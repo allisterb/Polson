@@ -957,7 +957,7 @@ class ArtifactRouteTests(unittest.TestCase):
     """Renders reach the page as URLs, which is what makes a refresh survivable."""
 
     def setUp(self) -> None:
-        self.root = Path(tempfile.mkdtemp(prefix="ARTIFACT_BUCKET-"))
+        self.root = Path(tempfile.mkdtemp(prefix="example-artifacts-"))
         self.registry = Registry()
         self.client = TestClient(app_mod.create_app(self.root, self.registry))
 
