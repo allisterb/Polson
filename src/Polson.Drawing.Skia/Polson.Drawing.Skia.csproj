@@ -11,11 +11,11 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Polson.Tests.Drawing" />
     <InternalsVisibleTo Include="Polson.MCPServer" />
+    <InternalsVisibleTo Include="Polson.Drawing.Mesh" />
+    <InternalsVisibleTo Include="Polson.Tests.Drawing.Mesh" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="SharpGLTF.Core" Version="1.0.7" />
-    <PackageReference Include="SharpGLTF.Runtime" Version="1.0.7" />
     <PackageReference Include="SkiaSharp" Version="4.148.0" />
     <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="4.148.0" />
   </ItemGroup>
