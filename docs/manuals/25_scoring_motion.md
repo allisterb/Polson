@@ -301,6 +301,13 @@ is Synfig's, and the craft follows from it:
 - **Loop an idle rather than keying it to the end: `Motion.nodes.timeLoop(breath, 3)`.** Key one breath, one sway,
   one bob, and the loop plays it for the length of the shot; `localTime` lines it up, and a negative duration
   plays it backwards. Loop the idle and leave the blinks unlooped: a loop repeats exactly, and blinks must not.
+- **Let the loose parts follow through on their own: `Motion.nodes.dynamic([0, -80], { origin: crown })`.** Key the
+  head; an antenna, an earring, a ponytail's end, a tail's tip hung off it on a spring lags as the head starts, swings
+  past as it stops and settles after, which is follow-through and overlapping action without a key of its own. The
+  defaults are soft and keep wobbling; raise `spring` and `torsion` for a stiffer part, `damping` and `friction` for
+  one that settles sooner, and add `force: [0, 400]` for something heavy that hangs. Base it on the node the head
+  moves by, `n.add('vector', origin, offset)`, so it rides the same motion. Any frame renders on its own, as every
+  other node does.
 - **Or let a performer give the motion: `{ follow: Character.track('Jumping Jacks') }`.** The recorded clips
   that pose the 3D body drive a drawing too, each bone turned to point where the performer's part points on the
   page. It is only as good as the clip is flat: read `track.warnings` first, and choose a clip that moves across

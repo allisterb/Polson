@@ -287,6 +287,48 @@ public class MotionCompositionTests(ITestOutputHelper output) : TestsRuntime
     }
 
     /// <summary>
+    /// The dynamic node, read off pixels: an antenna tip on a spring whose origin swings across, and a weight hanging
+    /// under gravity whose stalk can only stretch. Synfig integrates frame to frame from its last time; we integrate from
+    /// 0 on our own grid; both are adaptive to 1e-5, so they should agree to well under a pixel.
+    /// </summary>
+    [Fact]
+    public void SynfigSpringsTheWayOurDynamicDoes()
+    {
+        if (Synfig() is not { } synfig) return;
+
+        var motion = new MotionToolkit();
+        var comp = motion.Composition(Opts(("width", 480d), ("height", 320d), ("fps", 24d), ("duration", 2d)));
+        comp.Fill(Opts(("color", "#ffffff")));
+        var antenna = motion.Nodes.Dynamic(new[] { 0d, -60d }, Opts(("origin", MotionDynamicTests.Swing())));
+        var weight = motion.Nodes.Dynamic(new[] { 0d, 40d }, Opts(("origin", new[] { 380d, 60d }), ("force", new[] { 0d, 240d }), ("torsionRigid", true)));
+        comp.Circle(Opts(("origin", antenna), ("radius", 8d), ("color", "#ff0000")));
+        comp.Circle(Opts(("origin", weight), ("radius", 8d), ("color", "#0000ff")));
+
+        Assert.Contains("<dynamic type=\"vector\"", comp.ToSif());
+        var theirs = RenderWithSynfig(synfig, comp, "dynamic");
+        var worst = 0d;
+        for (var i = 0; i < theirs.Length; i++)
+        {
+            using var bitmap = theirs[i];
+            var t = i / comp.Fps;
+            foreach (var (node, red) in new[] { (antenna, true), (weight, false) })
+            {
+                var (cx, cy) = Centroid(bitmap, c => red ? c.Red > 128 && c.Blue < 128 : c.Blue > 128 && c.Red < 128);
+                var p = (IDictionary<string, object?>)node.At(t);
+                var error = Math.Max(Math.Abs(cx - (double)p["x"]!), Math.Abs(cy - (double)p["y"]!));
+                worst = Math.Max(worst, error);
+                if (error > 0.5) output.WriteLine($"{(red ? "antenna" : "weight")} at {t:0.000}s: synfig {cx:0.0},{cy:0.0} ours {p["x"]:0.0},{p["y"]:0.0}");
+            }
+        }
+
+        // Measured 2026-10-10: 0.79px on the two frames where the antenna swings fastest, everywhere else under half a pixel.
+        // The gap is Synfig's: ours gives the same values to 0.1px at a tolerance of 1e-9, so it has converged, while
+        // Synfig's step control accepts coarser steps than its stated 1e-5 and integrates from frame to frame.
+        output.WriteLine($"worst centre error {worst:0.000}px over {theirs.Length} frames");
+        Assert.True(worst < 1.0, $"worst centre error {worst:0.000}px");
+    }
+
+    /// <summary>
     /// The envelope, which Synfig has no node for, written as a linear key on every frame: a disc driven along x by two
     /// hits, the second retriggering mid-release, measured in Synfig's render at every frame.
     /// </summary>

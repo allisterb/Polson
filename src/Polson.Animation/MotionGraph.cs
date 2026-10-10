@@ -857,6 +857,9 @@ public sealed class MotionNodeFactory
 
     private static readonly string[] Phases = ["attack", "release", "settle"];
 
+    private static readonly string[] DynamicKeys =
+        ["origin", "force", "torque", "damping", "friction", "spring", "torsion", "mass", "inertia", "springRigid", "torsionRigid", "originDragsTip", "unit"];
+
     private static readonly string[] BlinkKeys = ["start", "end", "every", "jitter", "seed", "close", "shut", "open", "double", "at", "avoid"];
     #endregion
 
@@ -1098,6 +1101,39 @@ public sealed class MotionNodeFactory
             o["linkTime"] is { } a ? Real(a, $"{who}'s linkTime") : 0,
             o["localTime"] is { } b ? Real(b, $"{who}'s localTime") : 0,
             Real(duration, $"{who}'s duration (seconds)"));
+    }
+
+    /// <summary>
+    /// A point on a spring, after Synfig's dynamic converter: <c>tip</c> is where it hangs off <c>origin</c> at rest, and
+    /// when the origin moves it lags, overshoots and settles. Options: <c>{ origin, force, torque, damping, friction,
+    /// spring, torsion, mass, inertia, springRigid, torsionRigid, originDragsTip }</c>.
+    /// </summary>
+    /// <remarks>
+    /// Synfig's defaults: damping 0.4, friction 0.4, spring 30, torsion 30, mass 0.3, inertia 0.3, origin and force
+    /// <c>[0, 0]</c>, torque 0; <c>springRigid</c> and <c>torsionRigid</c> false (true holds the distance or the angle at the
+    /// rest offset's); <c>originDragsTip</c> true (false gives the offset alone). Lengths are pixels, y down, so a force
+    /// <c>[0, 400]</c> pulls it down. <c>unit</c> (60) is the pixels in one of Synfig's units, which the simulation runs in: its
+    /// defaults are tuned for a stalk about one unit long, so give a shorter or longer one a unit near its own length.
+    /// </remarks>
+    public MotionDynamic Dynamic(object? tip, object? options = null)
+    {
+        const string who = "Motion.nodes.dynamic";
+        var o = options is null ? new Hashtable()
+            : JsInterop.AsDict(options) ?? throw new ArgumentException($"{who}(tip, options) takes an object of spring settings.");
+        Refuse(o, DynamicKeys, $"{who}'s options");
+        MotionNode V(string key) => Node(o[key] ?? new[] { 0d, 0d }, MotionType.Vector, $"{who}'s {key}");
+        MotionNode R(string key, double fallback) => Node(o[key] ?? fallback, MotionType.Real, $"{who}'s {key}");
+        bool B(string key, bool fallback) => o[key] switch
+        {
+            null => fallback,
+            bool b => b,
+            var v => throw new ArgumentException($"{who}'s {key} is true or false, not {v}.")
+        };
+
+        return new MotionDynamic(Node(tip, MotionType.Vector, $"{who}'s tip (the rest offset from the origin)"), V("origin"), V("force"),
+            R("torque", 0), R("damping", 0.4), R("friction", 0.4), R("spring", 30), R("torsion", 30), R("mass", 0.3), R("inertia", 0.3),
+            B("springRigid", false), B("torsionRigid", false), B("originDragsTip", true),
+            o["unit"] is { } u ? Real(u, $"{who}'s unit") is > 0 and var px ? px : throw new ArgumentException($"{who}'s unit is pixels per unit, more than 0.") : 60);
     }
 
     private static List<(double From, double To)> Windows(object? value, string who)
