@@ -5539,6 +5539,46 @@ comp.render(0.8);
 > **The face is not exported**: like `comp.drawn`, it is refused by `toSif` and `toSvg`, because neither format can run the feature drawers. Capture it as frames, a sheet or animated WebP. A head drawn about 300px tall renders in about 45 ms a frame.
 >
 > **Timing is the channels' to carry**, and the corpus has two sources for it: Essa's thesis has an expression rise and fall exponentially and the eyes lag the mouth by about three frames in a smile; Stanchfield (Manual 25 §11) staggers the stops so parts do not all land on one frame. The example keys `AU6` a little after `AU12` for that reason. **`Motion.nodes.envelope({ at })` is Essa's curve as one node**: give a channel a hit rather than keys — `AU12: n.envelope({ at: 0.55, hold: 0.5 })`, `browTop: n.envelope({ at: 1.85, peak: 1.2 }, { from: 3 })`.
+### Speech — `Motion.speech`
+
+`Motion.speech(text, options?)` → a line of dialogue as phonemes and mouth shapes over time, **from its text alone**. Options `{ start?, rate?, set?, pronounce?, guess?, lead?, minimum? }`.
+
+- **The sounds are the dictionary's**: every word is looked up in the **CMU Pronouncing Dictionary** (Carnegie Mellon, as CMU Sphinx maintains it; 126,052 words), keeping its stress marks. It is fetched, not committed: `py tools/bootstrap.py --only speech` puts it beside the assembly, and without it `Motion.speech` says so. "the" before a vowel becomes *thee*; hyphenated words not in the dictionary are read as their parts. `pronounce: { zorblax: 'Z AO1 R B L AE0 K S' }` (CMU's 39 phonemes, each vowel with its stress 0, 1 or 2) gives a word its sounds, ahead of everything else, and chooses between a heteronym's readings (`pronounce: { read: 'R EH1 D' }`).
+- **What the dictionary lacks, the speech backend fills, when it is installed** (`py -3.13 tools/bootstrap.py --only speech-venv`; g2p-en in `python-speech/`): **a word no dictionary has is guessed**, and **a number is spelled out** — `4.5` is said "four point five", `$250` "two hundred fifty dollars", `3rd` "third", `2026` "twenty twenty-six"; `%` is "percent". Only those gaps leave the process, all in one call per line, and the answers are remembered. **Look at `speech.guessed`**: the guesses are plausible for invented words and weaker for names (measured: "Kaveh" lost its last syllable), so a character's name belongs in `pronounce`. **Without the backend, or with `guess: false`, those words and numbers are refused by name**, saying how to install it. Heteronyms are not guessed: the backend's table is weak on them, and in Preston Blair's chart most heteronyms show the same mouths either way.
+- **The mouths are a chart's**: `set` is `'blair'` (default; Preston Blair's ten: `AI O E U etc L WQ MBP FV rest`), `'flemingDobbs'` (eleven), `'rhubarb'` (`A`–`H`), `'cmu'` (the phonemes themselves), or your own `{ AE: 'wide', ... }` covering all 39 — the first three as Papagayo-NG maps them.
+- **The timing is the studio's rules**, not a recording: a stressed vowel 0.15 s, an unstressed one 0.065 s, a diphthong a quarter longer, a stop 0.07 s, a lip closure (`M B P`) 0.085 s; a phrase's last vowels 1.3 times longer; 0.25 s pause at a comma, dash or semicolon, 0.45 s at `. ! ?`; everything divided by `rate` (1). `start` (0) is when the first sound begins. With no recording there is nothing to be out of sync with; with one, time the line by ear (Papagayo) and key it by hand.
+
+It reads back:
+
+- `speech.mouths` → `[[time, mouth], ...]`: **keys for `comp.switch({ active: speech.mouths })`**, each shape `lead` (0.04 s) before its sound, `rest` before and after; a shape held under `minimum` (0.05 s) is folded into the one before, **except a lip closure, which must show to read**.
+- `speech.weights({ blend?, names? })` → `{ mouth: node }`: one node per mouth, 0 to 1, crossfading over `blend` (0.08 s) at each change and **summing to 1 at every time**, for a face's pose channels: name the poses after the mouths and pass `channels: speech.weights()`.
+- `speech.phonemes` → `[{ phoneme, base, stress, word, start, end, mouth, source }]` (stress −1 for a consonant; `source` is `dictionary`, `pronounce`, `model` for a guess, or `number`) · `speech.words` → `[{ word, start, end, said, source }]` (`said` what was pronounced: a number's words) · `speech.guessed` → `[{ word, phonemes }]`, what the backend guessed · `speech.names` (the mouths it uses) · `speech.start` · `speech.end` · `speech.duration` · `speech.set` · `speech.text`.
+- `speech.mouthAt(t)` · `speech.wordAt(t)` (`''` between words) — for a caption that follows the line.
+
+```javascript
+const line = Motion.speech('The cat in the hat has a rat.', { start: 0.4 });
+const comp = Motion.composition({ width: 240, height: 160, fps: 24, duration: Math.ceil(line.end + 0.5) });
+comp.fill({ color: '#f6f3ec' });
+
+// One layer per mouth, named for it; the switch shows the one the line is saying. Draw your own in place of these.
+const open = { rest: 0, MBP: 0, AI: 30, E: 14, O: 24, U: 14, WQ: 8, etc: 8, L: 18, FV: 6 };
+const wide = { O: 22, U: 14, WQ: 10 };
+const mouths = comp.switch({ active: line.mouths });
+for (const [name, h] of Object.entries(open))
+  mouths.drawn(ctx => {
+    ctx.fillStyle = '#7a2a30';
+    ctx.beginPath();
+    ctx.ellipse(120, 80, wide[name] || 40, Math.max(h, 2) / 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }, { desc: name });
+
+log(`${line.words.length} words in ${line.duration.toFixed(2)} s; at 1 s the mouth is ${line.mouthAt(1)} for '${line.wordAt(1)}'`);
+comp.render(1);
+```
+
+> [!NOTE]
+> **On `comp.face` the weights only go as far as the mouth can.** Its mouth opens, smiles, drops the jaw and parts the lips, but cannot yet round or pucker (`O`, `U`, `WQ`) or tuck the lower lip under the teeth (`FV`); poses for those can only approximate them. Drawn or cut-out mouths in a switch have no such limit.
+
 ### Nodes — `Motion.nodes`
 
 - `Motion.nodes.constant(type, value)` — a value that does not change.
