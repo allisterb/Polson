@@ -313,6 +313,15 @@ is Synfig's, and the craft follows from it:
   close-up and plainly for the wide shot, where the same marks would clump into noise. Draw each version once inside
   the switch, name it with `desc`, and key which shows; key the camera's cut on the same times. Drive every version
   from the same channel nodes, so the performance runs on unbroken while only the drawing changes.
+- **Make a line of dialogue from its text: `Motion.speech('The cat in the hat.', { start: 0.4 })`.** Which sounds a
+  sentence has is the dictionary's business, and mouth charts are coarse enough that accents and weak forms mostly
+  land on the same mouth; only the timing has to be chosen, and with no recording to match, natural timing is correct
+  timing. Key a switch of drawn mouths with `line.mouths`, or a face's mouth poses with `line.weights()`. Watch the
+  closures: `M`, `B` and `P` must close the lips on screen, or the word reads wrong, and the track keeps them however
+  short. Draw the mouth a frame before its sound (`lead`) and the eye reads them as one. With the speech backend
+  installed, numbers are spelled out and words no dictionary has are guessed; read `line.guessed` before trusting it,
+  and give a character's name its sounds with `pronounce`, once, in every line it is spoken. Use `line.wordAt(t)` for a
+  caption that follows.
 - **Or let a performer give the motion: `{ follow: Character.track('Jumping Jacks') }`.** The recorded clips
   that pose the 3D body drive a drawing too, each bone turned to point where the performer's part points on the
   page. It is only as good as the clip is flat: read `track.warnings` first, and choose a clip that moves across

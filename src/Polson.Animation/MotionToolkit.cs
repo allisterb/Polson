@@ -104,6 +104,12 @@ public class MotionToolkit : IDisposable
     public MotionNodeFactory Nodes { get; } = new();
 
     /// <summary>
+    /// A line of dialogue as phonemes and mouth shapes over time, from its text: <c>{ start?, rate?, set?, pronounce?,
+    /// lead?, minimum? }</c>. Its <c>mouths</c> key a <c>comp.switch</c> of drawn mouths; its <c>weights()</c> a face's poses.
+    /// </summary>
+    public MotionSpeech Speech(string text, object? options = null) => new(text, options);
+
+    /// <summary>
     /// Rasterises the current state of a paper, canvas or bitmap and keeps it as the next frame.
     /// </summary>
     /// <remarks>

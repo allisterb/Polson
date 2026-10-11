@@ -13,6 +13,7 @@ using Polson.ExtendedMind.ImageGeneration;
 using Polson.ExtendedMind.ObjectGeneration;
 using Polson.ExtendedMind.ParallelSearch;
 using Polson.ExtendedMind.Photos;
+using Polson.Animation;
 using Polson.Drawing.Mesh;
 using Polson.Drawing.Skia;
 using Polson.Drawing.Svg;
@@ -420,6 +421,32 @@ internal class Program : Runtime
         else Warn("No stock bodies found; Character.stock reads only a project's stock/ folder. Run tools/bootstrap.py and rebuild.");
     }
 
+    /// <summary>Points <c>Motion.speech(...)</c> at its dictionary and its optional backend, and says what it found.</summary>
+    /// <remarks>
+    /// The dictionary is required and the backend is not: without the backend, a line with a word the dictionary lacks
+    /// or a number in it is refused, naming them, and every other line works. Both are found beside the assembly or by
+    /// walking up to the checkout; <c>Tools:Cmudict</c>, <c>Tools:SpeechPython</c>, <c>Tools:SpeechScript</c> and
+    /// <c>Tools:SpeechData</c> override.
+    /// </remarks>
+    static void ConfigureSpeech()
+    {
+        if (Setting("Tools:Cmudict") is { Length: > 0 } dictionary)
+            CmuDictionary.PathOverride = dictionary;
+        if (Setting("Tools:SpeechPython") is { Length: > 0 } python)
+            SpeechBackend.PythonOverride = python;
+        if (Setting("Tools:SpeechScript") is { Length: > 0 } script)
+            SpeechBackend.ScriptOverride = script;
+        if (Setting("Tools:SpeechData") is { Length: > 0 } data)
+            SpeechBackend.DataOverride = data;
+
+        if (!CmuDictionary.Available)
+            Warn("Speech dictionary missing at {0}; Motion.speech will refuse. Run tools/bootstrap.py --only speech and rebuild.", CmuDictionary.Path);
+        else if (SpeechBackend.Available)
+            Info("Speech: dictionary and backend (unknown words guessed, numbers spelled out).");
+        else
+            Info("Speech: dictionary only; unknown words and numbers will be refused (no backend: {0}).", SpeechBackend.Missing);
+    }
+
     /// <summary>Points <c>Face.detect(...)</c> at a backend, and says whether it found one.</summary>
     /// <remarks>
     /// <para>
@@ -548,6 +575,7 @@ internal class Program : Runtime
         ConfigureFaceDetection();
         ConfigureBodyDetection();
         ConfigureGarmentDetection();
+        ConfigureSpeech();
         ConfigureBlender();
         ConfigureCharacterGeneration();
 

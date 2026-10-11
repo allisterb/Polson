@@ -21,4 +21,11 @@
     <ProjectReference Include="..\Polson.Runtime\Polson.Runtime.csproj" />
   </ItemGroup>
 
+  <!-- The CMU Pronouncing Dictionary and its licence (BSD-style; see Speech/README.md), fetched into Speech/ by
+       tools/bootstrap.py. Copied next to the assembly, and from there into every project that references this one. A
+       build before the fetch still succeeds, and Motion.speech then says what is missing. -->
+  <ItemGroup>
+    <None Update="Speech\cmudict.*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

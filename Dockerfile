@@ -340,10 +340,14 @@ USER polson
 # **What it costs:** about 350 MB of venv (OpenCV alone is ~140 MB, a declared mediapipe dependency we
 # call two functions of) and 34 MB of weights. `--build-arg POLSON_VISION=0` skips both and keeps the
 # 13 MB library; `Face.detect` and `Character.detect` then refuse, saying what is missing.
+#
+# The CMU Pronouncing Dictionary (3.6 MB, for `Motion.speech`) is fetched either way, beside the engine
+# in `/app/bin/cli/Speech` with its licence, the way the library is.
 ARG POLSON_VISION=1
 COPY tools/bootstrap.py /tmp/bootstrap.py
-RUN if [ "$POLSON_VISION" = "1" ]; then parts=library,models,venv; else parts=library; fi \
-    && PIP_NO_CACHE_DIR=1 python /tmp/bootstrap.py --root /app --library /app/bin/cli/Library --only "$parts"
+RUN if [ "$POLSON_VISION" = "1" ]; then parts=library,models,speech,venv; else parts=library,speech; fi \
+    && PIP_NO_CACHE_DIR=1 python /tmp/bootstrap.py --root /app --library /app/bin/cli/Library \
+       --speech /app/bin/cli/Speech --only "$parts"
 
 ENV POLSON_CLI_DLL=/app/bin/cli/Polson.CLI.dll \
     POLSON_PROJECTS_DIR=/app/projects \

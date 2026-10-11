@@ -6,11 +6,18 @@ they are binary, large, or someone else's to publish:
   library  Mesh2Motion's stock bodies, CC0 pose clips and human rig template (13 MB), from GitHub at a pinned
            commit, into src/Polson.Drawing.Mesh/Library/, where the build copies them next to the assembly.
   models   MediaPipe's face and pose landmarker weights (34 MB), from Google's model storage, into models/.
+  speech   the CMU Pronouncing Dictionary and its licence (3.6 MB), from CMU Sphinx's GitHub at a pinned commit,
+           into src/Polson.Animation/Speech/, where the build copies them next to the assembly (Motion.speech).
   venv     python-mediapipe/, the interpreter the face and body detectors run, installed from
            src/vision/requirements.lock.txt with --require-hashes. Needs Python 3.13, which the lock is for.
 
-    py -3.13 tools/bootstrap.py                  everything, then a smoke test
+  speech-venv  (opt-in) python-speech/, g2p-en and NLTK from src/speech/requirements.lock.txt, plus NLTK's tagger
+           and dictionary, pinned, into models/nltk_data/: pronouncing words no dictionary has, and heteronyms.
+
+    py -3.13 tools/bootstrap.py                  everything above but speech-venv, then a smoke test
     py -3.13 tools/bootstrap.py --only library   just the .glb files
+    py tools/bootstrap.py --only speech          just the dictionary (any Python 3)
+    py -3.13 tools/bootstrap.py --only speech-venv   the speech backend, then a smoke test of it, offline
     py -3.13 tools/bootstrap.py --extras         also the Full pose model, and the segmentation spikes' models:
                                                  MediaPipe's two, U²-Net cloth and SAM 2.1 (another 390 MB)
     py -3.13 tools/bootstrap.py --check          verify what is here and smoke-test it; no network
@@ -63,6 +70,19 @@ HUGGINGFACE = f"https://huggingface.co/spaces/wildoctopus/cloth-segmentation/res
 #: Meta's SAM 2.1 release. The `092824` in the path is the release; a new release is a new path.
 SAM2 = "https://dl.fbaipublicfiles.com/segment_anything_2/092824/"
 
+#: The CMU Pronouncing Dictionary, maintained by CMU Sphinx, at a fixed commit (2025-10-24) rather than `master`.
+CMUDICT_COMMIT = "74790861f652b15e4ac49015a90074ad62a27690"
+CMUDICT = f"https://raw.githubusercontent.com/cmusphinx/cmudict/{CMUDICT_COMMIT}/"
+
+#: What Motion.speech reads: the dictionary and its licence, which must travel with it (BSD-style; see
+#: src/Polson.Animation/Speech/README.md). Hashed on 2026-10-11 from the files at the pinned commit; scanned clean.
+SPEECH = [
+    ("speech", CMUDICT + "cmudict.dict", "cmudict.dict",
+     "81917843c7f44ce2b094ac63873c2c7a4cf802040792c455ba3ca406891c3d22", 3618488),
+    ("speech", CMUDICT + "LICENSE", "cmudict.LICENSE",
+     "bd4ce8e44170a5f9f481310ca85c51de3c4f851a65e679b40e603b143bd3542a", 1754),
+]
+
 #: `(group, url, destination relative to its folder, sha256, bytes)`.
 LIBRARY = [
     ("library", GITHUB + "models-variation/human/male.glb", "stock/male.glb",
@@ -112,9 +132,25 @@ EXTRAS = [
      "6d1aa6f30de5c92224f8172114de081d104bbd23dd9dc5c58996f0cad5dc4d38", 184416285),
 ]
 
-#: A glTF binary starts `glTF`; a MediaPipe `.task` and a PyTorch `.pth` or `.pt` are zips (`PK`); a `.tflite` is
-#: a FlatBuffer carrying `TFL3` at 4.
-MAGIC = {".glb": (0, b"glTF"), ".task": (0, b"PK"), ".pth": (0, b"PK"), ".pt": (0, b"PK"), ".tflite": (4, b"TFL3")}
+#: NLTK's data repository at a fixed commit (2026-07-01) rather than its `gh-pages` branch.
+NLTK_COMMIT = "550b6625bcef1f2abff2ff770a5a0d272c9c6b2a"
+NLTK_DATA = f"https://raw.githubusercontent.com/nltk/nltk_data/{NLTK_COMMIT}/packages/"
+
+#: What the speech venv's g2p.py reads, into models/nltk_data/ and unzipped there, as NLTK's downloader would. The
+#: hashes are the SHA-256 NLTK's own index.xml publishes, and the files fetched on 2026-10-11 matched them; their
+#: contents scanned clean. The tagger is JSON, which NLTK 3.9 and later load instead of the old pickle (MIT, from
+#: textblob-aptagger); the dictionary is NLTK's CMUdict 0.7a, which g2p-en reads itself ("completely unrestricted").
+NLTK = [
+    ("nltk", NLTK_DATA + "taggers/averaged_perceptron_tagger_eng.zip", "taggers/averaged_perceptron_tagger_eng.zip",
+     "6025f530624335c67d6547d44757b357b4e79bae030a0383e9887a92c1718f0b", 1539115),
+    ("nltk", NLTK_DATA + "corpora/cmudict.zip", "corpora/cmudict.zip",
+     "d07cca47fd72ad32ea9d8ad1219f85301eeaf4568f8b6b73747506a71fb5afd6", 896069),
+]
+
+#: A glTF binary starts `glTF`; a MediaPipe `.task`, a PyTorch `.pth` or `.pt` and NLTK's data are zips (`PK`); a
+#: `.tflite` is a FlatBuffer carrying `TFL3` at 4.
+MAGIC = {".glb": (0, b"glTF"), ".task": (0, b"PK"), ".pth": (0, b"PK"), ".pt": (0, b"PK"), ".zip": (0, b"PK"),
+         ".tflite": (4, b"TFL3")}
 
 
 def sha256(path: Path) -> str:
@@ -171,18 +207,54 @@ def venv_python(venv: Path) -> Path:
     return venv / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 
 
-def build_venv(venv: Path, lock: Path) -> None:
-    """Creates the venv with this interpreter and installs the lock into it, hash-checked, wheels only."""
+def build_venv(venv: Path, lock: Path, no_deps: bool = False) -> None:
+    """Creates the venv with this interpreter and installs the lock into it, hash-checked, wheels only.
+
+    `no_deps` installs exactly the lock and resolves nothing more: for a lock that leaves out a declared dependency
+    on purpose (the speech lock omits g2p-en's unused, source-only `distance`).
+    """
     if sys.version_info[:2] != (3, 13):
         raise SystemExit(
-            f"FATAL: the vision lock is for Python 3.13 and this is {sys.version.split()[0]}.\n"
+            f"FATAL: the {lock.parent.name} lock is for Python 3.13 and this is {sys.version.split()[0]}.\n"
             "       Run this script with 3.13 (Windows: py -3.13 tools/bootstrap.py), or pass --only library,models.")
     if not venv_python(venv).exists():
         print(f"  creating {venv}")
         subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True)
-    print(f"  installing {lock.name} (hash-checked)")
+    print(f"  installing {lock.parent.name}/{lock.name} (hash-checked)")
     subprocess.run([str(venv_python(venv)), "-m", "pip", "install", "--disable-pip-version-check",
-                    "--require-hashes", "--only-binary=:all:", "-r", str(lock)], check=True)
+                    "--require-hashes", "--only-binary=:all:", *(["--no-deps"] if no_deps else []), "-r", str(lock)],
+                   check=True)
+
+
+def unzip(archive: Path) -> None:
+    """Unpacks an NLTK data zip beside itself, as NLTK's downloader does, refusing a member that would land outside."""
+    import zipfile
+    target = archive.parent.resolve()
+    with zipfile.ZipFile(archive) as z:
+        for name in z.namelist():
+            if not (target / name).resolve().is_relative_to(target):
+                raise SystemExit(f"FATAL: {archive.name} holds {name!r}, which would unpack outside {target}.")
+        z.extractall(target)
+
+
+def smoke_speech(venv: Path, speech: Path, nltk_data: Path) -> None:
+    """Runs g2p.py on a sentence with a heteronym, a number and an invented word: JSON in, JSON out, offline."""
+    python = venv_python(venv)
+    if not python.exists():
+        raise SystemExit(f"FATAL: no interpreter at {python}. Run without --check, or with --only speech-venv.")
+    request = json.dumps({"text": "I read it in 2 hours, and Zorblax reads it now."}).encode()
+    result = subprocess.run([str(python), str(speech / "g2p.py"), str(nltk_data)], input=request,
+                            capture_output=True, timeout=300)
+    try:
+        answer = json.loads(result.stdout)
+    except ValueError:
+        answer = None
+    if result.returncode != 0 or not isinstance(answer, dict) or not answer.get("words"):
+        err = result.stderr.decode(errors="replace").strip().splitlines()[-5:]
+        raise SystemExit(f"FATAL: g2p.py did not run (exit {result.returncode}).\n       " + "\n       ".join(err))
+    said = ", ".join(f"{w['word']} {' '.join(w['phonemes'])} ({w['source']})" for w in answer["words"]
+                     if w["word"] in ("read", "two", "zorblax"))
+    print(f"  g2p.py: ran offline on {len(answer['words'])} words: {said}")
 
 
 def blank_png(width: int = 64, height: int = 64) -> bytes:
@@ -248,30 +320,36 @@ def smoke(venv: Path, vision: Path, models: Path) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--only", default="library,models,venv",
-                        help="comma-separated: library, models, venv (default: all three)")
+    parser.add_argument("--only", default="library,models,speech,venv",
+                        help="comma-separated: library, models, speech, venv (the default: all four), and the "
+                             "opt-in speech-venv")
     parser.add_argument("--extras", action="store_true", help="also the Full pose model and the segmentation models")
     parser.add_argument("--check", action="store_true", help="verify what is present and smoke-test it; no network")
     parser.add_argument("--force", action="store_true", help="replace a present file whose hash is wrong")
     parser.add_argument("--root", type=Path, default=ROOT, help="the checkout (default: the one this script is in)")
     parser.add_argument("--library", type=Path, help="default: <root>/src/Polson.Drawing.Mesh/Library")
     parser.add_argument("--models", type=Path, help="default: <root>/models")
+    parser.add_argument("--speech", type=Path, help="default: <root>/src/Polson.Animation/Speech")
     parser.add_argument("--venv", type=Path, help="default: <root>/python-mediapipe")
     parser.add_argument("--vision", type=Path, help="the lock and detector scripts; default: <root>/src/vision")
     args = parser.parse_args()
 
     only = {s.strip() for s in args.only.split(",") if s.strip()}
-    unknown = only - {"library", "models", "venv"}
+    unknown = only - {"library", "models", "speech", "venv", "speech-venv"}
     if unknown:
-        parser.error(f"--only takes library, models and venv, not {', '.join(sorted(unknown))}")
+        parser.error(f"--only takes library, models, speech, venv and speech-venv, not {', '.join(sorted(unknown))}")
     library = args.library or args.root / "src" / "Polson.Drawing.Mesh" / "Library"
     models = args.models or args.root / "models"
+    speech = args.speech or args.root / "src" / "Polson.Animation" / "Speech"
     venv = args.venv or args.root / "python-mediapipe"
     vision = args.vision or args.root / "src" / "vision"
 
-    wanted = [f for f in LIBRARY if "library" in only] + [f for f in MODELS + (EXTRAS if args.extras else [])
-                                                          if "models" in only]
-    folders = {"library": library, "models": models}
+    nltk_data = models / "nltk_data"
+    wanted = ([f for f in LIBRARY if "library" in only]
+              + [f for f in MODELS + (EXTRAS if args.extras else []) if "models" in only]
+              + [f for f in SPEECH if "speech" in only]
+              + [f for f in NLTK if "speech-venv" in only])
+    folders = {"library": library, "models": models, "speech": speech, "nltk": nltk_data}
     missing = []
     for group, url, rel, expected, size in wanted:
         dest = folders[group] / rel
@@ -282,6 +360,8 @@ def main() -> int:
             print(f"  {state:10} {dest}")
         else:
             print(f"  {fetch(url, dest, expected, size, args.force):10} {dest} ({size / 1e6:.1f} MB)")
+            if group == "nltk":
+                unzip(dest)
     if missing:
         raise SystemExit(f"FATAL: {len(missing)} file(s) missing or wrong. Run without --check to fetch them.")
 
@@ -289,6 +369,13 @@ def main() -> int:
         if not args.check:
             build_venv(venv, vision / "requirements.lock.txt")
         smoke(venv, vision, models)
+
+    # The speech backend, opt-in: python-speech/ from its own lock, g2p-en with NLTK's pinned data, smoke-tested offline.
+    if "speech-venv" in only:
+        speech_venv, speech_scripts = args.root / "python-speech", args.root / "src" / "speech"
+        if not args.check:
+            build_venv(speech_venv, speech_scripts / "requirements.lock.txt", no_deps=True)
+        smoke_speech(speech_venv, speech_scripts, nltk_data)
     return 0
 
 
