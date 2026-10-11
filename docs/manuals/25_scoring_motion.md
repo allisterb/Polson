@@ -308,6 +308,11 @@ is Synfig's, and the craft follows from it:
   one that settles sooner, and add `force: [0, 400]` for something heavy that hangs. Base it on the node the head
   moves by, `n.add('vector', origin, offset)`, so it rides the same motion. Any frame renders on its own, as every
   other node does.
+- **Swap a drawing rather than morph it: `comp.switch({ active: [[0, 'close'], [1.5, 'wide']] })`.** Some changes are
+  replacements, not motions — a mouth chart's shapes, a hand's poses, a face drawn with lashes and toned irises for the
+  close-up and plainly for the wide shot, where the same marks would clump into noise. Draw each version once inside
+  the switch, name it with `desc`, and key which shows; key the camera's cut on the same times. Drive every version
+  from the same channel nodes, so the performance runs on unbroken while only the drawing changes.
 - **Or let a performer give the motion: `{ follow: Character.track('Jumping Jacks') }`.** The recorded clips
   that pose the 3D body drive a drawing too, each bone turned to point where the performer's part points on the
   page. It is only as good as the clip is flat: read `track.warnings` first, and choose a clip that moves across
