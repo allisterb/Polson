@@ -143,6 +143,25 @@ public abstract class MotionLayerList
     }
 
     /// <summary>
+    /// A group that shows one of its layers at a time, chosen by name: <c>{ active, ...the group's options }</c>, returned so
+    /// layers can be added to it, each named with <c>desc</c>. <c>active</c> is a name, or held keys
+    /// <c>[{ time, value: name }]</c> or <c>[[time, name]]</c>; <c>''</c> shows nothing. Synfig's switch layer.
+    /// </summary>
+    /// <remarks>
+    /// A mouth chart, a hand's poses, a feature drawn in detail for the close-up and plainly for the wide shot: draw each
+    /// once, name it, and key which is showing. Names do not blend, so a key holds until the next. Where two layers share
+    /// a name the topmost (the last added) shows, as in Synfig; a name no layer has is refused when the switch first draws.
+    /// </remarks>
+    public MotionGroup Switch(object? options)
+    {
+        var o = new MotionOptions(options, "switch",
+            "active", "origin", "offset", "angle", "skewAngle", "scale", "bone", "amount", "blend", "timeOffset", "timeDilation", "desc");
+        var group = new MotionGroup(o, MotionSwitchTrack.Read(o.Raw("active"), "switch")) { Root = Root };
+        layers.Add(group.Layer);
+        return group;
+    }
+
+    /// <summary>
     /// A layer the SDK draws: <c>draw(ctx, v, t)</c> is called for every frame with a context in the
     /// layer's frame, <c>v</c> holding each of <c>options.values</c> evaluated at <c>t</c>.
     /// <c>options</c>: <c>{ values?, amount?, desc? }</c>.
@@ -225,8 +244,15 @@ public abstract class MotionLayerList
     internal IEnumerable<MotionLayer> AllLayers() =>
         layers.SelectMany(l => l is MotionLayer.GroupLayer g ? g.Children.AllLayers().Prepend(l) : [l]);
 
-    internal void RenderLayers(SkiaCanvas surface, double time)
+    internal void RenderLayers(SkiaCanvas surface, double time, MotionLayer? only = null)
     {
+        // A switch draws one of its layers and nothing else.
+        if (only is not null)
+        {
+            only.Render(surface, time);
+            return;
+        }
+
         if (!layers.Any(l => l is MotionDeformationLayer))
         {
             foreach (var layer in layers) layer.Render(surface, time);
@@ -280,6 +306,30 @@ public abstract class MotionLayerList
 
     internal IEnumerable<MotionNode> Nodes() => layers.SelectMany(l => l.Nodes());
 
+    /// <summary>The topmost layer named <paramref name="name"/>, as Synfig's switch picks it; none for an empty name.</summary>
+    internal MotionLayer? Named(string name, string who)
+    {
+        if (name.Length == 0) return null;
+        return layers.LastOrDefault(l => l.Desc == name) ?? throw new ArgumentException(
+            $"{who} has no layer named '{name}'. " + (layers.Any(l => l.Desc is not null)
+                ? $"Its layers are named: {string.Join(", ", layers.Where(l => l.Desc is not null).Select(l => $"'{l.Desc}'").Distinct())}."
+                : "Name each layer added to it with desc."));
+    }
+
+    /// <summary>The layers as SVG, each in a group shown only while it is the one <paramref name="shown"/> picks.</summary>
+    internal IEnumerable<XElement> SwitchedToSvg(SvgAnimationWriter svg, MotionTimeMap inner, Func<double, MotionLayer?> shown, string? desc)
+    {
+        if (HasBlendedLayers)
+            throw new InvalidOperationException($"The switch{(desc is null ? "" : $" '{desc}'")} cannot be written as animated SVG while a layer in it "
+                + "blends other than by compositing: SVG shows or hides its layers one by one, and a blend needs the others beneath it.");
+        return [.. layers.Select(layer =>
+        {
+            var g = new XElement(SvgAnimationWriter.Svg + "g", layer.ToSvg(svg, inner));
+            svg.Attribute(g, "display", t => ReferenceEquals(shown(t), layer) ? "inline" : "none");
+            return g;
+        })];
+    }
+
     /// <summary>Whether a layer here blends other than by compositing, so the stack must be drawn on its own.</summary>
     internal bool HasBlendedLayers => layers.Any(l => !l.Blend.IsComposite);
 
@@ -299,7 +349,7 @@ public abstract class MotionLayerList
 public sealed class MotionGroup : MotionLayerList
 {
     #region Constructors
-    internal MotionGroup(MotionOptions o) => Layer = new MotionLayer.GroupLayer(o, this);
+    internal MotionGroup(MotionOptions o, MotionSwitchTrack? active = null) => Layer = new MotionLayer.GroupLayer(o, this, active);
     #endregion
 
     #region Properties
@@ -1331,9 +1381,10 @@ internal abstract class MotionLayer
 
     public sealed class GroupLayer : MotionLayer
     {
-        public GroupLayer(MotionOptions o, MotionGroup children) : base(o)
+        public GroupLayer(MotionOptions o, MotionGroup children, MotionSwitchTrack? active = null) : base(o)
         {
             this.children = children;
+            (this.active, who) = (active, o.Who);
             origin = o.Node("origin", MotionType.Vector, new[] { 0d, 0d });
             offset = o.Node("offset", MotionType.Vector, new[] { 0d, 0d });
             angle = o.Node("angle", MotionType.Angle, 0d);
@@ -1360,6 +1411,9 @@ internal abstract class MotionLayer
 
         private readonly MotionGroup children;
         private readonly MotionNode origin, offset, angle, skewAngle, scale;
+        /// <summary>For a switch, which child shows, read at the switch's own time; null for a plain group.</summary>
+        private readonly MotionSwitchTrack? active;
+        private readonly string who;
 
         internal MotionGroup Children => children;
         private readonly double timeOffset, timeDilation;
@@ -1374,6 +1428,10 @@ internal abstract class MotionLayer
         /// </summary>
         protected override void Draw(SkiaCanvas surface, double time, double amount)
         {
+            // A switch picks its layer at its own time, as Synfig evaluates a layer's parameters, then draws only that one.
+            var only = Shown(time);
+            if (active is not null && only is null) return;
+
             var canvas = surface.SkCanvas;
             canvas.Save();
             canvas.Concat(Matrix(time));
@@ -1384,7 +1442,7 @@ internal abstract class MotionLayer
                 canvas.SaveLayer(fade);
             }
 
-            children.RenderLayers(surface, time * timeDilation + timeOffset);
+            children.RenderLayers(surface, time * timeDilation + timeOffset, only);
             if (isolate) canvas.Restore();
             canvas.Restore();
         }
@@ -1420,7 +1478,10 @@ internal abstract class MotionLayer
             var chain = bone is null ? NodeChain(svg, map) : BoneChain(svg, map);
 
             svg.Depth++;
-            var content = children.LayersToSvg(svg, map.Then(timeDilation, timeOffset)).ToArray();
+            var childMap = map.Then(timeDilation, timeOffset);
+            var content = active is null
+                ? children.LayersToSvg(svg, childMap).ToArray()
+                : children.SwitchedToSvg(svg, childMap, t => Shown(map.Local(t)), Desc).ToArray();
             svg.Depth--;
 
             // Innermost first: each transform wraps everything after it in the chain.
@@ -1494,7 +1555,24 @@ internal abstract class MotionLayer
             static MotionTrack Negate(MotionTrack t) => t with { Values = [.. t.Values.Select(v => -v)] };
         }
 
-        public override XElement ToSif(SifWriter sif) => Element("group", "0.3", sif,
+        /// <summary>The child a switch shows at a time, refusing a name no child has; null for a plain group or an empty name.</summary>
+        private MotionLayer? Shown(double time) => active is null ? null : children.Named(active.At(time), who);
+
+        /// <summary>
+        /// A group as Synfig's group; a switch as Synfig's switch, which is the same paste canvas with <c>layer_name</c> and
+        /// <c>layer_depth</c> (−1: by name) added, its children locked as Synfig Studio makes them. Every name it shows is
+        /// checked against the children first.
+        /// </summary>
+        public override XElement ToSif(SifWriter sif)
+        {
+            foreach (var name in active?.Names ?? []) children.Named(name, who);
+            return Element(active is null ? "group" : "switch", active is null ? "0.3" : "0.0", sif, GroupParams(sif),
+                active is null ? null : SifWriter.Param("layer_name", active.ToSif()),
+                active is null ? null : SifWriter.Param("layer_depth", new XElement("integer", new XAttribute("value", "-1"))));
+        }
+
+        private object[] GroupParams(SifWriter sif) =>
+        [
             sif.Param("origin", origin),
             SifWriter.Param("transformation", bone is null
                 ? new XElement("composite", new XAttribute("type", "transformation"),
@@ -1503,12 +1581,13 @@ internal abstract class MotionLayer
             SifWriter.Param("canvas", new XElement("canvas", children.LayersToSif(sif))),
             SifWriter.Param("time_dilation", new XElement("real", new XAttribute("value", MotionTypes.Format(timeDilation)))),
             SifWriter.Param("time_offset", new XElement("time", new XAttribute("value", MotionTypes.Time(timeOffset)))),
-            SifWriter.Param("children_lock", SifWriter.Bool(false)),
+            SifWriter.Param("children_lock", SifWriter.Bool(active is not null)),
             SifWriter.Param("outline_grow", new XElement("real", new XAttribute("value", "0"))),
             SifWriter.Param("z_range", SifWriter.Bool(false)),
             SifWriter.Param("z_range_position", new XElement("real", new XAttribute("value", "0"))),
             SifWriter.Param("z_range_depth", new XElement("real", new XAttribute("value", "0"))),
-            SifWriter.Param("z_range_blur", new XElement("real", new XAttribute("value", "0"))));
+            SifWriter.Param("z_range_blur", new XElement("real", new XAttribute("value", "0")))
+        ];
 
         /// <summary>A bone link on the transformation, its base value the inverse of the bone's rest frame.</summary>
         private XElement BoneTransformation(SifWriter sif)

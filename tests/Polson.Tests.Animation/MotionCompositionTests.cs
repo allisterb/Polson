@@ -329,6 +329,33 @@ public class MotionCompositionTests(ITestOutputHelper output) : TestsRuntime
     }
 
     /// <summary>
+    /// The switch layer, read off pixels: three named discs and keys that land exactly on frames, so the frame of each change
+    /// says which side of the key Synfig puts it; also a name before the first key and an empty name, which shows nothing.
+    /// </summary>
+    [Fact]
+    public void SynfigSwitchesTheWayOurSwitchDoes()
+    {
+        if (Synfig() is not { } synfig) return;
+
+        var (comp, _) = MotionSwitchTests.Discs(new object[]
+        {
+            new object[] { 0.25d, "b" }, new object[] { 0.5d, "c" }, new object[] { 1d, "" }, new object[] { 1.25d, "a" }, new object[] { 1.5d, "c" }
+        });
+        var theirs = RenderWithSynfig(synfig, comp, "switch");
+        var wrong = new List<string>();
+        for (var i = 0; i < theirs.Length; i++)
+        {
+            using var bitmap = theirs[i];
+            using var ours = comp.Render(i / comp.Fps);
+            var (s, o) = (MotionSwitchTests.Showing(bitmap), MotionSwitchTests.Showing(ours.SkBitmap));
+            if (s != o) wrong.Add($"frame {i} ({i / comp.Fps:0.000}s): synfig '{s}', ours '{o}'");
+        }
+
+        output.WriteLine(wrong.Count == 0 ? $"all {theirs.Length} frames agree" : string.Join("\n", wrong));
+        Assert.Empty(wrong);
+    }
+
+    /// <summary>
     /// The envelope, which Synfig has no node for, written as a linear key on every frame: a disc driven along x by two
     /// hits, the second retriggering mid-release, measured in Synfig's render at every frame.
     /// </summary>
