@@ -248,6 +248,32 @@ public class MotionToolkit : IDisposable
     }
 
     /// <summary>
+    /// Encodes the held frames as a video with sound, an MP4 (H.264, AAC) or a WebM (VP9, Opus) by the path's extension,
+    /// and writes it: <c>{ fps?, quality?, background?, audio? }</c>.
+    /// </summary>
+    /// <remarks>
+    /// Frames captured from a composition carry their times, so their rate and where they start are read from them and a
+    /// recording lands where the composition put it; <c>fps</c> (25 for frames added by hand) overrides the rate.
+    /// <c>audio</c> is a path, a line of speech timed by a recording, <c>{ path, start }</c>, or a list of these, mixed.
+    /// Video has no alpha, so frames are drawn over <c>background</c>, white by default. Needs <c>ffmpeg</c>.
+    /// </remarks>
+    public Dictionary<string, object?> SaveVideo(string filePath, object? options = null)
+    {
+        var o = new MotionOptions(options, "Motion.saveVideo", "fps", "quality", "background", "audio");
+        if (frames.Count == 0)
+            throw new InvalidOperationException("Motion.saveVideo(...) has no frames. Call Motion.frame(...) or comp.capture() first.");
+
+        // Evenly spaced captured frames say their own rate; anything else is 25 unless told.
+        var timed = times.All(t => t is not null) ? times.Select(t => t!.Value.Seconds).ToList() : null;
+        var step = timed is { Count: > 1 } ? timed[1] - timed[0] : 0;
+        var even = step > 0 && timed!.Zip(timed.Skip(1)).All(p => Math.Abs(p.Second - p.First - step) < 1e-6);
+        var fps = o.Has("fps") ? o.Number("fps", 25) : even ? Math.Round(1 / step, 6) : 25;
+
+        return MotionVideo.Save(filePath, frames, frames.Count, frames[0].Width, frames[0].Height, fps,
+            timed?[0] ?? 0, o, projectRoot, this);
+    }
+
+    /// <summary>
     /// The WebP loop count for a <c>loop</c> option: <c>true</c> (or absent) plays forever, which is 0 in
     /// the file; <c>false</c> plays once and holds the last frame, which is 1; a number plays that many
     /// times.

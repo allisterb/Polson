@@ -188,5 +188,44 @@ public class MotionRecordingTests : TestsRuntime, IDisposable
         Assert.StartsWith("artifacts/dot-image", pictures[0]);
         Assert.True(File.Exists(Path.Combine(root, pictures[0]!)));
     }
+
+    /// <summary>
+    /// A video is a render whichever call wrote it, with the recordings it carries named; reached from a script by its
+    /// JS spelling, with the audio given as a JS array of a path and an object.
+    /// </summary>
+    [Fact]
+    public async Task TestVideoIsARenderNamingItsSound()
+    {
+        if (!Polson.Animation.FFmpeg.Available) return;
+
+        // A second of silence: the sound is not what is checked here, only that it is carried and named.
+        using (var w = new BinaryWriter(File.Create(Path.Combine(root, "line.wav"))))
+        {
+            w.Write("RIFF"u8); w.Write(36 + 16000); w.Write("WAVE"u8);
+            w.Write("fmt "u8); w.Write(16); w.Write((short)1); w.Write((short)1); w.Write(8000); w.Write(16000);
+            w.Write((short)2); w.Write((short)16);
+            w.Write("data"u8); w.Write(16000); w.Write(new byte[16000]);
+        }
+
+        await Tools().ExecuteScript(Frames + """
+            Motion.saveVideo('artifacts/move.mp4', { fps: 12 });
+            const comp = Motion.composition({ width: 48, height: 32, fps: 10, duration: 0.9 });
+            comp.fill({ color: '#ffffff' });
+            comp.saveVideo('artifacts/talk.webm', { audio: ['line.wav', { path: 'line.wav', start: 0.5 }] });
+            'done';
+            """, 48, 32);
+
+        var renders = OfType("render");
+        var held = renders.Single(r => Str(r, "artifact") == "artifacts/move.mp4");
+        Assert.Equal("video", Str(held, "motion"));
+        Assert.Equal("mp4", Str(held, "format"));
+        Assert.Equal(6, held.GetProperty("frames").GetInt32());
+        Assert.Equal(0, held.GetProperty("audio").GetArrayLength());
+
+        var talk = renders.Single(r => Str(r, "artifact") == "artifacts/talk.webm");
+        Assert.Equal("webm", Str(talk, "format"));
+        Assert.Equal(10, talk.GetProperty("frames").GetInt32());
+        Assert.Equal(["line.wav", "line.wav"], talk.GetProperty("audio").EnumerateArray().Select(a => a.GetString()));
+    }
     #endregion
 }

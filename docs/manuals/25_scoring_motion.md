@@ -111,7 +111,7 @@ Five ways to put a change into it, and the choice is about what kind of change i
 
 ## 4. Looking at Something You Cannot Watch
 
-> **Implemented by**: `Motion.frame(...)`, `Motion.sheet(...)`, `Motion.save(...)`, `Motion.count`, `Motion.clear()`.
+> **Implemented by**: `Motion.frame(...)`, `Motion.sheet(...)`, `Motion.save(...)`, `Motion.saveVideo(...)`, `comp.saveVideo(...)`, `Motion.count`, `Motion.clear()`.
 
 The loop is always the same: seek, capture, repeat.
 
@@ -123,6 +123,7 @@ Then two different artifacts, for two different readers:
 
 - **`Motion.sheet(...)` is what you look at.** A contact sheet is one image, so it is one read, and the eye works *across* cells — which is how you see that a beat lands late or that two moves collide. It is also comparable: `bitmap.diff` can be pointed at it.
 - **`Motion.save(...)` is what you ship.** An animated file is the deliverable and close to the worst thing to hand yourself for inspection: you can produce one and still not perceive the motion in it.
+- **With sound, ship a video instead: `Motion.saveVideo('output.mp4', { audio })`**, or `comp.saveVideo(...)` straight from a composition, which renders each frame into the encoder and holds none, so a long film does not meet the frame ceiling below. A video has no alpha, so give the film a ground or name a `background`; and read the result's `warnings`, which is the only place a line cut off by the end of the film is reported.
 
 > [!CAUTION]
 > **Do not hand an animated file to the next stage of work either.** Animated WebP is frame-differenced — measured on a 47-frame file, exactly one frame was independently decodable and the rest chained, so reaching frame 36 cost 13 ms against 1 ms for frame 0. Random access is O(n) and gets worse with length. Pass on **the script**, and re-seek to reach a moment; that is O(1) at any `t`.
@@ -327,7 +328,9 @@ is Synfig's, and the craft follows from it:
   wrong in performance: a speaker lingers, rushes and pauses where the punctuation does not say to, and rule timing
   drifted over half a second within one measured line. The aligner finds each word in the recording, so the mouth
   lands with the sound; the line's text still decides which mouths. Check `line.words[i].confidence` for a word it was
-  unsure of, and keep the mouth a frame ahead of the sound (`lead`), which reads as one with it.
+  unsure of, and keep the mouth a frame ahead of the sound (`lead`), which reads as one with it. Deliver it with the
+  voice by passing the line itself, `comp.saveVideo('output.mp4', { audio: line })`: the recording plays from the line's
+  `start`, so the picture and the sound are placed once, in one place, and cannot drift apart.
 - **Or let a performer give the motion: `{ follow: Character.track('Jumping Jacks') }`.** The recorded clips
   that pose the 3D body drive a drawing too, each bone turned to point where the performer's part points on the
   page. It is only as good as the clip is flat: read `track.warnings` first, and choose a clip that moves across
