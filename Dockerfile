@@ -156,6 +156,10 @@ ENV DOTNET_ROOT=/usr/share/dotnet \
 # time_t transition; bookworm's was `libglib2.0-0`, so a base-image change back would need this edited.
 # (PortAudio is not needed: mediapipe imports `sounddevice` inside a try and tolerates its absence.)
 #
+# **`ffmpeg` is what `Motion.saveVideo` and `comp.saveVideo` encode with** (H.264 and AAC, VP9 and Opus;
+# Debian's build has all four). The studio finds it on the PATH and runs it as its own process; on Windows
+# `tools/bootstrap.py --only ffmpeg` fetches a pinned build instead. Without it the calls refuse, saying so.
+#
 # `libicu-dev` rather than a versioned `libicuNN`: the name is stable across Debian releases,
 # so a base-image bump cannot silently break the build. It costs headers we do not need — the
 # honest price of not pinning a version that would go stale.
@@ -233,6 +237,7 @@ RUN apt-get update \
         libfontconfig1 \
         fontconfig \
         potrace \
+        ffmpeg \
         libgl1 \
         libglib2.0-0t64 \
         fonts-recommended \

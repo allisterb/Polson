@@ -454,6 +454,24 @@ internal class Program : Runtime
                 : "Speech: no aligner, so Motion.speech will refuse audio (missing {0}).", SpeechBackend.AlignMissing ?? "");
     }
 
+    /// <summary>Points <c>Motion.saveVideo</c> and <c>comp.saveVideo</c> at ffmpeg, and says which one it found.</summary>
+    /// <remarks>
+    /// Found in <c>bin/ffmpeg/</c> (<c>tools/bootstrap.py --only ffmpeg</c> on Windows), then on the PATH, where
+    /// Debian's package lands; <c>Tools:FFmpeg</c> overrides. Announced either way, as tracing is: a run that could not
+    /// write video should say so before an agent spends a scene finding out.
+    /// </remarks>
+    static void ConfigureVideo()
+    {
+        if (Setting("Tools:FFmpeg") is { Length: > 0 } configured)
+            FFmpeg.ExecutableOverride = configured;
+
+        if (FFmpeg.Executable is { } exe)
+            Info("Video enabled ({0}).", exe);
+        else
+            Warn("Video unavailable: no 'ffmpeg' found, so Motion.saveVideo and comp.saveVideo will refuse. "
+                 + "Run py tools/bootstrap.py --only ffmpeg (Windows), apt-get install ffmpeg (Debian), or set Tools:FFmpeg.");
+    }
+
     /// <summary>Points <c>Face.detect(...)</c> at a backend, and says whether it found one.</summary>
     /// <remarks>
     /// <para>
@@ -583,6 +601,7 @@ internal class Program : Runtime
         ConfigureBodyDetection();
         ConfigureGarmentDetection();
         ConfigureSpeech();
+        ConfigureVideo();
         ConfigureBlender();
         ConfigureCharacterGeneration();
 

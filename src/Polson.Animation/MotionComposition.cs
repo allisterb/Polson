@@ -558,6 +558,39 @@ public sealed class MotionComposition : MotionLayerList
     }
 
     /// <summary>
+    /// Renders the composition straight into a video with sound, an MP4 (H.264, AAC) or a WebM (VP9, Opus) by the path's
+    /// extension: <c>{ fps?, from?, to?, quality?, background?, audio? }</c>.
+    /// </summary>
+    /// <remarks>
+    /// Frames go to the encoder one at a time and are not held, so the film is not bounded by <c>Motion</c>'s frame
+    /// buffer. <c>audio</c> is a path, a line of speech timed by a recording (it plays from the line's <c>start</c>),
+    /// <c>{ path, start }</c>, or a list of these, mixed; starts are composition times, so <c>from</c> moves the sound
+    /// with the picture. Video has no alpha, so frames are drawn over <c>background</c>, white by default.
+    /// </remarks>
+    public Dictionary<string, object?> SaveVideo(string filePath, object? options = null)
+    {
+        var o = new MotionOptions(options, "comp.saveVideo", "fps", "from", "to", "quality", "background", "audio");
+        var fps = o.Number("fps", Fps);
+        var from = o.Number("from", 0);
+        var to = o.Number("to", Duration);
+        if (fps <= 0) throw new ArgumentException("comp.saveVideo: fps must be positive.");
+        if (to < from) throw new ArgumentException($"comp.saveVideo: to ({to}) is before from ({from}).");
+
+        // Both ends included, as capture does.
+        var count = (int)Math.Floor((to - from) * fps + 1e-9) + 1;
+        IEnumerable<SKBitmap> Frames()
+        {
+            for (var i = 0; i < count; i++)
+            {
+                using var frame = Render(from + i / fps);
+                yield return frame.SkBitmap;
+            }
+        }
+
+        return MotionVideo.Save(filePath, Frames(), count, Width, Height, fps, from, o, projectRoot, motion);
+    }
+
+    /// <summary>
     /// The composition as Synfig's <c>.sif</c> XML. A composition with an image layer is refused: its
     /// pictures have to be written beside the file, which <see cref="SaveSif"/> does.
     /// </summary>

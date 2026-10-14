@@ -10,6 +10,9 @@ they are binary, large, or someone else's to publish:
            into src/Polson.Animation/Speech/, where the build copies them next to the assembly (Motion.speech).
   venv     python-mediapipe/, the interpreter the face and body detectors run, installed from
            src/vision/requirements.lock.txt with --require-hashes. Needs Python 3.13, which the lock is for.
+  ffmpeg   (Windows) Gyan Doshi's ffmpeg 9.0.2 essentials build (115 MB), from GitHub at a release tag, unpacked
+           into bin/ffmpeg/: what Motion.saveVideo encodes with. Elsewhere it is skipped; install the system
+           package (Debian: apt-get install ffmpeg), which the container does.
 
   speech-venv  (opt-in) python-speech/, g2p-en, NLTK, torch and torchaudio from src/speech/requirements.lock.txt, plus
            NLTK's tagger and dictionary, pinned, into models/nltk_data/, and wav2vec 2.0's English weights (378 MB)
@@ -18,6 +21,7 @@ they are binary, large, or someone else's to publish:
     py -3.13 tools/bootstrap.py                  everything above but speech-venv, then a smoke test
     py -3.13 tools/bootstrap.py --only library   just the .glb files
     py tools/bootstrap.py --only speech          just the dictionary (any Python 3)
+    py tools/bootstrap.py --only ffmpeg          just ffmpeg, then a check of its encoders (any Python 3)
     py -3.13 tools/bootstrap.py --only speech-venv   the speech backend, then a smoke test of it, offline
     py -3.13 tools/bootstrap.py --extras         also the Full pose model, and the segmentation spikes' models:
                                                  MediaPipe's two, U²-Net cloth and SAM 2.1 (another 390 MB)
@@ -160,6 +164,19 @@ ALIGNER = [
      "488fd4f16de84438ffc945334278c1b9fb9b7159a806c1080b16111a958c945d", 377664473),
 ]
 
+#: Gyan Doshi's Windows builds of ffmpeg, mirrored on GitHub under a tag per release. The essentials build is GPL-3
+#: (it carries libx264); the studio runs it as its own process and never links it, and bin/ is not committed. The hash
+#: is the SHA-256 GitHub reports for the asset (the API's `digest`), read 2026-10-14; see reference/README.md.
+FFMPEG_TAG = "9.0.2"
+FFMPEG = [
+    ("ffmpeg", f"https://github.com/GyanD/codexffmpeg/releases/download/{FFMPEG_TAG}/ffmpeg-{FFMPEG_TAG}-essentials_build.zip",
+     f"ffmpeg-{FFMPEG_TAG}-essentials_build.zip",
+     "60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba", 114768076),
+]
+
+#: What Motion.saveVideo asks ffmpeg for: H.264 and AAC in an MP4, VP9 and Opus in a WebM.
+FFMPEG_ENCODERS = ("libx264", "aac", "libvpx-vp9", "libopus")
+
 #: A glTF binary starts `glTF`; a MediaPipe `.task`, a PyTorch `.pth` or `.pt` and NLTK's data are zips (`PK`); a
 #: `.tflite` is a FlatBuffer carrying `TFL3` at 4.
 MAGIC = {".glb": (0, b"glTF"), ".task": (0, b"PK"), ".pth": (0, b"PK"), ".pt": (0, b"PK"), ".zip": (0, b"PK"),
@@ -248,6 +265,36 @@ def unzip(archive: Path) -> None:
             if not (target / name).resolve().is_relative_to(target):
                 raise SystemExit(f"FATAL: {archive.name} holds {name!r}, which would unpack outside {target}.")
         z.extractall(target)
+
+
+def unpack_ffmpeg(archive: Path) -> None:
+    """Takes ffmpeg.exe, ffprobe.exe and the licence out of the build's zip, flat into the folder beside it."""
+    import zipfile
+    keep = {"bin/ffmpeg.exe": "ffmpeg.exe", "bin/ffprobe.exe": "ffprobe.exe", "LICENSE": "LICENSE", "README.txt": "README.txt"}
+    found = set()
+    with zipfile.ZipFile(archive) as z:
+        for info in z.infolist():
+            # Members sit under one top folder named for the build; match on what follows it.
+            tail = info.filename.split("/", 1)[-1]
+            if tail in keep:
+                (archive.parent / keep[tail]).write_bytes(z.read(info))
+                found.add(tail)
+    if found != set(keep):
+        raise SystemExit(f"FATAL: {archive.name} lacks {', '.join(sorted(set(keep) - found))}.")
+
+
+def smoke_ffmpeg(folder: Path) -> None:
+    """Runs the unpacked ffmpeg once and checks it has every encoder Motion.saveVideo names."""
+    exe = folder / "ffmpeg.exe"
+    if not exe.exists():
+        raise SystemExit(f"FATAL: no ffmpeg at {exe}. Run without --check, or with --only ffmpeg.")
+    result = subprocess.run([str(exe), "-hide_banner", "-encoders"], capture_output=True, timeout=60)
+    listed = {line.split()[1] for line in result.stdout.decode(errors="replace").splitlines()
+              if len(line.split()) > 1 and len(line.split()[0]) == 6}
+    lacking = [e for e in FFMPEG_ENCODERS if e not in listed]
+    if result.returncode != 0 or lacking:
+        raise SystemExit(f"FATAL: {exe} ran (exit {result.returncode}) but lacks {', '.join(lacking) or 'nothing'}.")
+    print(f"  ffmpeg: ran, and has {', '.join(FFMPEG_ENCODERS)}")
 
 
 def smoke_speech(venv: Path, speech: Path, nltk_data: Path, models: Path) -> None:
@@ -351,8 +398,8 @@ def smoke(venv: Path, vision: Path, models: Path) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--only", default="library,models,speech,venv",
-                        help="comma-separated: library, models, speech, venv (the default: all four), and the "
+    parser.add_argument("--only", default="library,models,speech,venv,ffmpeg",
+                        help="comma-separated: library, models, speech, venv, ffmpeg (the default: all five), and the "
                              "opt-in speech-venv")
     parser.add_argument("--extras", action="store_true", help="also the Full pose model and the segmentation models")
     parser.add_argument("--check", action="store_true", help="verify what is present and smoke-test it; no network")
@@ -366,9 +413,13 @@ def main() -> int:
     args = parser.parse_args()
 
     only = {s.strip() for s in args.only.split(",") if s.strip()}
-    unknown = only - {"library", "models", "speech", "venv", "speech-venv"}
+    unknown = only - {"library", "models", "speech", "venv", "ffmpeg", "speech-venv"}
     if unknown:
-        parser.error(f"--only takes library, models, speech, venv and speech-venv, not {', '.join(sorted(unknown))}")
+        parser.error(f"--only takes library, models, speech, venv, ffmpeg and speech-venv, not {', '.join(sorted(unknown))}")
+    # Only the Windows build is fetched: elsewhere the system package is the way, and the studio finds it on the PATH.
+    if "ffmpeg" in only and os.name != "nt":
+        print("  skipped    ffmpeg: not Windows; install the system package (Debian: apt-get install ffmpeg)")
+        only.discard("ffmpeg")
     library = args.library or args.root / "src" / "Polson.Drawing.Mesh" / "Library"
     models = args.models or args.root / "models"
     speech = args.speech or args.root / "src" / "Polson.Animation" / "Speech"
@@ -379,8 +430,10 @@ def main() -> int:
     wanted = ([f for f in LIBRARY if "library" in only]
               + [f for f in MODELS + (EXTRAS if args.extras else []) if "models" in only]
               + [f for f in SPEECH if "speech" in only]
-              + [f for f in NLTK + ALIGNER if "speech-venv" in only])
-    folders = {"library": library, "models": models, "speech": speech, "nltk": nltk_data}
+              + [f for f in NLTK + ALIGNER if "speech-venv" in only]
+              + [f for f in FFMPEG if "ffmpeg" in only])
+    folders = {"library": library, "models": models, "speech": speech, "nltk": nltk_data,
+               "ffmpeg": args.root / "bin" / "ffmpeg"}
     missing = []
     for group, url, rel, expected, size in wanted:
         dest = folders[group] / rel
@@ -393,6 +446,8 @@ def main() -> int:
             print(f"  {fetch(url, dest, expected, size, args.force):10} {dest} ({size / 1e6:.1f} MB)")
             if group == "nltk":
                 unzip(dest)
+            if group == "ffmpeg":
+                unpack_ffmpeg(dest)
     if missing:
         raise SystemExit(f"FATAL: {len(missing)} file(s) missing or wrong. Run without --check to fetch them.")
 
@@ -400,6 +455,9 @@ def main() -> int:
         if not args.check:
             build_venv(venv, vision / "requirements.lock.txt")
         smoke(venv, vision, models)
+
+    if "ffmpeg" in only:
+        smoke_ffmpeg(folders["ffmpeg"])
 
     # The speech backend, opt-in: python-speech/ from its own lock, g2p-en with NLTK's pinned data, smoke-tested offline.
     if "speech-venv" in only:
