@@ -523,7 +523,9 @@ public class MotionCompositionTests(ITestOutputHelper output) : TestsRuntime
             Assert.DoesNotContain("error", log, StringComparison.OrdinalIgnoreCase);
 
             var files = Directory.GetFiles(dir, name + ".*.png").Order(StringComparer.Ordinal).ToArray();
-            return [.. files.Select(f => SKBitmap.Decode(f))];
+            // Through .NET, not SKBitmap.Decode(path): Skia opens with the CRT's fopen, whose handle is inheritable, so a
+            // process another test starts meanwhile inherits it and holds the file past our Directory.Delete.
+            return [.. files.Select(f => SKBitmap.Decode(File.ReadAllBytes(f)))];
         }
         finally
         {

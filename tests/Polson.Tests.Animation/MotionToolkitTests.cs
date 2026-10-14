@@ -60,7 +60,7 @@ public class MotionToolkitTests : TestsRuntime
             });
 
             Assert.Equal(2, Convert.ToInt32(sheet["cells"]));
-            using var bitmap = SKBitmap.Decode(path);
+            using var bitmap = SKBitmap.Decode(File.ReadAllBytes(path));
 
             // Left cell must still be the first colour; right cell the second.
             var left = bitmap.GetPixel(bitmap.Width / 4, bitmap.Height / 2);
@@ -111,7 +111,7 @@ public class MotionToolkitTests : TestsRuntime
             Assert.Equal(8 - Convert.ToInt32(saved["storedFrames"]), Convert.ToInt32(saved["merged"]));
             Assert.Equal(320f, Convert.ToSingle(saved["durationMs"]), 1);   // 8 x 40ms, regardless
 
-            using var codec = SKCodec.Create(path);
+            using var codec = SKCodec.Create(new MemoryStream(File.ReadAllBytes(path)));
             Assert.Equal(Convert.ToInt32(saved["storedFrames"]), codec.FrameCount);
         }
         finally { if (File.Exists(path)) File.Delete(path); }
@@ -213,7 +213,7 @@ public class MotionToolkitTests : TestsRuntime
             Assert.True(at > 0, "an animated WebP carries an ANIM chunk");
             Assert.Equal(expected, BitConverter.ToUInt16(bytes, at + 12));
 
-            using var codec = SKCodec.Create(path);
+            using var codec = SKCodec.Create(new MemoryStream(File.ReadAllBytes(path)));
             Assert.Equal(2, codec.FrameCount);   // patching the count leaves the file decodable
         }
         finally { if (File.Exists(path)) File.Delete(path); }
@@ -251,7 +251,7 @@ public class MotionToolkitTests : TestsRuntime
         try
         {
             motion.Sheet(path, new Dictionary<string, object?> { ["scale"] = 0.4f, ["labels"] = false });
-            using var sheet = SKBitmap.Decode(path);
+            using var sheet = SKBitmap.Decode(File.ReadAllBytes(path));
 
             // The cell starts at padding 12 + gap 10, and the line lands near 22 + 54 * 0.4.
             var darkest = 255;
