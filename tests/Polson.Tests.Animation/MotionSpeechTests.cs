@@ -250,6 +250,33 @@ public class MotionSpeechTests : TestsRuntime
         Assert.Equal(At("Bob") + 2, (double)later.Words.First(w => (string)w["word"]! == "Bob")["start"]!, 9);
     }
 
+    /// <summary>
+    /// An MP3 or M4A of the recording is decoded for the aligner and lands its words where the WAV does: within 30 ms,
+    /// under a frame at 30 fps, so a voice can be uploaded in whatever form it came in.
+    /// </summary>
+    [Fact]
+    public void AudioThatIsNotAWavIsDecodedForTheAligner()
+    {
+        if (!SpeechBackend.AlignAvailable || !FFmpeg.Available || Recording() is not { } wav) return;
+        var dir = Path.Combine(Path.GetTempPath(), "polson-speech-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var truth = Say(ProbeLine, ("audio", wav)).Words.Select(w => (double)w["start"]!).ToList();
+            foreach (var (name, codec) in new[] { ("probe.mp3", new[] { "-c:a", "libmp3lame", "-b:a", "128k" }), ("probe.m4a", new[] { "-c:a", "aac" }) })
+            {
+                var upload = MotionVideoTests.Transcode(wav, Path.Combine(dir, name), codec);
+                var s = Say(ProbeLine, ("audio", upload));
+                Assert.True(s.Aligned);
+                Assert.Equal(upload, s.Audio);
+                var starts = s.Words.Select(w => (double)w["start"]!).ToList();
+                Assert.Equal(truth.Count, starts.Count);
+                Assert.All(truth.Zip(starts), p => Assert.InRange(p.Second - p.First, -0.03, 0.03));
+            }
+        }
+        finally { Directory.Delete(dir, recursive: true); }
+    }
+
     [Fact]
     public void BadAudioIsRefused()
     {

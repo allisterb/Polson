@@ -13,6 +13,7 @@ using Polson.ExtendedMind.DocumentProcessing;
 using Polson.ExtendedMind.ImageGeneration;
 using Polson.ExtendedMind.ParallelSearch;
 using Polson.ExtendedMind.Photos;
+using Polson.ExtendedMind.SpeechGeneration;
 using Polson.Drawing.Mesh;
 using Polson.Drawing.Skia;
 using Polson.Drawing.Svg;
@@ -107,6 +108,7 @@ public static class JsSurface
         new("cutout", typeof(CutoutAsset), "Assets", true),
         new("cell", typeof(CutoutCell), "Assets", true),
         new("budget", typeof(AssetBudget), "Assets", true),
+        new("spoken", typeof(SpeechAsset), "Assets", true),
 
         new("Documents", typeof(DocumentProcessor), "Documents", false),
         new("answer", typeof(DocumentAnswer), "Documents", true),
@@ -224,6 +226,7 @@ public static class JsSurface
             ["matte.toJSON"] = "JSON.stringify protocol hook; see the execution model",
             ["cutout.toJSON"] = "JSON.stringify protocol hook; see the execution model",
             ["cell.toJSON"] = "JSON.stringify protocol hook; see the execution model",
+            ["spoken.toJSON"] = "JSON.stringify protocol hook; see the execution model",
             ["imageData.toJSON"] = "JSON.stringify protocol hook; see the execution model",
             ["element.toJSON"] = "JSON.stringify protocol hook; see the execution model",
 

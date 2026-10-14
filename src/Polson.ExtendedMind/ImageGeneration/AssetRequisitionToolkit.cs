@@ -42,7 +42,10 @@ using SkiaSharp;
 public partial class AssetRequisitionToolkit : Runtime
 {
     #region Constructors
-    public AssetRequisitionToolkit(IImageGenerator? generator, IRequisitionCache cache, AssetBudget budget, string requester = "unknown")
+    /// <param name="speech">The text-to-speech transport for <see cref="Speak"/>; null leaves speech unconfigured.</param>
+    /// <param name="speechCache">Where spoken lines are kept; a cache under the app data folder when null.</param>
+    public AssetRequisitionToolkit(IImageGenerator? generator, IRequisitionCache cache, AssetBudget budget, string requester = "unknown",
+        SpeechGeneration.ISpeechGenerator? speech = null, SpeechGeneration.ISpeechCache? speechCache = null)
     {
         ArgumentNullException.ThrowIfNull(cache);
         ArgumentNullException.ThrowIfNull(budget);
@@ -50,6 +53,8 @@ public partial class AssetRequisitionToolkit : Runtime
         this.generator = generator;
         this.cache = cache;
         this.requester = requester;
+        this.speech = speech;
+        this.speechCache = speechCache;
         Budget = budget;
     }
     #endregion
@@ -1378,6 +1383,8 @@ public partial class AssetRequisitionToolkit : Runtime
     readonly IImageGenerator? generator;
     readonly IRequisitionCache cache;
     readonly string requester;
+    readonly SpeechGeneration.ISpeechGenerator? speech;
+    SpeechGeneration.ISpeechCache? speechCache;
     readonly List<MaterialAsset> library = [];
     #endregion
     /// <summary>Words that make a descriptor about somebody's face rather than about a shape.</summary>

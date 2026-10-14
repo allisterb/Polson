@@ -131,6 +131,7 @@ public class ImageGenerationResult
         ImageGenerationFailure.Recitation => "Declined as too close to existing material. The descriptor was too generic — add specifics (finish, wear, colour, lighting) rather than retrying the same words.",
         ImageGenerationFailure.InvalidRequest => "The request was malformed or the descriptor was rejected. Simplify the descriptor and try once more.",
         ImageGenerationFailure.NoImageReturned => "The call succeeded but carried no image. Retry once; if it recurs, reword the descriptor.",
+        ImageGenerationFailure.NoAudioReturned => "The call succeeded but carried no usable audio. Retry once; if it recurs, shorten or reword the line.",
         ImageGenerationFailure.ServiceError => "The service failed on its side. Retry the same request after a short pause.",
         ImageGenerationFailure.Network => "The request never reached the service. Retry the same request.",
         ImageGenerationFailure.Timeout => "The request timed out. Retry, or continue without the asset and draw it procedurally.",
@@ -216,6 +217,12 @@ public enum ImageGenerationFailure
     /// perfectly and nothing downstream can detect it.
     /// </summary>
     RefusedLikeness = 17,
+
+    /// <summary>
+    /// A 200 that carried no audio, or audio that was not the 16-bit PCM WAV it should be. The speech counterpart of
+    /// <see cref="NoImageReturned"/>, and never to be read as a silent line.
+    /// </summary>
+    NoAudioReturned = 18,
 
     /// <summary>
     /// This studio has no image-generation credentials configured, so requisition is unavailable for

@@ -9,7 +9,10 @@ using System.Linq;
 using System.Text;
 using SkiaSharp;
 
-/// <summary>Video with sound, by way of <c>ffmpeg</c>: Skia frames in over a pipe, an MP4 or WebM out.</summary>
+/// <summary>
+/// Video with sound, by way of <c>ffmpeg</c>: Skia frames in over a pipe, an MP4 or WebM out. Also decodes a recording
+/// that is not 16-bit PCM WAV into one, for the aligner.
+/// </summary>
 /// <remarks>
 /// <para>
 /// <b>A separate program, not a library we link.</b> The usual builds are GPL (they carry x264), and running one as its
@@ -253,7 +256,64 @@ public static class FFmpeg
     }
 
     /// <summary>A WAV's length in seconds from its header, or null for another format or a header it cannot read.</summary>
-    internal static double? WavSeconds(string fullPath)
+    internal static double? WavSeconds(string fullPath) =>
+        Wav(fullPath) is { ByteRate: > 0 } f ? f.DataBytes / (double)f.ByteRate : null;
+
+    /// <summary>Whether the aligner reads a file as it is: a WAV of 16-bit integer PCM, which is all Python's <c>wave</c> takes.</summary>
+    internal static bool IsPcm16Wav(string fullPath) => Wav(fullPath) is { Tag: 1, Bits: 16 };
+
+    /// <summary>
+    /// A recording as the aligner reads it: the file itself when it is 16-bit PCM WAV, otherwise decoded once to a 16 kHz
+    /// mono one, the aligner's own rate, kept in the temp folder under its content's hash so the same upload is decoded
+    /// once however often it is named.
+    /// </summary>
+    /// <remarks>
+    /// Read with the demuxer its extension and first bytes agree on, as a video's recordings are, so an upload is never
+    /// probed. The video reads the same source the same way, so the times the aligner finds are the times it plays at:
+    /// ffmpeg drops an MP3's encoder delay and honours an M4A's edit list in both.
+    /// </remarks>
+    internal static string AlignerWav(string fullPath, string given, string who)
+    {
+        if (IsPcm16Wav(fullPath)) return fullPath;
+        var demuxer = Demuxer(fullPath, given, who);
+        if (Executable is not { } exe)
+            throw new InvalidOperationException(
+                $"{who}: '{given}' is not 16-bit PCM WAV, and decoding it for the aligner needs the 'ffmpeg' program: {Install}.");
+
+        string hash;
+        using (var f = File.OpenRead(fullPath)) hash = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(f));
+        var dir = Path.Combine(Path.GetTempPath(), "polson-audio");
+        var wav = Path.Combine(dir, hash[..32] + ".wav");
+        if (File.Exists(wav)) return wav;
+
+        Directory.CreateDirectory(dir);
+        var partial = wav + "." + Guid.NewGuid().ToString("N") + ".part";
+        var info = Info(exe, "-hide_banner", "-nostdin", "-loglevel", "error", "-y",
+            "-protocol_whitelist", "file", "-f", demuxer, "-i", "file:" + fullPath,
+            "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", "-f", "wav", "file:" + partial);
+        using var process = Process.Start(info) ?? throw new InvalidOperationException($"{who}: ffmpeg would not start.");
+        process.StandardInput.Close();
+        var stderr = process.StandardError.ReadToEndAsync();
+        _ = process.StandardOutput.ReadToEndAsync();
+        if (!process.WaitForExit(120_000))
+        {
+            Kill(process);
+            File.Delete(partial);
+            throw new TimeoutException($"{who}: decoding '{given}' took longer than 120 s.");
+        }
+        if (process.ExitCode != 0 || !IsPcm16Wav(partial))
+        {
+            File.Delete(partial);
+            throw new InvalidOperationException($"{who}: ffmpeg could not decode '{given}' (exit {process.ExitCode}). {Trim(stderr.Result)}");
+        }
+        // Another caller may have finished the same file first; theirs is the same bytes.
+        try { File.Move(partial, wav, overwrite: false); }
+        catch (IOException) when (File.Exists(wav)) { File.Delete(partial); }
+        return wav;
+    }
+
+    /// <summary>A WAV's format tag, bits per sample, bytes per second and data length, or null when it is not a WAV it can read.</summary>
+    static (int Tag, int Bits, uint ByteRate, long DataBytes)? Wav(string fullPath)
     {
         try
         {
@@ -261,22 +321,25 @@ public static class FFmpeg
             if (Encoding.ASCII.GetString(r.ReadBytes(4)) != "RIFF") return null;
             r.ReadUInt32();
             if (Encoding.ASCII.GetString(r.ReadBytes(4)) != "WAVE") return null;
-            uint byteRate = 0;
+            (int Tag, int Bits, uint ByteRate)? fmt = null;
             while (r.BaseStream.Position + 8 <= r.BaseStream.Length)
             {
                 var id = Encoding.ASCII.GetString(r.ReadBytes(4));
                 var size = r.ReadUInt32();
                 if (id == "fmt " && size >= 16)
                 {
-                    r.ReadBytes(8);
-                    byteRate = r.ReadUInt32();
-                    r.BaseStream.Seek(size - 12, SeekOrigin.Current);
+                    var tag = r.ReadUInt16();
+                    r.ReadBytes(6);
+                    var byteRate = r.ReadUInt32();
+                    r.ReadUInt16();
+                    fmt = (tag, r.ReadUInt16(), byteRate);
+                    r.BaseStream.Seek(size - 16 + (size & 1), SeekOrigin.Current);
                 }
                 else if (id == "data")
                 {
                     // A streamed WAV writes 0 or 0xFFFFFFFF here and means "to the end".
                     var bytes = size is 0 or uint.MaxValue ? r.BaseStream.Length - r.BaseStream.Position : size;
-                    return byteRate > 0 ? bytes / (double)byteRate : null;
+                    return fmt is { } f ? (f.Tag, f.Bits, f.ByteRate, bytes) : null;
                 }
                 else r.BaseStream.Seek(size + (size & 1), SeekOrigin.Current);
             }

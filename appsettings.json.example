@@ -4,8 +4,10 @@
   },
   "Assets": {
     "Model": "gemini-2.5-flash-image",
+    "SpeechModel": "gemini-3.8-flash-lite-tts",
     "Budget": 120,
-    "CacheDir": ""
+    "CacheDir": "",
+    "SpeechCacheDir": ""
   },
   "Trellis": {
     "BaseUrl": "http://localhost:8000"

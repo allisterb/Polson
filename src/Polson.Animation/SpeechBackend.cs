@@ -143,19 +143,21 @@ public static class SpeechBackend
     /// </summary>
     /// <remarks>
     /// The spans are the aligner's, pulled <see cref="AlignerLag"/> earlier: against the moment sound starts, it was
-    /// measured a little late.
+    /// measured a little late. A recording that is not 16-bit PCM WAV (an MP3, an M4A, a float WAV) is decoded for it by
+    /// ffmpeg first; <paramref name="given"/> is how the caller named it, for messages.
     /// </remarks>
-    internal static Alignment Align(string wav, IReadOnlyList<string> words, int timeoutMs = 180000)
+    internal static Alignment Align(string audio, IReadOnlyList<string> words, string? given = null, int timeoutMs = 180000)
     {
         lock (Gate)
         {
-            var file = new FileInfo(wav);
+            var file = new FileInfo(audio);
             var key = $"{file.FullName}|{file.Length}|{file.LastWriteTimeUtc.Ticks}|{string.Join(' ', words)}";
             if (Aligned.TryGetValue(key, out var known)) return known;
             if (!AlignAvailable)
                 throw new InvalidOperationException($"Aligning a recording needs {AlignMissing}: {Install}.");
 
-            using var doc = Run(_rAlignScript!, _rModels!, new { audio = file.FullName, words }, timeoutMs, "The aligner");
+            var wav = FFmpeg.AlignerWav(file.FullName, given ?? file.Name, "Motion.speech");
+            using var doc = Run(_rAlignScript!, _rModels!, new { audio = wav, words }, timeoutMs, "The aligner");
             double? Seconds(JsonElement w, string name) =>
                 w.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetDouble() : null;
             var spans = doc.RootElement.GetProperty("words").EnumerateArray().Select(w =>

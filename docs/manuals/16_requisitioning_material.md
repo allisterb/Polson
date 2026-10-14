@@ -344,6 +344,19 @@ followed the guide. A costumed character overlaps its clay guide by about half t
 
 ---
 
+## 8b. A Voice — `Assets.speak`
+
+> **Implemented by**: `Assets.speak(...)`, `spoken.path`, `spoken.duration`, `spoken.voice`, `spoken.sampleRate`, `spoken.byteLength`, `spoken.warnings`.
+
+A spoken line is material in the same sense a swatch is: the model supplies the sound, and the drawing still has to be made to it. `await Assets.speak(text, { voice, style, path })` writes a WAV into the project and returns where (`spoken.path`) and how long it runs (`spoken.duration`, in seconds, at `spoken.sampleRate`). Hand the path to `Motion.speech(text, { audio: spoken.path })` and the mouths are timed to the voice; hand the line to `comp.saveVideo(..., { audio: line })` and the voice plays where they were timed.
+
+- **Pick the voice once per character and keep it.** `spoken.voice` echoes the one used; a misspelt name is refused with the nearest. Each voice is a different take: the same line ran 4.16 s in Kore and 4.40 s in Puck, with the pauses in different places, so a line cannot be swapped to another voice without re-timing the mouths.
+- **Direct the delivery in words, never by naming a person.** `style: 'in a whisper'` is read as how to speak; `style: 'like Morgan Freeman'` is refused, since a voice cannot be made to sound like a real one.
+- **Read `spoken.warnings`.** A line much longer than its words allow may carry the direction spoken aloud; one much shorter may be cut off. Then align it and read each word's `confidence`: a low score on one word is the place to listen.
+- **Speak a scene line by line.** One call takes at most 600 characters, each line is one generation, and the same line in the same voice and direction is free from cache afterwards, which is what lets a script that speaks its dialogue be re-run. `spoken.byteLength` says what landed on disk.
+
+---
+
 ## 9. Provenance and Reuse
 
 > **Implemented by**: `Assets.library`, `material.provenance`, `material.id`.
@@ -399,6 +412,7 @@ log('already requisitioned: ' + have.map(m => m.provenance.prompt).join(' | '));
 | A background | `await Assets.backdrop(d, opts)` | `width`, `height`, `keepQuiet`, `noHorizon`, `conditionOn` |
 | A mask or height field | `await Assets.matte(d, opts)` | `size`, `invert` |
 | A face, a figure, a thing to composite | `await Assets.cutout(d, opts)` | `variants` (max 6), `size`, `style`, `background`, `tolerance`. Real alpha — see §8a |
+| A voice for a line of dialogue | `await Assets.speak(text, opts)` | `voice`, `style` (delivery, never a person), `path`. Writes a WAV; see §8b |
 | Did the sheet divide properly? | `cutout.split` | `'gaps'` good, `'even'` means check for clipped shoulders |
 | Did the key eat the face? | `cell.holes` | Enclosed transparency. Near zero is clean; `cell.coverage` cannot see this |
 | Did it work? | `result.success` | Then `failureName`, `remedy`, `retryable`, `error` |
