@@ -564,7 +564,9 @@ public static class CharacterBuilder
     public static FaceMesh LoadFace(string dir, string source)
     {
         var mesh = new MeshToolkit().FromObj(File.ReadAllText(Path.Combine(dir, FaceObj)));
-        var texture = SKBitmap.Decode(Path.Combine(dir, FacePng))
+        // Bytes through .NET, never a path to Skia: Skia opens a path with the CRT's fopen, whose handle a process started
+        // meanwhile (Blender, the detectors) inherits and holds for its lifetime.
+        var texture = SKBitmap.Decode(File.ReadAllBytes(Path.Combine(dir, FacePng)))
             ?? throw new ArgumentException($"The face atlas in {dir} could not be decoded.");
         return new FaceMesh(mesh.Vertices, mesh.Uvs, mesh.Indices, true, source) { Texture = texture };
     }
@@ -716,7 +718,8 @@ public static class CharacterBuilder
         {
             foreach (var node in manifest["views"]?.AsArray() ?? [])
                 if (node?.GetValue<string>() is { } file && file.StartsWith("view-", StringComparison.Ordinal))
-                    views[Path.GetFileNameWithoutExtension(file)["view-".Length..]] = SKBitmap.Decode(Path.Combine(dir, file))
+                    // From bytes, as LoadFace reads: the garment detector starts while these are being read.
+                    views[Path.GetFileNameWithoutExtension(file)["view-".Length..]] = SKBitmap.Decode(File.ReadAllBytes(Path.Combine(dir, file)))
                         ?? throw new InvalidOperationException($"{file} could not be decoded.");
             var bodies = BuiltRigs(manifest).ToDictionary(r => r, r => MeshGltf.Load(Path.Combine(dir, RigFile(manifest, r)!), r));
             var notes = new List<string>();

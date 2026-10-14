@@ -304,7 +304,9 @@ public class MotionBlendTests(ITestOutputHelper output) : TestsRuntime
 
             var files = Directory.GetFiles(dir, name + ".*.png").Order(StringComparer.Ordinal).ToArray();
             if (files.Length == 0) files = Directory.GetFiles(dir, name + ".png");
-            return [.. files.Select(f => SKBitmap.Decode(f))];
+            // Through .NET, not SKBitmap.Decode(path): Skia opens with the CRT's fopen, whose handle is inheritable, so a
+            // process another test starts meanwhile inherits it and holds the file past our Directory.Delete.
+            return [.. files.Select(f => SKBitmap.Decode(File.ReadAllBytes(f)))];
         }
         finally
         {

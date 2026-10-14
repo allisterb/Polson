@@ -293,7 +293,9 @@ public partial class DrawingMcpTools
             // ── Views ──────────────────────────────────────────────────────────────────────────────
             var images = await Step("views", () =>
             {
-                SKBitmap Decode(string key, string path) => SKBitmap.Decode(path)
+                // Bytes through .NET, never a path to Skia: Skia opens a path with the CRT's fopen, whose handle any process
+                // started meanwhile inherits (a build runs Blender and the detectors; a script may run ffmpeg) and holds.
+                SKBitmap Decode(string key, string path) => SKBitmap.Decode(File.ReadAllBytes(path))
                     ?? throw new StageFailure($"The {key} could not be decoded as an image.", "Pass a PNG, JPEG or WebP.");
                 if (!views.TryGetValue("sheet", out var sheetPath))
                     return Task.FromResult(views.Where(kv => kv.Key != "faceSheet").ToDictionary(kv => kv.Key, kv => Decode(kv.Key + " view", kv.Value)));
@@ -322,7 +324,7 @@ public partial class DrawingMcpTools
             List<SKBitmap>? heads = null;
             if (views.TryGetValue("faceSheet", out var headPath))
             {
-                using var headImage = SKBitmap.Decode(headPath)
+                using var headImage = SKBitmap.Decode(File.ReadAllBytes(headPath))
                     ?? throw new StageFailure("The face sheet could not be decoded as an image.", "Pass a PNG, JPEG or WebP.");
                 heads = CharacterBuilder.SplitSheet(headImage, 0, out var headWhy);
                 var problem = heads.Count is 0 or > 3
