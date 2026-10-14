@@ -307,7 +307,12 @@ public partial class ConstructiveDrawingToolkit
                 ["lowerLipY"] = yMouth + H * 0.03f,
                 // How far the lips part above and below the line of the mouth; closed at rest.
                 ["openUp"] = 0f,
-                ["openDown"] = 0f
+                ["openDown"] = 0f,
+                // 0 to 1: lips pushed forward into a ring (AU18, AU22), pressed shut and thin (AU24), the lower lip
+                // rolled under the upper teeth (AU28): the mouths speech needs that opening and stretching cannot make.
+                ["round"] = 0f,
+                ["press"] = 0f,
+                ["tuck"] = 0f
             },
             ["jaw"] = new Dictionary<string, object?>
             {
@@ -670,7 +675,11 @@ public partial class ConstructiveDrawingToolkit
                 ["upperLipY"] = upperLip,
                 ["lowerLipY"] = lowerLip,
                 ["openUp"] = 0f,
-                ["openDown"] = 0f
+                ["openDown"] = 0f,
+                // 0 to 1, as on Loomis's head: rounded (AU18, AU22), pressed (AU24), lower lip tucked (AU28).
+                ["round"] = 0f,
+                ["press"] = 0f,
+                ["tuck"] = 0f
             },
             ["jaw"] = new Dictionary<string, object?>
             {
@@ -1335,6 +1344,9 @@ public partial class ConstructiveDrawingToolkit
         ("mouthGuides.lowerLipY", HeadValue.CoordY),
         ("mouthGuides.openUp", HeadValue.Length),
         ("mouthGuides.openDown", HeadValue.Length),
+        ("mouthGuides.round", HeadValue.Fraction),
+        ("mouthGuides.press", HeadValue.Fraction),
+        ("mouthGuides.tuck", HeadValue.Fraction),
 
         ("jaw.ear", HeadValue.Point),
         ("jaw.angle", HeadValue.Point),

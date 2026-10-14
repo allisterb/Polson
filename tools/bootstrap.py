@@ -11,8 +11,9 @@ they are binary, large, or someone else's to publish:
   venv     python-mediapipe/, the interpreter the face and body detectors run, installed from
            src/vision/requirements.lock.txt with --require-hashes. Needs Python 3.13, which the lock is for.
 
-  speech-venv  (opt-in) python-speech/, g2p-en and NLTK from src/speech/requirements.lock.txt, plus NLTK's tagger
-           and dictionary, pinned, into models/nltk_data/: pronouncing words no dictionary has, and heteronyms.
+  speech-venv  (opt-in) python-speech/, g2p-en, NLTK, torch and torchaudio from src/speech/requirements.lock.txt, plus
+           NLTK's tagger and dictionary, pinned, into models/nltk_data/, and wav2vec 2.0's English weights (378 MB)
+           into models/: pronouncing words no dictionary has, and timing a known line against a recording.
 
     py -3.13 tools/bootstrap.py                  everything above but speech-venv, then a smoke test
     py -3.13 tools/bootstrap.py --only library   just the .glb files
@@ -147,6 +148,18 @@ NLTK = [
      "d07cca47fd72ad32ea9d8ad1219f85301eeaf4568f8b6b73747506a71fb5afd6", 896069),
 ]
 
+#: What the speech venv's align.py reads: wav2vec 2.0 base fine-tuned for English letters on LibriSpeech 960 h, the
+#: weights torchaudio's WAV2VEC2_ASR_BASE_960H bundle fetches (MIT, "originally published by the authors of wav2vec 2.0
+#: under MIT License and redistributed with the same license", per torchaudio's bundle page). Into models/, under the
+#: name torch's loader looks for there, so align.py finds it and never downloads. Hashed 2026-10-13 from PyTorch's model
+#: storage (multipart ETag ac14bf30...-23); its pickle references only OrderedDict, FloatStorage and
+#: _rebuild_tensor_v2, checked with pickletools without loading it, and align.py loads it with weights_only.
+ALIGNER = [
+    ("models", "https://download.pytorch.org/torchaudio/models/wav2vec2_fairseq_base_ls960_asr_ls960.pth",
+     "wav2vec2_fairseq_base_ls960_asr_ls960.pth",
+     "488fd4f16de84438ffc945334278c1b9fb9b7159a806c1080b16111a958c945d", 377664473),
+]
+
 #: A glTF binary starts `glTF`; a MediaPipe `.task`, a PyTorch `.pth` or `.pt` and NLTK's data are zips (`PK`); a
 #: `.tflite` is a FlatBuffer carrying `TFL3` at 4.
 MAGIC = {".glb": (0, b"glTF"), ".task": (0, b"PK"), ".pth": (0, b"PK"), ".pt": (0, b"PK"), ".zip": (0, b"PK"),
@@ -237,8 +250,8 @@ def unzip(archive: Path) -> None:
         z.extractall(target)
 
 
-def smoke_speech(venv: Path, speech: Path, nltk_data: Path) -> None:
-    """Runs g2p.py on a sentence with a heteronym, a number and an invented word: JSON in, JSON out, offline."""
+def smoke_speech(venv: Path, speech: Path, nltk_data: Path, models: Path) -> None:
+    """Runs g2p.py on a sentence with a heteronym, a number and an invented word, then align.py on silence; offline."""
     python = venv_python(venv)
     if not python.exists():
         raise SystemExit(f"FATAL: no interpreter at {python}. Run without --check, or with --only speech-venv.")
@@ -255,6 +268,24 @@ def smoke_speech(venv: Path, speech: Path, nltk_data: Path) -> None:
     said = ", ".join(f"{w['word']} {' '.join(w['phonemes'])} ({w['source']})" for w in answer["words"]
                      if w["word"] in ("read", "two", "zorblax"))
     print(f"  g2p.py: ran offline on {len(answer['words'])} words: {said}")
+
+    # The aligner on a second of silence: torch, torchaudio, the pinned weights and forced_align load and run together.
+    import wave
+    with tempfile.TemporaryDirectory() as tmp:
+        wav = Path(tmp) / "silence.wav"
+        with wave.open(str(wav), "wb") as w:
+            w.setnchannels(1); w.setsampwidth(2); w.setframerate(16000); w.writeframes(b"\x00\x00" * 16000)
+        request = json.dumps({"audio": str(wav), "words": ["HELLO", "THERE"]}).encode()
+        result = subprocess.run([str(python), str(speech / "align.py"), str(models)], input=request,
+                                capture_output=True, timeout=600)
+    try:
+        answer = json.loads(result.stdout)
+    except ValueError:
+        answer = None
+    if result.returncode != 0 or not isinstance(answer, dict) or len(answer.get("words", [])) != 2:
+        err = result.stderr.decode(errors="replace").strip().splitlines()[-5:]
+        raise SystemExit(f"FATAL: align.py did not run (exit {result.returncode}).\n       " + "\n       ".join(err))
+    print(f"  align.py: ran offline on {answer['duration']} s of silence, {len(answer['words'])} words placed")
 
 
 def blank_png(width: int = 64, height: int = 64) -> bytes:
@@ -348,7 +379,7 @@ def main() -> int:
     wanted = ([f for f in LIBRARY if "library" in only]
               + [f for f in MODELS + (EXTRAS if args.extras else []) if "models" in only]
               + [f for f in SPEECH if "speech" in only]
-              + [f for f in NLTK if "speech-venv" in only])
+              + [f for f in NLTK + ALIGNER if "speech-venv" in only])
     folders = {"library": library, "models": models, "speech": speech, "nltk": nltk_data}
     missing = []
     for group, url, rel, expected, size in wanted:
@@ -375,7 +406,7 @@ def main() -> int:
         speech_venv, speech_scripts = args.root / "python-speech", args.root / "src" / "speech"
         if not args.check:
             build_venv(speech_venv, speech_scripts / "requirements.lock.txt", no_deps=True)
-        smoke_speech(speech_venv, speech_scripts, nltk_data)
+        smoke_speech(speech_venv, speech_scripts, nltk_data, models)
     return 0
 
 

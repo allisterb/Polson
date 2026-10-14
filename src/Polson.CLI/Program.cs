@@ -438,6 +438,10 @@ internal class Program : Runtime
             SpeechBackend.ScriptOverride = script;
         if (Setting("Tools:SpeechData") is { Length: > 0 } data)
             SpeechBackend.DataOverride = data;
+        if (Setting("Tools:AlignScript") is { Length: > 0 } align)
+            SpeechBackend.AlignScriptOverride = align;
+        if (Setting("Tools:SpeechModels") is { Length: > 0 } models)
+            SpeechBackend.ModelsOverride = models;
 
         if (!CmuDictionary.Available)
             Warn("Speech dictionary missing at {0}; Motion.speech will refuse. Run tools/bootstrap.py --only speech and rebuild.", CmuDictionary.Path);
@@ -445,6 +449,9 @@ internal class Program : Runtime
             Info("Speech: dictionary and backend (unknown words guessed, numbers spelled out).");
         else
             Info("Speech: dictionary only; unknown words and numbers will be refused (no backend: {0}).", SpeechBackend.Missing);
+        if (CmuDictionary.Available)
+            Info(SpeechBackend.AlignAvailable ? "Speech: recordings can be aligned (Motion.speech audio)."
+                : "Speech: no aligner, so Motion.speech will refuse audio (missing {0}).", SpeechBackend.AlignMissing ?? "");
     }
 
     /// <summary>Points <c>Face.detect(...)</c> at a backend, and says whether it found one.</summary>
