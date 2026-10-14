@@ -688,7 +688,7 @@ public partial class DrawingMcpTools
         // below with the execution context — the toolkits mutate the same instance, so the tallies
         // are readable again on this side once the run returns.
         using var probes = ProbeScope.Begin();
-        using var requisitions = RequisitionScope.Begin();
+        using var requisitions = RequisitionScope.Begin(ProjectRoot);
 
         try
         {
@@ -944,6 +944,8 @@ public partial class DrawingMcpTools
             fields["success"] = r.Success;
             fields["fromCache"] = r.FromCache;
             if (!r.Success) fields["failure"] = r.Failure;
+            // A spoken line is the one requisition that lands in the project as a file; name it as renders are named.
+            if (r.Artifact is { } artifact) fields["artifact"] = Events.Relativize(artifact);
 
             Events.Append(document ? "document.read" : "asset.requisition", stage, executionId, fields);
         }

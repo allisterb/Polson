@@ -76,6 +76,19 @@ public class MotionVideoTests : TestsRuntime, IDisposable
         return bytes.ToArray();
     }
 
+    /// <summary>Re-encodes a file the test wrote, as an upload might arrive: the codec by the output's extension.</summary>
+    internal static string Transcode(string source, string output, params string[] codec)
+    {
+        var info = new ProcessStartInfo(FFmpeg.Executable!) { RedirectStandardError = true, UseShellExecute = false };
+        foreach (var a in new[] { "-hide_banner", "-nostdin", "-loglevel", "error", "-y", "-i", source }.Concat(codec).Append(output))
+            info.ArgumentList.Add(a);
+        using var process = Process.Start(info)!;
+        var error = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        Assert.True(process.ExitCode == 0, error);
+        return output;
+    }
+
     /// <summary>Every frame as RGBA, read with the bt709 matrix it was written with.</summary>
     private static (byte[] Pixels, int Count) Frames(string file, int w, int h)
     {
@@ -295,6 +308,45 @@ public class MotionVideoTests : TestsRuntime, IDisposable
 
         var error = Assert.Throws<ArgumentException>(() => comp.SaveVideo("x.mp4", Opts(("audio", line))));
         Assert.Contains("no recording", error.Message);
+    }
+
+    /// <summary>
+    /// An upload the aligner cannot read is decoded to the 16 kHz mono 16-bit WAV it can, once: the tone stays where it
+    /// was, the length stays the length, and naming the same file again finds the decoded copy. A 16-bit PCM WAV is used
+    /// as it is.
+    /// </summary>
+    [Fact]
+    public void TestAnUploadIsDecodedToTheWavTheAlignerReads()
+    {
+        if (!FFmpeg.Available) return;
+        var wav = Wav("tone.wav", 0.5, 0.5, 0.5);
+        Assert.Equal(wav, FFmpeg.AlignerWav(wav, "tone.wav", "test"));
+
+        foreach (var (name, codec) in new[] { ("tone.mp3", new[] { "-c:a", "libmp3lame" }), ("tone.m4a", new[] { "-c:a", "aac" }),
+                     ("float.wav", new[] { "-c:a", "pcm_f32le" }), ("tone.flac", new[] { "-c:a", "flac" }) })
+        {
+            var upload = Transcode(wav, Path.Combine(root, name), codec);
+            Assert.False(FFmpeg.IsPcm16Wav(upload));
+            var decoded = FFmpeg.AlignerWav(upload, name, "test");
+            try
+            {
+                Assert.NotEqual(upload, decoded);
+                Assert.True(FFmpeg.IsPcm16Wav(decoded), name);
+                Assert.InRange(FFmpeg.WavSeconds(decoded)!.Value, 1.49, 1.53);
+                Assert.InRange(Onset(Samples(decoded)), 0.49, 0.52);
+                Assert.Equal(decoded, FFmpeg.AlignerWav(upload, name, "test"));
+            }
+            finally { File.Delete(decoded); }
+        }
+    }
+
+    /// <summary>An upload is decoded only when it is what its name says, as a video's recordings are.</summary>
+    [Fact]
+    public void TestAnUploadThatIsNotWhatItsNameSaysIsNotDecoded()
+    {
+        var fake = Path.Combine(root, "line.mp3");
+        File.WriteAllText(fake, "#EXTM3U\n#EXTINF:1,\nfile:///etc/passwd\n");
+        Assert.Contains("does not begin like one", Assert.Throws<ArgumentException>(() => FFmpeg.AlignerWav(fake, "line.mp3", "test")).Message);
     }
 
     /// <summary>Without ffmpeg the call refuses, saying how to get it, rather than writing nothing quietly.</summary>

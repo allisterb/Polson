@@ -13,6 +13,7 @@ using Polson.ExtendedMind.ImageGeneration;
 using Polson.ExtendedMind.ObjectGeneration;
 using Polson.ExtendedMind.ParallelSearch;
 using Polson.ExtendedMind.Photos;
+using Polson.ExtendedMind.SpeechGeneration;
 using Polson.Animation;
 using Polson.Drawing.Mesh;
 using Polson.Drawing.Skia;
@@ -194,8 +195,14 @@ internal class Program : Runtime
 
         var generator = string.IsNullOrWhiteSpace(apiKey) ? null : new ImageGenerator(apiKey, model);
 
+        // Assets.speak: the same key and the same budget, so a run's spend is one number whatever it bought.
+        var speechModel = Setting("Assets:SpeechModel") ?? SpeechGenerator.DefaultModel;
+        var speech = string.IsNullOrWhiteSpace(apiKey) ? null : new SpeechGenerator(apiKey, speechModel);
+        var speechCacheDir = Setting("Assets:SpeechCacheDir") ?? Path.Combine(projectDir, ".polson", "speech");
+
         JsDrawingEngine.Assets = new AssetRequisitionToolkit(
-            generator, new RequisitionCache(cacheDir), new AssetBudget(budget), "agent");
+            generator, new RequisitionCache(cacheDir), new AssetBudget(budget), "agent",
+            speech, new SpeechCache(speechCacheDir));
 
         if (generator is null)
         {
@@ -205,8 +212,8 @@ internal class Program : Runtime
         }
         else
         {
-            Info("Asset requisition enabled (model: {0}, budget: {1} generations, cache: {2}).",
-                model, budget, cacheDir);
+            Info("Asset requisition enabled (model: {0}, speech: {1}, budget: {2} generations, cache: {3}).",
+                model, speechModel, budget, cacheDir);
         }
     }
 

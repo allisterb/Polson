@@ -267,7 +267,7 @@ public abstract record RequisitionResult
     public string FailureName => Failure.ToString();
 
     /// <summary>What to do next, phrased for the agent reading it.</summary>
-    public string Remedy => ImageGenerationResult.RemedyFor(Failure);
+    public virtual string Remedy => ImageGenerationResult.RemedyFor(Failure);
 
     /// <summary>Whether repeating the identical requisition could plausibly succeed.</summary>
     public bool Retryable => ImageGenerationResult.IsRetryable(Failure);

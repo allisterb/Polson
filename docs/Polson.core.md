@@ -4571,6 +4571,32 @@ Session.kitCrouch = kit.toDataUri();      // the guide's own frame, figure where
   hole punched through it. **This is the face check** — see the IMPORTANT under `Assets.cutout`.
 - `cell.aspectRatio` → `number` — Width over height. Cells are trimmed, so this differs between them.
 
+## A Voice — `Assets.speak`
+
+- `Assets.speak(text: string, options?: { voice?: string, style?: string, path?: string, model?: string })` → `Promise<SpeechAsset>` — **Speaks a line in a prebuilt voice and writes it into the project as a WAV**, for `Motion.speech(text, { audio: spoken.path })` to time the mouths against and for `comp.saveVideo(..., { audio: line })` to play. `await` it. Model `gemini-3.8-flash-lite-tts`, about 2.7 s a line; one generation from `Assets.budget` per line, and **the same line in the same voice and direction is served from cache for nothing**, wherever you write it.
+  - `voice` is one of the prebuilt voices, `Kore` by default: `Achernar`, `Achird`, `Algenib`, `Algieba`, `Alnilam`, `Aoede`, `Autonoe`, `Callirrhoe`, `Charon`, `Despina`, `Enceladus`, `Erinome`, `Fenrir`, `Gacrux`, `Iapetus`, `Kore`, `Laomedeia`, `Leda`, `Orus`, `Pulcherrima`, `Puck`, `Rasalgethi`, `Sadachbia`, `Sadaltager`, `Schedar`, `Sulafat`, `Umbriel`, `Vindemiatrix`, `Zephyr`, `Zubenelgenubi`. A misspelling is refused with the nearest named.
+  - `style` is **how** to say it, in words: `'warmly'`, `'in a whisper'`, `'shout it, hoarse from the wind'`. It goes ahead of the line as a direction the model reads rather than speaks. **A direction naming a person to sound like is refused** (`RefusedLikeness`): a voice cannot be made to sound like a real one. Two capitalised words read as a name, so write a direction in lower case.
+  - `path` is where in the project the WAV goes, ending `.wav`; `audio/<id>.wav` when unset. Contained as `outFile` is.
+  - Refused before the network, spending nothing: an empty line, one over **600 characters** (speak a scene line by line and place each with `Motion.speech`'s `start`), an unknown voice, a named person, a bad path.
+
+```js
+const spoken = await Assets.speak('Who knew? Bob moved the moon so far, for fun!', { voice: 'Puck', path: 'audio/bob.wav' });
+if (!spoken.success) log(spoken.remedy);
+const line = Motion.speech(spoken.text, { audio: spoken.path, start: 0.5 });   // the mouths, timed to the voice
+// ... line.mouths keys a comp.switch of drawn mouths, or line.weights() a face's poses ...
+comp.saveVideo('output.mp4', { audio: line });                                 // the voice, where the mouths were timed
+```
+
+## `SpeechAsset`
+
+- `spoken.path` → `string` — the WAV in the project. `spoken.text`, `spoken.voice`, `spoken.style` — what was asked for.
+- `spoken.duration` → `number` (seconds), `spoken.sampleRate` → `number` (24000), `spoken.byteLength` → `number`, `spoken.id` → `string`, `spoken.provenance` → `Provenance` (its `prompt` is the direction and line as sent).
+- `spoken.warnings` → `string[]` — **a length the words do not account for**: far longer, as if the direction were read aloud, or far shorter, as if the line were cut off. Listen, or align it and read `line.words[i].confidence`; a low confidence on one word is worth hearing.
+- Failure as every result reports it (`success`, `failureName`, `remedy`); without a key or budget the remedy says to time the line by the rules with `Motion.speech(text)` instead.
+
+> [!NOTE]
+> **The file is the service's, kept whole.** It carries a C2PA provenance chunk after the samples saying it was generated, which the aligner, ffmpeg and every WAV reader skip; nothing here strips it. A video re-encodes the sound, so the label stays with the WAV and does not reach the MP4.
+
 ## `Assets` Properties
 
 - `Assets.budget` → `AssetBudget` — Remaining allowance. **Check this before requisitioning.**
@@ -5565,7 +5591,7 @@ comp.render(0.8);
 - **The mouths are a chart's**: `set` is `'blair'` (default; Preston Blair's ten: `AI O E U etc L WQ MBP FV rest`), `'flemingDobbs'` (eleven), `'rhubarb'` (`A`–`H`), `'cmu'` (the phonemes themselves), or your own `{ AE: 'wide', ... }` covering all 39 — the first three as Papagayo-NG maps them.
 - **The timing is the studio's rules**, not a recording: a stressed vowel 0.15 s, an unstressed one 0.065 s, a diphthong a quarter longer, a stop 0.07 s, a lip closure (`M B P`) 0.085 s; a phrase's last vowels 1.3 times longer; 0.25 s pause at a comma, dash or semicolon, 0.45 s at `. ! ?`; everything divided by `rate` (1). `start` (0) is when the first sound begins. With no recording there is nothing to be out of sync with. **Rules drift against a real voice, though**: measured on a Gemini TTS reading of a ten-word line, they put words 0.14 s to 0.69 s early, because a voice pauses where it likes.
 
-- **With `audio: 'line.wav'`, the words are where a recording says them.** The line is still read for its sounds as above; then the speech backend's aligner (wav2vec 2.0, English, in `python-speech/`) finds each word in the recording, and each word's span is shared among its sounds in the rules' proportions. The WAV is read from inside the project, 16-bit PCM, any rate; `start` is where the recording begins in the composition, and `rate` is refused, since the voice sets the pace. The recording's own pauses become rests. **Measured against Windows' synthesizer, which reports its words' times, 135 of 142 words landed within one frame at 24 fps of their true relative place and all within two**; its starts are pulled 20 ms earlier for the model's lag behind the sound. A word it cannot place takes the room between its neighbours. This is the route for a generated or recorded voice: its `words[i].confidence` says how sure the aligner was, and a low one is worth a look. **To hear it with the picture, pass the line itself as a video's audio**, `comp.saveVideo('output.mp4', { audio: line })`: it plays from the line's `start`, where the mouths were timed.
+- **With `audio: 'line.wav'`, the words are where a recording says them.** The line is still read for its sounds as above; then the speech backend's aligner (wav2vec 2.0, English, in `python-speech/`) finds each word in the recording, and each word's span is shared among its sounds in the rules' proportions. The recording is read from inside the project: a 16-bit PCM WAV at any rate as it is, and **an `.mp3`, `.m4a`, `.ogg`, `.opus`, `.flac` or other WAV decoded for the aligner by ffmpeg** (once per file, by its content; it is refused if its first bytes do not match its extension). Measured on the same line as WAV, MP3 and M4A, every word landed in the same place; `speech.audio` stays the file you named, so a video plays the original. `start` is where the recording begins in the composition, and `rate` is refused, since the voice sets the pace. The recording's own pauses become rests. **Measured against Windows' synthesizer, which reports its words' times, 135 of 142 words landed within one frame at 24 fps of their true relative place and all within two**; its starts are pulled 20 ms earlier for the model's lag behind the sound. A word it cannot place takes the room between its neighbours. This is the route for a generated or recorded voice: its `words[i].confidence` says how sure the aligner was, and a low one is worth a look. **To hear it with the picture, pass the line itself as a video's audio**, `comp.saveVideo('output.mp4', { audio: line })`: it plays from the line's `start`, where the mouths were timed.
 
 It reads back:
 

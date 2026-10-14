@@ -34,11 +34,16 @@ public class SpeechProbeLiveTests : TestsRuntime
         this.apiKey = config["ApiKeys:GoogleAgentPlatform"];
     }
 
-    static readonly string[] Candidates =
-    [
-        "gemini-2.5-flash-tts", "gemini-2.5-pro-tts",
-        "gemini-2.5-flash-preview-tts", "gemini-2.5-pro-preview-tts", "gemini-2.5-flash-lite-preview-tts"
-    ];
+    /// <summary>Every model probed, unless <c>POLSON_LIVE_SPEECH_MODELS</c> names some (comma-separated), so a new one can be tried alone.</summary>
+    static string[] Candidates =>
+        System.Environment.GetEnvironmentVariable("POLSON_LIVE_SPEECH_MODELS") is { Length: > 0 } named
+            ? named.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            :
+            [
+                "gemini-2.5-flash-tts", "gemini-2.5-pro-tts",
+                "gemini-2.5-flash-preview-tts", "gemini-2.5-pro-preview-tts", "gemini-2.5-flash-lite-preview-tts",
+                "gemini-3.8-flash-lite-tts"
+            ];
 
     [Fact]
     public async Task Speech_Live_WhichTextToSpeechModelsAnswer()
@@ -51,8 +56,9 @@ public class SpeechProbeLiveTests : TestsRuntime
         var client = new Client(enterprise: true, apiKey: this.apiKey);
         const string line = "Who knew? Bob moved the moon so far, for fun!";
         var answered = 0;
+        var candidates = Candidates;
 
-        foreach (var model in Candidates)
+        foreach (var model in candidates)
         {
             var config = new GenerateContentConfig
             {
@@ -70,11 +76,15 @@ public class SpeechProbeLiveTests : TestsRuntime
                     continue;
                 }
 
+                // The 2.5 models answer audio/L16, bare PCM to be wrapped; gemini-3.8-flash-lite-tts answers audio/wav, a
+                // whole file with a C2PA provenance chunk after the samples, written as it came so the chunk is kept.
+                var whole = pcm is [(byte)'R', (byte)'I', (byte)'F', (byte)'F', ..];
                 var rate = RateOf(blob.MimeType);
                 var path = Path.Combine(dir, $"{model}.wav");
-                System.IO.File.WriteAllBytes(path, Wav(pcm, rate));
+                System.IO.File.WriteAllBytes(path, whole ? pcm : Wav(pcm, rate));
+                var seconds = whole ? WavSeconds(pcm) : pcm.Length / 2.0 / rate;
                 var usage = response.UsageMetadata;
-                output.WriteLine($"{model}: OK in {clock.ElapsedMilliseconds} ms; {blob.MimeType}; {pcm.Length} bytes = {pcm.Length / 2.0 / rate:0.00} s; "
+                output.WriteLine($"{model}: OK in {clock.ElapsedMilliseconds} ms; {blob.MimeType}; {pcm.Length} bytes = {seconds:0.00} s; "
                     + $"tokens in {usage?.PromptTokenCount} out {usage?.CandidatesTokenCount}; {path}");
                 answered++;
             }
@@ -84,7 +94,38 @@ public class SpeechProbeLiveTests : TestsRuntime
             }
         }
 
-        output.WriteLine($"{answered} of {Candidates.Length} answered with audio");
+        output.WriteLine($"{answered} of {candidates.Length} answered with audio");
+    }
+
+    /// <summary>
+    /// <c>Assets.speak</c> end to end against the real service: one line in a voice other than the probe's, written into
+    /// a project folder (<c>POLSON_LIVE_OUT</c>), then asked for again to show the second costs nothing. Billed once.
+    /// </summary>
+    [Fact]
+    public async Task Speech_Live_AssetsSpeakWritesALine()
+    {
+        if (string.IsNullOrWhiteSpace(this.apiKey)) return;
+        if (System.Environment.GetEnvironmentVariable("POLSON_LIVE_SPEECH_PROBE") != "1") return;   // opt-in: this one bills
+
+        var project = System.Environment.GetEnvironmentVariable("POLSON_LIVE_OUT") ?? Path.Combine(Path.GetTempPath(), "polson-speech-probe");
+        using var speech = new global::Polson.ExtendedMind.SpeechGeneration.SpeechGenerator(this.apiKey);
+        var budget = new global::Polson.ExtendedMind.ImageGeneration.AssetBudget(2);
+        var toolkit = new global::Polson.ExtendedMind.ImageGeneration.AssetRequisitionToolkit(null,
+            new global::Polson.ExtendedMind.ImageGeneration.RequisitionCache(Path.Combine(project, ".cache", "assets")), budget, "live",
+            speech, new global::Polson.ExtendedMind.SpeechGeneration.SpeechCache(Path.Combine(project, ".cache", "speech")));
+        var options = new global::Polson.ExtendedMind.SpeechGeneration.SpeechOptions { Voice = "Puck", Path = "assets-speak-puck.wav" };
+
+        using var scope = global::Polson.RequisitionScope.Begin(project);
+        var clock = Stopwatch.StartNew();
+        var spoken = await toolkit.Speak("Who knew? Bob moved the moon so far, for fun!", options);
+        output.WriteLine($"speak: {spoken.Success} in {clock.ElapsedMilliseconds} ms; {spoken.FailureName} {spoken.Error}; "
+            + $"{spoken.Path} {spoken.Duration:0.00} s at {spoken.SampleRate} Hz, {spoken.ByteLength} bytes; model {spoken.Provenance?.Model}; "
+            + $"tokens {budget.TokensSpent}; warnings [{string.Join("; ", spoken.Warnings)}]");
+        Assert.True(spoken.Success, spoken.Error);
+
+        var again = await toolkit.Speak("Who knew? Bob moved the moon so far, for fun!", options);
+        output.WriteLine($"again: fromCache {again.Provenance?.FromCache}; spent {budget.Spent}, cache hits {budget.CacheHits}");
+        Assert.Equal(1, budget.Spent);
     }
 
     /// <summary>The sample rate a <c>audio/L16;codec=pcm;rate=24000</c> mime type states; 24 kHz when it does not.</summary>
@@ -100,6 +141,21 @@ public class SpeechProbeLiveTests : TestsRuntime
         w.Write(Encoding.ASCII.GetBytes("fmt ")); w.Write(16); w.Write((short)1); w.Write((short)1); w.Write(rate); w.Write(rate * 2); w.Write((short)2); w.Write((short)16);
         w.Write(Encoding.ASCII.GetBytes("data")); w.Write(pcm.Length); w.Write(pcm);
         return ms.ToArray();
+    }
+
+    /// <summary>A WAV file's length from its <c>fmt </c> byte rate and <c>data</c> size, walking past any other chunk.</summary>
+    static double WavSeconds(byte[] wav)
+    {
+        uint byteRate = 0;
+        for (var at = 12; at + 8 <= wav.Length;)
+        {
+            var id = Encoding.ASCII.GetString(wav, at, 4);
+            var size = BitConverter.ToUInt32(wav, at + 4);
+            if (id == "fmt ") byteRate = BitConverter.ToUInt32(wav, at + 16);
+            if (id == "data") return byteRate > 0 ? size / (double)byteRate : 0;
+            at += 8 + (int)size + (int)(size & 1);
+        }
+        return 0;
     }
 
     static string Short(string s) => s.Length <= 300 ? s : s[..300] + "…";

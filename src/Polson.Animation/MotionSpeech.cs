@@ -62,7 +62,7 @@ public sealed class MotionSpeech
         // A recording to time the line against, read from inside the project; with one, the words' times are its.
         if (o["audio"] is { } given)
         {
-            if (given is not string path || path.Length == 0) throw new ArgumentException($"{who}'s audio is the path of a WAV file in the project.");
+            if (given is not string path || path.Length == 0) throw new ArgumentException($"{who}'s audio is the path of a recording in the project: .wav, .mp3, .m4a, .ogg, .opus or .flac.");
             if (o["rate"] is not null) throw new ArgumentException($"{who}: rate has no meaning with audio, whose words are said as fast as they are.");
             Audio = path;
             audioFile = ProjectPath.Resolve(projectRoot, path, "audio", "Read");
@@ -232,7 +232,7 @@ public sealed class MotionSpeech
     /// </summary>
     List<(double Start, double End, double? Score)> AlignedSpans(List<(int Token, Spoken Word, string[] Sounds, double[] Weights)> plan, string who)
     {
-        var alignment = SpeechBackend.Align(audioFile!, [.. plan.Select(p => p.Word.Word)]);
+        var alignment = SpeechBackend.Align(audioFile!, [.. plan.Select(p => p.Word.Word)], Audio);
         var raw = alignment.Words;
         if (raw.All(w => w.Start is null))
             throw new InvalidOperationException($"{who}: the aligner could not place any word of the line in '{Audio}'. Is it the right recording?");

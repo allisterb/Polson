@@ -17,6 +17,7 @@ using System.Threading;
 /// different event from a failure: nothing was attempted, nothing was spent, and the remedy is to
 /// reword rather than to retry.
 /// </param>
+/// <param name="Artifact">The file the requisition wrote into the project, as a full path, when it wrote one: a spoken line's WAV.</param>
 public sealed record RequisitionRecord(
     string Kind,
     string Descriptor,
@@ -25,7 +26,8 @@ public sealed record RequisitionRecord(
     string? Reason,
     string? Model,
     bool FromCache,
-    bool Refused);
+    bool Refused,
+    string? Artifact = null);
 
 /// <summary>Where the allowance stood when this execution finished with it.</summary>
 public sealed record BudgetSnapshot(int Total, int Spent, int Remaining, int CacheHits, long TokensSpent);
@@ -50,12 +52,26 @@ public sealed record BudgetSnapshot(int Total, int Spent, int Remaining, int Cac
 public sealed class RequisitionScope : IDisposable
 {
     #region Constructors
-    private RequisitionScope(RequisitionScope? parent) => this.parent = parent;
+    private RequisitionScope(RequisitionScope? parent, string? projectRoot)
+    {
+        this.parent = parent;
+        ProjectRoot = projectRoot;
+    }
     #endregion
 
     #region Properties
     /// <summary>The scope in force, or null when nothing is collecting.</summary>
     public static RequisitionScope? Current => current.Value;
+
+    /// <summary>
+    /// The project a requisition that writes a file writes into, contained as <c>outFile</c> is; null for an ad-hoc
+    /// server, or outside a scope.
+    /// </summary>
+    /// <remarks>
+    /// Carried here because the requisition surface is configured once for the process while the project is the
+    /// execution's, and the tests run several projects in one process: the scope is already per execution.
+    /// </remarks>
+    public string? ProjectRoot { get; }
 
     /// <summary>What was requisitioned during this execution, in order.</summary>
     public IReadOnlyList<RequisitionRecord> Records
@@ -91,10 +107,10 @@ public sealed class RequisitionScope : IDisposable
     #endregion
 
     #region Methods
-    /// <summary>Starts collecting. Dispose restores whatever was in force before.</summary>
-    public static RequisitionScope Begin()
+    /// <summary>Starts collecting, for files in <paramref name="projectRoot"/>. Dispose restores whatever was in force before.</summary>
+    public static RequisitionScope Begin(string? projectRoot = null)
     {
-        var scope = new RequisitionScope(current.Value);
+        var scope = new RequisitionScope(current.Value, projectRoot);
         current.Value = scope;
         return scope;
     }

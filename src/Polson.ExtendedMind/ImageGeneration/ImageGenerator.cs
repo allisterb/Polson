@@ -268,7 +268,8 @@ public class ImageGenerator : Runtime, IImageGenerator, IDisposable
         return width > 0 && height > 0;
     }
 
-    static ImageGenerationFailure Classify(int status, string message) => status switch
+    /// <summary>A client error's status as the failure an agent can act on. Shared with <c>SpeechGenerator</c>.</summary>
+    internal static ImageGenerationFailure Classify(int status, string message) => status switch
     {
         400 when message.Contains("safety", StringComparison.OrdinalIgnoreCase) => ImageGenerationFailure.SafetyBlocked,
         400 => ImageGenerationFailure.InvalidRequest,
