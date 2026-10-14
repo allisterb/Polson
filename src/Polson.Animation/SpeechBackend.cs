@@ -33,12 +33,16 @@ using System.Text.Json;
 public static class SpeechBackend
 {
     #region Fields
-    static string? _python, _script, _data;
-    static string? _rPython, _rScript, _rData;
+    static string? _python, _script, _data, _alignScript, _models;
+    static string? _rPython, _rScript, _rData, _rAlignScript, _rModels;
     static bool _looked;
     static readonly Dictionary<string, (string[] Phonemes, string Source)> Guessed = new(StringComparer.Ordinal);
     static readonly Dictionary<string, string> Spelled = new(StringComparer.Ordinal);
+    static readonly Dictionary<string, Alignment> Aligned = new(StringComparer.Ordinal);
     static readonly object Gate = new();
+
+    /// <summary>The aligner's weights, which <c>tools/bootstrap.py</c> puts in <c>models/</c>.</summary>
+    const string Weights = "wav2vec2_fairseq_base_ls960_asr_ls960.pth";
     #endregion
 
     #region Properties
@@ -80,6 +84,37 @@ public static class SpeechBackend
         }
     }
 
+    /// <summary>An explicit path to <c>align.py</c>, or null to discover one.</summary>
+    public static string? AlignScriptOverride
+    {
+        get => _alignScript;
+        set { _alignScript = value; _looked = false; }
+    }
+
+    /// <summary>An explicit path to the folder holding the aligner's weights, or null to discover one.</summary>
+    public static string? ModelsOverride
+    {
+        get => _models;
+        set { _models = value; _looked = false; }
+    }
+
+    /// <summary>Whether a recording can be aligned here: the interpreter, <c>align.py</c> and the weights.</summary>
+    public static bool AlignAvailable { get { Look(); return _rPython is not null && _rAlignScript is not null && _rModels is not null; } }
+
+    /// <summary>What alignment is missing, for saying so rather than only failing.</summary>
+    public static string? AlignMissing
+    {
+        get
+        {
+            Look();
+            List<string> gaps = [];
+            if (_rPython is null) gaps.Add("the python-speech interpreter");
+            if (_rAlignScript is null) gaps.Add("src/speech/align.py");
+            if (_rModels is null) gaps.Add($"models/{Weights}");
+            return gaps.Count == 0 ? null : string.Join(", ", gaps);
+        }
+    }
+
     /// <summary>How to get it, for a refusal to end with.</summary>
     internal const string Install = "install the speech backend (py -3.13 tools/bootstrap.py --only speech-venv)";
     #endregion
@@ -102,11 +137,57 @@ public static class SpeechBackend
         }
     }
 
+    /// <summary>
+    /// When each word of a known line is said in a recording: one span per word, in order, null where the aligner could
+    /// not place it, and the recording's length. Remembered per file and line, keyed on the file's size and time.
+    /// </summary>
+    /// <remarks>
+    /// The spans are the aligner's, pulled <see cref="AlignerLag"/> earlier: against the moment sound starts, it was
+    /// measured a little late.
+    /// </remarks>
+    internal static Alignment Align(string wav, IReadOnlyList<string> words, int timeoutMs = 180000)
+    {
+        lock (Gate)
+        {
+            var file = new FileInfo(wav);
+            var key = $"{file.FullName}|{file.Length}|{file.LastWriteTimeUtc.Ticks}|{string.Join(' ', words)}";
+            if (Aligned.TryGetValue(key, out var known)) return known;
+            if (!AlignAvailable)
+                throw new InvalidOperationException($"Aligning a recording needs {AlignMissing}: {Install}.");
+
+            using var doc = Run(_rAlignScript!, _rModels!, new { audio = file.FullName, words }, timeoutMs, "The aligner");
+            double? Seconds(JsonElement w, string name) =>
+                w.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetDouble() : null;
+            var spans = doc.RootElement.GetProperty("words").EnumerateArray().Select(w =>
+                (Start: Seconds(w, "start") - AlignerLag, End: Seconds(w, "end") - AlignerLag, Score: Seconds(w, "score"))).ToList();
+            if (spans.Count != words.Count)
+                throw new InvalidOperationException($"The aligner returned {spans.Count} words for {words.Count}.");
+            return Aligned[key] = new Alignment(doc.RootElement.GetProperty("duration").GetDouble(), spans);
+        }
+    }
+
+    /// <summary>
+    /// How late the aligner places a word's start against the moment its sound begins, in seconds: about one 20 ms model
+    /// frame, measured 2026-10-13 on ten first words of Windows SAPI recordings (−30 to +71 ms, mean +22 ms).
+    /// </summary>
+    internal const double AlignerLag = 0.02;
+
     static void Ask(List<string> words, List<string> numbers, int timeoutMs)
     {
         if (!Available)
             throw new InvalidOperationException($"The speech backend needs {Missing}: {Install}.");
 
+        using var doc = Run(_rScript!, _rData!, new { words, numbers }, timeoutMs, "The speech backend");
+        foreach (var w in doc.RootElement.GetProperty("words").EnumerateObject())
+            Guessed[w.Name] = ([.. w.Value.GetProperty("phonemes").EnumerateArray().Select(p => p.GetString() ?? "")],
+                w.Value.GetProperty("source").GetString() ?? "model");
+        foreach (var n in doc.RootElement.GetProperty("numbers").EnumerateObject())
+            Spelled[n.Name] = n.Value.GetString() ?? "";
+    }
+
+    /// <summary>Runs one of the backend's scripts: the request as UTF-8 JSON on stdin, the answer parsed from stdout.</summary>
+    static JsonDocument Run(string script, string argument, object request, int timeoutMs, string who)
+    {
         var info = new ProcessStartInfo(_rPython!)
         {
             RedirectStandardInput = true,
@@ -117,12 +198,11 @@ public static class SpeechBackend
             StandardOutputEncoding = Encoding.UTF8,
             StandardErrorEncoding = Encoding.UTF8
         };
-        info.ArgumentList.Add(_rScript!);
-        info.ArgumentList.Add(_rData!);
+        info.ArgumentList.Add(script);
+        info.ArgumentList.Add(argument);
 
-        using var process = Process.Start(info) ?? throw new InvalidOperationException("The speech backend would not start.");
-        var request = JsonSerializer.SerializeToUtf8Bytes(new { words, numbers });
-        using (var stdin = process.StandardInput.BaseStream) stdin.Write(request);
+        using var process = Process.Start(info) ?? throw new InvalidOperationException($"{who} would not start.");
+        using (var stdin = process.StandardInput.BaseStream) stdin.Write(JsonSerializer.SerializeToUtf8Bytes(request));
 
         // Read both streams at once, so a chatty stderr cannot fill its pipe and stall the process.
         var stderr = process.StandardError.ReadToEndAsync();
@@ -130,17 +210,11 @@ public static class SpeechBackend
         if (!process.WaitForExit(timeoutMs))
         {
             try { process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
-            throw new TimeoutException($"The speech backend did not finish within {timeoutMs} ms.");
+            throw new TimeoutException($"{who} did not finish within {timeoutMs} ms.");
         }
         if (process.ExitCode != 0 || json.Length == 0)
-            throw new InvalidOperationException($"The speech backend failed (exit {process.ExitCode}). {Trim(stderr.Result)}");
-
-        using var doc = JsonDocument.Parse(json);
-        foreach (var w in doc.RootElement.GetProperty("words").EnumerateObject())
-            Guessed[w.Name] = ([.. w.Value.GetProperty("phonemes").EnumerateArray().Select(p => p.GetString() ?? "")],
-                w.Value.GetProperty("source").GetString() ?? "model");
-        foreach (var n in doc.RootElement.GetProperty("numbers").EnumerateObject())
-            Spelled[n.Name] = n.Value.GetString() ?? "";
+            throw new InvalidOperationException($"{who} failed (exit {process.ExitCode}). {Trim(stderr.Result)}");
+        return JsonDocument.Parse(json);
     }
 
     static string Trim(string s) => s.Length <= 400 ? s.Trim() : string.Concat(s.AsSpan(0, 400).Trim(), "…");
@@ -154,6 +228,8 @@ public static class SpeechBackend
         // The folder counts only with both of its packages unpacked in it.
         _rData = Pick(_data, Candidates("models", "nltk_data"), d =>
             Directory.Exists(Path.Combine(d, "taggers", "averaged_perceptron_tagger_eng")) && Directory.Exists(Path.Combine(d, "corpora", "cmudict")));
+        _rAlignScript = Pick(_alignScript, Candidates("src", "speech/align.py"), File.Exists);
+        _rModels = Pick(_models, Candidates("models", ""), d => File.Exists(Path.Combine(d, Weights)));
     }
 
     static string? Pick(string? overridden, IEnumerable<string> candidates, Func<string, bool> exists) =>
@@ -166,5 +242,10 @@ public static class SpeechBackend
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
             yield return Path.Combine(dir.FullName, folder, tail.Replace('/', Path.DirectorySeparatorChar));
     }
+    #endregion
+
+    #region Types
+    /// <summary>A recording's length and, per word in order, where it was said (null where it could not be placed).</summary>
+    internal sealed record Alignment(double Duration, IReadOnlyList<(double? Start, double? End, double? Score)> Words);
     #endregion
 }

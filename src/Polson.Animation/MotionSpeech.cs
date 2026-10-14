@@ -30,7 +30,7 @@ using System.Text.RegularExpressions;
 public sealed class MotionSpeech
 {
     #region Constructors
-    internal MotionSpeech(string text, object? options)
+    internal MotionSpeech(string text, object? options, string? projectRoot = null)
     {
         const string who = "Motion.speech";
         var o = options is null ? new Hashtable()
@@ -59,41 +59,67 @@ public sealed class MotionSpeech
             var v => throw new ArgumentException($"{who}'s guess is true or false, not {v}.")
         };
 
-        // Words, numbers and pauses; then what each says; then when, in order.
+        // A recording to time the line against, read from inside the project; with one, the words' times are its.
+        if (o["audio"] is { } given)
+        {
+            if (given is not string path || path.Length == 0) throw new ArgumentException($"{who}'s audio is the path of a WAV file in the project.");
+            if (o["rate"] is not null) throw new ArgumentException($"{who}: rate has no meaning with audio, whose words are said as fast as they are.");
+            Audio = path;
+            audioFile = ProjectPath.Resolve(projectRoot, path, "audio", "Read");
+            if (!File.Exists(audioFile)) throw new ArgumentException($"{who}: there is no recording at '{path}'.");
+        }
+
+        // Words, numbers and pauses; then what each says; then when each spoken word is; then its sounds within that.
         var tokens = Tokenize(text, who);
         var said = Resolve(tokens, pronounce, guess, who, out guessed);
 
-        var t = Start;
+        // Every spoken word, in order: its token, its sounds ("the" before a vowel is "thee", the one weak form a
+        // dictionary's first choice gets wrong in ordinary speech), and each sound's weight, a vowel at the end of a
+        // phrase drawn out (a number's last spoken word, not all of it).
+        var plan = new List<(int Token, Spoken Word, string[] Sounds, double[] Weights)>();
         for (var i = 0; i < tokens.Count; i++)
         {
-            if (tokens[i].Pause > 0)
-            {
-                t += tokens[i].Pause / rate;
-                continue;
-            }
-
+            if (tokens[i].Pause > 0) continue;
             var spoken = said[i]!;
             var final = i + 1 == tokens.Count || tokens[i + 1].Pause > 0;
-            var wordStart = t;
             for (var k = 0; k < spoken.Count; k++)
             {
                 var sounds = spoken[k].Phonemes;
-                // "The" before a vowel is "thee", the one weak form a dictionary's first choice gets wrong in ordinary speech.
                 var next = k + 1 < spoken.Count ? spoken[k + 1] : i + 1 < tokens.Count && said[i + 1] is [var after, ..] ? after : null;
                 if (spoken[k].Word == "THE" && next is { Phonemes: [var first, ..] } && IsVowel(Base(first)))
                     sounds = ["DH", "IY0"];
-                // The end of a phrase draws out its last word's vowels: a number's last spoken word, not all of it.
                 var drawn = final && k == spoken.Count - 1;
-                foreach (var s in sounds)
-                {
-                    var d = Length(s) * (drawn && IsVowel(Base(s)) ? 1.3 : 1) / rate;
-                    phonemes.Add(new Sound(s, tokens[i].Raw, t, t + d, table.TryGetValue(Base(s), out var m) ? m
-                        : throw new ArgumentException($"{who}: the mouth set has no mouth for '{Base(s)}'."), spoken[k].Source));
-                    t += d;
-                }
+                plan.Add((i, spoken[k], sounds, [.. sounds.Select(s => Length(s) * (drawn && IsVowel(Base(s)) ? 1.3 : 1))]));
             }
+        }
+
+        // When each spoken word is: by the studio's rules, pauses and all, or where the aligner heard it.
+        var spans = audioFile is null ? RuleSpans(tokens, plan, rate) : AlignedSpans(plan, who);
+
+        // Each word's sounds share its span in their weights' proportions.
+        for (var p = 0; p < plan.Count; p++)
+        {
+            var (token, word, sounds, weights) = plan[p];
+            var (s0, s1, _) = spans[p];
+            var scale = (s1 - s0) / weights.Sum();
+            var t = s0;
+            for (var j = 0; j < sounds.Length; j++)
+            {
+                var d = weights[j] * scale;
+                phonemes.Add(new Sound(sounds[j], tokens[token].Raw, t, t + d, table.TryGetValue(Base(sounds[j]), out var m) ? m
+                    : throw new ArgumentException($"{who}: the mouth set has no mouth for '{Base(sounds[j])}'."), word.Source));
+                t += d;
+            }
+        }
+
+        foreach (var group in Enumerable.Range(0, plan.Count).GroupBy(p => plan[p].Token))
+        {
+            var mine = group.ToList();
+            var spoken = said[group.Key]!;
             var source = spoken.Select(s => s.Source).Distinct().ToList() is [var one] ? one : "model";
-            words.Add((tokens[i].Raw, wordStart, t, string.Join(" ", spoken.Select(s => s.Word.ToLowerInvariant())), source));
+            var confidence = audioFile is null ? (double?)null : mine.Select(p => spans[p].Score).Where(c => c is not null).DefaultIfEmpty().Min();
+            words.Add((tokens[group.Key].Raw, spans[mine[0]].Start, spans[mine[^1]].End,
+                string.Join(" ", spoken.Select(s => s.Word.ToLowerInvariant())), source, confidence));
         }
 
         End = phonemes.Count > 0 ? phonemes[^1].End : Start;
@@ -102,12 +128,13 @@ public sealed class MotionSpeech
     #endregion
 
     #region Fields
-    static readonly string[] Keys = ["start", "rate", "set", "pronounce", "guess", "lead", "minimum"];
+    static readonly string[] Keys = ["start", "rate", "set", "pronounce", "guess", "audio", "lead", "minimum"];
 
     private readonly double lead;
+    private readonly string? audioFile;
     private readonly IReadOnlyDictionary<string, string> table;
     private readonly List<Sound> phonemes = [];
-    private readonly List<(string Word, double Start, double End, string Said, string Source)> words = [];
+    private readonly List<(string Word, double Start, double End, string Said, string Source, double? Confidence)> words = [];
     private readonly List<Spoken> guessed;
     /// <summary>The mouths, led and merged: each from its start to the next one's, rest before the first and after the last.</summary>
     private readonly List<(double Start, double End, string Mouth)> segments;
@@ -116,6 +143,12 @@ public sealed class MotionSpeech
     #region Properties
     /// <summary>The line as given.</summary>
     public string Text { get; }
+
+    /// <summary>The recording the line was timed against, as given, or null when the studio's rules timed it.</summary>
+    public string? Audio { get; }
+
+    /// <summary>Whether the words' times are a recording's rather than the rules'.</summary>
+    public bool Aligned => audioFile is not null;
 
     /// <summary>The mouth set: <c>blair</c>, <c>flemingDobbs</c>, <c>rhubarb</c>, <c>cmu</c> or <c>custom</c>.</summary>
     public string Set { get; }
@@ -140,12 +173,13 @@ public sealed class MotionSpeech
     })];
 
     /// <summary>
-    /// Every word as written: <c>{ word, start, end, said, source }</c>, <c>said</c> what was pronounced (a number's
-    /// words, <c>'four point five'</c>) and <c>source</c> where its sounds came from, as for a phoneme.
+    /// Every word as written: <c>{ word, start, end, said, source, confidence }</c>, <c>said</c> what was pronounced (a
+    /// number's words, <c>'four point five'</c>), <c>source</c> where its sounds came from, as for a phoneme, and
+    /// <c>confidence</c> the aligner's (0 to 1) when timed against a recording, null otherwise.
     /// </summary>
     public IReadOnlyList<Dictionary<string, object?>> Words => [.. words.Select(w => new Dictionary<string, object?>
     {
-        ["word"] = w.Word, ["start"] = w.Start, ["end"] = w.End, ["said"] = w.Said, ["source"] = w.Source
+        ["word"] = w.Word, ["start"] = w.Start, ["end"] = w.End, ["said"] = w.Said, ["source"] = w.Source, ["confidence"] = w.Confidence
     })];
 
     /// <summary>
@@ -171,6 +205,60 @@ public sealed class MotionSpeech
 
     /// <summary>The word being spoken at a time, as written, or <c>''</c> between words.</summary>
     public string WordAt(double time) => words.FirstOrDefault(w => time >= w.Start && time < w.End).Word ?? "";
+
+    /// <summary>Each spoken word's span by the studio's rules: its sounds' weights end to end, pauses at punctuation, ÷ rate.</summary>
+    List<(double Start, double End, double? Score)> RuleSpans(List<Token> tokens, List<(int Token, Spoken Word, string[] Sounds, double[] Weights)> plan, double rate)
+    {
+        var spans = new List<(double, double, double?)>();
+        var t = Start;
+        var p = 0;
+        for (var i = 0; i < tokens.Count; i++)
+        {
+            if (tokens[i].Pause > 0) { t += tokens[i].Pause / rate; continue; }
+            for (; p < plan.Count && plan[p].Token == i; p++)
+            {
+                var d = plan[p].Weights.Sum() / rate;
+                spans.Add((t, t + d, null));
+                t += d;
+            }
+        }
+        return spans;
+    }
+
+    /// <summary>
+    /// Each spoken word's span where the recording says it, <see cref="Start"/> being where the recording begins. A word the
+    /// aligner could not place takes the room between its neighbours, shared by the rules' weights, or the rules' own
+    /// length before the first placed word or after the last.
+    /// </summary>
+    List<(double Start, double End, double? Score)> AlignedSpans(List<(int Token, Spoken Word, string[] Sounds, double[] Weights)> plan, string who)
+    {
+        var alignment = SpeechBackend.Align(audioFile!, [.. plan.Select(p => p.Word.Word)]);
+        var raw = alignment.Words;
+        if (raw.All(w => w.Start is null))
+            throw new InvalidOperationException($"{who}: the aligner could not place any word of the line in '{Audio}'. Is it the right recording?");
+
+        var spans = new List<(double Start, double End, double? Score)>();
+        for (var p = 0; p < plan.Count; p++)
+        {
+            if (raw[p].Start is { } s && raw[p].End is { } e) { spans.Add((Start + Math.Max(0, s), Start + Math.Max(e, s), raw[p].Score)); continue; }
+
+            // A run of unplaced words, from p to q - 1, between the placed ones either side.
+            var q = p;
+            while (q < plan.Count && raw[q].Start is null) q++;
+            var lengths = Enumerable.Range(p, q - p).Select(r => plan[r].Weights.Sum()).ToList();
+            double? before = spans.Count > 0 ? spans[^1].End : null;
+            double? after = q < plan.Count ? Start + Math.Max(0, raw[q].Start!.Value) : null;
+            var from = before ?? after!.Value - lengths.Sum();
+            var scale = before is { } b && after is { } a ? Math.Max(0, a - b) / lengths.Sum() : 1;
+            foreach (var l in lengths)
+            {
+                spans.Add((from, from + l * scale, null));
+                from += l * scale;
+            }
+            p = q - 1;
+        }
+        return spans;
+    }
 
     /// <summary>
     /// What each token says. A word is what <c>pronounce</c> gives, else the dictionary's, else its hyphenated parts in
@@ -265,6 +353,49 @@ public sealed class MotionSpeech
             throw new ArgumentException($"{who}: this line never shows '{n}'. Its mouths are {string.Join(", ", Names)}.");
         return names.ToDictionary(n => n, n => (object?)Weight(n, blend / 2));
     }
+
+    /// <summary>
+    /// Preston Blair's ten mouths as Action Units, a pose library for <c>comp.face</c>: pass it as <c>poses</c> and
+    /// <c>weights()</c> as <c>channels</c>, and the face's own mouth speaks the line. <c>scale</c> (1) opens every mouth
+    /// more or less: 0.7 for a mumble, 1.3 for a shout. The unit sets are the studio's, tuned by eye against the chart.
+    /// </summary>
+    /// <remarks>
+    /// Only for the <c>blair</c> set, the one the units were tuned on. <c>L</c> is drawn without the tongue the chart
+    /// shows, which the face does not draw: it reads as a slightly open mouth.
+    /// </remarks>
+    public Dictionary<string, object?> Poses(object? options = null)
+    {
+        const string who = "speech.poses";
+        if (Set != "blair")
+            throw new ArgumentException($"{who} is Preston Blair's chart as Action Units; this line uses the {Set} set. Use Motion.speech(text, {{ set: 'blair' }}), or build poses for your own mouths.");
+        var o = options is null ? new Hashtable()
+            : JsInterop.AsDict(options) ?? throw new ArgumentException($"{who}(options) takes {{ scale? }}.");
+        foreach (var key in o.Keys.Cast<object>().Select(k => k.ToString()!))
+            if (key != "scale") throw new ArgumentException($"{who} has no '{key}'. It takes: scale.");
+        var scale = o["scale"] is { } s ? MotionTypes.Read(s, MotionType.Real, $"{who}'s scale")[0] : 1d;
+        if (scale is < 0 or > 2) throw new ArgumentException($"{who}'s scale is {MotionTypes.Format(scale)}; it runs 0 to 2.");
+
+        // The opening units scale with the voice; the shaping ones (pucker, press, tuck, the smile's stretch) do not, or a
+        // quiet "m" would not close.
+        static bool Opens(string unit) => unit is "AU25" or "AU26" or "AU22";
+        return BlairPoses.ToDictionary(p => p.Key, p => (object?)p.Value.ToDictionary(
+            u => u.Key, u => (object?)(Opens(u.Key) ? Math.Min(1d, u.Value * scale) : u.Value)));
+    }
+
+    /// <summary>The ten mouths as units, tuned by eye on Loomis's head (docs/internal/spikes/mouth-units.png).</summary>
+    static readonly Dictionary<string, Dictionary<string, double>> BlairPoses = new()
+    {
+        ["rest"] = [],
+        ["AI"] = new() { ["AU26"] = 0.55, ["AU25"] = 0.5 },
+        ["E"] = new() { ["AU25"] = 0.55, ["AU12"] = 0.35, ["AU26"] = 0.15 },
+        ["O"] = new() { ["AU22"] = 1, ["AU26"] = 0.45 },
+        ["U"] = new() { ["AU18"] = 0.8, ["AU22"] = 0.3 },
+        ["WQ"] = new() { ["AU18"] = 1 },
+        ["MBP"] = new() { ["AU24"] = 1 },
+        ["FV"] = new() { ["AU28"] = 1 },
+        ["etc"] = new() { ["AU25"] = 0.35, ["AU26"] = 0.1, ["AU12"] = 0.2 },
+        ["L"] = new() { ["AU25"] = 0.4, ["AU26"] = 0.3 }
+    };
 
     /// <summary>A mouth's share of the window <c>[t − h, t + h]</c>, keyed linearly where that changes slope.</summary>
     private MotionAnimated Weight(string mouth, double h)

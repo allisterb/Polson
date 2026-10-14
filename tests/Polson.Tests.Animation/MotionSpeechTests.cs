@@ -208,6 +208,85 @@ public class MotionSpeechTests : TestsRuntime
     }
 
     /// <summary>The fetched dictionary sits beside the assembly with its licence, which must travel with it.</summary>
+    /// <summary>
+    /// The Gemini TTS recording of the face-speech line, from the speech probe (docs/internal/spikes/tts-probe, gitignored):
+    /// found by walking up from the test, or null where it is not, and the tests that need it skip.
+    /// </summary>
+    static string? Recording()
+    {
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+            if (Path.Combine(dir.FullName, "docs", "internal", "spikes", "tts-probe", "gemini-2.5-flash-tts.wav") is var p && File.Exists(p)) return p;
+        return null;
+    }
+
+    const string ProbeLine = "Who knew? Bob moved the moon so far, for fun!";
+
+    /// <summary>
+    /// Timed against a recording, every word sits where the voice says it, not where the rules would put it. Measured by
+    /// the aligner on this recording: "Bob" at 1.44 s and "for" at 3.99 s, which the rules put at 1.30 s and 3.30 s.
+    /// </summary>
+    [Fact]
+    public void AudioTimesTheWordsToTheRecording()
+    {
+        if (!SpeechBackend.AlignAvailable || Recording() is not { } wav) return;
+        var s = Say(ProbeLine, ("audio", wav));
+        Assert.True(s.Aligned);
+        Assert.Equal(wav, s.Audio);
+        double At(string word) => (double)s.Words.First(w => (string)w["word"]! == word)["start"]!;
+        Assert.InRange(At("Bob"), 1.38, 1.46);
+        Assert.InRange(At("for"), 3.93, 4.01);
+        Assert.All(s.Words, w => Assert.InRange((double)w["confidence"]!, 0.3, 1.0));
+
+        // The recording's pauses are the line's: "far," is followed by a long one the rules would not give.
+        var far = s.Words.First(w => (string)w["word"]! == "far");
+        Assert.True(At("for") - (double)far["end"]! > 0.3);
+        Assert.Equal("rest", s.MouthAt(((double)far["end"]! + At("for")) / 2));
+
+        // Its sounds fill each word, end to end, and a start moves the whole line.
+        var p = s.Phonemes;
+        for (var i = 1; i < p.Count; i++)
+            if ((string)p[i]["word"]! == (string)p[i - 1]["word"]!) Assert.Equal((double)p[i - 1]["end"]!, (double)p[i]["start"]!, 9);
+        var later = Say(ProbeLine, ("audio", wav), ("start", 2d));
+        Assert.Equal(At("Bob") + 2, (double)later.Words.First(w => (string)w["word"]! == "Bob")["start"]!, 9);
+    }
+
+    [Fact]
+    public void BadAudioIsRefused()
+    {
+        Assert.Contains("no recording", Assert.Throws<ArgumentException>(() => Say("cat", ("audio", Path.Combine(Path.GetTempPath(), "no-such-line.wav")))).Message);
+        Assert.Throws<ArgumentException>(() => Say("cat", ("audio", 3d)));
+        if (Recording() is { } wav)
+            Assert.Contains("rate", Assert.Throws<ArgumentException>(() => Say("cat", ("audio", wav), ("rate", 1.2d))).Message);
+        Assert.False(Say("cat").Aligned);
+        Assert.Null(Say("cat").Words[0]["confidence"]);
+    }
+
+    /// <summary>Blair's ten mouths as unit poses: a face speaks with its own mouth, and a scale opens it more or less.</summary>
+    [Fact]
+    public void BlairsMouthsAsFacePoses()
+    {
+        var s = Say("Who knew? Bob moved the moon so far, for fun!");
+        var poses = s.Poses();
+        Assert.Equal(["AI", "E", "FV", "L", "MBP", "O", "U", "WQ", "etc", "rest"], poses.Keys.Order(StringComparer.Ordinal));
+        Assert.All(s.Names, n => Assert.Contains(n, poses.Keys));
+
+        // Louder opens the opening units only: a shouted "m" still closes.
+        var loud = s.Poses(Opts(("scale", 1.5d)));
+        double Unit(Dictionary<string, object?> p, string pose, string unit) => (double)((Dictionary<string, object?>)p[pose]!)[unit]!;
+        Assert.Equal(Unit(poses, "AI", "AU26") * 1.5, Unit(loud, "AI", "AU26"), 9);
+        Assert.Equal(Unit(poses, "MBP", "AU24"), Unit(loud, "MBP", "AU24"), 9);
+
+        var comp = new MotionToolkit().Composition(Opts(("width", 300d), ("height", 300d), ("duration", 4d)));
+        var face = comp.Face(Opts(("origin", new[] { 150d, 150d }), ("height", 260d), ("poses", poses), ("channels", s.Weights())));
+        var at = s.Phonemes.First(p => (string)p["mouth"]! == "MBP");
+        var mid = ((double)at["start"]! + (double)at["end"]!) / 2 - 0.04;
+        var mouth = (IDictionary<string, object?>)face.HeadAt(mid)["mouthGuides"]!;
+        Assert.True(Convert.ToSingle(mouth["press"]) > 0.5f, "the face presses its lips for the M");
+
+        Assert.Throws<ArgumentException>(() => Say("cat", ("set", "rhubarb")).Poses());
+        Assert.Throws<ArgumentException>(() => s.Poses(Opts(("loud", 1d))));
+    }
+
     [Fact]
     public void TheDictionaryIsCmudictWithItsLicenceBesideIt()
     {

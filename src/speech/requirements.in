@@ -9,7 +9,12 @@
 # platform at once:
 #
 #     python/Scripts/uv.exe pip compile src/speech/requirements.in --universal --python-version 3.13 \
-#         --generate-hashes --no-emit-package distance --output-file src/speech/requirements.lock.txt
+#         --generate-hashes --no-emit-package distance --extra-index-url https://download.pytorch.org/whl/cpu \
+#         --index-strategy unsafe-best-match --emit-index-url --output-file src/speech/requirements.lock.txt
+#
+# `--emit-index-url` keeps PyTorch's index in the lock, which bootstrap installs from alone; `unsafe-best-match` lets
+# the resolver take `+cpu` builds from it while the rest comes from PyPI. With --require-hashes, a second index
+# cannot substitute anything: every file must match a listed hash.
 #
 # **`--no-emit-package distance`, and therefore `--no-deps` at install.** g2p-en declares `distance`, which PyPI has
 # only as a source archive, against bootstrap's wheels-only rule; g2p-en never imports it (its imports are nltk,
@@ -32,3 +37,13 @@ nltk>=3.9
 # g2p-en's own dependencies, resolved rather than pinned here: numpy for the model, inflect for spelling numbers out.
 numpy
 inflect
+
+# Forced alignment (src/speech/align.py): when each word of a known line is said in a recording. wav2vec 2.0's English
+# letters model (torchaudio's WAV2VEC2_ASR_BASE_960H bundle; weights pinned in tools/bootstrap.py) and torchaudio's CTC
+# forced_align, which torchaudio 2.10 kept when it entered maintenance (pytorch/audio#3902). Its audio I/O moved to
+# TorchCodec and FFmpeg; align.py does not use it, reading the WAV with Python's own `wave` module.
+#
+# CPU builds from PyTorch's own index, as src/vision does and for the same reasons: PyPI's torch is a CUDA build on
+# Linux, gigabytes the container never uses. Same torch as the vision lock, so the two venvs agree.
+torch==2.14.0+cpu
+torchaudio

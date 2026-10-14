@@ -975,6 +975,19 @@ public partial class ConstructiveDrawingToolkit
         var openDown = MathF.Max(0f, Read("openDown", 0f));
         var upperT = MathF.Max(F(2f), (center.Y - openUp) - Read("upperLipY", center.Y - F(4.8f)));
         var lowerT = MathF.Max(F(3f), Read("lowerLipY", center.Y + F(7.2f)) - (center.Y + openDown));
+
+        // **Rounded, pressed and tucked**, each 0 to 1, after the lips' thicknesses are measured so that pressing a
+        // laughing mouth shut does not fatten its upper lip. Pressed lips meet and thin, whatever else is opening them
+        // (AU24: M, B, P). A tucked lower lip rolls up under the upper teeth, which show above it (AU28: F, V). Rounded
+        // lips are pushed forward into a ring around an opening that stops short of the corners (AU18, AU22: O, U, W).
+        float Unit(string key) => Math.Clamp(Read(key, 0f), 0f, 1f);
+        float round = Unit("round"), press = Unit("press"), tuck = Unit("tuck");
+        // How far a laugh has lifted the upper lip, before a tuck adds its own small opening: it stretches the creases out.
+        var parted = openUp;
+        openDown *= (1f - press) * (1f - tuck);
+        openUp = (openUp + (tuck * F(3.2f))) * (1f - press);
+        upperT *= 1f - (0.4f * press);
+        lowerT *= (1f - (0.4f * press)) * (1f - (0.45f * tuck));
         var open = openUp + openDown > F(0.6f);
 
         // **The mouth's shape**, each -1 to +1 and 0 by default, the three ways the mouths in Hamm's p. 11
@@ -983,14 +996,18 @@ public partial class ConstructiveDrawingToolkit
         // Cupid's bow with high peaks set close. Width is the head's (`mouthWidth`). The amounts are the studio's.
         float Option(string key) => Math.Clamp(Num(optDict, key, 0f), -1f, 1f);
         float full = Option("full"), balance = Option("balance"), bow = Option("bow");
-        var fullness = full >= 0f ? 1f + (0.7f * full) : 1f + (0.6f * full);
+        // Lips pushed forward show more of themselves, so a rounded mouth's are fuller.
+        var fullness = (full >= 0f ? 1f + (0.7f * full) : 1f + (0.6f * full)) * (1f + (0.45f * round));
         // A laugh stretches the upper lip thin as it rises (p. 12), so its extra fullness fades as it opens; a full
         // upper lip on a rising one would otherwise climb into the nose.
         var upperScale = fullness * (1f + (0.35f * balance));
         upperT = MathF.Max(F(0.8f), upperT * (1f + ((upperScale - 1f) * upperT / (upperT + openUp))));
         lowerT = MathF.Max(F(1f), lowerT * fullness * (1f - (0.35f * balance)));
         var tone = Math.Clamp(Num(optDict, "tone", 1f), 0f, 1f);
-        var creases = Math.Clamp(Num(optDict, "creases", 0f), 0f, 1f);
+        // Hamm, p. 11: the creases across the lips "show up more" in sounds like "o" and "u", and in a laugh "nearly
+        // disappear". So a rounded mouth draws them even when the option is off, and a parted upper lip fades them.
+        var laugh = Math.Clamp(parted / F(4.5f), 0f, 1f);
+        var creases = Math.Clamp((Math.Clamp(Num(optDict, "creases", 0f), 0f, 1f) + (0.35f * round)) * (1f - laugh), 0f, 1f);
 
         // The two halves of a turned mouth differ, so every point is placed off its own half.
         float dl = center.X - left.X, dr = right.X - center.X;
@@ -1041,11 +1058,19 @@ public partial class ConstructiveDrawingToolkit
         // **The line of the opening**, the darkest part of the mouth (p. 11). Closed, it dips a little at the
         // centre, where the upper lip's protrusion presses down on the lower.
         // A deep bow presses its tubercle down harder; thin lips close nearly straight.
-        var dip = F(0.9f) * (1f + (0.4f * bow)) * MathF.Min(1f, fullness);
-        var apertureTop = Through(left, Across(-0.5f, center.Y - (openUp * 0.85f) + (open ? 0f : dip * 0.6f)), new Point2D(center.X, center.Y - openUp + (open ? 0f : dip)),
-                                  Across(0.5f, center.Y - (openUp * 0.85f) + (open ? 0f : dip * 0.6f)), right);
+        var dip = F(0.9f) * (1f + (0.4f * bow)) * MathF.Min(1f, fullness) * (1f - press);
+        // A rounded mouth's opening stops short of the corners, where the lips meet, and swells toward an oval.
+        var inset = 0.42f * round;
+        var span = 1f - inset;
+        var swell = 0.85f + (0.15f * round);
+        // Rounded, the opening's shoulders move out toward its ends, so the curve through them is an oval, not a lens.
+        var shoulderAt = (0.5f + (0.22f * round)) * span;
+        Point2D Toward(Point2D corner) => new(corner.X + ((center.X - corner.X) * inset), corner.Y + ((center.Y - corner.Y) * inset));
+        Point2D aL = Toward(left), aR = Toward(right);
+        var apertureTop = Through(aL, Across(-shoulderAt, center.Y - (openUp * swell) + (open ? 0f : dip * 0.6f)), new Point2D(center.X, center.Y - openUp + (open ? 0f : dip)),
+                                  Across(shoulderAt, center.Y - (openUp * swell) + (open ? 0f : dip * 0.6f)), aR);
         var apertureBottom = open
-            ? Through(left, Across(-0.5f, center.Y + (openDown * 0.85f) + dip * 0.6f), new Point2D(center.X, center.Y + openDown + dip), Across(0.5f, center.Y + (openDown * 0.85f) + dip * 0.6f), right)
+            ? Through(aL, Across(-shoulderAt, center.Y + (openDown * swell) + dip * 0.6f), new Point2D(center.X, center.Y + openDown + dip), Across(shoulderAt, center.Y + (openDown * swell) + dip * 0.6f), aR)
             : apertureTop;
 
         // **The upper lip**: Cupid's bow on top, two peaks either side of a notch under the hollow above the
@@ -1053,29 +1078,35 @@ public partial class ConstructiveDrawingToolkit
         var lipTop = center.Y - openUp - upperT;
         var notch = upperT * (bow >= 0f ? 0.25f + (0.3f * bow) : 0.25f * (1f + bow));
         var peak = 0.3f - (0.08f * bow);
-        var shoulder = upperT * (0.45f + (0.1f * bow));
-        var upperOutline = Through(left, Across(-0.62f, lipTop + shoulder), Across(-peak, lipTop), new Point2D(center.X, lipTop + notch),
-                                   Across(peak, lipTop), Across(0.62f, lipTop + shoulder), right);
+        // Rounded, the lips keep their fullness toward the corners rather than tapering into them: a ring, not a bow.
+        var shoulder = upperT * (0.45f + (0.1f * bow)) * (1f - (0.3f * round));
+        var flank = 0.62f + (0.07f * round);
+        var upperOutline = Through(left, Across(-flank, lipTop + shoulder), Across(-peak, lipTop), new Point2D(center.X, lipTop + notch),
+                                   Across(peak, lipTop), Across(flank, lipTop + shoulder), right);
         var upperLip = Shape(upperOutline.Concat(Enumerable.Reverse(apertureTop)));
 
         // **The lower lip**: fuller, rounder and lit, from the opening down to its rounded underside.
         var lipBottom = center.Y + openDown + lowerT;
-        var lowerOutline = Through(right, Across(0.62f, lipBottom - (lowerT * 0.42f)), Across(0.3f, lipBottom - (lowerT * 0.05f)), new Point2D(center.X, lipBottom),
-                                   Across(-0.3f, lipBottom - (lowerT * 0.05f)), Across(-0.62f, lipBottom - (lowerT * 0.42f)), left);
-        var lowerLip = Shape(apertureBottom.Concat(lowerOutline.Skip(1)));
+        var sag = 0.42f * (1f - (0.35f * round));
+        var lowerOutline = Through(right, Across(flank, lipBottom - (lowerT * sag)), Across(0.3f, lipBottom - (lowerT * 0.05f)), new Point2D(center.X, lipBottom),
+                                   Across(-0.3f, lipBottom - (lowerT * 0.05f)), Across(-flank, lipBottom - (lowerT * sag)), left);
+        // With the opening inset, the lower lip runs to the corners itself rather than starting where the opening ends.
+        var lowerLip = Shape(apertureBottom.Concat(lowerOutline.Skip(inset > 0f ? 0 : 1)));
 
         // **The cavity**, between the two edges of the opening; a sliver when the mouth is closed.
-        var cavityBottom = open ? apertureBottom : Through(left, new Point2D(center.X, center.Y + dip + F(0.8f)), right);
+        var cavityBottom = open ? apertureBottom : Through(aL, new Point2D(center.X, center.Y + dip + F(0.8f)), aR);
         var cavity = Shape(apertureTop.Concat(Enumerable.Reverse(cavityBottom)));
 
-        // **The upper teeth**, the set that shows in a laugh, under the upper lip and clipped to the opening.
+        // **The upper teeth**, the set that shows in a laugh, under the upper lip and clipped to the opening. Over a
+        // tucked lower lip they fill the gap down to it: the teeth rest on the lip.
         var teeth = new CanvasPath();
         if (open)
         {
             var teethH = MathF.Min((openUp + openDown) * 0.75f + F(0.6f), F(9f));
-            teeth = Shape(Through(Across(-0.82f, center.Y - (openUp * 0.6f)), new Point2D(center.X, center.Y - openUp), Across(0.82f, center.Y - (openUp * 0.6f)))
-                .Concat(Through(Across(0.78f, center.Y - (openUp * 0.6f) + (teethH * 0.6f)), new Point2D(center.X, center.Y - openUp + teethH),
-                                Across(-0.78f, center.Y - (openUp * 0.6f) + (teethH * 0.6f)))));
+            if (tuck > 0f) teethH = MathF.Max(teethH, ((openUp + openDown) * (0.75f + (0.25f * tuck))) + (F(1f) * tuck));
+            teeth = Shape(Through(Across(-0.82f * span, center.Y - (openUp * 0.6f)), new Point2D(center.X, center.Y - openUp), Across(0.82f * span, center.Y - (openUp * 0.6f)))
+                .Concat(Through(Across(0.78f * span, center.Y - (openUp * 0.6f) + (teethH * 0.6f)), new Point2D(center.X, center.Y - openUp + teethH),
+                                Across(-0.78f * span, center.Y - (openUp * 0.6f) + (teethH * 0.6f)))));
         }
 
         // **The shadow under the lower lip**, in the depression above the chin.
@@ -1111,10 +1142,10 @@ public partial class ConstructiveDrawingToolkit
         // **The opening as the inked line**: tapered, full through the middle and lifting at the corners.
         var lipLine = Open(apertureTop);
         var lipMark = CreateTaperedStrokePath(
-            left,
-            new Point2D(left.X + ((center.X - left.X) * 0.6f), center.Y - (openUp * 0.9f) + (open ? 0f : dip)),
-            new Point2D(right.X - ((right.X - center.X) * 0.6f), center.Y - (openUp * 0.9f) + (open ? 0f : dip)),
-            right,
+            aL,
+            new Point2D(aL.X + ((center.X - aL.X) * 0.6f), center.Y - (openUp * 0.9f) + (open ? 0f : dip)),
+            new Point2D(aR.X - ((aR.X - center.X) * 0.6f), center.Y - (openUp * 0.9f) + (open ? 0f : dip)),
+            aR,
             Tier(LipLineTier, mw, MouthWidthAt240, weight * TaperGain));
 
         ctx.Save();
@@ -1732,6 +1763,24 @@ public partial class ConstructiveDrawingToolkit
             // where they were. So this lifts the whole upper lip and leaves the jaw alone; a yelling laugh or a
             // mouth open in awe is AU26 as well.
             ["AU25"] = (head, w, h, _) => PartLips(head, 0.030f * h * w),
+
+            // **The mouths speech needs that opening and stretching cannot make.** FACS's numbering; the drawing is the
+            // studio's, since nothing in the corpus draws these, and tuned by eye against the Preston Blair chart's shapes.
+            //
+            // Orbicularis Oris, Incisivii - Lip Pucker: the corners drawn toward the middle and the lips pushed forward
+            // into a ring, closed or nearly, as for a kiss, "oo" and "w".
+            ["AU18"] = (head, w, h, s) => RoundLips(head, w, 0.045f * h * w, 0f, s),
+
+            // Orbicularis Oris - Lip Funneler: the lips rounded and turned out around an opening, as for "o", "sh" and "ch".
+            ["AU22"] = (head, w, h, s) => RoundLips(head, w, 0.032f * h * w, 0.016f * h * w, s),
+
+            // Orbicularis Oris - Lip Presser: the lips pressed together and thinned. Like the blink, it shuts the mouth
+            // whatever else is opening it, because M, B and P read only if the lips meet.
+            ["AU24"] = (head, w, _, _) => AddToMouth(head, "press", w),
+
+            // Orbicularis Oris - Lip Suck. FACS's unit draws both lips in over the teeth; here only the lower, rolled under
+            // the upper teeth, which is the F and V of speech. The upper lip's half is not drawn.
+            ["AU28"] = (head, w, _, _) => AddToMouth(head, "tuck", w),
         };
 
     /// <summary>
@@ -1875,6 +1924,27 @@ public partial class ConstructiveDrawingToolkit
             if (away == 0) away = key == "rightCorner" ? 1 : -1;
             mouth[key] = ToDict(new Point2D(p.X + (away * spread), p.Y + lift));
         }
+    }
+
+    /// <summary>
+    /// Rounds the lips: the corners drawn in by <paramref name="narrow"/> pixels each, the mouth's <c>round</c> raised by
+    /// <paramref name="amount"/>, and the lips parted by <paramref name="open"/>, a little more below than above.
+    /// </summary>
+    static void RoundLips(Dictionary<string, object?> head, float amount, float narrow, float open, FaceSide side)
+    {
+        MoveMouthCorners(head, -narrow, 0f, side);
+        AddToMouth(head, "round", amount);
+        if (open <= 0f || head["mouthGuides"] is not Dictionary<string, object?> mouth) return;
+        foreach (var (key, share) in new[] { ("openUp", 0.4f), ("openDown", 0.6f) })
+            mouth[key] = (mouth.TryGetValue(key, out var o) && o is not null ? Convert.ToSingle(o, CultureInfo.InvariantCulture) : 0f) + (open * share);
+    }
+
+    /// <summary>Raises one of the mouth's 0–1 fractions (<c>round</c>, <c>press</c>, <c>tuck</c>), held at 1.</summary>
+    static void AddToMouth(Dictionary<string, object?> head, string key, float amount)
+    {
+        if (head["mouthGuides"] is not Dictionary<string, object?> mouth) return;
+        var had = mouth.TryGetValue(key, out var v) && v is not null ? Convert.ToSingle(v, CultureInfo.InvariantCulture) : 0f;
+        mouth[key] = Math.Clamp(had + amount, 0f, 1f);
     }
 
     /// <summary>Parts the lips by lifting the whole upper lip (Hamm's laugh, p. 12); the jaw stays.</summary>

@@ -316,12 +316,18 @@ is Synfig's, and the craft follows from it:
 - **Make a line of dialogue from its text: `Motion.speech('The cat in the hat.', { start: 0.4 })`.** Which sounds a
   sentence has is the dictionary's business, and mouth charts are coarse enough that accents and weak forms mostly
   land on the same mouth; only the timing has to be chosen, and with no recording to match, natural timing is correct
-  timing. Key a switch of drawn mouths with `line.mouths`, or a face's mouth poses with `line.weights()`. Watch the
+  timing. Key a switch of drawn mouths with `line.mouths`, or let a face speak with its own mouth:
+  `comp.face({ poses: line.poses(), channels: line.weights() })`, Blair's ten mouths as the face's own units. Watch the
   closures: `M`, `B` and `P` must close the lips on screen, or the word reads wrong, and the track keeps them however
   short. Draw the mouth a frame before its sound (`lead`) and the eye reads them as one. With the speech backend
   installed, numbers are spelled out and words no dictionary has are guessed; read `line.guessed` before trusting it,
   and give a character's name its sounds with `pronounce`, once, in every line it is spoken. Use `line.wordAt(t)` for a
   caption that follows.
+- **With a voice, time the line to it: `Motion.speech(text, { audio: 'line.wav' })`.** Rules are right on average and
+  wrong in performance: a speaker lingers, rushes and pauses where the punctuation does not say to, and rule timing
+  drifted over half a second within one measured line. The aligner finds each word in the recording, so the mouth
+  lands with the sound; the line's text still decides which mouths. Check `line.words[i].confidence` for a word it was
+  unsure of, and keep the mouth a frame ahead of the sound (`lead`), which reads as one with it.
 - **Or let a performer give the motion: `{ follow: Character.track('Jumping Jacks') }`.** The recorded clips
   that pose the 3D body drive a drawing too, each bone turned to point where the performer's part points on the
   page. It is only as good as the clip is flat: read `track.warnings` first, and choose a clip that moves across
