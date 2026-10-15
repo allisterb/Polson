@@ -421,6 +421,200 @@ public class QlooClientTests : TestsRuntime
         Assert.Throws<ArgumentException>(() => new QlooClient("k", new HttpClient(), baseUrl));
     #endregion
 
+    #region Cache and budget
+    [Fact]
+    public async Task Cache_ARepeatedQuestionIsAnsweredWithoutAsking()
+    {
+        using var dir = new TempDir();
+        var calls = 0;
+        var budget = new QlooBudget(10);
+        var client = Offline(new StubHandler(_ => { calls++; return Respond(InsightsWithLocality); }), [], cache: new QlooCache(dir.Path), budget: budget);
+        var query = new QlooQuery { ["filter.type"] = "urn:entity:artist", ["signal.location.query"] = "Port Sample" };
+
+        var fresh = await client.Insights(query);
+        var again = await client.Insights(query.Clone());
+
+        Assert.Equal(1, calls);
+        Assert.False(fresh.FromCache);
+        Assert.True(again.FromCache);
+        Assert.NotNull(again.CachedUtc);
+        Assert.Equal(fresh.Entities.Select(e => e.EntityId), again.Entities.Select(e => e.EntityId));
+        Assert.Equal(fresh.Locality, again.Locality);
+        Assert.Contains("Qloo: Could not calculate explainability", again.Warnings);
+        Assert.Equal((1, 1), (budget.Spent, budget.CacheHits));
+    }
+
+    [Fact]
+    public async Task Cache_ADifferentQuestionOrServiceIsADifferentEntry()
+    {
+        using var dir = new TempDir();
+        var calls = 0;
+        var client = Offline(new StubHandler(_ => { calls++; return Respond(InsightsWithLocality); }), [], cache: new QlooCache(dir.Path));
+
+        await client.Insights(new QlooQuery { ["filter.type"] = "urn:entity:artist", ["signal.location.query"] = "Port Sample" });
+        await client.Insights(new QlooQuery { ["filter.type"] = "urn:entity:artist", ["signal.location.query"] = "Other Town" });
+
+        Assert.Equal(2, calls);
+        Assert.NotEqual(QlooCache.KeyOf("https://hackathon.api.qloo.com", "/v2/tags"), QlooCache.KeyOf("https://api.qloo.com", "/v2/tags"));
+    }
+
+    [Fact]
+    public async Task Cache_AFailureIsNotKeptAndTheKeyIsNeverWritten()
+    {
+        using var dir = new TempDir();
+        var calls = 0;
+        var handler = new StubHandler(_ => ++calls == 1 ? Respond("{}", HttpStatusCode.Unauthorized) : Respond(AudienceResults));
+        var client = Offline(handler, [], key: "secret-test-key", cache: new QlooCache(dir.Path));
+
+        var failed = await client.Audiences();
+        var ok = await client.Audiences();
+        var hit = await client.Audiences();
+
+        Assert.Equal(QlooFailure.Auth, failed.Failure);
+        Assert.True(ok.Success && !ok.FromCache);
+        Assert.True(hit.FromCache);
+        Assert.Equal(2, calls);
+        Assert.All(System.IO.Directory.GetFiles(dir.Path), f => Assert.DoesNotContain("secret-test-key", System.IO.File.ReadAllText(f)));
+    }
+
+    [Fact]
+    public async Task Cache_AnUnreadableEntryIsAMissAndIsRewritten()
+    {
+        using var dir = new TempDir();
+        var cache = new QlooCache(dir.Path);
+        var calls = 0;
+        var client = Offline(new StubHandler(_ => { calls++; return Respond(AudienceResults); }), [], cache: cache);
+        var key = QlooCache.KeyOf(QlooClient.HackathonBaseUrl, "/v2/audiences?take=50");
+        System.IO.File.WriteAllText(System.IO.Path.Combine(dir.Path, key + ".json"), "{ corrupt");
+
+        var r = await client.Audiences();
+
+        Assert.True(r.Success && !r.FromCache, r.Error);
+        Assert.Equal(1, calls);
+        Assert.NotNull(cache.Get(key));
+    }
+
+    /// <summary>A query refused by the validator sends nothing, so it costs nothing and is not cached.</summary>
+    [Fact]
+    public async Task Budget_ARefusedQueryIsNotCharged()
+    {
+        var budget = new QlooBudget(5);
+        var client = Offline(new StubHandler(_ => Respond(EmptyInsights)), [], budget: budget);
+
+        var r = await client.Insights(new QlooQuery { ["filter.type"] = "urn:entity:music" });
+
+        Assert.Equal(QlooFailure.InvalidRequest, r.Failure);
+        Assert.Equal(0, budget.Spent);
+    }
+
+    [Fact]
+    public async Task Budget_WhenSpentRefusesButStillServesTheCache()
+    {
+        using var dir = new TempDir();
+        var calls = 0;
+        var budget = new QlooBudget(1);
+        var client = Offline(new StubHandler(_ => { calls++; return Respond(AudienceResults); }), [], cache: new QlooCache(dir.Path), budget: budget);
+
+        var first = await client.Audiences();
+        var other = await client.Audiences("urn:audience:life_stage");
+        var repeat = await client.Audiences();
+
+        Assert.True(first.Success);
+        Assert.Equal(QlooFailure.BudgetExhausted, other.Failure);
+        Assert.Contains("allowance of 1", other.Error);
+        Assert.True(repeat.FromCache);
+        Assert.Equal(1, calls);
+        Assert.Equal(1, budget.Refused);
+    }
+
+    /// <summary>Every request sent draws on Qloo's quota, so a retry is charged too.</summary>
+    [Fact]
+    public async Task Budget_ChargesEachAttempt()
+    {
+        var calls = 0;
+        var budget = new QlooBudget(10);
+        var client = Offline(new StubHandler(_ => ++calls == 1 ? Respond("{}", HttpStatusCode.TooManyRequests) : Respond(AudienceResults)), [], budget: budget);
+
+        var r = await client.Audiences();
+
+        Assert.True(r.Success);
+        Assert.Equal(2, budget.Spent);
+    }
+
+    [Fact]
+    public async Task Budget_StopsRetryingWhenTheAllowanceRunsOut()
+    {
+        var calls = 0;
+        var budget = new QlooBudget(1);
+        var client = Offline(new StubHandler(_ => { calls++; return Respond("{}", HttpStatusCode.BadGateway); }), [], budget: budget);
+
+        var r = await client.Audiences();
+
+        Assert.Equal(1, calls);
+        Assert.Equal(QlooFailure.BudgetExhausted, r.Failure);
+    }
+
+    /// <summary>Once Qloo reports the month at or below the reserve, nothing more is sent, whatever the run has left.</summary>
+    [Fact]
+    public async Task Budget_TheMonthlyReserveIsNotSpent()
+    {
+        using var dir = new TempDir();
+        var calls = 0;
+        var budget = new QlooBudget(100, monthlyReserve: 1000);
+        var client = Offline(new StubHandler(_ =>
+        {
+            calls++;
+            var r = Respond(AudienceResults);
+            r.Headers.Add("X-Month-RateLimit-Remaining", "900");
+            return r;
+        }), [], cache: new QlooCache(dir.Path), budget: budget);
+
+        var first = await client.Audiences();
+        var next = await client.Audiences("urn:audience:communities");
+        var cached = await client.Audiences();
+
+        Assert.True(first.Success);
+        Assert.True(budget.ReserveReached);
+        Assert.Equal(900, budget.MonthlyRemaining);
+        Assert.Equal(QlooFailure.BudgetExhausted, next.Failure);
+        Assert.Contains("reserve", next.Error);
+        Assert.True(cached.FromCache);
+        Assert.Equal(1, calls);
+    }
+
+    [Fact]
+    public async Task Budget_ZeroTurnsQlooOff()
+    {
+        var calls = 0;
+        var client = Offline(new StubHandler(_ => { calls++; return Respond(AudienceResults); }), [], budget: new QlooBudget(0));
+
+        var r = await client.Audiences();
+
+        Assert.Equal(QlooFailure.BudgetExhausted, r.Failure);
+        Assert.Contains("turned off", r.Error);
+        Assert.Equal(0, calls);
+    }
+
+    [Fact]
+    public void Budget_ChargesAreExactUnderConcurrency()
+    {
+        var budget = new QlooBudget(50);
+
+        var charged = Enumerable.Range(0, 200).AsParallel().Count(_ => budget.TryCharge() is null);
+
+        Assert.Equal(50, charged);
+        Assert.Equal(50, budget.Spent);
+        Assert.Equal(150, budget.Refused);
+    }
+
+    [Fact]
+    public void Budget_RefusesNegativeSettings()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new QlooBudget(-1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new QlooBudget(10, -1));
+    }
+    #endregion
+
     #region Live
     /// <summary>
     /// One real call each. Asserts on shape and on facts a director would check — never on data, which is
@@ -453,8 +647,8 @@ public class QlooClientTests : TestsRuntime
     private static HttpResponseMessage Respond(string body, HttpStatusCode status = HttpStatusCode.OK) =>
         new(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
 
-    private static QlooClient Offline(StubHandler handler, List<TimeSpan> waits, string key = "test-key") =>
-        new(key, new HttpClient(handler), QlooClient.HackathonBaseUrl)
+    private static QlooClient Offline(StubHandler handler, List<TimeSpan> waits, string key = "test-key", QlooCache? cache = null, QlooBudget? budget = null) =>
+        new(key, new HttpClient(handler), QlooClient.HackathonBaseUrl, cache, budget)
         {
             Delay = (t, _) => { waits.Add(t); return Task.CompletedTask; },
             Spacing = TimeSpan.Zero,
@@ -470,6 +664,17 @@ public class QlooClientTests : TestsRuntime
             return response;
         });
         return (Offline(handler, [], key), handler);
+    }
+
+    /// <summary>A fresh cache directory per test, removed afterwards.</summary>
+    private sealed class TempDir : IDisposable
+    {
+        public string Path { get; } = System.IO.Directory.CreateTempSubdirectory("polson-qloo-").FullName;
+
+        public void Dispose()
+        {
+            try { System.IO.Directory.Delete(Path, recursive: true); } catch (System.IO.IOException) { }
+        }
     }
 
     private sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> responder) : HttpMessageHandler
