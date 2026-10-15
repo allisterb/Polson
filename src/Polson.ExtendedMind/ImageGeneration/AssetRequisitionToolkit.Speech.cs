@@ -14,6 +14,15 @@ public partial class AssetRequisitionToolkit
     public const int MaxSpeechCharacters = 600;
     #endregion
 
+    #region Properties
+    /// <summary>
+    /// Every voice <see cref="Speak"/> takes, with Google's word for what it sounds like: <c>[{ name, description }]</c>,
+    /// by name. Free and offline: choosing a voice for a character should not cost a generation per guess.
+    /// </summary>
+    public Dictionary<string, object?>[] Voices =>
+        [.. SpeechVoices.Names.Select(n => new Dictionary<string, object?> { ["name"] = n, ["description"] = SpeechVoices.Descriptions[n] })];
+    #endregion
+
     #region Methods
     /// <summary>
     /// Speaks a line in a prebuilt voice and writes it into the project as a WAV. <c>await Assets.speak('Who knew?', { voice: 'Puck' })</c>.
@@ -57,19 +66,20 @@ public partial class AssetRequisitionToolkit
         if (SpeechVoices.Names.FirstOrDefault(v => string.Equals(v, opts.Voice?.Trim(), StringComparison.OrdinalIgnoreCase)) is not { } voice)
             return Refuse(ImageGenerationFailure.InvalidRequest,
                 $"'{opts.Voice}' is not a voice. Did you mean {string.Join(", ", NearestVoices(opts.Voice ?? ""))}? "
-                + $"The voices are: {string.Join(", ", SpeechVoices.Names)}.");
+                + $"The voices are: {string.Join(", ", SpeechVoices.Names.Select(SpeechVoices.Describe))}. Assets.voices lists them.");
 
         var style = opts.Style?.Trim().TrimEnd(':').Trim();
         // A name alone is enough, as for a redraw's description: a direction has no other reason to hold one.
         if (style is { Length: > 0 } && PersonalName().Match(style) is { Success: true } who)
             return Refuse(ImageGenerationFailure.RefusedLikeness,
                 $"'{who.Value}' reads as a real person, and a voice cannot be made to sound like one: a generated likeness "
-                + "of a voice carries none of the consent a real one would need. Describe the delivery instead: 'warmly', "
-                + "'in a whisper', 'like a tired sailor'. If it is not a name, write it in lower case.");
+                + "of a voice carries none of the consent a real one would need. Choose the voice by its description (Assets.voices) and "
+                + "describe only the delivery: 'shouting over the wind', 'out of breath'. If it is not a name, write it in lower case.");
 
-        // The direction before a colon is how to say what follows, which the model reads and does not speak.
-        var prompt = style is { Length: > 0 } ? $"{style}: {text}" : text;
-        var hash = SpeechGenerator.HashOf(model, voice, prompt);
+        // The text is spoken verbatim; the direction travels beside it as speechMetadata.style, which is not spoken.
+        style = style is { Length: > 0 } ? style : null;
+        var prompt = SpeechGenerator.Describe(text, style);
+        var hash = SpeechGenerator.HashOf(model, voice, text, style);
 
         var path = string.IsNullOrWhiteSpace(opts.Path) ? $"audio/{hash[..12].ToLowerInvariant()}.wav" : opts.Path.Trim();
         if (!path.EndsWith(".wav", StringComparison.OrdinalIgnoreCase))
@@ -79,7 +89,7 @@ public partial class AssetRequisitionToolkit
         catch (ArgumentException ex) { return Refuse(ImageGenerationFailure.InvalidRequest, ex.Message); }
 
         var hitsBefore = Budget.CacheHits;
-        var result = await AcquireSpeech(prompt, model, voice, hash);
+        var result = await AcquireSpeech(text, style, prompt, model, voice, hash);
         var fromCache = Budget.CacheHits > hitsBefore;
 
         if (result.Success)
@@ -118,7 +128,7 @@ public partial class AssetRequisitionToolkit
     }
 
     /// <summary>The cache, then the budget, then the service: the only path in <see cref="Speak"/> that can spend.</summary>
-    async Task<SpeechGenerationResult> AcquireSpeech(string prompt, string model, string voice, string hash)
+    async Task<SpeechGenerationResult> AcquireSpeech(string text, string? style, string prompt, string model, string voice, string hash)
     {
         if (speech is null)
             return SpeechGenerationResult.Failed(ImageGenerationFailure.NotConfigured,
@@ -135,7 +145,7 @@ public partial class AssetRequisitionToolkit
             return SpeechGenerationResult.Failed(ImageGenerationFailure.BudgetExhausted,
                 $"Budget exhausted ({Budget.Spent}/{Budget.Total} spent).", prompt, model);
 
-        var result = await speech.GenerateSpeech(prompt, voice, model);
+        var result = await speech.GenerateSpeech(text, style, voice, model);
         if (result.Charged)
         {
             Budget.Spent++;

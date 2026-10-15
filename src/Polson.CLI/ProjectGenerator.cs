@@ -339,6 +339,11 @@ internal static class ProjectGenerator
 
         WriteDocumentsReadme(Path.Combine(dir, "documents", "README.md"));
 
+        // Claude Code takes the judgment manuals as imported files; anything else, or no manuals at all, takes back
+        // whatever an earlier generation of this project wrote there.
+        var importManuals = opts.InlineManuals && sdk == "claude";
+        if (!importManuals) SyncManualFiles(dir, []);
+
         var tokens = new Dictionary<string, string>
         {
             ["PROJECT_ID"] = id,
@@ -354,8 +359,9 @@ internal static class ProjectGenerator
             // workflow: it carries no instructions.md, which is the only thing discovery looks for.
             ["ENGINE_ONLY"] = Render("_shared", "engine_only.md", []),
 
-            // The judgment manuals, inlined rather than pointed at. Empty unless asked for.
-            ["MANUALS"] = opts.InlineManuals ? InlinedManuals(workflow) : "",
+            // The judgment manuals, inlined rather than pointed at. Empty unless asked for. Imported files arrive just
+            // as complete under Claude Code, without one oversized CLAUDE.md — see `ImportedManuals`.
+            ["MANUALS"] = importManuals ? ImportedManuals(dir, workflow) : opts.InlineManuals ? InlinedManuals(workflow) : "",
 
             // Stay in the project directory. Shared because it is true of every workflow, and stated
             // as a prompt rule because that is what has actually worked: the engine-only guardrail
@@ -1075,8 +1081,9 @@ internal static class ProjectGenerator
     /// </remarks>
     internal static readonly string[] RunOutput =
     [
-        "events", "scripts", "artifacts",
-        "findings.md", "critique_log.md", "artwork.js", "output.webp", "output.svg", "output.png",
+        // `audio` holds the lines Assets.speak wrote, which a run makes as it makes its renders.
+        "events", "scripts", "artifacts", "audio",
+        "findings.md", "critique_log.md", "artwork.js", "output.webp", "output.svg", "output.png", "output.mp4",
         // Workflow deliverables: drawing's turns.md, painting's materials.md, sketch_scene's sketch.md,
         // animation's animation.md.
         "turns.md", "materials.md", "sketch.md", "animation.md"
@@ -1359,16 +1366,53 @@ internal static class ProjectGenerator
         ["logo"] = ["09", "11"],
     };
 
-    /// <summary>The judgment manuals for one workflow, as one Markdown block, or empty.</summary>
+    /// <summary>The judgment manuals for one workflow, in full, as one Markdown block, or empty.</summary>
+    static string InlinedManuals(string workflow) =>
+        ManualsBlock(JudgmentManualsFor(workflow), ManualText, note: null);
+
+    /// <summary>
+    /// The judgment manuals as files under <c>manuals/</c>, and the block of <c>@</c> imports that pulls them into
+    /// <c>CLAUDE.md</c>. Claude Code only.
+    /// </summary>
     /// <remarks>
-    /// Each is framed as reference the agent already holds rather than as an instruction, so it does
-    /// not compete with the workflow's own stages for authority. A manual that cannot be found is
-    /// skipped rather than throwing: a missing manual should not stop a project being generated, and
-    /// the omission is visible in the file.
+    /// <para>
+    /// Claude Code expands an <c>@path</c> line into the instructions when the session starts, so a manual can be a
+    /// file of its own and still arrive in full, unasked — the property that made inlining work. Inlined, the
+    /// animation workflow's three came to ~95k of a 158k-character <c>CLAUDE.md</c>, past the 150k at which Claude
+    /// Code warns. <b>This does not make the context any smaller</b>: an import is loaded exactly as the inline text
+    /// was. What it buys is a file of a size the host does not warn about, and manuals a person can open on their own.
+    /// </para>
+    /// <para>
+    /// No other host expands an import. Antigravity is told to read <c>GEMINI.md</c> and ADK reads the file itself,
+    /// so to either an <c>@</c> line is a pointer, which is the thing measured not to work. They keep the inline block.
+    /// </para>
     /// </remarks>
-    static string InlinedManuals(string workflow)
+    static string ImportedManuals(string dir, string workflow)
     {
-        if (!JudgmentManuals.TryGetValue(workflow, out var ids)) return string.Empty;
+        var manuals = JudgmentManualsFor(workflow);
+        SyncManualFiles(dir, manuals);
+        return ManualsBlock(manuals, m => [$"@{ManualFile(m)}", ""],
+            note: "Each is a file in `manuals/`, imported below, so it is already in front of you — there is no "
+                + "need to open it.");
+    }
+
+    /// <summary>
+    /// The workflow's judgment manuals. One that cannot be found is skipped rather than thrown on: a missing manual
+    /// should not stop a project being generated, and the omission is visible in the file.
+    /// </summary>
+    static StudioManual[] JudgmentManualsFor(string workflow) =>
+        JudgmentManuals.TryGetValue(workflow, out var ids)
+            ? [.. ids.Select(PolsonManuals.Find).OfType<StudioManual>()]
+            : [];
+
+    /// <summary>The judgment manuals' preamble, then one entry per manual, or empty when there are none.</summary>
+    /// <remarks>
+    /// Each is framed as reference the agent already holds rather than as an instruction, so it does not compete
+    /// with the workflow's own stages for authority.
+    /// </remarks>
+    static string ManualsBlock(StudioManual[] manuals, Func<StudioManual, IEnumerable<string>> entry, string? note)
+    {
+        if (manuals.Length == 0) return string.Empty;
 
         var parts = new List<string>
         {
@@ -1376,7 +1420,8 @@ internal static class ProjectGenerator
             "",
             "These are the manuals whose content is **judgment rather than a call** — what to stage, "
             + "where the eye goes, how value is structured. They are here rather than behind `Search` "
-            + "because a manual you have to decide to fetch is one you will not fetch.",
+            + "because a manual you have to decide to fetch is one you will not fetch."
+            + (note is null ? "" : " " + note),
             "",
             "**The rest of the corpus is still only a call away.** `polson://manual/index` lists every "
             + "manual with its purpose, and `Search(query, scope: 'manual')` finds a passage in any of "
@@ -1384,20 +1429,50 @@ internal static class ProjectGenerator
             + "binds to SDK calls this file already names.",
             "",
         };
+        parts.AddRange(manuals.SelectMany(entry));
+        return string.Join(Environment.NewLine, parts);
+    }
 
-        foreach (var id in ids)
+    /// <summary>One manual as the instructions carry it, inline or in its own file.</summary>
+    static IEnumerable<string> ManualText(StudioManual manual) =>
+        ["---", "", $"### Manual {manual.Id} — {manual.Title}", "", manual.Body.Trim(), ""];
+
+    static string ManualFile(StudioManual manual) => $"manuals/{manual.Id}_{manual.Slug}.md";
+
+    /// <summary>
+    /// Writes <paramref name="manuals"/> under <c>manuals/</c> and removes the ones a previous generation wrote that
+    /// are no longer wanted.
+    /// </summary>
+    /// <remarks>
+    /// Only a file opening with <see cref="ManualMarker"/> is removed, so anything a person put in the folder stays.
+    /// A stale manual would do nothing — it is not imported — but a reader of the project would take it as part of
+    /// the agent's instructions.
+    /// </remarks>
+    static void SyncManualFiles(string dir, StudioManual[] manuals)
+    {
+        var wanted = manuals.Select(ManualFile).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var folder = Path.Combine(dir, "manuals");
+        if (Directory.Exists(folder))
         {
-            if (PolsonManuals.Find(id) is not { } manual) continue;
-            parts.Add($"---");
-            parts.Add("");
-            parts.Add($"### Manual {manual.Id} — {manual.Title}");
-            parts.Add("");
-            parts.Add(manual.Body.Trim());
-            parts.Add("");
+            foreach (var file in Directory.EnumerateFiles(folder, "*.md").ToArray())
+            {
+                var name = "manuals/" + Path.GetFileName(file);
+                if (!wanted.Contains(name) && File.ReadLines(file).FirstOrDefault()?.StartsWith(ManualMarker, StringComparison.Ordinal) == true)
+                    File.Delete(file);
+            }
         }
 
-        return parts.Count > 5 ? string.Join(Environment.NewLine, parts) : string.Empty;
+        foreach (var manual in manuals)
+        {
+            WriteText(dir, ManualFile(manual), string.Join("\n",
+                [$"{ManualMarker} from {manual.Uri}, imported by CLAUDE.md. Rewritten on every create and reset. -->", "",
+                 .. ManualText(manual)]));
+        }
+
+        if (Directory.Exists(folder) && !Directory.EnumerateFileSystemEntries(folder).Any()) Directory.Delete(folder);
     }
+
+    const string ManualMarker = "<!-- Generated by polson create-project";
 
     static string HookCommand(string sdk, string projectDir) =>
         sdk == "agy" ? ".\\" + Path.GetFileName(HookScriptPath) : DirectCommand(sdk, projectDir);

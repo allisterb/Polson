@@ -138,6 +138,7 @@ public sealed class MotionSpeech
     private readonly List<Spoken> guessed;
     /// <summary>The mouths, led and merged: each from its start to the next one's, rest before the first and after the last.</summary>
     private readonly List<(double Start, double End, string Mouth)> segments;
+    private List<string> unsaid = [];
     #endregion
 
     #region Properties
@@ -149,6 +150,20 @@ public sealed class MotionSpeech
 
     /// <summary>Whether the words' times are a recording's rather than the rules'.</summary>
     public bool Aligned => audioFile is not null;
+
+    /// <summary>
+    /// What the recording says by itself, as the aligner's model hears it with no line to hold it to: upper-case words,
+    /// roughly spelled (<c>A HOY</c> for "Ahoy"). Null when the rules timed the line.
+    /// </summary>
+    public string? Heard { get; private set; }
+
+    /// <summary>
+    /// Words the recording says that the line does not: a direction read aloud, an extra word, a different take. Empty
+    /// when it says the line and nothing else. Alignment cannot show these, because it folds them into a neighbouring word,
+    /// which only lengthens that word and lowers its confidence: anim3's take said "Shouting... Ahoy!" and gave
+    /// <c>["SHOUTING"]</c> here, while the aligner reported "Ahoy" at 1.05 s and 0.71.
+    /// </summary>
+    public IReadOnlyList<string> Unsaid => unsaid;
 
     /// <summary>The mouth set: <c>blair</c>, <c>flemingDobbs</c>, <c>rhubarb</c>, <c>cmu</c> or <c>custom</c>.</summary>
     public string Set { get; }
@@ -226,6 +241,38 @@ public sealed class MotionSpeech
     }
 
     /// <summary>
+    /// The heard words the line does not account for. Compared letter by letter, because the model hears without a
+    /// dictionary and spells roughly ("A HOY", "BAR" for "Bear"): a heard word of three letters or more with fewer than
+    /// half its letters in the longest common subsequence of the two is one the line does not say.
+    /// </summary>
+    internal static List<string> Unheard(string heard, IEnumerable<string> line)
+    {
+        static string Letters(string w) => new([.. w.ToUpperInvariant().Where(c => c is >= 'A' and <= 'Z')]);
+        var said = string.Concat(line.Select(Letters));
+        var words = heard.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var letters = string.Concat(words.Select(Letters));
+        var owner = words.SelectMany((w, k) => Enumerable.Repeat(k, Letters(w).Length)).ToArray();
+
+        // The longest common subsequence from each pair of suffixes, then a walk that marks the heard letters it uses.
+        // The walk passes over a heard letter whenever that keeps the subsequence longest, so the line's letters land on
+        // the latest heard letters that can carry them. Taking the earliest instead let a direction read aloud before the
+        // line claim the line's letters: the A of SAILOR took the A of AHOY, and the real AHOY was reported unsaid.
+        var (n, m) = (letters.Length, said.Length);
+        var lcs = new int[n + 1, m + 1];
+        for (var i = n - 1; i >= 0; i--)
+            for (var j = m - 1; j >= 0; j--)
+                lcs[i, j] = letters[i] == said[j] ? lcs[i + 1, j + 1] + 1 : Math.Max(lcs[i + 1, j], lcs[i, j + 1]);
+        var used = new int[words.Length];
+        for (int i = 0, j = 0; i < n && j < m;)
+        {
+            if (lcs[i + 1, j] == lcs[i, j]) i++;
+            else if (letters[i] == said[j]) { used[owner[i]]++; i++; j++; }
+            else j++;
+        }
+        return [.. words.Where((w, k) => Letters(w).Length >= 3 && used[k] * 2 < Letters(w).Length)];
+    }
+
+    /// <summary>
     /// Each spoken word's span where the recording says it, <see cref="Start"/> being where the recording begins. A word the
     /// aligner could not place takes the room between its neighbours, shared by the rules' weights, or the rules' own
     /// length before the first placed word or after the last.
@@ -233,6 +280,8 @@ public sealed class MotionSpeech
     List<(double Start, double End, double? Score)> AlignedSpans(List<(int Token, Spoken Word, string[] Sounds, double[] Weights)> plan, string who)
     {
         var alignment = SpeechBackend.Align(audioFile!, [.. plan.Select(p => p.Word.Word)], Audio);
+        Heard = alignment.Heard;
+        unsaid = alignment.Heard is { } h ? Unheard(h, plan.Select(p => p.Word.Word)) : [];
         var raw = alignment.Words;
         if (raw.All(w => w.Start is null))
             throw new InvalidOperationException($"{who}: the aligner could not place any word of the line in '{Audio}'. Is it the right recording?");

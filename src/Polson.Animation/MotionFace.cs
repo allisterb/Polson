@@ -8,6 +8,8 @@ using System.Xml.Linq;
 
 using Polson.Drawing.Skia;
 
+using static Polson.Drawing.Skia.ConstructiveDrawingToolkit;
+
 /// <summary>
 /// A face as a composition layer: a constructed head whose placement, character and expression are channels, each a
 /// value or a node, drawn every frame by the feature drawers.
@@ -75,8 +77,8 @@ internal sealed class MotionFaceLayer : MotionLayer
         character = ReadReals(o.Raw("character"), $"{o.Who}'s character");
         look = JsInterop.AsDict(o.Raw("look")) ?? (o.Has("look") ? throw new ArgumentException($"{o.Who}'s look is an object of drawing options.") : new Hashtable());
         foreach (var key in look.Keys.Cast<object>().Select(k => k.ToString()!))
-            if (!LookKeys.Contains(key))
-                throw new ArgumentException($"{o.Who}'s look has no '{key}'. It takes: {string.Join(", ", LookKeys)}.");
+            if (!ConstructiveDrawingToolkit.FaceLookKeys.Contains(key))
+                throw new ArgumentException($"{o.Who}'s look has no '{key}'. It takes: {string.Join(", ", ConstructiveDrawingToolkit.FaceLookKeys)}.");
 
         // The pose library: each pose a fixed set of channel values, blended in by a channel of its own name.
         if (o.Has("poses"))
@@ -84,16 +86,16 @@ internal sealed class MotionFaceLayer : MotionLayer
             var library = JsInterop.AsDict(o.Raw("poses")) ?? throw new ArgumentException($"{o.Who}'s poses is an object: {{ name: {{ channel: value }} }}.");
             foreach (var poseName in library.Keys.Cast<object>().Select(k => k.ToString()!))
             {
-                if (poseName.Contains('.') || WheelChannels.Contains(poseName) || poseName.StartsWith("AU", StringComparison.Ordinal) || IsExpression(poseName))
+                if (Toolkit.FacePoseNameTaken(poseName))
                     throw new ArgumentException($"{o.Who}'s pose '{poseName}' takes a name a channel already has; name it something else.");
-                var entries = new List<PoseEntry>();
+                var entries = new List<FacePoseEntry>();
                 foreach (var (name, node) in ReadReals(library[poseName], $"{o.Who}'s pose '{poseName}'"))
                 {
                     if (node is not MotionConstant)
                         throw new ArgumentException($"{o.Who}'s pose '{poseName}' holds fixed values; its '{name}' is a node. Key the pose's weight instead.");
-                    var (side, bare) = SplitSide(name);
-                    var kind = Classify(bare, o.Who, name);
-                    entries.Add(new PoseEntry(side, bare, kind, node.Evaluate(0)[0]));
+                    var (side, bare) = ConstructiveDrawingToolkit.SplitFaceSide(name);
+                    var kind = Toolkit.ClassifyFaceChannel(bare, o.Who, name);
+                    entries.Add(new FacePoseEntry(side, bare, kind, node.Evaluate(0)[0]));
                 }
                 poses[poseName] = entries;
             }
@@ -102,8 +104,8 @@ internal sealed class MotionFaceLayer : MotionLayer
         var channels = ReadReals(o.Raw("channels"), $"{o.Who}'s channels");
         foreach (var (name, node) in channels)
         {
-            var (side, bare) = SplitSide(name);
-            var kind = poses.ContainsKey(bare) ? ChannelKind.Pose : Classify(bare, o.Who, name);
+            var (side, bare) = ConstructiveDrawingToolkit.SplitFaceSide(name);
+            var kind = poses.ContainsKey(bare) ? FaceChannelKind.Pose : Toolkit.ClassifyFaceChannel(bare, o.Who, name);
             parsed.Add((name, side, bare, kind, node));
         }
 
@@ -118,12 +120,6 @@ internal sealed class MotionFaceLayer : MotionLayer
     internal static readonly string[] Options =
         ["origin", "height", "yaw", "pitch", "construction", "character", "poses", "channels", "look", "amount", "blend", "desc"];
 
-    static readonly string[] LookKeys =
-        ["skin", "ink", "outline", "geometry", "planes", "lines", "brow", "eye", "nose", "mouth", "ears"];
-
-    static readonly string[] WheelChannels =
-        ["browTop", "browTopInner", "browTopOuter", "browBottom", "browBottomInner", "browBottomOuter", "fold", "upperLid", "lowerLid"];
-
     static readonly ConstructiveDrawingToolkit Toolkit = new();
 
     private readonly string construction;
@@ -133,8 +129,8 @@ internal sealed class MotionFaceLayer : MotionLayer
     private readonly MotionNode pitch;
     private readonly List<(string Name, MotionNode Node)> character;
     private readonly IDictionary look;
-    private readonly List<(string Name, string? Side, string Bare, ChannelKind Kind, MotionNode Node)> parsed = [];
-    private readonly Dictionary<string, List<PoseEntry>> poses = [];
+    private readonly List<(string Name, string? Side, string Bare, FaceChannelKind Kind, MotionNode Node)> parsed = [];
+    private readonly Dictionary<string, List<FacePoseEntry>> poses = [];
     #endregion
 
     #region Properties
@@ -169,64 +165,11 @@ internal sealed class MotionFaceLayer : MotionLayer
 
         try
         {
+            // The same call a figure's drawing makes, so the two routes cannot drift: the layer only knows the pitch the
+            // nose is handed and the height the outline's width is taken from.
             var head = Build(time, out var pitchDeg);
             var ctx = new CanvasRenderingContext2D(surface, canvas.TotalMatrix);
-            var ink = look["ink"]?.ToString() ?? "#15151a";
-            Hashtable Feature(string key)
-            {
-                var own = JsInterop.AsDict(look[key]);
-                var options = new Hashtable { ["inkColor"] = ink };
-                if (own is not null) foreach (DictionaryEntry e in own) options[e.Key] = e.Value;
-                return options;
-            }
-            bool On(string key) => look[key] is not false;
-
-            var geo = Toolkit.CreateHeadGeometry(head, JsInterop.AsDict(look["geometry"]));
-            ctx.FillStyle = look["skin"]?.ToString() ?? "#efe2cf";
-            ctx.Fill((CanvasPath)geo["silhouette"]!);
-
-            if (look["planes"] is not null and not false)
-            {
-                var planeOptions = JsInterop.AsDict(look["planes"]) is { } given ? new Hashtable(given) : [];
-                Toolkit.DrawHeadPlanes(ctx, head, planeOptions);
-            }
-
-            if (On("ears") && JsInterop.AsDict(geo["ears"]) is { } ears)
-            {
-                Toolkit.DrawComicEar(ctx, ears["far"]!, true, Feature("ears"));
-                Toolkit.DrawComicEar(ctx, ears["near"]!, false, Feature("ears"));
-            }
-
-            ctx.Save();
-            ctx.Clip((CanvasPath)geo["mass"]!);
-            if (On("lines")) Toolkit.DrawEyeLines(ctx, head, Feature("lines"));
-            if (On("brow"))
-            {
-                Toolkit.DrawComicBrow(ctx, head["farBrow"]!, true, Feature("brow"));
-                Toolkit.DrawComicBrow(ctx, head["nearBrow"]!, false, Feature("brow"));
-            }
-            if (On("eye"))
-            {
-                Toolkit.DrawComicEye(ctx, head["farEye"]!, true, Feature("eye"));
-                Toolkit.DrawComicEye(ctx, head["nearEye"]!, false, Feature("eye"));
-            }
-            if (On("nose"))
-            {
-                // The nose cannot read its own pitch from the landmarks, so the face hands it the pitch channel.
-                var nose = Feature("nose");
-                if (!nose.ContainsKey("pitchDeg") && Math.Abs(pitchDeg) > 1e-6) nose["pitchDeg"] = pitchDeg;
-                Toolkit.DrawComicNose(ctx, head["noseWedge"]!, nose);
-            }
-            if (On("mouth")) Toolkit.DrawComicMouth(ctx, head["mouthGuides"]!, Feature("mouth"));
-            ctx.Restore();
-
-            if (On("outline"))
-            {
-                var outline = JsInterop.AsDict(look["outline"]);
-                ctx.StrokeStyle = outline?["color"]?.ToString() ?? ink;
-                ctx.LineWidth = outline is not null && outline["width"] is { } w ? Convert.ToSingle(w) : MathF.Max(1f, (float)height.Evaluate(time)[0] / 220f);
-                ctx.Stroke((CanvasPath)geo["silhouette"]!);
-            }
+            Toolkit.DrawFace(ctx, head, look, pitchDeg, (float)height.Evaluate(time)[0]);
         }
         finally
         {
@@ -247,122 +190,10 @@ internal sealed class MotionFaceLayer : MotionLayer
         if (character.Count > 0)
             head = Toolkit.CreateParametricHead(head, character.ToDictionary(c => c.Name, c => (object?)(float)c.Node.Evaluate(time)[0]));
 
-        // Units and expressions add up per side, as applyActionUnits composes them; a unit past 1 is clamped there. The
-        // eye wheel is set directly by its channels (a side's own over both) and moved by each pose by its weight times
-        // the pose's distance from the normal setting, so poses add as blend shapes do.
-        string[] sides = ["both", "near", "far"];
-        var units = sides.ToDictionary(s => s, _ => new Dictionary<string, object?>());
-        var wheel = sides.ToDictionary(s => s, _ => new Dictionary<string, float>());
-        var offsets = sides.ToDictionary(s => s, _ => new Dictionary<string, float>());
-        void AddExpression(Dictionary<string, object?> into, string name, float weight)
-        {
-            if (weight > 0f)
-                foreach (var (unit, w) in Toolkit.ExpressionUnits(name, MathF.Min(1f, weight)))
-                    Add(into, unit, Convert.ToSingle(w));
-        }
-        foreach (var (_, side, bare, kind, node) in parsed)
-        {
-            var v = (float)node.Evaluate(time)[0];
-            var key = side ?? "both";
-            switch (kind)
-            {
-                case ChannelKind.Unit: Add(units[key], bare, v); break;
-                case ChannelKind.Expression: AddExpression(units[key], bare, v); break;
-                case ChannelKind.Wheel: wheel[key][bare] = v; break;
-                default:
-                    if (v == 0f) break;
-                    foreach (var entry in poses[bare])
-                    {
-                        // A pose set on one side puts its unsided values there; its own sided values go only where they belong.
-                        var target = entry.Side is null ? key : key == "both" || key == entry.Side ? entry.Side : null;
-                        if (target is null) continue;
-                        switch (entry.Kind)
-                        {
-                            case ChannelKind.Unit: Add(units[target], entry.Bare, (float)(v * entry.Value)); break;
-                            case ChannelKind.Expression: AddExpression(units[target], entry.Bare, (float)(v * entry.Value)); break;
-                            default: offsets[target][entry.Bare] = offsets[target].GetValueOrDefault(entry.Bare) + (float)(v * (entry.Value - 3d)); break;
-                        }
-                    }
-                    break;
-            }
-        }
-
-        // A unit pushed below zero by a negative pose weight is no unit at all.
-        foreach (var w in units.Values) foreach (var unit in w.Keys.ToList()) w[unit] = MathF.Max(0f, (float)w[unit]!);
-        if (units["both"].Count > 0) head = Toolkit.ApplyActionUnits(head, units["both"]);
-        foreach (var side in new[] { "near", "far" })
-            if (units[side].Count > 0) head = Toolkit.ApplyActionUnits(head, units[side], new Dictionary<string, object?> { ["side"] = side });
-
-        if (sides.Any(s => wheel[s].Count > 0 || offsets[s].Count > 0))
-        {
-            var settings = WheelSettings(wheel["both"], offsets["both"]);
-            foreach (var side in new[] { "near", "far" })
-                if (wheel[side].Count > 0 || offsets[side].Count > 0)
-                    settings[side] = WheelSettings(
-                        wheel["both"].Concat(wheel[side]).GroupBy(e => e.Key).ToDictionary(g => g.Key, g => g.Last().Value),
-                        offsets["both"].Concat(offsets[side]).GroupBy(e => e.Key).ToDictionary(g => g.Key, g => g.Sum(e => e.Value)));
-            head = Toolkit.EyeWheel(head, settings);
-        }
-        return head;
-
-        static void Add(Dictionary<string, object?> into, string unit, float w) =>
-            into[unit] = (into.TryGetValue(unit, out var had) && had is float f ? f : 0f) + w;
-    }
-
-    /// <summary>
-    /// The eye wheel's settings from its channels, held inside the wheel's range: a keyed curve that overshoots a
-    /// setting is clamped rather than refused, so an <c>auto</c> ease can be used on it.
-    /// </summary>
-    private static Dictionary<string, object?> WheelSettings(IReadOnlyDictionary<string, float> set, IReadOnlyDictionary<string, float> offset)
-    {
-        float Off(string key) => offset.GetValueOrDefault(key);
-        float? Set(string key) => set.TryGetValue(key, out var v) ? v : null;
-        var settings = new Dictionary<string, object?>();
-        foreach (var (edge, max) in new[] { ("browTop", 3f), ("browBottom", 5f) })
-        {
-            var both = Set(edge) ?? 3f;
-            float End(string end) => Math.Clamp((Set(edge + end) ?? both) + Off(edge + end) + Off(edge), 1f, max);
-            settings[edge] = new Dictionary<string, object?> { ["inner"] = End("Inner"), ["outer"] = End("Outer") };
-        }
-        foreach (var (key, max) in new[] { ("fold", 3f), ("upperLid", 5f), ("lowerLid", 4f) })
-            settings[key] = Math.Clamp((Set(key) ?? 3f) + Off(key), 1f, max);
-        return settings;
-    }
-    private static (string? Side, string Bare) SplitSide(string name)
-    {
-        foreach (var side in new[] { "near", "far" })
-            if (name.StartsWith(side + ".", StringComparison.Ordinal)) return (side, name[(side.Length + 1)..]);
-        return (null, name);
-    }
-
-    /// <summary>What a channel names: a unit, an eye-wheel setting, or an expression; anything else is refused by name.</summary>
-    private static ChannelKind Classify(string bare, string who, string name)
-    {
-        if (WheelChannels.Contains(bare)) return ChannelKind.Wheel;
-        if (bare.StartsWith("AU", StringComparison.Ordinal))
-        {
-            // applyActionUnits refuses a unit it does not know, naming those it does.
-            Toolkit.ApplyActionUnits(Toolkit.CreateLoomisHead(0f, 0f, 100f, 0f), new Dictionary<string, object?> { [bare] = 0f });
-            return ChannelKind.Unit;
-        }
-        try
-        {
-            Toolkit.ExpressionUnits(bare, 0f);
-            return ChannelKind.Expression;
-        }
-        catch (ArgumentException)
-        {
-            throw new ArgumentException(
-                $"{who}'s channel '{name}' is not a channel. Channels are Action Units (AU1, AU12, ...), expressions "
-                + $"(joy, anger, fear, sadness, surprise, disgust), eye-wheel settings ({string.Join(", ", WheelChannels)}), or "
-                + "the name of a pose in the face's poses, each optionally prefixed near. or far. for one side.");
-        }
-    }
-
-    private static bool IsExpression(string name)
-    {
-        try { Toolkit.ExpressionUnits(name, 0f); return true; }
-        catch (ArgumentException) { return false; }
+        // The channels at this time, applied as applyFaceChannels applies them: units and expressions summed per side,
+        // the eye wheel set by its channels and moved by each pose's weight.
+        return Toolkit.ApplyFaceChannelValues(head,
+            parsed.Select(c => new FaceChannelValue(c.Side, c.Bare, c.Kind, (float)c.Node.Evaluate(time)[0])), poses);
     }
 
     /// <summary>An object of named real values or nodes.</summary>
@@ -377,10 +208,4 @@ internal sealed class MotionFaceLayer : MotionLayer
     }
     #endregion
 
-    #region Types
-    internal enum ChannelKind { Unit, Expression, Wheel, Pose }
-
-    /// <summary>One channel value held by a pose.</summary>
-    internal sealed record PoseEntry(string? Side, string Bare, ChannelKind Kind, double Value);
-    #endregion
 }

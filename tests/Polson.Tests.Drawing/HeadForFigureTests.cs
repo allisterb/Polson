@@ -277,6 +277,65 @@ public class HeadForFigureTests : TestsRuntime
         Assert.Contains("createMannequinFigure", ex.Message);
     }
 
+    /// <summary>
+    /// A larger head grows from the chin: the chin stays where the figure's is, the head is the multiple of its height
+    /// asked for, and the neck keeps its length in pixels while its length in head units shrinks to match. anim3 and
+    /// anim4 both drew the head 1.5× by hand with a canvas transform and re-derived every point on it.
+    /// </summary>
+    [Fact]
+    public void TestAScaledHeadGrowsFromItsChin()
+    {
+        var fig = Figure(new Dictionary<string, object?> { ["pose"] = new Dictionary<string, object?> { ["spineDeg"] = 14d } });
+        var canon = Fitted(fig, new Dictionary<string, object?> { ["character"] = new Dictionary<string, object?> { ["jawShape"] = 0.5d } });
+        var big = Fitted(fig, new Dictionary<string, object?> { ["scale"] = 1.5d, ["character"] = new Dictionary<string, object?> { ["jawShape"] = 0.5d } });
+
+        Assert.Equal(Pt(canon, "chin").X, Pt(big, "chin").X, 1);
+        Assert.Equal(Pt(canon, "chin").Y, Pt(big, "chin").Y, 1);
+        Assert.Equal(Num(Sub(canon, "unit"), "H") * 1.5f, Num(Sub(big, "unit"), "H"), 2);
+        Assert.True(Silhouette(big).Top < Silhouette(canon).Top - Unit * 0.4f, "the bigger head rises above the canon one");
+
+        var (fc, fb) = (Sub(canon, "fit"), Sub(big, "fit"));
+        Assert.Equal(1.5f, Num(fb, "scale"));
+        Assert.Equal(Pt(fc, "pivot"), Pt(fb, "pivot"));
+        Assert.Equal(Num(fc, "neckLength") * Num(fc, "headHeight"), Num(fb, "neckLength") * Num(fb, "headHeight"), 1);
+    }
+
+    [Fact]
+    public void TestAScaleOutOfRangeIsRefused()
+    {
+        var ex = Assert.Throws<ArgumentException>(() => Fitted(Figure(), new Dictionary<string, object?> { ["scale"] = 0d }));
+        Assert.Contains("0.25 to 4", ex.Message);
+    }
+
+    /// <summary>
+    /// headPoint turns a landmark into the lean the head is drawn in, so a hand can reach the mouth on a leaning figure:
+    /// the point keeps its distance from the pivot and turns by exactly the roll.
+    /// </summary>
+    [Fact]
+    public void TestHeadPointPutsALandmarkWhereItIsDrawn()
+    {
+        var head = Fitted(Figure(new Dictionary<string, object?> { ["pose"] = new Dictionary<string, object?> { ["spineDeg"] = 20d } }),
+            new Dictionary<string, object?> { ["scale"] = 1.5d });
+        var fit = Sub(head, "fit");
+        var pivot = Pt(fit, "pivot");
+        var roll = Num(fit, "rollDeg");
+        Assert.True(Math.Abs(roll) > 5f, "the figure leans, so the head has a roll to apply");
+
+        var corner = Pt(Sub(head, "mouthGuides"), "leftCorner");
+        var placed = Kit.HeadPoint(head, Sub(Sub(head, "mouthGuides"), "leftCorner"));
+        var (px, py) = (Convert.ToSingle(placed["x"]), Convert.ToSingle(placed["y"]));
+
+        float Dist(float x, float y) => MathF.Sqrt((x - pivot.X) * (x - pivot.X) + (y - pivot.Y) * (y - pivot.Y));
+        float Angle(float x, float y) => MathF.Atan2(y - pivot.Y, x - pivot.X) * 180f / MathF.PI;
+        Assert.Equal(Dist(corner.X, corner.Y), Dist(px, py), 2);
+        Assert.Equal(roll, Angle(px, py) - Angle(corner.X, corner.Y), 1);
+
+        // A head with no fit is not turned.
+        var free = Kit.CreateLoomisHead(100f, 100f, 200f, 0f);
+        var same = Kit.HeadPoint(free, Sub(free, "chin"));
+        Assert.Equal(Pt(free, "chin").X, Convert.ToSingle(same["x"]), 4);
+    }
+
     /// <summary>Same figure, same head — a character has to survive a page of panels.</summary>
     [Fact]
     public void TestItIsDeterministic()

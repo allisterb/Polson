@@ -978,6 +978,9 @@ class ArtifactRouteTests(unittest.TestCase):
         # than into `artifacts/`. This is the case the route used to miss.
         (project / "output.webp").write_bytes(b"the delivery")
         (project / "output.svg").write_text("<svg/>", encoding="utf-8")
+        (project / "output.mp4").write_bytes(b"the film")
+        (project / "audio").mkdir()
+        (project / "audio" / "line1.wav").write_bytes(b"never")
 
         (project / "secret.txt").write_text("never", encoding="utf-8")
         (self.root / "outside.txt").write_text("never", encoding="utf-8")
@@ -1008,6 +1011,21 @@ class ArtifactRouteTests(unittest.TestCase):
             page = self.client.get(f"/runs/acme-1/artifact/{name}")
             self.assertEqual(page.status_code, 200, name)
             self.assertEqual(page.content, expected, name)
+
+    def test_a_film_is_served_as_video(self):
+        """`comp.saveVideo` writes `output.mp4`: an artifact the page plays in a `<video>`, so it must be served."""
+        page = self.client.get("/runs/acme-1/artifact/output.mp4")
+
+        self.assertEqual(page.status_code, 200)
+        self.assertEqual(page.content, b"the film")
+        self.assertTrue(page.headers["content-type"].startswith("video/mp4"), page.headers["content-type"])
+
+    def test_a_spoken_line_is_not_an_artifact(self):
+        """The film carries the voice; the WAVs `Assets.speak` wrote stay unreachable, like every other non-render."""
+        page = self.client.get("/runs/acme-1/artifact/audio/line1.wav")
+
+        self.assertEqual(page.status_code, 404)
+        self.assertNotIn(b"never", page.content)
 
     def test_a_missing_render_is_a_404_not_a_500(self):
         self.assertEqual(self.client.get("/runs/acme-1/artifact/nope.webp").status_code, 404)
@@ -1599,6 +1617,35 @@ class DeliverableRouteTests(unittest.TestCase):
         self.assertEqual([f["path"] for f in formats], ["output.webp"])
         self.assertTrue(formats[0]["animated"])
         self.assertEqual(formats[0]["durationMs"], 2000.0)
+
+    def test_a_film_with_its_voice_comes_before_its_silent_webp(self):
+        """The animation workflow delivers `output.mp4`; a looping `output.webp` beside it is the silent copy."""
+        self._made("output.mp4")
+        self._made("output.webp")
+        self._render_events(
+            {"type": "render", "ts": "2026-10-14T10:00:00Z", "artifact": "output.mp4", "format": "mp4",
+             "motion": "video", "frames": 48, "durationMs": 4000.0, "audio": ["audio/line1.wav"]},
+            {"type": "render", "ts": "2026-10-14T10:00:05Z", "artifact": "output.webp", "format": "webp",
+             "motion": "animation", "frames": 48, "durationMs": 4000.0})
+
+        picture = self._picture()
+        self.assertEqual([f["path"] for f in picture["formats"]], ["output.mp4", "output.webp"])
+        self.assertTrue(picture["formats"][0]["animated"])
+        self.assertEqual(picture["formats"][0]["durationMs"], 4000.0)
+        self.assertEqual(picture["name"], "output")
+
+    def test_the_finished_film_replaces_its_draft(self):
+        self._made("artifacts/05_draft.mp4")
+        self._made("output.mp4")
+        self._render_events(
+            {"type": "render", "ts": "2026-10-14T10:00:00Z", "artifact": "artifacts/05_draft.mp4",
+             "format": "mp4", "motion": "video"},
+            {"type": "render", "ts": "2026-10-14T10:05:00Z", "artifact": "output.mp4",
+             "format": "mp4", "motion": "video"},
+            {"type": "render", "ts": "2026-10-14T10:05:01Z", "artifact": "artifacts/06_poster.webp",
+             "format": "webp"})
+
+        self.assertEqual(self._picture()["formats"][0]["path"], "output.mp4")
 
     def test_a_later_animation_still_replaces_an_earlier_one(self):
         self._made("artifacts/draft.webp")

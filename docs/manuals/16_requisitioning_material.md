@@ -346,12 +346,14 @@ followed the guide. A costumed character overlaps its clay guide by about half t
 
 ## 8b. A Voice — `Assets.speak`
 
-> **Implemented by**: `Assets.speak(...)`, `spoken.path`, `spoken.duration`, `spoken.voice`, `spoken.sampleRate`, `spoken.byteLength`, `spoken.warnings`.
+> **Implemented by**: `Assets.speak(...)`, `Assets.voices`, `spoken.path`, `spoken.duration`, `spoken.voice`, `spoken.sampleRate`, `spoken.byteLength`, `spoken.warnings`.
 
 A spoken line is material in the same sense a swatch is: the model supplies the sound, and the drawing still has to be made to it. `await Assets.speak(text, { voice, style, path })` writes a WAV into the project and returns where (`spoken.path`) and how long it runs (`spoken.duration`, in seconds, at `spoken.sampleRate`). Hand the path to `Motion.speech(text, { audio: spoken.path })` and the mouths are timed to the voice; hand the line to `comp.saveVideo(..., { audio: line })` and the voice plays where they were timed.
 
+- **Cast the voice from its description, not its name.** The names are stars and say nothing; `Assets.voices` gives each with Google's one word for how it sounds (`soft`, `gravelly`, `mature`, `youthful`, `warm`...), free and offline. Match the word to the character before spending anything: casting by trial costs a generation a voice.
 - **Pick the voice once per character and keep it.** `spoken.voice` echoes the one used; a misspelt name is refused with the nearest. Each voice is a different take: the same line ran 4.16 s in Kore and 4.40 s in Puck, with the pauses in different places, so a line cannot be swapped to another voice without re-timing the mouths.
-- **Direct the delivery in words, never by naming a person.** `style: 'in a whisper'` is read as how to speak; `style: 'like Morgan Freeman'` is refused, since a voice cannot be made to sound like a real one.
+- **Direct the delivery in `style`, briefly, and never in the line.** The line is spoken word for word, so a direction written into it is said aloud: a first run asked for `'shouting'` that way and shipped a keeper saying "Shouting... Ahoy!". `style: 'out of breath'` travels beside the line and is followed, not spoken. Keep it to a few words, or leave it out; who the speaker is (age, gender, accent) is the voice's job, not the direction's. `style: 'like Morgan Freeman'` is refused, since a voice cannot be made to sound like a real one.
+- **Put a moment where it happens, as a tag, and only a sound.** `<short pause>`, `<breath>`, `<sigh>`, `<gasp>` in angle brackets inside the line; a capitalised word takes the stress (`"on the ROCKS!"`). A tag named for a delivery is a sound too: `<shout> Ahoy!` added a burst of its own and came back "HOHAY", which is why shouting is `style`'s and not a tag's. Give `Motion.speech` the line without its tags.
 - **Read `spoken.warnings`.** A line much longer than its words allow may carry the direction spoken aloud; one much shorter may be cut off. Then align it and read each word's `confidence`: a low score on one word is the place to listen.
 - **Speak a scene line by line.** One call takes at most 600 characters, each line is one generation, and the same line in the same voice and direction is free from cache afterwards, which is what lets a script that speaks its dialogue be re-run. `spoken.byteLength` says what landed on disk.
 

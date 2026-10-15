@@ -10,6 +10,7 @@ using Polson.ExtendedMind.ImageGeneration;
 using Polson.ExtendedMind.SpeechGeneration;
 using Polson.MCPServer;
 using Xunit;
+using Xunit.Abstractions;
 
 /// <summary>
 /// <c>Assets.speak</c> as a script reaches it: the options object maps onto <see cref="SpeechOptions"/>, the line lands
@@ -21,10 +22,15 @@ public class SpeechInteropTests : TestsRuntime, IDisposable
     #region Fields
     private readonly string root = Path.Combine(Path.GetTempPath(), "polson-speakjs-" + Guid.NewGuid().ToString("N"));
     private readonly AssetRequisitionToolkit? was = JsDrawingEngine.Assets;
+    private readonly ITestOutputHelper output;
     #endregion
 
     #region Methods
-    public SpeechInteropTests() => Directory.CreateDirectory(root);
+    public SpeechInteropTests(ITestOutputHelper output)
+    {
+        this.output = output;
+        Directory.CreateDirectory(root);
+    }
 
     public void Dispose()
     {
@@ -53,6 +59,10 @@ public class SpeechInteropTests : TestsRuntime, IDisposable
             log(JSON.stringify(spoken));
             const wrong = await Assets.speak('Hi.', { voice: 'Koree' });
             log(wrong.failureName + ': ' + wrong.error);
+            const voices = Assets.voices;
+            log('VOICES ' + JSON.stringify({ length: voices.length, isArray: Array.isArray(voices),
+              gacrux: voices.find(v => v.name === 'Gacrux').description,
+              mature: voices.filter(v => v.description === 'Mature').map(v => v.name) }));
             const c = createCanvas(8, 8); c.getContext('2d').fillRect(0, 0, 8, 8); c;
             """, 8, 8);
 
@@ -66,6 +76,11 @@ public class SpeechInteropTests : TestsRuntime, IDisposable
         Assert.Equal(1.0, json.GetProperty("duration").GetDouble(), 3);
         Assert.False(json.TryGetProperty("Wav", out _));
         Assert.Contains(result.Logs, l => l.Contains("InvalidRequest") && l.Contains("Did you mean Kore"));
+        var voices = JsonDocument.Parse(result.Logs.First(l => l.StartsWith("[LOG] VOICES "))["[LOG] VOICES ".Length..]).RootElement;
+        Assert.Equal(30, voices.GetProperty("length").GetInt32());
+        Assert.Equal("Mature", voices.GetProperty("gacrux").GetString());
+        Assert.Equal(["Gacrux"], voices.GetProperty("mature").EnumerateArray().Select(v => v.GetString()));
+        output.WriteLine("Assets.voices is a JS array: " + voices.GetProperty("isArray").GetBoolean());
 
         var bought = Assert.Single(Events("asset.requisition"));
         Assert.Equal("speech", bought.GetProperty("kind").GetString());
@@ -81,10 +96,10 @@ public class SpeechInteropTests : TestsRuntime, IDisposable
     {
         public string Model => SpeechGenerator.DefaultModel;
 
-        public Task<SpeechGenerationResult> GenerateSpeech(string prompt, string voice, string? model = null, CancellationToken ct = default) =>
+        public Task<SpeechGenerationResult> GenerateSpeech(string text, string? style, string voice, string? model = null, CancellationToken ct = default) =>
             Task.FromResult(new SpeechGenerationResult
             {
-                Success = true, Wav = WavFile.Wrap(new byte[48000], 24000), Model = Model, Prompt = prompt,
+                Success = true, Wav = WavFile.Wrap(new byte[48000], 24000), Model = Model, Prompt = SpeechGenerator.Describe(text, style),
                 GeneratedUtc = DateTime.UtcNow, Charged = true, TotalTokens = 100
             });
     }

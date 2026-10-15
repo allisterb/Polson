@@ -190,8 +190,8 @@ ol#events { list-style: none; margin: 0; padding: 0; max-height: 46vh; overflow-
                  background: var(--panel); max-height: 46vh; overflow: auto; }
 /* Fit the pane rather than fill it: a tall portrait panel would otherwise set the row's height and
    leave the script beside it in a sliver. */
-.latest img { max-height: calc(46vh - 3rem); max-width: 100%; width: auto; height: auto;
-              display: block; margin: 0 auto; }
+.latest img, .latest video { max-height: calc(46vh - 3rem); max-width: 100%; width: auto; height: auto;
+                              display: block; margin: 0 auto; }
 .latest figcaption { font-family: var(--mono); font-size: .78rem; color: var(--dim);
                      padding-top: .4rem; }
 .latest .empty { padding: .7rem .2rem; margin: 0; }
@@ -212,8 +212,11 @@ footer.site a:hover, footer.site a:focus-visible { color: var(--accent); }
             flex-direction: column; align-items: center; justify-content: center; gap: .5rem;
             padding: 2rem; background: rgba(28, 39, 51, .82); }
 #lightbox[hidden] { display: none; }
-#lightbox img { max-width: 100%; max-height: calc(100vh - 7rem); width: auto; height: auto;
+#lightbox img, #lightbox video { max-width: 100%; max-height: calc(100vh - 7rem); width: auto; height: auto;
                 background: var(--panel); border-radius: 3px; box-shadow: 0 2px 24px rgba(0,0,0,.35); }
+/* A video's own controls take clicks; only the backdrop closes the overlay around it. */
+#lightbox video { cursor: auto; }
+#lightbox video[hidden] { display: none; }
 #lightbox p { margin: 0; color: var(--panel); font-family: var(--mono); font-size: .8rem; }
 #lightbox .hint { opacity: .7; }
 

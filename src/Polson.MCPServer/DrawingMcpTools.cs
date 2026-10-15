@@ -313,6 +313,31 @@ public partial class DrawingMcpTools
     [GeneratedRegex(@"<image\b[^>]*?\b(?:xlink:)?href\s*=\s*""(?<href>[^""]*)""", RegexOptions.IgnoreCase)]
     private static partial Regex ImageHrefRegex();
 
+    /// <summary>
+    /// The encoding a render is written in: the one <c>format</c> names, else the one <c>outFile</c>'s extension names,
+    /// else WebP. A <c>format</c> that contradicts the extension is refused.
+    /// </summary>
+    /// <remarks>
+    /// The extension used to be ignored: anim4 asked for <c>outFile: 'artifacts/00_probe.png'</c> with no format and got
+    /// WebP bytes under a <c>.png</c> name, which the result admitted only in <c>imageFormat</c>. A file whose name says
+    /// one format and whose bytes are another is opened by whatever trusts the name, so a mismatch either way is refused
+    /// rather than written.
+    /// </remarks>
+    internal static string OutputFormat(string? format, string? outFile)
+    {
+        var ext = string.IsNullOrWhiteSpace(outFile) ? "" : Path.GetExtension(outFile.Trim()).ToLowerInvariant();
+        var named = ext switch { ".png" => "png", ".jpg" or ".jpeg" => "jpeg", ".webp" => "webp", _ => null };
+        if (string.IsNullOrWhiteSpace(format)) return named ?? "webp";
+
+        var asked = SkiaImageEncoder.NormalizeFormatName(format);
+        if (named is not null && named != asked)
+            throw new ArgumentException(
+                $"format '{format}' writes {asked}, but outFile '{outFile}' is named {ext}, so the file would hold {asked} "
+                + $"bytes under a {named} name. Leave format out and the extension decides, or name the file .{(asked == "jpeg" ? "jpg" : asked)}.",
+                nameof(format));
+        return asked;
+    }
+
     internal string ResolveOutputPath(string path, string parameterName)
     {
         var full = ProjectPath.Resolve(ProjectRoot, path, parameterName, "Write to");
@@ -625,7 +650,7 @@ public partial class DrawingMcpTools
         [Description("The JavaScript code to execute. Omit this when passing scriptFile.")] string? script = null,
         [Description("Default canvas / SVG viewport width in pixels (default 800).")] int? width = null,
         [Description("Default canvas / SVG viewport height in pixels (default 600).")] int? height = null,
-        [Description("Output image encoding format ('webp', 'png', 'jpeg'; default 'webp').")] string? format = null,
+        [Description("Output image encoding format ('webp', 'png', 'jpeg'). Defaults to the one outFile's extension names, else 'webp'; a format that contradicts outFile's extension is refused.")] string? format = null,
         [Description("Image encoding quality (1-100; default 85).")] int? quality = null,
         [Description("Optional file path where the rendered image should be saved, relative to the project directory (e.g. 'artifacts/stage1.webp'). Paths outside the project are refused.")] string? outFile = null,
         [Description("Optional file path where the rendered SVG XML should be saved, relative to the project directory (e.g. 'artifacts/stage1.svg'). Paths outside the project are refused.")] string? outSvg = null,
@@ -692,7 +717,17 @@ public partial class DrawingMcpTools
 
         try
         {
-            var fmt = format ?? "webp";
+            string fmt;
+            try { fmt = OutputFormat(format, outFile); }
+            catch (ArgumentException ex)
+            {
+                Events.Append("script.error", session.Stage, executionId, new Dictionary<string, object?>
+                {
+                    ["script"] = scriptPath,
+                    ["error"] = ex.Message
+                });
+                return new DrawingExecutionResult { Success = false, Error = ex.Message };
+            }
             var q = quality ?? 85;
 
             // Both output paths are validated **before** the script runs, and whether or not it goes
@@ -1692,7 +1727,7 @@ public partial class DrawingMcpTools
         [Description("A path relative to the project directory to read the SVG from instead — normally something outSvg wrote. Give this or `svgXml`, not both.")] string? file = null,
         [Description("Target image width in pixels (optional, defaults to SVG width or 800).")] int? width = null,
         [Description("Target image height in pixels (optional, defaults to SVG height or 600).")] int? height = null,
-        [Description("Output image encoding format ('webp', 'png', 'jpeg'; default 'webp').")] string? format = null,
+        [Description("Output image encoding format ('webp', 'png', 'jpeg'). Defaults to the one outFile's extension names, else 'webp'; a format that contradicts outFile's extension is refused.")] string? format = null,
         [Description("Image encoding quality (1-100; default 85).")] int? quality = null,
         [Description("Optional file path where the rendered image should be saved, relative to the project directory. Paths outside the project are refused.")] string? outFile = null,
         [Description("AVOID THIS. Whether to inline the rendered image into the JSON response as base64 (default: true if outFile is omitted, false if outFile is specified). Base64 inflates the image by a third and the whole of it is delivered as TEXT in your context window - a routine 1200x760 WebP is ~126,000 characters, tens of thousands of tokens, and a PNG is four times that. It is not an image content block, so it costs the window without necessarily being viewable. Pass outFile instead and open the saved path with your host's file/image reader; that is both cheaper and the only way you reliably SEE the render.")] bool? includeBytes = null)
@@ -1711,7 +1746,9 @@ public partial class DrawingMcpTools
             ? svgXml!
             : File.ReadAllText(ResolveOutputPath(file, nameof(file)));
 
-        var fmt = format ?? "webp";
+        string fmt;
+        try { fmt = OutputFormat(format, outFile); }
+        catch (ArgumentException ex) { return new DrawingExecutionResult { Success = false, Error = ex.Message }; }
         var q = quality ?? 85;
         var result = new DrawingExecutionResult
         {

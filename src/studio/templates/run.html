@@ -183,6 +183,8 @@
      held in memory behind an invisible overlay. -->
 <div id="lightbox" hidden>
   <img id="lightbox-img" alt="">
+  <!-- A film with sound: an MP4 or WebM does not play in an <img>, as an animated WebP does. -->
+  <video id="lightbox-video" controls preload="metadata" hidden></video>
   <!-- The script at full size. Shares the overlay with the render so Esc and click-to-close are one
        behaviour rather than two that can drift apart; only one of the two is ever shown. -->
   <div id="lightbox-code" hidden></div>
@@ -839,6 +841,7 @@
   // still raster is the usual picture; a contact sheet is the agent's view of an animation and shows
   // only when nothing else did; a static SVG only fills an empty slot.
   function shows(event) {
+    if (event.motion === 'video') return 5;   // the film with its sound, which the others are drafts or views of
     if (event.motion === 'animation') return 4;
     if (event.motion === 'svg') return 3;
     if (event.motion === 'sheet') return 1;
@@ -852,6 +855,8 @@
     const secs = Number(e.durationMs) / 1000;
     const len = Number.isFinite(secs) && secs > 0 ? `${secs.toFixed(1)}s` : '';
     if (e.motion === 'animation') return ['\u25B6 ' + (len || 'animation'), count(e.frames, 'frames')].filter(Boolean).join(' \u00B7 ');
+    if (e.motion === 'video') return ['\u25B6 ' + (len || 'video'), count(e.frames, 'frames'),
+      Array.isArray(e.audio) && e.audio.length ? 'with sound' : 'silent'].filter(Boolean).join(' \u00B7 ');
     if (e.motion === 'svg') return ['\u25B6 ' + (len || 'animation'), 'animated svg'].join(' \u00B7 ');
     if (e.motion === 'sheet') return ['contact sheet', count(e.cells, 'cells')].filter(Boolean).join(' \u00B7 ');
     return '';
@@ -917,9 +922,13 @@
       ? `<img class="sheet" src="${base}/runs/${runId}/artifact/${made.sheet}?v=${made.sheetV}" alt="${esc(made.sheet)}">` +
         `<figcaption>${esc(made.sheet)} <span class="hint">contact sheet</span></figcaption>`
       : '';
+    // A video needs a player; its controls are the way to hear it, so it is not a click-to-enlarge.
+    const src = made.artifact ? `${base}/runs/${runId}/artifact/${made.artifact}?v=${made.v}` : '';
+    const shown = isVideo(made.artifact)
+      ? `<video src="${src}" controls preload="metadata" title="${esc(made.artifact)}"></video>`
+      : `<img src="${src}" alt="${esc(made.artifact)}">`;
     render.innerHTML = made.artifact
-      ? `<img src="${base}/runs/${runId}/artifact/${made.artifact}?v=${made.v}" alt="${esc(made.artifact)}">` +
-        `<figcaption>${caption}${note}</figcaption>` + sheet
+      ? shown + `<figcaption>${caption}${note}</figcaption>` + sheet
       : '<p class="empty">This pass rendered nothing.</p>';
 
     if (made.script) openScript(made.script);
@@ -1181,7 +1190,31 @@
   // for judging a drawing. Clicking it shows the artifact at its own size.
   const lightbox = document.getElementById('lightbox');
   const lightboxImg = document.getElementById('lightbox-img');
+  const lightboxVideo = document.getElementById('lightbox-video');
   const lightboxCode = document.getElementById('lightbox-code');
+
+  // A click on the player's controls is a play or a seek, not a request to close.
+  lightboxVideo.addEventListener('click', (e) => e.stopPropagation());
+
+  // An MP4 or WebM is a film with sound, played by a <video>; everything else the studio renders is an image.
+  function isVideo(path) { return /\.(mp4|webm)$/i.test(path || ''); }
+
+  // Puts a render in the overlay in whichever element can show it, and empties the other.
+  function showMedia(src, label) {
+    const video = isVideo(src.split('?')[0]);
+    lightboxCode.hidden = true;
+    lightboxImg.hidden = video;
+    lightboxVideo.hidden = !video;
+    if (video) { lightboxImg.removeAttribute('src'); lightboxVideo.src = src; }
+    else { stopVideo(); lightboxImg.src = src; lightboxImg.alt = label; }
+  }
+
+  function stopVideo() {
+    lightboxVideo.pause();
+    lightboxVideo.removeAttribute('src');
+    lightboxVideo.load();
+    lightboxVideo.hidden = true;
+  }
   const lightboxCaption = document.getElementById('lightbox-caption');
   const expand = document.getElementById('expand');
 
@@ -1235,6 +1268,7 @@
     if (lightbox.hidden) return;
     lightbox.hidden = true;
     lightboxImg.removeAttribute('src');
+    stopVideo();   // or it plays on, heard and not seen, behind the closed overlay
     lightboxCode.innerHTML = '';
   }
 
@@ -1381,11 +1415,8 @@
       // and middle-click still open the artifact in a tab as any link would.
       if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
       e.preventDefault();
-      lightboxCode.hidden = true;
       lightboxCode.innerHTML = '';
-      lightboxImg.hidden = false;
-      lightboxImg.src = `${base}/runs/${runId}/artifact/${format.dataset.src}`;
-      lightboxImg.alt = format.dataset.src;
+      showMedia(`${base}/runs/${runId}/artifact/${format.dataset.src}`, format.dataset.src);
       lightboxCaption.textContent = `${format.dataset.src} — right-click to save`;
       lightbox.hidden = false;
       return;

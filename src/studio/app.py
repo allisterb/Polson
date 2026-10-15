@@ -98,10 +98,11 @@ FORMATTER = HtmlFormatter(style="friendly", cssclass="code", linenos="table", li
 
 #: What a render can produce, and therefore the whole of what the artifact route will serve.
 #:
-#: `outFile` writes webp, png or jpeg; `outSvg` writes svg. Nothing else is an artifact, so nothing
-#: else is reachable by a visitor-supplied name — see `serve_artifact`, which resolves against the
-#: project root rather than a single directory and needs this to keep that boundary narrow.
-ARTIFACT_SUFFIXES = frozenset({".webp", ".png", ".jpg", ".jpeg", ".svg"})
+#: `outFile` writes webp, png or jpeg; `outSvg` writes svg; `saveVideo` writes mp4 or webm. Nothing else
+#: is an artifact, so nothing else is reachable by a visitor-supplied name — see `serve_artifact`, which
+#: resolves against the project root rather than a single directory and needs this to keep that boundary
+#: narrow. The spoken lines in `audio/` are deliberately not here: the film carries them.
+ARTIFACT_SUFFIXES = frozenset({".webp", ".png", ".jpg", ".jpeg", ".svg", ".mp4", ".webm"})
 
 #: Prose, so no line numbers. A drawing script is cited by line and a report is not.
 PROSE = HtmlFormatter(style="friendly", cssclass="code")
@@ -140,7 +141,7 @@ DELIVERABLES: tuple[tuple[str, str], ...] = (
     ("materials.md", "the materials requisitioned, and what each was for"),
     ("turns.md", "the turn-by-turn record the drawing workflow keeps"),
     ("sketch.md", "the scene in verbs, and every check the sketch was held to"),
-    ("animation.md", "the beats in frames, the keys, and every check the motion was held to"),
+    ("animation.md", "the dialogue and its timing, the beats in frames, the keys, and every check the motion was held to"),
 )
 
 #: The same list as a set, for the membership test the route makes.
@@ -609,7 +610,8 @@ def contain(root: Path, name: str) -> Path:
 #: Rasters before vector in the finished-piece row. The first entry is what the page shows when a
 #: reader clicks, and a raster is the one that always displays; the SVG is the file they want *after*
 #: seeing it. Not a claim about which is the real deliverable — for a vector piece that is the SVG.
-FORMAT_ORDER = ("webp", "png", "jpeg", "jpg", "svg")
+#: A video comes first of all: it is the film with its sound, and a WebP beside it is a silent copy.
+FORMAT_ORDER = ("mp4", "webm", "webp", "png", "jpeg", "jpg", "svg")
 
 
 def final_render(run: Run) -> dict[str, Any] | None:
@@ -647,7 +649,7 @@ def final_render(run: Run) -> dict[str, Any] | None:
             continue
         fmt, artifact = (event.get("format") or "").lower(), event.get("artifact")
         if fmt and artifact:
-            moving = motion in ("animation", "svg")
+            moving = motion in ("animation", "svg", "video")
             held = latest.get(fmt)
             if held is None or moving or not held[0]:
                 latest[fmt] = (moving, event)       # later events win within the same kind

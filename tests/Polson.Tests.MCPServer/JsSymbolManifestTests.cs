@@ -158,6 +158,24 @@ public class JsSymbolManifestTests
         Assert.Contains("cx", symbol.Signature);
     }
 
+    /// <summary>
+    /// An options bag the reference spells out is spelled out in the signature too. Reflection reads it as <c>object</c>,
+    /// and the index published <c>options?: any</c>: anim4 needed <c>irisColor</c> to keep its brief's single tone and
+    /// found it only by grepping a saved ReadDoc dump.
+    /// </summary>
+    [Fact]
+    public void TestADocumentedOptionsBagIsSpelledOut()
+    {
+        var eye = JsSymbolManifest.Resolve("Drawing.drawComicEye")!;
+        Assert.Contains("irisColor", eye.Signature);
+        Assert.DoesNotContain("options?: any", eye.Signature);
+        Assert.StartsWith("drawComicEye(", eye.Signature);
+
+        // Every published signature still names the call it is for, with the JS spelling.
+        Assert.All(JsSymbolManifest.Symbols.Where(s => s.Kind == "method"),
+            s => Assert.StartsWith(s.Member + "(", s.Signature));
+    }
+
     [Fact]
     public void TestResolveReturnsANullThatMeansSomething()
     {
