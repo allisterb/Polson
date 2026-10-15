@@ -374,6 +374,69 @@ internal class Program : Runtime
             processor, TaskSchema.CapacityOf(processor), budget);
     }
 
+    /// <summary>
+    /// Wires Qloo's taste graph for the <c>Taste</c> tool, or leaves it null so the tool says plainly that
+    /// audience taste cannot be fetched — never that guessing is the alternative.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// One client for the process: the key's pacing and monthly quota are shared by every session, and each
+    /// session spends from its own <c>Qloo:Budget</c> through a scoped view of it.
+    /// </para>
+    /// <para>
+    /// The cache is shared across projects by default (<see cref="QlooCache.DefaultDirectory"/>), unlike the
+    /// document cache: an answer is about an audience, not a project, and on a 10,000-a-month key a preset run
+    /// in a fresh project should not ask Qloo again. It is also outside every repository, as Qloo's terms require.
+    /// </para>
+    /// </remarks>
+    static void ConfigureTaste()
+    {
+        var apiKey = Setting("ApiKeys:Qloo");
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            DrawingMcpTools.TasteClient = null;
+            Warn("Taste disabled: no ApiKeys:Qloo in {0}. Agents will be told audience taste cannot be fetched.",
+                Path.Combine(AssemblyLocation, "appsettings.json"));
+            return;
+        }
+
+        var budget = ResolveQlooSetting("Qloo:Budget", Setting("Qloo:Budget"), Polson.ExtendedMind.Taste.QlooBudget.DefaultTotal);
+        var reserve = ResolveQlooSetting("Qloo:MonthlyReserve", Setting("Qloo:MonthlyReserve"), Polson.ExtendedMind.Taste.QlooBudget.DefaultMonthlyReserve);
+        var cache = new Polson.ExtendedMind.Taste.QlooCache(Setting("Qloo:CacheDir"));
+
+        try
+        {
+            DrawingMcpTools.TasteClient = new Polson.ExtendedMind.Taste.QlooClient(apiKey, baseUrl: Setting("Qloo:BaseUrl"), cache: cache);
+        }
+        catch (ArgumentException ex)
+        {
+            // A malformed base URL or a key with a pasted newline: configuration, said at startup rather than on the
+            // first call, where it would read as Qloo being down.
+            DrawingMcpTools.TasteClient = null;
+            Warn("Taste disabled: {0}", ex.Message);
+            return;
+        }
+
+        SessionContext.TasteBudget = budget;
+        SessionContext.TasteMonthlyReserve = reserve;
+        Info("Taste enabled ({0}; budget: {1} requests per session; monthly reserve: {2}; cache: {3}).",
+            Setting("Qloo:BaseUrl") ?? Polson.ExtendedMind.Taste.QlooClient.HackathonBaseUrl, budget, reserve, cache.Location);
+    }
+
+    /// <summary>
+    /// A Qloo count from configuration, or the default. Zero is accepted — it turns the surface off or spends the
+    /// month to the last request — but a value that is not a whole number is reported and ignored, because
+    /// <c>int.TryParse</c> would leave zero and a typo would silently turn Qloo off.
+    /// </summary>
+    internal static int ResolveQlooSetting(string key, string? configured, int fallback)
+    {
+        if (string.IsNullOrWhiteSpace(configured)) return fallback;
+        if (int.TryParse(configured.Trim(), out var parsed) && parsed >= 0) return parsed;
+
+        Warn("Ignoring {0}='{1}': it must be a whole number, zero or more. Using {2}.", key, configured, fallback);
+        return fallback;
+    }
+
     /// <summary>Points <c>bitmap.trace(...)</c> at a tracer, and says which one it found.</summary>
     /// <remarks>
     /// <para>
@@ -620,6 +683,7 @@ internal class Program : Runtime
         ConfigureDocuments(projectDir);
         ConfigurePhotos();
         ConfigureResearch(projectDir);
+        ConfigureTaste();
 
         if (opts.Http)
         {

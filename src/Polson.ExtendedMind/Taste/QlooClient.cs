@@ -66,6 +66,21 @@ public sealed class QlooClient : Runtime, IDisposable
 
         ownsHttp = httpClient is null;
         http = httpClient ?? new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
+        shared = new SharedState();
+    }
+
+    /// <summary>A view of <paramref name="parent"/> with its own budget, sharing everything else.</summary>
+    private QlooClient(QlooClient parent, QlooBudget budget)
+    {
+        apiKey = parent.apiKey;
+        baseUrl = parent.baseUrl;
+        http = parent.http;
+        ownsHttp = false;
+        shared = parent.shared;
+        Cache = parent.Cache;
+        Budget = budget;
+        Delay = parent.Delay;
+        Spacing = parent.Spacing;
     }
     #endregion
 
@@ -86,8 +101,12 @@ public sealed class QlooClient : Runtime, IDisposable
     /// <summary>Cap on the body kept in <see cref="QlooResponse.RawBody"/> after a failure.</summary>
     public const int MaxRetainedBodyChars = 4000;
 
-    /// <summary>The rate-limit headers from the most recent response, or null before the first.</summary>
-    public QlooRateLimit? LastRateLimit { get; private set; }
+    /// <summary>The rate-limit headers from the most recent response on this client or any scope of it.</summary>
+    public QlooRateLimit? LastRateLimit
+    {
+        get => shared.LastRateLimit;
+        private set => shared.LastRateLimit = value;
+    }
 
     public QlooCache? Cache { get; }
 
@@ -100,6 +119,13 @@ public sealed class QlooClient : Runtime, IDisposable
     #endregion
 
     #region Methods
+    /// <summary>
+    /// The same client with a budget of its own: one per session, so one visitor cannot spend another's
+    /// allowance. The connection, the cache, the pacing and the last-known monthly quota are shared — Qloo's
+    /// five-a-second limit and its month are the key's, not the session's.
+    /// </summary>
+    public QlooClient Scoped(QlooBudget budget) => new(this, budget ?? throw new ArgumentNullException(nameof(budget)));
+
     /// <summary>
     /// <c>/v2/insights</c>: recommendations, taste analysis, demographics or a heatmap, by <c>filter.type</c>.
     /// </summary>
@@ -172,10 +198,17 @@ public sealed class QlooClient : Runtime, IDisposable
     }
 
     /// <summary><c>/v2/audiences</c>: audiences, optionally under one type such as <c>urn:audience:communities</c>.</summary>
-    public Task<QlooAudiencesResponse> Audiences(string? parentType = null, int take = 50, CancellationToken cancellationToken = default) =>
+    /// <param name="nameContains">
+    /// Keeps only audiences whose name contains this, ignoring case. Applied here rather than sent, because Qloo
+    /// lists audiences by type; the request — and so the cache entry — is the same whatever is looked for.
+    /// </param>
+    public Task<QlooAudiencesResponse> Audiences(
+        string? parentType = null, int take = 50, string? nameContains = null, CancellationToken cancellationToken = default) =>
         Get<QlooAudiencesResponse>("/v2/audiences",
             new QlooQuery().Set("filter.parents.types", parentType).Set("take", Math.Clamp(take, 1, 100)),
-            (r, root) => r.Audiences = Results(root, "audiences").Select(QlooAudience.From).OfType<QlooAudience>().ToArray(),
+            (r, root) => r.Audiences = Results(root, "audiences").Select(QlooAudience.From).OfType<QlooAudience>()
+                .Where(a => string.IsNullOrWhiteSpace(nameContains) || a.Name.Contains(nameContains.Trim(), StringComparison.OrdinalIgnoreCase))
+                .ToArray(),
             cancellationToken);
 
     /// <summary><c>/v2/audiences/types</c>: the audience type URNs.</summary>
@@ -208,10 +241,10 @@ public sealed class QlooClient : Runtime, IDisposable
             cancellationToken);
     }
 
+    /// <summary>Disposes the connection if this client made it. A scoped view disposes nothing it shares.</summary>
     public void Dispose()
     {
         if (ownsHttp) http.Dispose();
-        pacing.Dispose();
     }
     #endregion
 
@@ -258,7 +291,7 @@ public sealed class QlooClient : Runtime, IDisposable
             string? requestId;
             TimeSpan? retryAfter;
 
-            if (Budget?.TryCharge() is string refusal)
+            if (Budget?.TryCharge(LastRateLimit?.MonthlyRemaining) is string refusal)
             {
                 var refused = Failed<TResponse>(QlooFailure.BudgetExhausted, refusal, request, stopwatch);
                 refused.RateLimit = LastRateLimit;
@@ -359,16 +392,16 @@ public sealed class QlooClient : Runtime, IDisposable
     /// <summary>Keeps request starts at least <see cref="Spacing"/> apart, across concurrent callers.</summary>
     private async Task Pace(CancellationToken cancellationToken)
     {
-        await pacing.WaitAsync(cancellationToken);
+        await shared.Pacing.WaitAsync(cancellationToken);
         try
         {
-            var wait = lastStart + Spacing - DateTimeOffset.UtcNow;
+            var wait = shared.LastStart + Spacing - DateTimeOffset.UtcNow;
             if (wait > TimeSpan.Zero) await Delay(wait, cancellationToken);
-            lastStart = DateTimeOffset.UtcNow;
+            shared.LastStart = DateTimeOffset.UtcNow;
         }
         finally
         {
-            pacing.Release();
+            shared.Pacing.Release();
         }
     }
 
@@ -482,7 +515,18 @@ public sealed class QlooClient : Runtime, IDisposable
     private readonly string baseUrl;
     private readonly HttpClient http;
     private readonly bool ownsHttp;
-    private readonly SemaphoreSlim pacing = new(1, 1);
-    private DateTimeOffset lastStart = DateTimeOffset.MinValue;
+    private readonly SharedState shared;
+    #endregion
+
+    #region Child Types
+    /// <summary>What every scope of one client shares: the key's pacing and its last-known quota.</summary>
+    private sealed class SharedState
+    {
+        public SemaphoreSlim Pacing { get; } = new(1, 1);
+
+        public DateTimeOffset LastStart { get; set; } = DateTimeOffset.MinValue;
+
+        public QlooRateLimit? LastRateLimit { get; set; }
+    }
     #endregion
 }

@@ -127,6 +127,11 @@ public static class JsSurface
         new("basis", typeof(FieldBasis), "Research", true),
         new("citation", typeof(TaskCitation), "Research", true),
 
+        // Read-only as well. Qloo is asked by the Taste MCP tool, so the agent reads the answer; scripts cite it.
+        new("Taste", typeof(Polson.ExtendedMind.Taste.TasteToolkit), "Taste", false),
+        new("tasteResult", typeof(Polson.ExtendedMind.Taste.TasteResult), "Taste", true),
+        new("tasteBudget", typeof(Polson.ExtendedMind.Taste.QlooBudget), "Taste", true),
+
         new("Drawing", typeof(ConstructiveDrawingToolkit), "Drawing", false),
         new("Logo", typeof(LogoDesignToolkit), "Logo", false),
         new("VectorLogo", typeof(VectorLogoToolkit), "VectorLogo", false),

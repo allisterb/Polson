@@ -73,12 +73,17 @@ public sealed class QlooBudget
     /// Charges one request if it may be sent. Returns null when charged, or the reason it may not be — the
     /// sentence an agent will read.
     /// </summary>
-    internal string? TryCharge()
+    /// <param name="monthlyRemaining">
+    /// The month's remaining quota as the shared client last saw it, from any session. A new session's budget
+    /// has observed nothing yet, and must not be the gap the reserve leaks through.
+    /// </param>
+    internal string? TryCharge(int? monthlyRemaining = null)
     {
+        if (monthlyRemaining is int seen) Observe(seen);
         if (ReserveReached)
         {
             Interlocked.Increment(ref refused);
-            return $"Qloo reports {monthlyRemaining} requests left this month, at or below the {MonthlyReserve} held "
+            return $"Qloo reports {this.monthlyRemaining} requests left this month, at or below the {MonthlyReserve} held "
                  + "in reserve for the demo and judging. Work from what has already been fetched; cached answers still work.";
         }
 
@@ -101,8 +106,10 @@ public sealed class QlooBudget
     /// <summary>Records the month's remaining quota from a response's headers.</summary>
     internal void Observe(QlooRateLimit? limit)
     {
-        if (limit?.MonthlyRemaining is int remaining) Interlocked.Exchange(ref monthlyRemaining, remaining);
+        if (limit?.MonthlyRemaining is int remaining) Observe(remaining);
     }
+
+    private void Observe(int remaining) => Interlocked.Exchange(ref monthlyRemaining, remaining);
     #endregion
 
     #region Fields

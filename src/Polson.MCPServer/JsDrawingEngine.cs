@@ -488,6 +488,11 @@ public partial class JsDrawingEngine : Runtime
             // waiting is done, so every member here is a plain read.
             engine.SetValue("Research", new ResearchToolkit(session?.Research ?? new ResearchRegistry()));
 
+            // Qloo answers, read-only, for the same reason: the agent fetches them with the Taste tool so it
+            // can reason with them, and a script reads them back to cite what a mark rests on.
+            engine.SetValue("Taste", new Polson.ExtendedMind.Taste.TasteToolkit(
+                session?.Taste ?? new Polson.ExtendedMind.Taste.TasteRegistry()));
+
             // Global logging & exit helpers
             engine.SetValue("log", new Action<string>(msg =>
             {

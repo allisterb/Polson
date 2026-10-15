@@ -265,7 +265,9 @@ public static class QlooParameters
             ["urn:heatmap"] = Set(["filter.location", "filter.location.query", "filter.location.radius",
                 "heatmap.dimensions", "filter.dimensions.hotel_class", "filter.dimensions.price_level",
                 "output.heatmap.boundary"]),
-            ["urn:tag"] = Set(["diversify.by", "diversify.take"]),
+            // filter.tag.types is not in the guide for urn:tag, but the API applies it: twelve tags over six films,
+            // all of the two types asked for (2026-10-15). The second parameter the guide omits that the API honours.
+            ["urn:tag"] = Set(["diversify.by", "diversify.take", "filter.tag.types"]),
             ["urn:demographics"] = Set([]),
         };
     }

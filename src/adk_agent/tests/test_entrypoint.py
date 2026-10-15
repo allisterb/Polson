@@ -39,6 +39,11 @@ ENGINE_KEYS = {
     "Research:ArchiveDir",
     "Research:Budget",
     "Research:Processor",
+    "ApiKeys:Qloo",
+    "Qloo:BaseUrl",
+    "Qloo:Budget",
+    "Qloo:MonthlyReserve",
+    "Qloo:CacheDir",
     "Server:DefaultTimeoutSeconds",
 }
 
