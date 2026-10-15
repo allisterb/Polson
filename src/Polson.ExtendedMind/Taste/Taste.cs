@@ -74,6 +74,13 @@ public sealed class TasteResult
     /// <summary>For <c>compare</c>: Qloo's result as sent.</summary>
     public object? Comparison { get; init; }
 
+    /// <summary>
+    /// For <c>profile</c>: <c>{ audience, locality, floor, domains, placeAesthetics, requests }</c>. Each domain is
+    /// <c>{ type, distinctive, shared, audienceRequest, baselineRequest }</c>: <c>distinctive</c> is what this audience
+    /// loves that its place's baseline does not list — the evidence a direction cites.
+    /// </summary>
+    public Dictionary<string, object?>? Profile { get; init; }
+
     public string RetrievedUtc { get; init; } = DateTime.UtcNow.ToString("O");
     #endregion
 
@@ -85,61 +92,6 @@ public sealed class TasteResult
 
     public override string ToString() => $"{Id} [{Op}] {Label} ({(Ok ? "ok" : "failed")})";
 
-    /// <summary>Builds the record of one response. Never throws: a failed response is recorded as failed.</summary>
-    public static TasteResult From(string id, string op, string label, QlooResponse response) => new()
-    {
-        Id = id,
-        Op = op,
-        Label = label,
-        Request = response.Request,
-        Ok = response.Success,
-        Error = response.Error,
-        Remedy = response.Remedy,
-        FromCache = response.FromCache,
-        CachedUtc = response.CachedUtc?.ToString("O"),
-        RequestId = response.RequestId,
-        Warnings = [.. response.Warnings],
-        Locality = response is QlooInsightsResponse { Locality: { } l }
-            ? new() { ["id"] = l.EntityId, ["name"] = l.Name, ["disambiguation"] = l.Disambiguation }
-            : null,
-        Entities = response switch
-        {
-            QlooInsightsResponse i => [.. i.Entities.Select(EntityObject)],
-            QlooEntitiesResponse e => [.. e.Entities.Select(EntityObject)],
-            _ => [],
-        },
-        Tags = response switch
-        {
-            QlooInsightsResponse i => [.. i.Tags.Select(TagObject)],
-            QlooTagsResponse t => [.. t.Tags.Select(TagObject)],
-            _ => [],
-        },
-        Audiences = response is QlooAudiencesResponse a
-            ? [.. a.Audiences.Select(x => (object?)new Dictionary<string, object?>
-              { ["id"] = x.Id, ["name"] = x.Name, ["type"] = x.Type, ["parents"] = x.Parents.ToArray() })]
-            : [],
-        Demographics = response is QlooInsightsResponse d ? [.. d.Demographics.Select(e => JsonInterop.ToClr(e))] : [],
-        Comparison = response is QlooCompareResponse c ? JsonInterop.ToClr(c.Results) : null,
-    };
-
-    internal static object? EntityObject(QlooEntity e) => new Dictionary<string, object?>
-    {
-        ["id"] = e.EntityId,
-        ["name"] = e.Name,
-        ["type"] = e.Types.FirstOrDefault(),
-        ["types"] = e.Types.ToArray(),
-        ["disambiguation"] = e.Disambiguation,
-        ["popularity"] = e.Popularity,
-        ["affinity"] = e.Affinity,
-        ["tags"] = e.Tags.Select(TagObject).ToArray(),
-        ["explainability"] = JsonInterop.ToClr(e.Explainability),
-        ["properties"] = JsonInterop.ToClr(e.Properties),
-    };
-
-    internal static object? TagObject(QlooTag t) => new Dictionary<string, object?>
-    {
-        ["id"] = t.Id, ["name"] = t.Name, ["type"] = t.Type, ["popularity"] = t.Popularity, ["affinity"] = t.Affinity,
-    };
     #endregion
 }
 
@@ -168,7 +120,18 @@ public sealed class TasteRegistry
     {
         lock (results)
         {
-            var result = TasteResult.From($"t{results.Count + 1}", op, label, response);
+            var result = TasteObjects.Result($"t{results.Count + 1}", op, label, response);
+            results.Add(result);
+            return result;
+        }
+    }
+
+    /// <summary>Records a result built elsewhere — a profile — under the next id, which the builder is given.</summary>
+    public TasteResult Add(Func<string, TasteResult> build)
+    {
+        lock (results)
+        {
+            var result = build($"t{results.Count + 1}");
             results.Add(result);
             return result;
         }
@@ -223,4 +186,98 @@ public sealed class TasteToolkit
     #region Fields
     private readonly TasteRegistry registry;
     #endregion
+}
+
+/// <summary>
+/// Qloo entities and tags as the plain dictionaries scripts read. Shared by <see cref="TasteResult"/> and the MCP
+/// layer's profile builder; not itself exposed to the sandbox.
+/// </summary>
+public static class TasteObjects
+{
+    /// <summary>Builds the record of one response. Never throws: a failed response is recorded as failed.</summary>
+    public static TasteResult Result(string id, string op, string label, QlooResponse response) => new TasteResult
+    {
+        Id = id,
+        Op = op,
+        Label = label,
+        Request = response.Request,
+        Ok = response.Success,
+        Error = response.Error,
+        Remedy = response.Remedy,
+        FromCache = response.FromCache,
+        CachedUtc = response.CachedUtc?.ToString("O"),
+        RequestId = response.RequestId,
+        Warnings = [.. response.Warnings],
+        Locality = response is QlooInsightsResponse { Locality: { } l }
+            ? new() { ["id"] = l.EntityId, ["name"] = l.Name, ["disambiguation"] = l.Disambiguation }
+            : null,
+        Entities = response switch
+        {
+            QlooInsightsResponse i => [.. i.Entities.Select(TasteObjects.Entity)],
+            QlooEntitiesResponse e => [.. e.Entities.Select(TasteObjects.Entity)],
+            _ => [],
+        },
+        Tags = response switch
+        {
+            QlooInsightsResponse i => [.. i.Tags.Select(TasteObjects.Tag)],
+            QlooTagsResponse t => [.. t.Tags.Select(TasteObjects.Tag)],
+            _ => [],
+        },
+        Audiences = response is QlooAudiencesResponse a
+            ? [.. a.Audiences.Select(x => (object?)new Dictionary<string, object?>
+              { ["id"] = x.Id, ["name"] = x.Name, ["type"] = x.Type, ["parents"] = x.Parents.ToArray() })]
+            : [],
+        Demographics = response is QlooInsightsResponse d ? [.. d.Demographics.Select(e => JsonInterop.ToClr(e))] : [],
+        Comparison = response is QlooCompareResponse c ? JsonInterop.ToClr(c.Results) : null,
+    };
+
+    /// <summary>
+    /// The record of a profile, built from several responses. <see cref="Entities"/> holds every distinctive entity
+    /// across the domains and <see cref="Tags"/> the place's aesthetic tags, so a script reads either without
+    /// walking the profile.
+    /// </summary>
+    public static TasteResult ProfileResult(
+        string id, string label, Dictionary<string, object?> profile, IReadOnlyList<QlooResponse> responses,
+        object?[] distinctive, object?[] placeTags, QlooLocality? locality, IEnumerable<string> extraWarnings)
+    {
+        var failed = responses.FirstOrDefault(r => !r.Success);
+        return new TasteResult
+        {
+            Id = id,
+            Op = "profile",
+            Label = label,
+            Request = string.Join(" ; ", responses.Select(r => r.Request)),
+            Ok = failed is null,
+            Error = failed?.Error,
+            Remedy = failed?.Remedy,
+            FromCache = responses.Count > 0 && responses.All(r => r.FromCache),
+            CachedUtc = responses.Where(r => r.CachedUtc is not null).Select(r => r.CachedUtc).Min()?.ToString("O"),
+            RequestId = responses.Select(r => r.RequestId).FirstOrDefault(r => r is not null),
+            Warnings = [.. responses.SelectMany(r => r.Warnings).Concat(extraWarnings).Distinct()],
+            Locality = locality is null ? null : new() { ["id"] = locality.EntityId, ["name"] = locality.Name, ["disambiguation"] = locality.Disambiguation },
+            Entities = distinctive,
+            Tags = placeTags,
+            Profile = profile,
+        };
+    }
+
+
+    public static object? Entity(QlooEntity e) => new Dictionary<string, object?>
+    {
+        ["id"] = e.EntityId,
+        ["name"] = e.Name,
+        ["type"] = e.Types.FirstOrDefault(),
+        ["types"] = e.Types.ToArray(),
+        ["disambiguation"] = e.Disambiguation,
+        ["popularity"] = e.Popularity,
+        ["affinity"] = e.Affinity,
+        ["tags"] = e.Tags.Select(Tag).ToArray(),
+        ["explainability"] = JsonInterop.ToClr(e.Explainability),
+        ["properties"] = JsonInterop.ToClr(e.Properties),
+    };
+
+    public static object? Tag(QlooTag t) => new Dictionary<string, object?>
+    {
+        ["id"] = t.Id, ["name"] = t.Name, ["type"] = t.Type, ["popularity"] = t.Popularity, ["affinity"] = t.Affinity,
+    };
 }

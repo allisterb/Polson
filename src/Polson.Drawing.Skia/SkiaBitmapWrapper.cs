@@ -439,6 +439,67 @@ public class SkiaBitmapWrapper : IDisposable, IDataUriSource, ILosslessImageSour
         return palette;
     }
 
+    /// <summary>
+    /// How colourful the image is: Hasler and Süsstrunk's metric, one number, 0 for greyscale and rising with
+    /// both how saturated and how varied the colour is.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>M = √(σ²rg + σ²yb) + 0.3·√(μ²rg + μ²yb)</c> over the opponent channels <c>rg = R − G</c> and
+    /// <c>yb = ½(R + G) − B</c>, on sRGB — Hasler &amp; Süsstrunk's <c>M̂(3)</c> ("Measuring colourfulness in natural
+    /// images", SPIE 5007, 2003, §7). It is the dominant term in the colourfulness model of Reinecke et al. (CHI '13).
+    /// </para>
+    /// <para>
+    /// <b>Use it to compare, not to grade.</b> The paper's Table 2 (p. 6) ties <c>M̂(3)</c> to its seven categories —
+    /// 0 not colourful, 15 slightly, 33 moderately, 45 averagely, 59 quite, 82 highly, 109 extremely — but those come
+    /// from 20 viewers rating 84 photographs, and the cross-cultural findings this is used against come from first
+    /// impressions of websites. "This variant is more colourful than that one" is what it supports, so the number is
+    /// returned and the band is left to the reader.
+    /// </para>
+    /// <para>
+    /// <paramref name="options"/> takes <c>{ x?, y?, width?, height? }</c> to measure a region. Fully transparent
+    /// pixels are left out; a region with none visible <b>throws</b>, because 0 would read as a greyscale image.
+    /// </para>
+    /// </remarks>
+    public double Colorfulness(object? options = null)
+    {
+        var x0 = Math.Clamp(OptionInt(options, "x", 0), 0, Bitmap.Width);
+        var y0 = Math.Clamp(OptionInt(options, "y", 0), 0, Bitmap.Height);
+        var x1 = Math.Clamp(x0 + OptionInt(options, "width", Bitmap.Width - x0), x0, Bitmap.Width);
+        var y1 = Math.Clamp(y0 + OptionInt(options, "height", Bitmap.Height - y0), y0, Bitmap.Height);
+
+        double sumRg = 0, sumYb = 0, sqRg = 0, sqYb = 0;
+        long n = 0;
+        for (var y = y0; y < y1; y++)
+        {
+            for (var x = x0; x < x1; x++)
+            {
+                var p = Bitmap.GetPixel(x, y);
+                if (p.Alpha == 0) continue;
+
+                double rg = p.Red - p.Green, yb = 0.5 * (p.Red + p.Green) - p.Blue;
+                sumRg += rg; sumYb += yb; sqRg += rg * rg; sqYb += yb * yb;
+                n++;
+            }
+        }
+
+        if (n == 0)
+        {
+            throw new ArgumentException(
+                $"bitmap.colorfulness(...) found no visible pixels in {x1 - x0}x{y1 - y0} at {x0},{y0}. " +
+                "Measure a region that holds the drawing, or flatten the bitmap onto a background first.");
+        }
+
+        double meanRg = sumRg / n, meanYb = sumYb / n;
+        var varRg = Math.Max(0, sqRg / n - meanRg * meanRg);
+        var varYb = Math.Max(0, sqYb / n - meanYb * meanYb);
+        var m = Math.Sqrt(varRg + varYb) + 0.3 * Math.Sqrt(meanRg * meanRg + meanYb * meanYb);
+
+        ProbeScope.RecordOutcome(ProbeScope.Kinds.Sample, $"colorfulness: {m:F1} over {n:N0} px",
+            new Dictionary<string, object?> { ["call"] = "bitmap.colorfulness", ["colorfulness"] = Math.Round(m, 2), ["pixels"] = n });
+        return m;
+    }
+
     /// <summary>Traces this bitmap into path geometry. See <see cref="BitmapTracer"/>.</summary>
     /// <remarks>
     /// <para>

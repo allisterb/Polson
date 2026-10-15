@@ -49,10 +49,16 @@ public partial class DrawingMcpTools
         "returns roughly the all-time popular list, not this audience. A place NAME is fuzzy-matched — 'Lagos' is also " +
         "in Portugal and Spain — so check `locality` in the reply, or resolve it first (op 'resolve', type 'locality') " +
         "and pass the chosen id as the location.\n" +
-        "- 'describe': the tags a set of entities share, from `entities` (ids). The bridge from what an audience " +
-        "watches to how a design should look. Give `type` as tag kinds to keep only those — 'aesthetic,motif' for " +
-        "visual vocabulary (palettes, imagery), or 'theme', 'ambience', 'archetype'. Without it you get an overview " +
-        "across every kind, which over films includes dishes and venues.\n" +
+        "- 'profile': START HERE for an audience. What it loves that its PLACE does not: for each domain (default " +
+        "movie, tv_show, artist; or `type`, comma-separated), the audience's list minus the place's baseline — the " +
+        "DISTINCTIVE references — plus the place's aesthetic vocabulary. Give `audience` with a location. Cite the " +
+        "distinctive references as the evidence for a direction; derive the look from what those references look and " +
+        "sound like. `placeAesthetics` are the PLACE's: Qloo does not vary tags by age, so never present them as this " +
+        "audience's. About 7 requests; a second audience in the same place reuses the cached baseline.\n" +
+        "- 'describe': the tags a set of entities share, from `entities` (ids). Give `type` as tag kinds — " +
+        "'aesthetic,motif', 'theme', 'archetype' — or get an overview across every kind, dishes and venues included. " +
+        "WEAK EVIDENCE: measured, two halves of one audience's titles shared none of their tags, so with a dozen titles " +
+        "the tags follow which titles you picked. Use it to explore, never as the basis of a direction.\n" +
         "- 'demographics': who an entity appeals to, by age band and gender, from `entities`. Use it to check a " +
         "reference really skews to your audience before you borrow from it.\n" +
         "- 'compare': what separates two sets of entities' audiences: `entities` against `versus`.\n" +
@@ -69,7 +75,7 @@ public partial class DrawingMcpTools
         "Every answer stays readable from later scripts as the `Taste` global: Taste.get('t3').entities, " +
         "Taste.latest.cite() for the caption line.")]
     public Task<JsonObject> Taste(
-        [Description("'resolve', 'insights', 'describe', 'demographics', 'compare', 'audiences' or 'status'.")] string op,
+        [Description("'profile', 'resolve', 'insights', 'describe', 'demographics', 'compare', 'audiences' or 'status'.")] string op,
         [Description("resolve: the name or words to look up.")] string? name = null,
         [Description("resolve: 'entity' (default), 'tag' or 'audience'.")] string? kind = null,
         [Description("insights and compare: the result type — artist, movie, tv_show, brand, book, podcast, video_game, place, destination, person, or a full urn. resolve: narrows an entity search, or for kind 'tag' the tag kind. describe: tag kinds to keep, comma-separated, e.g. 'aesthetic,motif'. audiences: the audience type, e.g. 'communities'.")] string? type = null,
@@ -102,6 +108,8 @@ public partial class DrawingMcpTools
         }
 
         var client = TasteClient.Scoped(registry.Budget);
+        if (op == "profile") return await TasteProfile(session, client, label, audience, type, query, take, cancellationToken);
+
         var count = Math.Clamp(take ?? (op == "describe" ? 25 : 10), 1, MaxTasteResults);
         var (call, refusal) = TastePlan(client, op, name, kind, type, audience, query, entities, versus, count, cancellationToken);
 
@@ -139,6 +147,156 @@ public partial class DrawingMcpTools
 
     #region Internal methods
     internal const string TasteTypeList = "artist, movie, tv_show, brand, book, podcast, video_game, place, destination, person";
+
+    /// <summary>Domains a profile reads when none are named: what an audience watches and listens to.</summary>
+    internal const string TasteProfileDomains = "movie,tv_show,artist";
+
+    /// <summary>
+    /// Popularity percentile a profile asks for unless the query sets one. Measured: none returned the long tail
+    /// (titles no one would recognise), 0.9 the all-time list; 0.5 kept both recognisable and distinctive.
+    /// </summary>
+    internal const double TasteProfileFloor = 0.5;
+
+    /// <summary>
+    /// The taste profile (design doc §4.3): per domain, what the audience loves that its place's baseline does not
+    /// list, plus the place's aesthetic vocabulary. Every request is kept, and refusals cost nothing.
+    /// </summary>
+    /// <remarks>
+    /// Built on <b>membership</b>, not on affinity: measured, Qloo's affinity saturates near the top for anything in
+    /// a list (audience minus baseline came to ±0.01), while the lists themselves separate audiences clearly. The
+    /// tags come from the place, not the audience, because Qloo ignores age for tag results.
+    /// </remarks>
+    private async Task<JsonObject> TasteProfile(
+        SessionContext session, QlooClient client, string label, string? audience, string? types, string? extra, int? take,
+        CancellationToken ct)
+    {
+        var registry = session.Taste;
+        JsonObject Refuse(string reason)
+        {
+            Events.Append("taste.refused", session.Stage, null, new Dictionary<string, object?> { ["op"] = "profile", ["label"] = label, ["reason"] = reason });
+            return new JsonObject { ["ok"] = false, ["op"] = "profile", ["error"] = reason, ["note"] = "Nothing was sent or spent.", ["budget"] = TasteBudgetNode(registry.Budget) };
+        }
+
+        var domains = (Trimmed(types) ?? TasteProfileDomains).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(t => (Given: t, Urn: TasteType(t))).ToArray();
+        if (domains.FirstOrDefault(d => d.Urn is null || !d.Urn.StartsWith("urn:entity:", StringComparison.Ordinal)) is { Given: { } bad })
+            return Refuse($"profile domain '{bad}' is not an entity type. Use {TasteTypeList}.");
+
+        var count = Math.Clamp(take ?? 30, 5, MaxTasteResults);
+        var (template, problem) = TasteQuery(domains[0].Urn!, audience, extra, count);
+        if (template is null) return Refuse(problem!);
+        var place = template.Names.FirstOrDefault(n => n.StartsWith("signal.location", StringComparison.Ordinal) && n != "signal.location.radius");
+        if (place is null)
+            return Refuse("A profile needs the audience's place: audience {\"location\": \"...\"}. Its contrast is against that place's baseline.");
+        if (!template.Has("filter.popularity.min")) template["filter.popularity.min"] = TasteProfileFloor;
+
+        var responses = new List<QlooResponse>();
+        var domainNodes = new List<object?>();
+        var distinctiveAll = new List<object?>();
+        QlooLocality? locality = null;
+
+        foreach (var (given, urn) in domains)
+        {
+            var mine = template.Clone().Set("filter.type", urn);
+            var baseline = mine.Clone();
+            foreach (var n in baseline.Names.Where(n => n.StartsWith("signal.demographics.", StringComparison.Ordinal)).ToArray()) baseline[n] = null;
+
+            var a = await client.Insights(mine, ct);
+            var b = await client.Insights(baseline, ct);
+            responses.Add(a);
+            responses.Add(b);
+            locality ??= a.Locality ?? b.Locality;
+            if (!a.Success || !b.Success) break;
+
+            var baseIds = b.Entities.Select(e => e.EntityId).ToHashSet(StringComparer.Ordinal);
+            var ranked = a.Entities.Select((e, i) => (Entity: e, Rank: i + 1)).ToArray();
+            object?[] Objects(IEnumerable<(QlooEntity Entity, int Rank)> items) => [.. items.Select(x =>
+            {
+                var o = (Dictionary<string, object?>)TasteObjects.Entity(x.Entity)!;
+                o["audienceRank"] = x.Rank;
+                o.Remove("properties");     // kept in the single-call answers; a profile is read for its references
+                return (object?)o;
+            })];
+            var distinctive = Objects(ranked.Where(x => !baseIds.Contains(x.Entity.EntityId)));
+            var shared = Objects(ranked.Where(x => baseIds.Contains(x.Entity.EntityId)));
+            distinctiveAll.AddRange(distinctive);
+            domainNodes.Add(new Dictionary<string, object?>
+            {
+                ["type"] = urn, ["distinctive"] = distinctive, ["shared"] = shared,
+                ["audienceRequest"] = a.Request, ["baselineRequest"] = b.Request,
+            });
+        }
+
+        object?[] placeTags = [];
+        string? tagsRequest = null;
+        if (responses.All(r => r.Success))
+        {
+            var tq = new QlooQuery
+            {
+                ["filter.type"] = "urn:tag", [place] = template[place],
+                ["filter.tag.types"] = new[] { "urn:tag:aesthetic_property:qloo", "urn:tag:motif:qloo" }, ["take"] = 20,
+            };
+            var tags = await client.Insights(tq, ct);
+            responses.Add(tags);
+            tagsRequest = tags.Request;
+            placeTags = [.. tags.Tags.Select(TasteObjects.Tag)];
+        }
+
+        var profile = new Dictionary<string, object?>
+        {
+            ["audience"] = new Dictionary<string, object?>
+            {
+                ["location"] = template[place], ["age"] = template["signal.demographics.age"],
+                ["gender"] = template["signal.demographics.gender"], ["audiences"] = template["signal.demographics.audiences"],
+            },
+            ["locality"] = locality is null ? null : new Dictionary<string, object?> { ["id"] = locality.EntityId, ["name"] = locality.Name, ["disambiguation"] = locality.Disambiguation },
+            ["floor"] = template["filter.popularity.min"],
+            ["domains"] = domainNodes.ToArray(),
+            ["placeAesthetics"] = new Dictionary<string, object?>
+            {
+                ["tags"] = placeTags, ["request"] = tagsRequest,
+                ["note"] = "The place's aesthetic vocabulary. Qloo does not vary it by age or gender, so it is never evidence about this audience.",
+            },
+            ["requests"] = responses.Select(r => r.Request).ToArray(),
+        };
+
+        var notes = new List<string>();
+        if (domainNodes.Cast<Dictionary<string, object?>>().Any(d => ((object?[])d["distinctive"]!).Length == 0))
+            notes.Add("A domain has nothing distinctive: this audience's list matches its place's. Say so rather than read a difference into it.");
+
+        var result = registry.Add(id => TasteObjects.ProfileResult(id, label, profile, responses, [.. distinctiveAll], placeTags, locality, notes));
+        Events.Append(result.Ok ? "taste.query" : "taste.failed", session.Stage, null, new Dictionary<string, object?>
+        {
+            ["id"] = result.Id, ["op"] = "profile", ["label"] = label, ["requests"] = responses.Count,
+            ["fromCache"] = result.FromCache, ["distinctive"] = distinctiveAll.Count, ["placeTags"] = placeTags.Length,
+            ["failure"] = result.Ok ? null : responses.First(r => !r.Success).Failure.ToString(),
+            ["spent"] = registry.Budget.Spent, ["remaining"] = registry.Budget.Remaining, ["monthlyRemaining"] = registry.Budget.MonthlyRemaining,
+        });
+
+        var reply = new JsonObject
+        {
+            ["ok"] = result.Ok, ["op"] = "profile", ["id"] = result.Id, ["label"] = label, ["fromCache"] = result.FromCache,
+            ["requests"] = responses.Count,
+        };
+        if (!result.Ok) { reply["error"] = result.Error; reply["remedy"] = result.Remedy; }
+        if (locality is not null) reply["locality"] = new JsonObject { ["name"] = locality.Name, ["disambiguation"] = locality.Disambiguation };
+        reply["domains"] = new JsonArray([.. domainNodes.Cast<Dictionary<string, object?>>().Select(d => (JsonNode)new JsonObject
+        {
+            ["type"] = (string?)d["type"],
+            ["distinctive"] = new JsonArray([.. ((object?[])d["distinctive"]!).Take(12).Cast<Dictionary<string, object?>>().Select(e => (JsonNode)new JsonObject
+            {
+                ["id"] = (string?)e["id"], ["name"] = (string?)e["name"], ["disambiguation"] = (string?)e["disambiguation"], ["rank"] = (int)e["audienceRank"]!,
+            })]),
+            ["distinctiveCount"] = ((object?[])d["distinctive"]!).Length,
+            ["sharedCount"] = ((object?[])d["shared"]!).Length,
+        })]);
+        reply["placeAesthetics"] = new JsonArray([.. placeTags.Cast<Dictionary<string, object?>>().Select(t => (JsonNode?)(string?)t["name"])]);
+        if (result.Warnings.Length > 0) reply["warnings"] = new JsonArray([.. result.Warnings.Select(w => (JsonNode?)w)]);
+        reply["note"] = "Distinctive = in this audience's list and not in its place's baseline: cite these. placeAesthetics are the "
+                      + "place's, the same for every age. The full profile is Taste.get('" + result.Id + "').profile.";
+        reply["budget"] = TasteBudgetNode(registry.Budget);
+        return reply;
+    }
 
     /// <summary>
     /// The Qloo call one operation makes, or why it cannot be made. Deciding is separate from calling so every
@@ -207,7 +365,7 @@ public partial class DrawingMcpTools
                 return (async () => await client.Audiences(TasteAudienceType(type), 100, null, ct), null);
 
             default:
-                return (null, $"Unknown op '{op}'. Use resolve, insights, describe, demographics, compare, audiences or status.");
+                return (null, $"Unknown op '{op}'. Use profile, resolve, insights, describe, demographics, compare, audiences or status.");
         }
     }
 

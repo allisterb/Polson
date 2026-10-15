@@ -281,7 +281,7 @@ Stage.note('synecdoche — the wing, not the bird; rejects the generic globe');
 > A stage is **your account of your own intent**, not something the server verified — that is what makes a run legible rather than merely logged. The machine-recorded fields beside it (script path, duration, artifact path, byte count) remain the checkable half. Name stages for what a reader would want to click on: `Concept`, `Blocking`, `Refine`, `Stress test`.
 
 > [!TIP]
-> **The measurements record themselves.** `bitmap.diff`, `bitmap.palette` and `bitmap.rowProfile` write an `observe` event carrying what they *found* — the similarity and the changed region, the dominant colours and their shares, how many rows matched — so the record shows the outcome of a check without you restating it. A `rowProfile` that matched nothing is recorded as such, which is the case most easily missed by a loop that simply does not run.
+> **The measurements record themselves.** `bitmap.diff`, `bitmap.palette`, `bitmap.rowProfile` and `bitmap.colorfulness` write an `observe` event carrying what they *found* — the similarity and the changed region, the dominant colours and their shares, how many rows matched — so the record shows the outcome of a check without you restating it. A `rowProfile` that matched nothing is recorded as such, which is the case most easily missed by a loop that simply does not run.
 >
 > What the server cannot know is what you were hoping for. That is what `Stage.expect(...)` and `Stage.check(...)` are for, and together with the automatic `observe` events they are what lets a reader tell a run that measured and was satisfied from one that measured, found the value wrong, and redrew four times.
 
@@ -1137,6 +1137,7 @@ Verification primitives. **"Look again at what you rendered" means comparing it 
 - `bitmap.diffMap(other: SkiaBitmapWrapper, options?: { tolerance?: number, ignoreAlpha?: boolean, color?: string })` → `SkiaBitmapWrapper` — Where they differ, as an image: differing pixels marked, matching ones dimmed so the differences read at a glance.
 - `bitmap.rowProfile(color: string, options?: { tolerance?: number, axis?: 'row' | 'column', minCount?: number })` → `object[]` — Where a colour class starts and ends on each row: `{ index, start, end, extent, count }`, rows matching nothing omitted. Pass `axis: 'column'` to profile the other way.
 - `bitmap.palette(count?: number, options?: { buckets?: number })` → `object[]` — The dominant colours as `{ color, share, pixels }`. Colours are bucketed before counting, so antialiasing collapses into the flat colour it surrounds instead of producing thousands of near-duplicates. Fully transparent pixels are ignored.
+- `bitmap.colorfulness(options?: { x?: number, y?: number, width?: number, height?: number })` → `number` — How colourful the image is, as one number: Hasler and Süsstrunk's metric (2003), `0` for greyscale and rising with both saturation and variety of colour. Their scale, fitted to people rating photographs, puts 15 at *slightly*, 33 *moderately*, 45 *averagely*, 59 *quite*, 82 *highly* and 109 *extremely* colourful. **Use it to compare variants, not to grade one** — "the Lagos poster is more colourful than the Mexico City one, as its direction asked" — because that scale has not been validated for posters. Fully transparent pixels are left out, and a region with none visible throws rather than returning `0`, which would read as greyscale.
 
 > [!TIP]
 > `rowProfile` is what makes a structural comparison affordable. It reduces an image to a few hundred rows of measurement, so comparing two images becomes a loop over **rows** rather than over pixels — roughly 1,400 iterations for two 700-row images, against nearly a million for the pixel-level equivalent.
@@ -5011,12 +5012,13 @@ ctx.fillText(data.citeField('missions.0'), x, y + 20);   // "Apollo 11 - NASA �
 What an audience actually loves — the artists, films, shows, brands and places that over-index for a place, an age band, a gender or a community — and what those things share, measured by Qloo's taste graph. Read-only here: answers are fetched by the `Taste` **tool**, because the agent has to read them to reason with them. A script reads them back to **cite** what a mark rests on.
 
 ```javascript
-// The Taste tool has already answered (op 'describe' over the films an audience over-indexes on).
-const look = Taste.find('older audience palette');
-if (!look || !look.ok) exit('no taste grounding — design from the brief and say so');
+// The Taste tool has already answered: op 'profile' for adults 55+ in one city.
+const p = Taste.find('older audience');
+if (!p || !p.ok) exit('no taste grounding — design from the brief and say so');
 
-const palettes = look.tags.filter(t => t.type === 'urn:tag:aesthetic_property:qloo');
-ctx.fillText(look.cite(), 24, H - 18);            // "Qloo Insights API, /v2/insights?… (retrieved …)"
+const films = p.profile.domains.find(d => d.type === 'urn:entity:movie').distinctive;   // theirs, not the city's
+log(films.slice(0, 5).map(f => f.name).join(', '));    // the references a direction cites
+ctx.fillText(p.cite(), 24, H - 18);                     // "Qloo Insights API, /v2/insights?… (retrieved …)"
 ```
 
 > [!CAUTION]
@@ -5039,7 +5041,7 @@ ctx.fillText(look.cite(), 24, H - 18);            // "Qloo Insights API, /v2/ins
 ## `TasteResult`
 
 - `tasteResult.id` → `string` — This session's handle: `t1`, `t2`…
-- `tasteResult.op` → `string` — `resolve`, `insights`, `describe`, `demographics`, `compare` or `audiences`.
+- `tasteResult.op` → `string` — `profile`, `resolve`, `insights`, `describe`, `demographics`, `compare` or `audiences`.
 - `tasteResult.label` → `string` — What it was for, in the agent's words.
 - `tasteResult.request` → `string` — The Qloo endpoint and canonical query, without the key. **The provenance line.**
 - `tasteResult.ok` → `boolean` — Whether Qloo answered. `false` carries `error` and `remedy`.
@@ -5055,6 +5057,7 @@ ctx.fillText(look.cite(), 24, H - 18);            // "Qloo Insights API, /v2/ins
 - `tasteResult.audiences` → `object[]` — Each `{ id, name, type, parents }`.
 - `tasteResult.demographics` → `object[]` — For `demographics`: one block per signal, affinity by age band and gender, as Qloo sent it.
 - `tasteResult.comparison` → `object?` — For `compare`: Qloo's result as sent.
+- `tasteResult.profile` → `object?` — For `profile`: `{ audience, locality, floor, domains, placeAesthetics, requests }`. Each domain is `{ type, distinctive, shared, audienceRequest, baselineRequest }`. **`distinctive`** is what this audience loves that its place's baseline does not list, each entity carrying its `audienceRank` — the evidence a direction cites. `shared` is popular there regardless of who. `placeAesthetics.tags` are **the place's**: Qloo does not vary tags by age, so they are never evidence about the audience. For a profile, `entities` holds every distinctive entity across the domains and `tags` the place's aesthetics.
 - `tasteResult.cite()` → `string` — A caption-ready source line: the request and when it was retrieved.
 
 ## `QlooBudget`
