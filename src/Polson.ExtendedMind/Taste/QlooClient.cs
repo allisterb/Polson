@@ -31,12 +31,16 @@ using System.Threading.Tasks;
 /// <para>
 /// <b>Quota.</b> The hackathon key allows five requests a second and 10,000 a month (headers, 2026-10-15).
 /// Requests are paced under the first; the second is reported on every response in
-/// <see cref="QlooResponse.RateLimit"/> and in <see cref="LastRateLimit"/>, for the budget above this layer.
+/// <see cref="QlooResponse.RateLimit"/> and in <see cref="LastRateLimit"/>, and fed to the
+/// <see cref="QlooBudget"/>, whose monthly reserve refuses before the month runs out.
 /// </para>
 /// <para>
-/// Not exposed to the JavaScript sandbox. A metered service in front of an agent needs a budget, a cache and
-/// a record, which is the layer above — the same split as <c>ImageGenerator</c> and
-/// <c>AssetRequisitionToolkit</c>.
+/// <b>Cache and budget sit inside the request path</b>, not in a layer above as they do for images: a cached
+/// answer is a stored body re-read by the same parser, and a budget charge has to happen per request sent —
+/// retries included — which only this loop can see. Without either (the default) it is a plain client.
+/// </para>
+/// <para>
+/// Not exposed to the JavaScript sandbox. The record of what was asked and why belongs to the MCP layer above.
 /// </para>
 /// </remarks>
 public sealed class QlooClient : Runtime, IDisposable
@@ -45,8 +49,12 @@ public sealed class QlooClient : Runtime, IDisposable
     /// <param name="apiKey">Read from <c>ApiKeys:Qloo</c>. Sent as <c>X-Api-Key</c> on each request, never logged.</param>
     /// <param name="httpClient">Optional. Neither mutated nor disposed; the key travels on the request.</param>
     /// <param name="baseUrl">From <c>Qloo:BaseUrl</c>. A hackathon key works only against <see cref="HackathonBaseUrl"/>.</param>
-    public QlooClient(string apiKey, HttpClient? httpClient = null, string? baseUrl = null)
+    /// <param name="cache">Optional. Answers already fetched are served from it and cost nothing.</param>
+    /// <param name="budget">Optional. Without one, requests are unlimited.</param>
+    public QlooClient(string apiKey, HttpClient? httpClient = null, string? baseUrl = null, QlooCache? cache = null, QlooBudget? budget = null)
     {
+        Cache = cache;
+        Budget = budget;
         ArgumentException.ThrowIfNullOrWhiteSpace(apiKey);
         if (apiKey.Any(char.IsControl))
             throw new ArgumentException("The Qloo API key contains a control character.", nameof(apiKey));
@@ -80,6 +88,10 @@ public sealed class QlooClient : Runtime, IDisposable
 
     /// <summary>The rate-limit headers from the most recent response, or null before the first.</summary>
     public QlooRateLimit? LastRateLimit { get; private set; }
+
+    public QlooCache? Cache { get; }
+
+    public QlooBudget? Budget { get; }
 
     /// <summary>How long the client waits. A test replaces it so retries and pacing cost no wall-clock time.</summary>
     internal Func<TimeSpan, CancellationToken, Task> Delay { get; set; } = Task.Delay;
@@ -223,6 +235,20 @@ public sealed class QlooClient : Runtime, IDisposable
         var stopwatch = Stopwatch.StartNew();
         var request = Provenance(path, query);
         var url = baseUrl + path + (query.Count > 0 ? "?" + query.ToQueryString() : string.Empty);
+        var key = QlooCache.KeyOf(baseUrl, request);
+
+        if (Cache?.Get(key) is { } hit)
+        {
+            var cached = Read(hit.Body, 200, hit.RequestId, null, request, parse, stopwatch);
+            if (cached.Success)
+            {
+                Budget?.CountHit();
+                cached.FromCache = true;
+                cached.CachedUtc = hit.RetrievedUtc;
+                return cached;
+            }
+            // An entry the parser cannot read is not an answer; ask again, and the success rewrites it.
+        }
 
         for (var attempt = 1; ; attempt++)
         {
@@ -231,6 +257,13 @@ public sealed class QlooClient : Runtime, IDisposable
             QlooRateLimit? limit;
             string? requestId;
             TimeSpan? retryAfter;
+
+            if (Budget?.TryCharge() is string refusal)
+            {
+                var refused = Failed<TResponse>(QlooFailure.BudgetExhausted, refusal, request, stopwatch);
+                refused.RateLimit = LastRateLimit;
+                return refused;
+            }
 
             try
             {
@@ -265,6 +298,7 @@ public sealed class QlooClient : Runtime, IDisposable
             }
 
             if (limit is not null) LastRateLimit = limit;
+            Budget?.Observe(limit);
             var code = (int)status;
 
             if (code is < 200 or > 299)
@@ -284,29 +318,41 @@ public sealed class QlooClient : Runtime, IDisposable
                 return failed;
             }
 
-            try
+            var result = Read(body, code, requestId, limit, request, parse, stopwatch);
+            if (result.Success)
+                Cache?.Put(key, new CachedQlooAnswer { Request = request, Body = body, RetrievedUtc = DateTime.UtcNow, RequestId = requestId });
+            return result;
+        }
+    }
+
+    /// <summary>Parses a successful body, fresh or cached. The one reader of Qloo's JSON.</summary>
+    private static TResponse Read<TResponse>(
+        string body, int code, string? requestId, QlooRateLimit? limit, string request,
+        Action<TResponse, JsonElement> parse, Stopwatch stopwatch)
+        where TResponse : QlooResponse, new()
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(body);
+            var result = new TResponse
             {
-                using var document = JsonDocument.Parse(body);
-                var result = new TResponse
-                {
-                    Success = true,
-                    Failure = QlooFailure.None,
-                    StatusCode = code,
-                    RequestId = requestId,
-                    RateLimit = limit,
-                    Request = request,
-                };
-                parse(result, document.RootElement);
-                result.Warn(ServiceWarnings(document.RootElement));
-                result.ElapsedMs = stopwatch.ElapsedMilliseconds;
-                return result;
-            }
-            catch (Exception ex) when (ex is JsonException or InvalidOperationException)
-            {
-                var failed = Failed<TResponse>(QlooFailure.MalformedResponse, ex.Message, request, stopwatch, code, body);
-                failed.RequestId = requestId;
-                return failed;
-            }
+                Success = true,
+                Failure = QlooFailure.None,
+                StatusCode = code,
+                RequestId = requestId,
+                RateLimit = limit,
+                Request = request,
+            };
+            parse(result, document.RootElement);
+            result.Warn(ServiceWarnings(document.RootElement));
+            result.ElapsedMs = stopwatch.ElapsedMilliseconds;
+            return result;
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException)
+        {
+            var failed = Failed<TResponse>(QlooFailure.MalformedResponse, ex.Message, request, stopwatch, code, body);
+            failed.RequestId = requestId;
+            return failed;
         }
     }
 

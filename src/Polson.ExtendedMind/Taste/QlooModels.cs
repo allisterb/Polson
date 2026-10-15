@@ -16,6 +16,9 @@ public enum QlooFailure
     /// <summary>Refused by our own checks before any request was made, so nothing was spent.</summary>
     InvalidRequest,
 
+    /// <summary>Refused by <see cref="QlooBudget"/>: this run's allowance is spent, or the monthly reserve is reached.</summary>
+    BudgetExhausted,
+
     /// <summary>401. The key is wrong, or it was sent to the wrong environment.</summary>
     Auth,
 
@@ -61,6 +64,7 @@ public class QlooResponse
     {
         QlooFailure.None => null,
         QlooFailure.InvalidRequest => "Correct the query; nothing was sent or spent.",
+        QlooFailure.BudgetExhausted => "No more Qloo requests this run. Work from what has been fetched — a repeated question is still answered from the cache.",
         QlooFailure.Auth => "Check ApiKeys:Qloo, and that Qloo:BaseUrl is https://hackathon.api.qloo.com — a hackathon key answers 401 on staging and production.",
         QlooFailure.UnsupportedType => "This key may not read that filter.type. Use the closest supported type (music is urn:entity:artist; food and drink is urn:entity:place or urn:entity:brand).",
         QlooFailure.RateLimited => "Qloo allows five requests a second. Wait a moment and retry.",
@@ -89,6 +93,12 @@ public class QlooResponse
     public IReadOnlyList<string> Warnings => warnings;
 
     public QlooRateLimit? RateLimit { get; internal set; }
+
+    /// <summary>Served from <see cref="QlooCache"/>: nothing was sent, and nothing was spent.</summary>
+    public bool FromCache { get; internal set; }
+
+    /// <summary>When Qloo gave a cached answer — the age of the evidence. Null for a fresh answer.</summary>
+    public DateTime? CachedUtc { get; internal set; }
     #endregion
 
     #region Methods
