@@ -120,7 +120,8 @@ public sealed record QlooTag(string Id, string Name, string? Type, double? Popul
 {
     internal static QlooTag? From(JsonElement e) =>
         e.ValueKind == JsonValueKind.Object && QlooJson.String(e, "id", "tag_id") is string id
-            ? new(id, QlooJson.String(e, "name") ?? id, QlooJson.String(e, "type", "subtype"), QlooJson.Number(e, "popularity"),
+            // subtype first: tag insights send type "urn:tag" with the kind in subtype; elsewhere type is the kind.
+            ? new(id, QlooJson.String(e, "name") ?? id, QlooJson.String(e, "subtype", "type"), QlooJson.Number(e, "popularity"),
                   QlooJson.Number(e, "affinity") ?? (e.TryGetProperty("query", out var q) ? QlooJson.Number(q, "affinity") : null))
             : null;
 }

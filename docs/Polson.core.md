@@ -5006,6 +5006,67 @@ ctx.fillText(data.citeField('missions.0'), x, y + 20);   // "Apollo 11 - NASA �
 
 ---
 
+# Taste (Audience Taste from Qloo)
+
+What an audience actually loves — the artists, films, shows, brands and places that over-index for a place, an age band, a gender or a community — and what those things share, measured by Qloo's taste graph. Read-only here: answers are fetched by the `Taste` **tool**, because the agent has to read them to reason with them. A script reads them back to **cite** what a mark rests on.
+
+```javascript
+// The Taste tool has already answered (op 'describe' over the films an audience over-indexes on).
+const look = Taste.find('older audience palette');
+if (!look || !look.ok) exit('no taste grounding — design from the brief and say so');
+
+const palettes = look.tags.filter(t => t.type === 'urn:tag:aesthetic_property:qloo');
+ctx.fillText(look.cite(), 24, H - 18);            // "Qloo Insights API, /v2/insights?… (retrieved …)"
+```
+
+> [!CAUTION]
+> **Qloo holds measured taste, not culture's rules.** It does not know which colours mean mourning or which numbers are unlucky; those come from research, cited separately — never present a Qloo answer as one. Its results are **aggregate affinities**: never describe them as facts about a person, and never infer health, beliefs or identity from them.
+
+> [!IMPORTANT]
+> **Give an audience a place.** An age band or gender with no location returns roughly the all-time popular list rather than that audience's own taste (measured 2026-10-15), so the tool refuses one. A location is fuzzy-matched: check `locality` on the answer to confirm it is the place you meant.
+>
+> **Requests are metered** — five a second and 10,000 a month for the whole studio — and this session has an allowance (`Taste.budget`). A repeated question is answered from the cache and costs nothing (`fromCache`), so ask the same thing the same way. A query with an unknown or misspelt parameter is refused before it is sent, because Qloo would otherwise ignore it silently and answer with nothing.
+
+## `Taste`
+
+- `Taste.results` → `TasteResult[]` — Every answer fetched this session, in order.
+- `Taste.count` → `number` — How many there are.
+- `Taste.latest` → `TasteResult?` — The most recent, or **`null`**.
+- `Taste.get(id: string)` → `TasteResult?` — By the id the tool returned (`'t3'`), or null.
+- `Taste.find(text: string)` → `TasteResult?` — The latest answer whose label contains the text, case-insensitively — finding evidence by what it was *for*.
+- `Taste.budget` → `QlooBudget` — What remains of this session's allowance, and the key's month.
+
+## `TasteResult`
+
+- `tasteResult.id` → `string` — This session's handle: `t1`, `t2`…
+- `tasteResult.op` → `string` — `resolve`, `insights`, `describe`, `demographics`, `compare` or `audiences`.
+- `tasteResult.label` → `string` — What it was for, in the agent's words.
+- `tasteResult.request` → `string` — The Qloo endpoint and canonical query, without the key. **The provenance line.**
+- `tasteResult.ok` → `boolean` — Whether Qloo answered. `false` carries `error` and `remedy`.
+- `tasteResult.error` · `tasteResult.remedy` → `string?`
+- `tasteResult.fromCache` → `boolean` — Answered from the cache: nothing was sent or spent.
+- `tasteResult.cachedUtc` → `string?` — When Qloo gave a cached answer, ISO 8601 — the age of the evidence.
+- `tasteResult.retrievedUtc` → `string` — When this session recorded it.
+- `tasteResult.requestId` → `string?` — Qloo's id for the call, for quoting to Qloo.
+- `tasteResult.warnings` → `string[]` — Ours (a parameter Qloo may ignore for this type, an empty answer) and Qloo's own.
+- `tasteResult.locality` → `object?` — `{ id, name, disambiguation }`: where Qloo placed the location.
+- `tasteResult.entities` → `object[]` — Each `{ id, name, type, types, disambiguation, popularity, affinity, tags, explainability, properties }`. `affinity` is to the query's signals; `popularity` is a 0–1 percentile.
+- `tasteResult.tags` → `object[]` — Each `{ id, name, type, popularity, affinity }`. Visual vocabulary has type `urn:tag:aesthetic_property:qloo`.
+- `tasteResult.audiences` → `object[]` — Each `{ id, name, type, parents }`.
+- `tasteResult.demographics` → `object[]` — For `demographics`: one block per signal, affinity by age band and gender, as Qloo sent it.
+- `tasteResult.comparison` → `object?` — For `compare`: Qloo's result as sent.
+- `tasteResult.cite()` → `string` — A caption-ready source line: the request and when it was retrieved.
+
+## `QlooBudget`
+
+- `tasteBudget.total` · `tasteBudget.spent` · `tasteBudget.remaining` · `tasteBudget.cacheHits` · `tasteBudget.refused` → `number` — Requests this session may send and has sent, **retries included**; cache hits send nothing.
+- `tasteBudget.monthlyReserve` → `number` — Monthly requests the studio never spends, held for the demo and judging.
+- `tasteBudget.monthlyRemaining` → `number?` — The key's month as Qloo last reported it, or null before the first answer.
+- `tasteBudget.reserveReached` → `boolean` — When true, only cached answers are available.
+- `tasteBudget.canAfford(count?: number)` → `boolean`
+
+---
+
 # Motion (Frame Capture & Animated Encoding)
 
 > [!WARNING]

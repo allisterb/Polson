@@ -93,6 +93,23 @@ public sealed class SessionContext
     public static string? ResearchArchiveDir { get; set; }
 
     /// <summary>
+    /// Qloo answers fetched during this session, exposed to scripts as the global <c>Taste</c>.
+    /// </summary>
+    /// <remarks>
+    /// Per session for the reason <see cref="Research"/> is: on a public deployment one process serves many
+    /// visitors, and the first must not spend everyone's allowance. The key's pacing and its monthly reserve are
+    /// shared all the same — they live on the one client every session is a scope of.
+    /// </remarks>
+    public Polson.ExtendedMind.Taste.TasteRegistry Taste { get; } =
+        new(new Polson.ExtendedMind.Taste.QlooBudget(TasteBudget, TasteMonthlyReserve));
+
+    /// <summary>Qloo requests allowed per session, from <c>Qloo:Budget</c>. Static for the reason <see cref="ResearchBudget"/> is.</summary>
+    public static int TasteBudget { get; set; } = Polson.ExtendedMind.Taste.QlooBudget.DefaultTotal;
+
+    /// <summary>Monthly Qloo requests never spent, from <c>Qloo:MonthlyReserve</c>.</summary>
+    public static int TasteMonthlyReserve { get; set; } = Polson.ExtendedMind.Taste.QlooBudget.DefaultMonthlyReserve;
+
+    /// <summary>
     /// The stage of work the agent says it is in, e.g. "Blocking". Null until it declares one.
     /// </summary>
     /// <remarks>

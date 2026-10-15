@@ -595,6 +595,34 @@ public class QlooClientTests : TestsRuntime
         Assert.Equal(0, calls);
     }
 
+    /// <summary>
+    /// Sessions spend from their own allowances, but the month is the key's: a reserve one session saw must stop
+    /// another session's first request, before that session has observed anything itself.
+    /// </summary>
+    [Fact]
+    public async Task Scoped_SessionsHaveTheirOwnAllowanceButShareTheMonth()
+    {
+        var calls = 0;
+        var parent = Offline(new StubHandler(_ =>
+        {
+            calls++;
+            var r = Respond(AudienceResults);
+            r.Headers.Add("X-Month-RateLimit-Remaining", "900");
+            return r;
+        }), []);
+        var first = parent.Scoped(new QlooBudget(10, monthlyReserve: 1000));
+        var second = parent.Scoped(new QlooBudget(10, monthlyReserve: 1000));
+
+        var a = await first.Audiences();
+        var b = await second.Audiences("urn:audience:communities");
+
+        Assert.True(a.Success);
+        Assert.Equal(QlooFailure.BudgetExhausted, b.Failure);
+        Assert.Contains("reserve", b.Error);
+        Assert.Equal((1, 0), (first.Budget!.Spent, second.Budget!.Spent));
+        Assert.Equal(1, calls);
+    }
+
     [Fact]
     public void Budget_ChargesAreExactUnderConcurrency()
     {

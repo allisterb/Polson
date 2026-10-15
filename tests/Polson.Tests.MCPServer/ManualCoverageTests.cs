@@ -94,6 +94,12 @@ public class ManualCoverageTests : TestsRuntime
         ["Research"] = 100,
         ["Photo"] = 100,
 
+        // 54 on arrival (2026-10-15), and said plainly rather than padded: every member is in the SDK reference,
+        // but no manual names the surface yet. The poster workflow's manual on designing for an audience is the
+        // passage that will — written from the verified sources in docs/internal/qloo-taste-grounded-design.md
+        // §4.7 — and this floor goes up with it.
+        ["Taste"] = 54,
+
         // Documented as it was built, like Chart and Research, so it starts at the top rather than
         // being brought up to it. No manual yet — the SDK reference is its only prose, which is why
         // the floor is what holds it reachable.
