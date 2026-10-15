@@ -109,7 +109,7 @@ public class SpeechProbeLiveTests : TestsRuntime
 
         var project = System.Environment.GetEnvironmentVariable("POLSON_LIVE_OUT") ?? Path.Combine(Path.GetTempPath(), "polson-speech-probe");
         using var speech = new global::Polson.ExtendedMind.SpeechGeneration.SpeechGenerator(this.apiKey);
-        var budget = new global::Polson.ExtendedMind.ImageGeneration.AssetBudget(2);
+        var budget = new global::Polson.ExtendedMind.ImageGeneration.AssetBudget(3);
         var toolkit = new global::Polson.ExtendedMind.ImageGeneration.AssetRequisitionToolkit(null,
             new global::Polson.ExtendedMind.ImageGeneration.RequisitionCache(Path.Combine(project, ".cache", "assets")), budget, "live",
             speech, new global::Polson.ExtendedMind.SpeechGeneration.SpeechCache(Path.Combine(project, ".cache", "speech")));
@@ -126,6 +126,43 @@ public class SpeechProbeLiveTests : TestsRuntime
         var again = await toolkit.Speak("Who knew? Bob moved the moon so far, for fun!", options);
         output.WriteLine($"again: fromCache {again.Provenance?.FromCache}; spent {budget.Spent}, cache hits {budget.CacheHits}");
         Assert.Equal(1, budget.Spent);
+    }
+
+    /// <summary>
+    /// Whether a direction sent as <c>speechMetadata.style</c> is followed rather than spoken, on the endpoint this key
+    /// reaches. anim3's keeper said "Shouting... Ahoy!" when the direction was written into the text. Two takes of that
+    /// line, with the direction and without, plus one with an inline tag and a capitalised word, are written to
+    /// <c>POLSON_LIVE_OUT</c> to be transcribed and compared. Billed up to three times; a take already cached is free.
+    /// </summary>
+    [Fact]
+    public async Task Speech_Live_AStyleIsFollowedNotSpoken()
+    {
+        if (string.IsNullOrWhiteSpace(this.apiKey)) return;
+        if (System.Environment.GetEnvironmentVariable("POLSON_LIVE_SPEECH_PROBE") != "1") return;   // opt-in: this one bills
+
+        var project = System.Environment.GetEnvironmentVariable("POLSON_LIVE_OUT") ?? Path.Combine(Path.GetTempPath(), "polson-speech-probe");
+        using var speech = new global::Polson.ExtendedMind.SpeechGeneration.SpeechGenerator(this.apiKey);
+        var budget = new global::Polson.ExtendedMind.ImageGeneration.AssetBudget(3);
+        var toolkit = new global::Polson.ExtendedMind.ImageGeneration.AssetRequisitionToolkit(null,
+            new global::Polson.ExtendedMind.ImageGeneration.RequisitionCache(Path.Combine(project, ".cache", "assets")), budget, "live",
+            speech, new global::Polson.ExtendedMind.SpeechGeneration.SpeechCache(Path.Combine(project, ".cache", "speech")));
+        using var scope = global::Polson.RequisitionScope.Begin(project);
+
+        const string line = "Ahoy! Bear away, you're on the rocks!";
+        // The third take is the guide's other half: a moment as an inline tag and a stressed word in capitals, which
+        // must be performed rather than read out as "short pause".
+        foreach (var (name, text, style) in new[]
+                 {
+                     ("style-shouting.wav", line, "shouting over the wind"), ("style-none.wav", line, (string?)null),
+                     ("style-tag.wav", "Ahoy! <short pause> Bear away, you're on the ROCKS!", (string?)null)
+                 })
+        {
+            var clock = Stopwatch.StartNew();
+            var spoken = await toolkit.Speak(text, new global::Polson.ExtendedMind.SpeechGeneration.SpeechOptions { Voice = "Algenib", Style = style, Path = name });
+            output.WriteLine($"{name}: {spoken.Success} {spoken.FailureName} {spoken.Error} in {clock.ElapsedMilliseconds} ms; "
+                + $"{spoken.Duration:0.00} s; tokens so far {budget.TokensSpent}; sent: {spoken.Provenance?.Prompt}; warnings [{string.Join("; ", spoken.Warnings)}]");
+            Assert.True(spoken.Success, spoken.Error);
+        }
     }
 
     /// <summary>The sample rate a <c>audio/L16;codec=pcm;rate=24000</c> mime type states; 24 kHz when it does not.</summary>

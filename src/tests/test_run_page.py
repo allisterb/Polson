@@ -135,6 +135,14 @@ CASES: list[tuple[str, dict, str | None]] = [
      "1.5s \u00b7 animated svg"),
     ("an animation with no length", {"type": "render", "artifact": "a.webp", "motion": "animation"},
      "animation"),
+    # FFmpeg.cs via MotionVideo.cs: comp.saveVideo and Motion.saveVideo.
+    ("a film with its voice", {"type": "render", "artifact": "output.mp4", "format": "mp4", "motion": "video",
+                               "frames": 48, "durationMs": 4000.0, "width": 480, "height": 270,
+                               "audio": ["audio/line1.wav"]},
+     "4.0s \u00b7 48 frames \u00b7 with sound"),
+    ("a silent film", {"type": "render", "artifact": "artifacts/05_draft.mp4", "format": "mp4",
+                       "motion": "video", "frames": 24, "durationMs": 2000.0, "audio": []},
+     "2.0s \u00b7 24 frames \u00b7 silent"),
     ("an export", {"type": "export", "artifact": "artifacts/walk.sif", "format": "sif",
                    "motion": "sif", "pictures": ["artifacts/walk-image0.png"]},
      "artifacts/walk.sif"),
@@ -261,6 +269,11 @@ class PassRankTests(unittest.TestCase):
         self.assertGreater(animation, still)
         self.assertGreater(still, sheet)
         self.assertGreater(sheet, svg)
+
+    def test_a_film_outranks_the_silent_animation_beside_it(self) -> None:
+        """A pass that wrote `output.mp4` and a looping `output.webp` was for the film with its sound."""
+        film, animation = self.rank({"format": "mp4", "motion": "video"}, {"format": "webp", "motion": "animation"})
+        self.assertGreater(film, animation)
 
     def test_an_animated_svg_loses_to_the_raster_and_beats_a_still(self) -> None:
         """One script writing `output.webp` and `output.svg` should show the WebP, as stills do."""

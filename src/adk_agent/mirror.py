@@ -58,7 +58,8 @@ except ValueError:
 #: the work. `.polson/research/` is here because a research run costs one of a run's two allowances
 #: and is what makes a drawn figure checkable afterwards — losing it turns a sourced number back into
 #: an assertion.
-MIRRORED_DIRS = ("artifacts", "scripts", "events", ".polson/research")
+#: `audio/` is the spoken lines an animation is timed to: losing them loses the film's sound and its timing.
+MIRRORED_DIRS = ("artifacts", "scripts", "events", ".polson/research", "audio")
 
 #: Files at the project root, by exact name.
 #:
@@ -91,9 +92,9 @@ MIRRORED_DIRS = ("artifacts", "scripts", "events", ".polson/research")
 #: pass they had chosen was not the one they could save.
 MIRRORED_FILES = (
     "brief.md", "artwork.js", "accuracy.md", "findings.md",
-    "critique_log.md", "materials.md", "turns.md", "project.json",
+    "critique_log.md", "materials.md", "turns.md", "animation.md", "project.json",
     "GEMINI.md", "CLAUDE.md",
-    "output.webp", "output.svg", "output.png",
+    "output.webp", "output.svg", "output.png", "output.mp4",
 )
 
 #: Never copied, at any depth. `documents/` is the director's own supplied material — a client's

@@ -734,7 +734,7 @@ public partial class ConstructiveDrawingToolkit
         };
     }
 
-    static readonly string[] HeadForFigureOptions = ["yawDeg", "pitchDeg", "skull", "neckLength", "character"];
+    static readonly string[] HeadForFigureOptions = ["yawDeg", "pitchDeg", "skull", "neckLength", "character", "scale"];
 
     static readonly string[] FaceAirOptions = ["skull", "face"];
 
@@ -936,14 +936,30 @@ public partial class ConstructiveDrawingToolkit
                 "createHeadForFigure: the figure's head carries no ry, so there is no size to build to.",
                 nameof(figureObj));
 
-        var head = CreateLoomisHead(center.X, center.Y, headHeight,
-            Num(opt, "yawDeg", 0f), Num(opt, "pitchDeg", 0f));
-
         var character = ChildFace(Num(JsInterop.AsDict(fig["build"]), "age", 18f));
         if (JsInterop.AsDict(opt?["character"]) is IDictionary given)
             foreach (DictionaryEntry e in given) character[e.Key.ToString()!] = e.Value;
-        if (character.Count > 0)
-            head = CreateParametricHead(head, character);
+        Dictionary<string, object?> Build(float cx, float cy, float h)
+        {
+            var built = CreateLoomisHead(cx, cy, h, Num(opt, "yawDeg", 0f), Num(opt, "pitchDeg", 0f));
+            return character.Count > 0 ? CreateParametricHead(built, character) : built;
+        }
+
+        var scale = opt?["scale"] is null ? 1f : Num(opt, "scale", 1f);
+        if (!float.IsFinite(scale) || scale < 0.25f || scale > 4f)
+            throw new ArgumentException(
+                $"createHeadForFigure scale is {scale}; it is a multiple of the figure's own head, from 0.25 to 4 "
+                + "(1.5 is a cartoon head large enough for a mouth to read).", nameof(options));
+
+        var head = Build(center.X, center.Y, headHeight);
+        if (scale != 1f)
+        {
+            // Grown about the chin, so the chin stays where the figure's is and the neck still reaches the shoulders:
+            // the bigger head rises from the neck rather than swallowing it. The construction is proportional to its
+            // height, so scaling the centre's distance from the chin by the same factor puts the new chin on the old.
+            var chin0 = ExtractPoint(head["chin"]);
+            head = Build(chin0.X - (chin0.X - center.X) * scale, chin0.Y - (chin0.Y - center.Y) * scale, headHeight * scale);
+        }
 
         // Measured on the figure in hand rather than on the canon, which is what lets a posed figure
         // get the neck its own pose needs. Taken after any character parameters, which is now what
@@ -953,19 +969,43 @@ public partial class ConstructiveDrawingToolkit
         var reach = MathF.Sqrt((sternum.X - chin.X) * (sternum.X - chin.X)
                              + (sternum.Y - chin.Y) * (sternum.Y - chin.Y));
 
+        // The pivot stays the figure's head centre at any scale: the scaled head shares the unscaled one's chin, so the
+        // same rotation about the same point lands it on the figure exactly as the canonical head would land.
         head["fit"] = new Dictionary<string, object?>
         {
             ["rollDeg"] = Num(node, "angleDeg", 0f),
             ["pivot"] = ToDict(center),
-            ["headHeight"] = headHeight,
+            ["headHeight"] = headHeight * scale,
+            ["scale"] = scale,
             ["neckLength"] = opt != null && opt.Contains("neckLength")
                 ? MathF.Max(0f, Num(opt, "neckLength", 0f))
-                : reach / headHeight,
+                : reach / (headHeight * scale),
             ["reach"] = reach,
             ["skull"] = skull
         };
 
         return head;
+    }
+
+    /// <summary>
+    /// Where a point of a figure's head is on the page: the point turned by the head's <c>fit.rollDeg</c> about its
+    /// <c>fit.pivot</c>, the same lean the head is drawn in. <c>Drawing.headPoint(head, head.mouthGuides.leftCorner)</c>
+    /// is the mouth's corner on the leaning figure, ready for <c>reachArm</c>.
+    /// </summary>
+    /// <remarks>
+    /// A head from <see cref="CreateHeadForFigure"/> is built upright and drawn inside a rotation, so its landmarks are in
+    /// its own frame, and a hand reaching for one reached for where it would be on an upright head. anim3 and anim4 both
+    /// re-derived the rotation by hand to cup a hand at the mouth. A head with no <c>fit</c> is not turned at all.
+    /// </remarks>
+    public Dictionary<string, object?> HeadPoint(object headObj, object pointObj)
+    {
+        var head = JsInterop.AsDict(headObj) ?? throw new ArgumentException("headPoint needs a head.", nameof(headObj));
+        var p = ExtractPoint(pointObj);
+        if (JsInterop.AsDict(head["fit"]) is not IDictionary fit) return ToDict(p);
+        var pivot = ExtractPoint(fit["pivot"]);
+        var a = Num(fit, "rollDeg", 0f) * MathF.PI / 180f;
+        var (dx, dy) = (p.X - pivot.X, p.Y - pivot.Y);
+        return ToDict(new Point2D(pivot.X + dx * MathF.Cos(a) - dy * MathF.Sin(a), pivot.Y + dx * MathF.Sin(a) + dy * MathF.Cos(a)));
     }
     #endregion
 }

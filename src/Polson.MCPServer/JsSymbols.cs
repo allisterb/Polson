@@ -368,7 +368,9 @@ public static partial class JsSymbolManifest
                     member is MethodInfo ? "method" : "property",
                     area,
                     $"polson://sdk/core/{area}",
-                    Signature(member, jsName),
+                    member is MethodInfo method && DocumentedSignature($"{receiver.Name}.{jsName}") is { } doc
+                        ? $"{jsName}({doc.Args}) -> {doc.Return ?? JsType(method.ReturnType)}"
+                        : Signature(member, jsName),
                     member.DeclaringType?.Name ?? receiver.Types[0].Name,
                     member.Name,
                     !receiver.Types.Contains(member.DeclaringType)));
@@ -528,6 +530,37 @@ public static partial class JsSymbolManifest
     }
 
     static (string Area, string Text)[]? slices;
+
+    /// <summary>
+    /// The parameters and return the reference writes for a call, when it writes them: for <c>Drawing.drawComicEye</c>,
+    /// <c>ctx: CanvasRenderingContext2D, eyeObj: object, isFar?: boolean, options?: { inkColor?, irisColor?, ... }</c>.
+    /// </summary>
+    /// <remarks>
+    /// Reflection reads every options bag as <c>object</c>, so the index published <c>options?: any</c> for calls whose
+    /// entry in the reference names each option. anim4 needed <c>irisColor</c> to keep a brief's single tone, found
+    /// <c>options?: any</c> from <c>Search</c>, and got the names only by grepping a saved <c>ReadDoc</c> dump. The
+    /// reference is the agent's view of the API, so where it spells a signature out, that spelling is the answer.
+    /// <para>
+    /// Built on first use rather than in a field initialiser, as <see cref="Slices"/> is: <see cref="Symbols"/> is built
+    /// while this class's statics are still being initialised, and a field declared below it reads as null then.
+    /// </para>
+    /// </remarks>
+    static (string Args, string? Return)? DocumentedSignature(string name) =>
+        (documented ??= BuildDocumented()).TryGetValue(name, out var found) ? found : null;
+
+    static Dictionary<string, (string Args, string? Return)> BuildDocumented()
+    {
+        var found = new Dictionary<string, (string, string?)>(StringComparer.OrdinalIgnoreCase);
+        foreach (Match m in DocumentedCall().Matches(PolsonResources.Docs.Core()))
+            found.TryAdd(m.Groups["name"].Value, (m.Groups["args"].Value, m.Groups["ret"].Success ? m.Groups["ret"].Value : null));
+        return found;
+    }
+
+    static Dictionary<string, (string Args, string? Return)>? documented;
+
+    /// <summary>A reference entry that opens with a call: <c>- `Receiver.call(args)` → `returns`</c>.</summary>
+    [GeneratedRegex(@"^\s*- `(?<name>[A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z][A-Za-z0-9]*)+)\((?<args>[^`]*)\)`(?:\s*→\s*`(?<ret>[^`]+)`)?", RegexOptions.Multiline)]
+    private static partial Regex DocumentedCall();
 
     /// <summary>A type and its bases, stopping short of <see cref="object"/>.</summary>
     /// <summary>

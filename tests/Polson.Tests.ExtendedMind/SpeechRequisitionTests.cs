@@ -112,19 +112,28 @@ public class SpeechRequisitionTests : TestsRuntime, IDisposable
         Assert.True(scope.Records[1].FromCache);
     }
 
-    /// <summary>A direction goes before a colon, which the model reads as how to say the line rather than as words.</summary>
+    /// <summary>
+    /// A direction travels beside the line, never in it: the 3.8 models speak a part's text verbatim, so anim3's
+    /// <c>"shouting: Ahoy!"</c> came back as a keeper saying "Shouting... Ahoy!". The text sent is exactly the line.
+    /// </summary>
     [Fact]
-    public async Task TestADirectionIsSentAheadOfTheLine()
+    public async Task TestADirectionTravelsBesideTheLineNotInIt()
     {
         var fake = new FakeSpeechGenerator(ServiceWav(1.5));
         using var scope = RequisitionScope.Begin(project);
 
-        var spoken = await Toolkit(fake).Speak("Land ho!", new SpeechOptions { Style = "shout it, hoarse from the wind:" });
+        var spoken = await Toolkit(fake).Speak("Land ho!", new SpeechOptions { Style = "shouting over the wind:" });
 
         Assert.True(spoken.Success, spoken.Error);
-        Assert.Equal("shout it, hoarse from the wind: Land ho!", fake.LastPrompt);
-        Assert.Equal(fake.LastPrompt, spoken.Provenance!.Prompt);
-        Assert.Equal("shout it, hoarse from the wind", spoken.Style);
+        Assert.Equal("Land ho!", fake.LastText);
+        Assert.Equal("shouting over the wind", fake.LastStyle);
+        Assert.Equal("shouting over the wind", spoken.Style);
+        Assert.Equal("Land ho! [speechMetadata.style: shouting over the wind]", spoken.Provenance!.Prompt);
+
+        // No direction, no metadata; and the same line with a direction is a different request, not a cache hit.
+        var plain = await Toolkit(fake).Speak("Land ho!");
+        Assert.Null(fake.LastStyle);
+        Assert.NotEqual(spoken.Id, plain.Id);
     }
 
     /// <summary>A line far longer than its words allow is spoken, and the result says what that may mean.</summary>
@@ -159,6 +168,25 @@ public class SpeechRequisitionTests : TestsRuntime, IDisposable
         Assert.Equal(0, budget.Spent);
         Assert.True(Assert.Single(scope.Records).Refused);
         Assert.Empty(Directory.GetFiles(project, "*", SearchOption.AllDirectories));
+    }
+
+    /// <summary>
+    /// Every voice carries Google's description of it, and a script can read them for free: a name alone says nothing
+    /// about how a voice sounds, so without these a character is cast by spending a generation per guess.
+    /// </summary>
+    [Fact]
+    public async Task TestEveryVoiceIsDescribedAndAWrongNameListsThem()
+    {
+        var toolkit = Toolkit(new FakeSpeechGenerator(ServiceWav(1.0)));
+
+        Assert.Equal(30, toolkit.Voices.Length);
+        Assert.Equal(SpeechVoices.Names, toolkit.Voices.Select(v => (string)v["name"]!));
+        Assert.All(toolkit.Voices, v => Assert.False(string.IsNullOrWhiteSpace(v["description"] as string)));
+        Assert.Equal("Gravelly", toolkit.Voices.Single(v => (string)v["name"]! == "Algenib")["description"]);
+
+        var wrong = await toolkit.Speak("Hi.", new SpeechOptions { Voice = "Gacrucks" });
+        Assert.Contains("Did you mean Gacrux", wrong.Error);
+        Assert.Contains("Gacrux (mature)", wrong.Error);
     }
 
     [Fact]
@@ -214,18 +242,20 @@ public class SpeechRequisitionTests : TestsRuntime, IDisposable
     {
         public byte[] Wav { get; } = wav;
         public int Calls { get; private set; }
-        public string? LastPrompt { get; private set; }
+        public string? LastText { get; private set; }
+        public string? LastStyle { get; private set; }
         public string? LastVoice { get; private set; }
         public string Model => SpeechGenerator.DefaultModel;
 
-        public Task<SpeechGenerationResult> GenerateSpeech(string prompt, string voice, string? model = null, CancellationToken ct = default)
+        public Task<SpeechGenerationResult> GenerateSpeech(string text, string? style, string voice, string? model = null, CancellationToken ct = default)
         {
             Calls++;
-            LastPrompt = prompt;
+            LastText = text;
+            LastStyle = style;
             LastVoice = voice;
             return Task.FromResult(new SpeechGenerationResult
             {
-                Success = true, Wav = Wav, Model = model ?? Model, Prompt = prompt, GeneratedUtc = DateTime.UtcNow,
+                Success = true, Wav = Wav, Model = model ?? Model, Prompt = SpeechGenerator.Describe(text, style), GeneratedUtc = DateTime.UtcNow,
                 Charged = true, TotalTokens = 104
             });
         }

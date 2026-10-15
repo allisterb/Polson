@@ -19,8 +19,11 @@ public interface ISpeechGenerator
     /// <summary>The default model.</summary>
     string Model { get; }
 
-    /// <summary>Speaks <paramref name="prompt"/> in a prebuilt voice. Never throws for a remote fault.</summary>
-    Task<SpeechGenerationResult> GenerateSpeech(string prompt, string voice, string? model = null, CancellationToken ct = default);
+    /// <summary>
+    /// Speaks <paramref name="text"/>, verbatim, in a prebuilt voice, delivered as <paramref name="style"/> says when it
+    /// is given. Never throws for a remote fault.
+    /// </summary>
+    Task<SpeechGenerationResult> GenerateSpeech(string text, string? style, string voice, string? model = null, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -29,9 +32,16 @@ public interface ISpeechGenerator
 /// </summary>
 /// <remarks>
 /// <para>
-/// Express-mode auth, as <see cref="ImageGenerator"/>. A line goes in as the text of one user turn, with
-/// <c>ResponseModalities = ["AUDIO"]</c> and a prebuilt voice; the model reads a direction before a colon
-/// (<c>Say warmly: ...</c>) as how to say what follows rather than as words.
+/// Express-mode auth, as <see cref="ImageGenerator"/>. A line goes in as one part of one user turn, with
+/// <c>ResponseModalities = ["AUDIO"]</c> and a prebuilt voice.
+/// </para>
+/// <para>
+/// <b>The direction is the part's <c>speechMetadata.style</c>, never its text.</b> The 3.8 models read a part's text as
+/// a verbatim transcript, so a direction written into it (<c>"shouting: Ahoy!"</c>, the older models' convention) is
+/// spoken aloud: anim3 shipped a keeper saying "Shouting... Ahoy!", found by transcribing the take with the aligner's own
+/// model. Google's guide puts sustained delivery in <c>speech_metadata.style</c> and moments in the text as tags
+/// (<c>&lt;short pause&gt;</c>, <c>&lt;breath&gt;</c>), and a tag is a sound: anim4's <c>&lt;shout&gt; Ahoy!</c> added a
+/// burst and came back "HOHAY". <c>SpeechMetadata</c> reached the .NET SDK in Google.GenAI 1.25.
 /// </para>
 /// <para>
 /// <b>The two generations answer differently.</b> The 2.5 models return bare 16-bit PCM labelled
@@ -65,9 +75,15 @@ public class SpeechGenerator : Runtime, ISpeechGenerator, IDisposable
     #endregion
 
     #region Methods
-    public async Task<SpeechGenerationResult> GenerateSpeech(string prompt, string voice, string? model = null, CancellationToken ct = default)
+    public async Task<SpeechGenerationResult> GenerateSpeech(string text, string? style, string voice, string? model = null, CancellationToken ct = default)
     {
         var useModel = model ?? this.model;
+        var prompt = Describe(text, style);
+        var part = new Part
+        {
+            Text = text,
+            SpeechMetadata = string.IsNullOrWhiteSpace(style) ? null : new SpeechMetadata { Style = style }
+        };
         var config = new GenerateContentConfig
         {
             ResponseModalities = ["AUDIO"],
@@ -78,7 +94,7 @@ public class SpeechGenerator : Runtime, ISpeechGenerator, IDisposable
         try
         {
             var response = await client.Models.GenerateContentAsync(
-                useModel, [new Content { Role = "user", Parts = [new Part { Text = prompt }] }], config, ct);
+                useModel, [new Content { Role = "user", Parts = [part] }], config, ct);
             var blob = response.Candidates?.SelectMany(c => c.Content?.Parts ?? []).Select(p => p.InlineData)
                 .FirstOrDefault(b => b?.Data is not null);
 
@@ -138,8 +154,16 @@ public class SpeechGenerator : Runtime, ISpeechGenerator, IDisposable
     }
 
     /// <summary>Content address of a speech request, and its cache key.</summary>
-    public static string HashOf(string model, string voice, string prompt) =>
-        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"speech|{model}|{voice}|{prompt}")))[..32];
+    /// <remarks>
+    /// <c>speech2</c>, because a line used to be keyed on <c>"style: text"</c> as one prompt, and those takes carry the
+    /// direction spoken aloud: the old keys must never be served as the new request's answer.
+    /// </remarks>
+    public static string HashOf(string model, string voice, string text, string? style) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"speech2|{model}|{voice}|{style ?? ""}|{text}")))[..32];
+
+    /// <summary>The request as provenance records it: the transcript, and the direction it travelled with.</summary>
+    public static string Describe(string text, string? style) =>
+        string.IsNullOrWhiteSpace(style) ? text : $"{text} [speechMetadata.style: {style}]";
 
     public void Dispose()
     {

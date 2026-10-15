@@ -164,7 +164,8 @@ public static class SpeechBackend
                 (Start: Seconds(w, "start") - AlignerLag, End: Seconds(w, "end") - AlignerLag, Score: Seconds(w, "score"))).ToList();
             if (spans.Count != words.Count)
                 throw new InvalidOperationException($"The aligner returned {spans.Count} words for {words.Count}.");
-            return Aligned[key] = new Alignment(doc.RootElement.GetProperty("duration").GetDouble(), spans);
+            var heard = doc.RootElement.TryGetProperty("heard", out var h) && h.ValueKind == JsonValueKind.String ? h.GetString() : null;
+            return Aligned[key] = new Alignment(doc.RootElement.GetProperty("duration").GetDouble(), spans, heard);
         }
     }
 
@@ -247,7 +248,10 @@ public static class SpeechBackend
     #endregion
 
     #region Types
-    /// <summary>A recording's length and, per word in order, where it was said (null where it could not be placed).</summary>
-    internal sealed record Alignment(double Duration, IReadOnlyList<(double? Start, double? End, double? Score)> Words);
+    /// <summary>
+    /// A recording's length; per word in order, where it was said (null where it could not be placed); and what the model
+    /// heard with no line to hold it to, upper-case words, or null from an aligner that does not report it.
+    /// </summary>
+    internal sealed record Alignment(double Duration, IReadOnlyList<(double? Start, double? End, double? Score)> Words, string? Heard = null);
     #endregion
 }

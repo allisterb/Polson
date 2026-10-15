@@ -1209,6 +1209,69 @@ draw(Drawing.squashHead(Drawing.createParametricHead(at(750), { eyeLine: 0.3, mo
 canvas;
 ```
 
+## 8c. A face that acts, on a figure that moves
+
+> **Implemented by**: `Drawing.applyFaceChannels(head, channels, { poses })`, `Drawing.drawFace(ctx, head, look)`.
+
+The example above draws each feature by hand, with default ink, and that is fine for a sheet of three
+heads. It is not how to draw a character who has to *perform*. A face that acts needs a dozen things
+at once: an expression, a blink, lids and brows set by the eye wheel, a nose treatment that suits who
+the character is, a mouth that speaks. `comp.face` does all of them for a free-standing head, but it
+places its own head and cannot follow a body: a head fitted to a leaning figure carries a roll the
+layer does not have. So a figure drawn every frame builds its own head, and the face layer's two steps
+are there to be called on it:
+
+1. **`applyFaceChannels(head, channels, { poses })`** moves the head by the same channels `comp.face`
+   takes: Action Units, the six expressions, Hamm's eye-wheel settings (`upperLid`, `browTop`, ...),
+   and named poses blended by weight, any of them `near.` or `far.` for one side.
+2. **`drawFace(ctx, head, look)`** draws all of it with the same look: skin, ink, ears, eye lines,
+   brows, eyes, the nose treatment, the mouth's shape, the outline.
+
+The same head and look draw the same pixels through either route, because `comp.face` is built from
+these calls. Draw the face inside the figure's lean, then the body over the neck's base, as §8 does.
+
+**Make the head big enough to act.** On a figure framed whole the canon head is a few dozen pixels
+tall and its mouth a few, so a performance is there and cannot be seen. `createHeadForFigure(fig,
+{ scale: 1.5 })` draws a cartoon head half as big again, grown from the chin so it still sits on the
+neck. And because the head is built upright and drawn in the figure's lean, its landmarks are in its
+own frame: `Drawing.headPoint(head, head.mouthGuides.leftCorner)` is where the mouth's corner is on
+the page, which is what a hand cupped to the mouth reaches for.
+
+```javascript
+// A face that acts on a figure that moves: the head fitted to a leaning mannequin, moved by channels, drawn whole.
+const canvas = createCanvas(520, 760);
+const ctx = canvas.getContext('2d');
+ctx.fillStyle = '#f5f2e9'; ctx.fillRect(0, 0, 520, 760);
+
+const fig = Drawing.createMannequinFigure(260, 70, 620, { pose: { spineDeg: 14, neckDeg: -6 }, shoulderTiltDeg: -8 });
+const figGeo = Drawing.createFigureGeometry(fig);
+const body = figGeo.silhouette.subtract(figGeo.groups.head);
+
+// Who he is, then what his face is doing: a half smile, the near brow up, the lids a little lowered.
+let head = Drawing.createHeadForFigure(fig, { yawDeg: 22, character: { jawShape: 0.6, noseLength: 0.4 } });
+head = Drawing.applyFaceChannels(head, { joy: 0.5, 'near.AU2': 0.7, upperLid: 3.6 });
+
+// The whole face in the figure's lean, in one call: a box face, a male nose treatment, a fuller mouth.
+ctx.save();
+ctx.translate(head.fit.pivot.x, head.fit.pivot.y);
+ctx.rotate(head.fit.rollDeg * Math.PI / 180);
+ctx.translate(-head.fit.pivot.x, -head.fit.pivot.y);
+Drawing.drawFace(ctx, head, { geometry: { face: 'box' }, nose: { treatment: 'male2' }, mouth: { full: 0.4 } });
+ctx.restore();
+
+// Then the body, over the neck's base.
+ctx.fillStyle = '#d8d2c4'; ctx.fill(body);
+ctx.strokeStyle = '#1a1a18'; ctx.lineWidth = 2.5; ctx.stroke(body);
+canvas;
+```
+
+**In motion, every channel is a node.** In `comp.drawn`, pass the nodes as values and read them back
+as channels each frame: `Motion.nodes.blinks()` for `AU45`, so the character blinks at irregular
+times; a keyed `joy` or `surprise` that peaks on the stressed beat; and for dialogue, `line.weights()`
+as channels with `line.poses()` as the poses, so the mouth speaks with the rest of the face rather
+than on its own. The face and the body then act together, which is the point: an expression that
+arrives with the gesture reads as one action, and one that does not reads as two.
+
 ## 9. What this does not give you
 
 - **No cartoon canon in numbers.** §8b's sources teach the cartoon head as a shape, an eye line and

@@ -16,7 +16,11 @@ public sealed record SpeechOptions
     /// <summary>One of the prebuilt voices (<see cref="SpeechVoices.Names"/>). Default <c>Kore</c>.</summary>
     public string Voice { get; init; } = "Kore";
 
-    /// <summary>How to say it, in words: <c>warmly</c>, <c>in a whisper</c>, <c>like a tired sailor</c>. Never a person to sound like.</summary>
+    /// <summary>
+    /// How to deliver the whole line, in a few words: <c>shouting over the wind</c>, <c>out of breath</c>, <c>whispered
+    /// urgently</c>. Sent as <c>speechMetadata.style</c>, not spoken. Never a person to sound like, and not age, gender or
+    /// accent, which belong to the voice; a moment within the line goes in the text as a tag, <c>&lt;short pause&gt;</c>.
+    /// </summary>
     public string? Style { get; init; }
 
     /// <summary>Where in the project to write the WAV. <c>audio/&lt;id&gt;.wav</c> when unset.</summary>
@@ -26,20 +30,32 @@ public sealed record SpeechOptions
     public string? Model { get; init; }
 }
 
-/// <summary>The prebuilt voices the Gemini speech models offer, by name.</summary>
+/// <summary>The prebuilt voices the Gemini speech models offer, by name, each with what it sounds like.</summary>
 public static class SpeechVoices
 {
     /// <summary>
-    /// Every name, so a misspelling is refused with the nearest rather than sent to fail. The list is Google's for
-    /// the Gemini TTS models; <c>Kore</c> and <c>Puck</c> were heard on this key, 2026-10-14.
+    /// Every voice and Google's one-word description of it, as its speech-generation page gives them (read
+    /// 2026-10-14, ai.google.dev/gemini-api/docs/speech-generation). The descriptions are how a voice is chosen for a
+    /// character; the names alone say nothing. <c>Kore</c> and <c>Puck</c> were heard on this key, 2026-10-14.
     /// </summary>
-    public static readonly string[] Names =
-    [
-        "Achernar", "Achird", "Algenib", "Algieba", "Alnilam", "Aoede", "Autonoe", "Callirrhoe", "Charon", "Despina",
-        "Enceladus", "Erinome", "Fenrir", "Gacrux", "Iapetus", "Kore", "Laomedeia", "Leda", "Orus", "Pulcherrima",
-        "Puck", "Rasalgethi", "Sadachbia", "Sadaltager", "Schedar", "Sulafat", "Umbriel", "Vindemiatrix", "Zephyr",
-        "Zubenelgenubi"
-    ];
+    public static readonly IReadOnlyDictionary<string, string> Descriptions = new Dictionary<string, string>
+    {
+        ["Achernar"] = "Soft", ["Achird"] = "Friendly", ["Algenib"] = "Gravelly", ["Algieba"] = "Smooth",
+        ["Alnilam"] = "Firm", ["Aoede"] = "Breezy", ["Autonoe"] = "Bright", ["Callirrhoe"] = "Easy-going",
+        ["Charon"] = "Informative", ["Despina"] = "Smooth", ["Enceladus"] = "Breathy", ["Erinome"] = "Clear",
+        ["Fenrir"] = "Excitable", ["Gacrux"] = "Mature", ["Iapetus"] = "Clear", ["Kore"] = "Firm",
+        ["Laomedeia"] = "Upbeat", ["Leda"] = "Youthful", ["Orus"] = "Firm", ["Pulcherrima"] = "Forward",
+        ["Puck"] = "Upbeat", ["Rasalgethi"] = "Informative", ["Sadachbia"] = "Lively", ["Sadaltager"] = "Knowledgeable",
+        ["Schedar"] = "Even", ["Sulafat"] = "Warm", ["Umbriel"] = "Easy-going", ["Vindemiatrix"] = "Gentle",
+        ["Zephyr"] = "Bright", ["Zubenelgenubi"] = "Casual"
+    };
+
+    /// <summary>Every name, in order, so a misspelling is refused with the nearest rather than sent to fail.</summary>
+    public static readonly string[] Names = [.. Descriptions.Keys.Order(StringComparer.Ordinal)];
+
+    /// <summary><c>Algenib (gravelly)</c>: a voice as a reader picks it.</summary>
+    public static string Describe(string name) =>
+        Descriptions.TryGetValue(name, out var d) ? $"{name} ({d.ToLowerInvariant()})" : name;
 }
 
 /// <summary>
@@ -76,12 +92,12 @@ public sealed record SpeechAsset : RequisitionResult
     /// <summary>Remedies phrased for a line rather than a picture, where the two differ.</summary>
     public override string Remedy => Failure switch
     {
-        ImageGenerationFailure.SafetyBlocked => "The line or its direction was blocked. Reword it; a direction describes the delivery ('warmly'), never a person.",
+        ImageGenerationFailure.SafetyBlocked => "The line or its direction was blocked. Reword it; a direction describes the delivery ('out of breath'), never a person.",
         ImageGenerationFailure.NotConfigured => "This studio has speech disabled: no credentials are configured. Go without a voice; Motion.speech(text) times a line by the studio's rules.",
         ImageGenerationFailure.BudgetExhausted => "No generation budget remains this session. Time the line without a voice: Motion.speech(text) needs none. Check Assets.budget.remaining first.",
         ImageGenerationFailure.ModelNotFound => "That model is not available on this key. Leave model unset to use the default.",
         ImageGenerationFailure.InvalidRequest => "The request was refused. Read error: check the voice, the path and the line's length, then try once more.",
-        ImageGenerationFailure.RefusedLikeness => "A voice cannot be made to sound like a real person. Describe the delivery instead ('gravelly', 'like a tired sailor').",
+        ImageGenerationFailure.RefusedLikeness => "A voice cannot be made to sound like a real person. Pick the voice by its description (Assets.voices) and describe only the delivery in style ('shouting over the wind').",
         _ => base.Remedy
     };
 

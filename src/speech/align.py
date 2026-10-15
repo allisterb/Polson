@@ -5,10 +5,15 @@
 Request: `{"audio": "C:/.../line.wav", "words": ["WHO", "KNEW", "BOB", ...]}`: a 16-bit PCM WAV, any rate, mono or
 stereo, and the words as spoken (numbers already spelled out), in order. Answer, one entry per word in that order:
 
-    {"duration": 4.81, "words": [{"word": "WHO", "start": 0.26, "end": 0.48, "score": 0.93}, ...]}
+    {"duration": 4.81, "heard": "WHO KNEW BOB ...", "words": [{"word": "WHO", "start": 0.26, "end": 0.48, "score": 0.93}, ...]}
 
 `start` and `end` are seconds into the recording; `score` is the model's mean confidence over the word's letters, 0 to
 1. A word with no letters the model knows comes back with `start` and `end` null.
+
+`heard` is what the model hears with no line to hold it to: the likeliest letter in each frame, repeats and blanks
+collapsed (greedy CTC decoding of the same emission, so it costs nothing more). Forced alignment cannot report a word
+the line does not have; it folds it into a neighbour. anim3's take said "Shouting... Ahoy!", and the aligner gave
+"Ahoy" 1.05 s at 0.71 while `heard` would have read SHOUTING A HOY. The caller compares the two.
 
 **How.** wav2vec 2.0 base, fine-tuned on LibriSpeech's 960 hours to emit English letters (torchaudio's
 WAV2VEC2_ASR_BASE_960H bundle; MIT), gives every 20 ms frame a probability for each letter, the apostrophe, the word
@@ -60,6 +65,16 @@ def read_wav(path: str):
     return samples, rate
 
 
+def heard(emission, labels) -> str:
+    """What the recording says by itself: the best label per frame, repeats and blanks collapsed, words upper-case."""
+    out, prev = [], None
+    for k in emission[0].argmax(-1).tolist():
+        if k != prev and k != 0:
+            out.append(labels[k])
+        prev = k
+    return " ".join("".join(out).replace("|", " ").split())
+
+
 def align(torch, torchaudio, bundle, model, audio: str, words: list[str]) -> dict:
     samples, rate = read_wav(audio)
     waveform = torch.from_numpy(samples).unsqueeze(0)
@@ -74,6 +89,7 @@ def align(torch, torchaudio, bundle, model, audio: str, words: list[str]) -> dic
     # Each word's letters the model knows, separators between: "WHO|KNEW|BOB". A hyphen and anything else it has no
     # label for is dropped, so X-RAY is the letters XRAY.
     labels = bundle.get_labels()
+    said = heard(emission, labels)
     index = {c: i for i, c in enumerate(labels)}
     letters = [[index[c] for c in w.upper() if c in index and c not in ("|", "-")] for w in words]
     targets, owner = [], []
@@ -84,7 +100,8 @@ def align(torch, torchaudio, bundle, model, audio: str, words: list[str]) -> dic
             targets.append(index["|"]); owner.append(None)
         targets.extend(ls); owner.extend([i] * len(ls))
     if not targets:
-        return {"duration": duration, "words": [{"word": w, "start": None, "end": None, "score": None} for w in words]}
+        return {"duration": duration, "heard": said,
+                "words": [{"word": w, "start": None, "end": None, "score": None} for w in words]}
 
     path, scores = torchaudio.functional.forced_align(emission, torch.tensor([targets], dtype=torch.int32), blank=0)
     spans = torchaudio.functional.merge_tokens(path[0], scores[0].exp())
@@ -100,7 +117,7 @@ def align(torch, torchaudio, bundle, model, audio: str, words: list[str]) -> dic
             continue
         out.append({"word": word, "start": round(mine[0].start * seconds, 4), "end": round(mine[-1].end * seconds, 4),
                     "score": round(sum(s.score for s in mine) / len(mine), 4)})
-    return {"duration": round(duration, 4), "words": out}
+    return {"duration": round(duration, 4), "heard": said, "words": out}
 
 
 def main() -> int:

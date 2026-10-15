@@ -277,6 +277,34 @@ public class MotionSpeechTests : TestsRuntime
         finally { Directory.Delete(dir, recursive: true); }
     }
 
+    /// <summary>
+    /// What a recording says beyond its line is found by comparing what the model hears with the line, letter by letter:
+    /// anim3's "Shouting... Ahoy!" and a direction read in full are caught, while the model's rough spellings of the line
+    /// itself ("A HOY", "BAR" for "Bear") are not mistaken for extra words.
+    /// </summary>
+    [Theory]
+    [InlineData("SHOUTING A HOY BEAR AWAY YOU'RE ON THE ROCKS", "SHOUTING")]
+    [InlineData("AN OLD GRUFF SAILOR SHOUTING AHOY BAR AWAY YOU'RE ON THE ROCKS", "OLD GRUFF SAILOR SHOUTING")]
+    [InlineData("A HOY BEAR AWAY YOU'RE ON THE ROCKS", "")]
+    [InlineData("AHOY BAR AWAY YOURE ON THE ROCKS", "")]
+    [InlineData("AHOY BEAR AWAY YOU'RE ON THE ROCKS AND HURRY", "AND HURRY")]
+    public void WordsTheRecordingSaysBeyondTheLineAreFound(string heard, string unsaid)
+    {
+        string[] line = ["AHOY", "BEAR", "AWAY", "YOU'RE", "ON", "THE", "ROCKS"];
+        Assert.Equal(unsaid, string.Join(" ", MotionSpeech.Unheard(heard, line)));
+    }
+
+    /// <summary>The aligner reports what it heard, and a recording of the line alone leaves nothing unsaid.</summary>
+    [Fact]
+    public void ARecordingOfTheLineAloneLeavesNothingUnsaid()
+    {
+        if (!SpeechBackend.AlignAvailable || Recording() is not { } wav) return;
+        var s = Say(ProbeLine, ("audio", wav));
+        Assert.False(string.IsNullOrWhiteSpace(s.Heard));
+        Assert.Contains("MOON", s.Heard);
+        Assert.Empty(s.Unsaid);
+    }
+
     [Fact]
     public void BadAudioIsRefused()
     {

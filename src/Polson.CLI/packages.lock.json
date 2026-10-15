@@ -134,8 +134,8 @@
       },
       "Google.GenAI": {
         "type": "Transitive",
-        "resolved": "1.20.0",
-        "contentHash": "F0aq9U6WpvoHgrYRxmYjBPpsgY9o8vobYf1E/ibnntX42oxL3IW6LGwJfLjp9RvYTTsp6IwVDKnUJ+Yylpaj/Q==",
+        "resolved": "1.26.0",
+        "contentHash": "oR6n2UDzR8JDdqzWQzodZ+O2ajYHvjbFOD99rYuqULDxxoYiusmchzuLzbflskQ2hBtn2R25+gVSlp6yqJG2Jg==",
         "dependencies": {
           "Google.Apis.Auth": "1.69.0",
           "Microsoft.Extensions.AI.Abstractions": "10.6.0",
@@ -764,7 +764,7 @@
         "dependencies": {
           "Google.Cloud.AIPlatform.V1": "[3.76.0, )",
           "Google.Cloud.AIPlatform.V1Beta1": "[1.0.0-beta85, )",
-          "Google.GenAI": "[1.20.0, )",
+          "Google.GenAI": "[1.26.0, )",
           "Polson.Runtime": "[0.1.0, )",
           "SkiaSharp": "[4.148.0, )",
           "SkiaSharp.NativeAssets.Linux": "[4.148.0, )"

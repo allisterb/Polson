@@ -24,6 +24,8 @@ proceed as though the director had chosen it.
 | Who moves, and what each one is doing | |
 | What it starts from and where it ends | |
 | The one moment a reader must not miss | |
+| The dialogue: each line, word for word, who says it, and when | |
+| Each speaker's voice, and how the line is said (or "no dialogue") | |
 | Length in seconds, and whether it loops | |
 | Frame rate (24, or 12 for movement on twos) | |
 | Surface size in pixels | |
@@ -32,3 +34,6 @@ proceed as though the director had chosen it.
 > **One action, a few seconds.** "A sailor's day on deck" is a film; "a sailor hauls the rope, the
 > sail snaps full, and she staggers" is an action. Every beat has to be timed and checked, and a
 > length you cannot list beat by beat is too long for one run.
+>
+> **A line or two, not a scene.** The film is made to its dialogue, so the dialogue sets its length:
+> "Land ho!" or one sentence fits a few seconds; a conversation does not.
