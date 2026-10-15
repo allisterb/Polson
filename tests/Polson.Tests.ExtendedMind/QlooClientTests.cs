@@ -196,6 +196,20 @@ public class QlooClientTests : TestsRuntime
         Assert.Contains(r.Warnings, w => w.Contains("signal.location.query"));
     }
 
+    /// <summary>Measured 2026-10-15: three age bands in one city returned identical tags.</summary>
+    [Fact]
+    public async Task Insights_WarnsThatTagResultsIgnoreAge()
+    {
+        var (client, _) = MakeClient(EmptyInsights);
+
+        var r = await client.Insights(new QlooQuery
+        {
+            ["filter.type"] = "urn:tag", ["signal.location.query"] = "Port Sample", ["signal.demographics.age"] = "55_and_older",
+        });
+
+        Assert.Contains(r.Warnings, w => w.Contains("ignores age and gender") && w.Contains("describe the place"));
+    }
+
     [Fact]
     public async Task Insights_AnEmptyAnswerIsASuccessThatSaysWhatItMightMean()
     {

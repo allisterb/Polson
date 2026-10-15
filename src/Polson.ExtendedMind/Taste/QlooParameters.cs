@@ -95,7 +95,12 @@ public static class QlooParameters
         }
 
         var demographic = query.Names.Where(n => n.StartsWith("signal.demographics.", StringComparison.Ordinal)).ToArray();
-        if (demographic.Length > 0 && !query.Names.Any(n => n.StartsWith("signal.location", StringComparison.Ordinal))
+        if (demographic.Length > 0 && type == "urn:tag")
+        {
+            warnings.Add("Qloo ignores age and gender for filter.type urn:tag: 55+, 45–54 and under-25 in one city returned "
+                       + "identical tags (2026-10-15), while two cities differed. These tags describe the place, not the audience.");
+        }
+        else if (demographic.Length > 0 && !query.Names.Any(n => n.StartsWith("signal.location", StringComparison.Ordinal))
             && type != "urn:demographics")
         {
             warnings.Add("A demographic signal without signal.location.query returns close to the all-time popular "

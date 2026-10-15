@@ -231,6 +231,98 @@ public class TasteToolTests : TestsRuntime, IDisposable
             ["urn:tag:aesthetic_property:qloo", "urn:tag:motif:qloo", "urn:tag:genre:media"],
             DrawingMcpTools.TasteTagTypes("aesthetic, motif, urn:tag:genre:media, urn:entity:movie"));
 
+    /// <summary>
+    /// A synthetic Qloo for a profile: the audience's list (age signal present) is E-1, E-2, E-3; the place's baseline
+    /// is E-2, E-9; tag results are the place's aesthetics.
+    /// </summary>
+    private void ServeProfile() =>
+        DrawingMcpTools.TasteClient = new QlooClient("test-key", new HttpClient(new StubHandler(r =>
+        {
+            Interlocked.Increment(ref calls);
+            var q = Uri.UnescapeDataString(r.RequestUri!.Query);
+            string Entity(string id, string name) => $$"""{ "name": "{{name}}", "entity_id": "{{id}}", "type": "urn:entity", "subtype": "urn:entity:movie", "query": { "affinity": 0.9 } }""";
+            var body = q.Contains("filter.type=urn:tag")
+                ? """{ "results": { "tags": [ { "id": "urn:tag:aesthetic_property:qloo:sample_bold", "name": "Sample Bold Prints", "type": "urn:tag", "subtype": "urn:tag:aesthetic_property:qloo" } ] } }"""
+                : q.Contains("signal.demographics.age")
+                    ? $$"""{ "results": { "entities": [ {{Entity("E-1", "Audience Only")}}, {{Entity("E-2", "Everyone")}}, {{Entity("E-3", "Also Theirs")}} ] }, "query": { "localities": { "signal": { "entity_id": "L-1", "name": "Port Sample", "disambiguation": "Port Sample, Examplia" } } } }"""
+                    : $$"""{ "results": { "entities": [ {{Entity("E-2", "Everyone")}}, {{Entity("E-9", "Baseline Only")}} ] } }""";
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
+        })), QlooClient.HackathonBaseUrl);
+
+    [Fact]
+    public async Task Profile_KeepsWhatTheAudienceLovesThatItsPlaceDoesNot()
+    {
+        ServeProfile();
+        var tools = new DrawingMcpTools();
+
+        var reply = await tools.Taste("profile", audience: """{"location":"Port Sample","age":"55_and_older"}""", type: "movie", label: "older Port Sample");
+
+        Assert.True(reply["ok"]!.GetValue<bool>(), reply.ToJsonString());
+        Assert.Equal(3, reply["requests"]!.GetValue<int>());                     // audience, baseline, place tags
+        var movies = reply["domains"]![0]!;
+        Assert.Equal(["Audience Only", "Also Theirs"], movies["distinctive"]!.AsArray().Select(e => e!["name"]!.GetValue<string>()));
+        Assert.Equal([1, 3], movies["distinctive"]!.AsArray().Select(e => e!["rank"]!.GetValue<int>()));
+        Assert.Equal(1, movies["sharedCount"]!.GetValue<int>());
+        Assert.Equal("Sample Bold Prints", reply["placeAesthetics"]![0]!.GetValue<string>());
+        Assert.Equal("Port Sample, Examplia", reply["locality"]!["disambiguation"]!.GetValue<string>());
+        Assert.Equal(3, calls);
+    }
+
+    [Fact]
+    public async Task Profile_TheBaselineDropsTheAgeAndTheFloorIsApplied()
+    {
+        string? baselineQuery = null, audienceQuery = null;
+        DrawingMcpTools.TasteClient = new QlooClient("test-key", new HttpClient(new StubHandler(r =>
+        {
+            var q = Uri.UnescapeDataString(r.RequestUri!.Query);
+            if (!q.Contains("urn:tag")) { if (q.Contains("signal.demographics.age")) audienceQuery = q; else baselineQuery = q; }
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("""{ "results": { "entities": [], "tags": [] } }""", Encoding.UTF8, "application/json") };
+        })), QlooClient.HackathonBaseUrl);
+
+        var reply = await new DrawingMcpTools().Taste("profile", audience: """{"location":"Port Sample","age":"55_and_older"}""", type: "artist");
+
+        Assert.Contains("filter.popularity.min=0.5", audienceQuery);
+        Assert.Contains("signal.location.query=Port Sample", baselineQuery);
+        Assert.DoesNotContain("signal.demographics", baselineQuery);
+        Assert.Contains(reply["warnings"]!.AsArray(), w => w!.GetValue<string>().Contains("nothing distinctive"));
+    }
+
+    [Theory]
+    [InlineData("""{"age":"55_and_older"}""", null, "needs a location")]
+    [InlineData("""{"location":"Port Sample"}""", "movie,tag", "not an entity type")]
+    [InlineData(null, null, "needs the audience's place")]
+    public async Task Profile_RefusalsSendNothing(string? audience, string? type, string expected)
+    {
+        ServeProfile();
+
+        var reply = await new DrawingMcpTools().Taste("profile", audience: audience, type: type);
+
+        Assert.False(reply["ok"]!.GetValue<bool>());
+        Assert.Contains(expected, reply["error"]!.GetValue<string>());
+        Assert.Equal(0, calls);
+    }
+
+    [Fact]
+    public async Task Profile_AScriptReadsTheWholeProfile()
+    {
+        ServeProfile();
+        var tools = new DrawingMcpTools();
+        var id = (await tools.Taste("profile", audience: """{"location":"Port Sample","age":"55_and_older"}""", type: "movie"))["id"]!.GetValue<string>();
+
+        var result = await tools.ExecuteScript($$"""
+            const p = Taste.get('{{id}}');
+            log(JSON.stringify({ first: p.profile.domains[0].distinctive[0].name, flat: p.entities.length,
+                                 place: p.profile.placeAesthetics.tags[0].name, age: p.profile.audience.age }));
+            """, render: false);
+
+        Assert.True(result.Success, result.Error);
+        var read = JsonNode.Parse(result.Logs.Single(l => l.StartsWith("[LOG] {"))["[LOG] ".Length..])!;
+        Assert.Equal("Audience Only", read["first"]!.GetValue<string>());
+        Assert.Equal(2, read["flat"]!.GetValue<int>());
+        Assert.Equal("Sample Bold Prints", read["place"]!.GetValue<string>());
+        Assert.Equal("55_and_older", read["age"]!.GetValue<string>());
+    }
+
     [Theory]
     [InlineData("film", "urn:entity:movie")]
     [InlineData("tv", "urn:entity:tv_show")]

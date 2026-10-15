@@ -7,7 +7,7 @@
 
 ## 1. Why Measure at All
 
-> **Implemented by**: `bitmap.getPixel(...)`, `bitmap.diff(...)`, `bitmap.rowProfile(...)`, `bitmap.palette(...)`. Signatures at `polson://sdk/core/Skia`.
+> **Implemented by**: `bitmap.getPixel(...)`, `bitmap.diff(...)`, `bitmap.rowProfile(...)`, `bitmap.palette(...)`, `bitmap.colorfulness(...)`. Signatures at `polson://sdk/core/Skia`.
 
 Looking at a render tells you a layer is "too bright". It does not tell you **which** of three quite different things went wrong:
 
@@ -180,6 +180,32 @@ Now `bands` is the notan: how much of the frame sits in each value band, and whe
 > [!IMPORTANT]
 > `highContrast` **changes the image so you can see the fault**. It does not tell you whether the fault is still there afterwards. That distinction is the whole of the incident in §1: applying a filter is a way of looking, and a critique that ends with a filter has looked twice and measured nothing. Read the bands before and after, and compare them.
 
+### How colourful — `colorfulness`
+
+`bitmap.colorfulness(options?)` reduces the frame to one number: 0 for a greyscale image, rising as the colour gets both more saturated and more varied. It is Hasler and Süsstrunk's metric (SPIE 5007, 2003, §7), which combines the spread and the mean of two opponent channels, red against green and yellow against blue. They fitted it to twenty viewers rating the colourfulness of 84 photographs in seven categories, and their Table 2 (p. 6) places those categories on the scale: about 15 *slightly*, 33 *moderately*, 45 *averagely*, 59 *quite*, 82 *highly* and 109 *extremely* colourful. It is also the largest single term in the model Reinecke and colleagues used to score websites' colourfulness (CHI '13), the measure behind their finding that preferred colourfulness differs by country and by age (CHI '14).
+
+Its use here is **comparison**: did the variant the direction asked to be warmer and brighter come out more colourful than the restrained one, and by how much? Measure both, and say so in the check.
+
+```javascript
+// Two variants of one passage of colour: a warm, saturated direction and a restrained one.
+// In a run these are Skia.Image.load('artifacts/…') of the two finished posters.
+const variant = (a, b) => {
+    const canvas = createCanvas(200, 100);
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = a; ctx.fillRect(0, 0, 100, 100);
+    ctx.fillStyle = b; ctx.fillRect(100, 0, 100, 100);
+    return canvas.toBitmap();
+};
+const warm = variant('#e2572b', '#f2b134');
+const restrained = variant('#9c8f84', '#b9b1a6');
+log(`warm ${warm.colorfulness().toFixed(1)} against restrained ${restrained.colorfulness().toFixed(1)}`);
+if (warm.colorfulness() <= restrained.colorfulness()) exit('the warm direction did not come out more colourful');
+```
+
+Two limits, and both are about what the number cannot carry. **It is not a grade**: that scale was fitted to photographs, not posters, and the Reinecke figures come from half-second first impressions of website screenshots, so treat any absolute target drawn from them as an extrapolation. **And the people it is measured against are a weak lever**: in that study age, gender, country and education together accounted for a small share of how appealing a design was — most of the difference was the individual viewer and the particular design. Use it to show a variant did what its direction said, not to claim an audience will like it.
+
+Fully transparent pixels are left out, and a region with nothing visible throws rather than returning 0, which would read as greyscale. Pass `{ x, y, width, height }` to measure the subject without the background.
+
 ---
 
 ## 7. Cropping, Scaling and Copies
@@ -262,6 +288,7 @@ if (!Stage.check('accent under 15%', accent < 0.15, 'measured ' + (accent * 100)
 | Is the shape right? | `bitmap.rowProfile(color, opts)` | Per-row `start` / `end` / `extent` / `count` |
 | Is the tonal balance right? | `bitmap.palette(count, opts)` | `color` / `share` / `pixels`, transparent ignored |
 | Is the *value* right? | `applyColorFilter(colorMatrix(...))` then `palette` | The notan, as numbers |
+| Which variant is more colourful? | `bitmap.colorfulness(opts)` | One number, 0 for grey; compare, do not grade |
 | Just let me see the values | `Skia.ColorFilter.highContrast(...)` | A look, not a measurement |
 | Read back a previous stage | `Skia.Image.load('artifacts/…')` | Project-relative, like `outFile` |
 | Hold a "before" | `canvas.toBitmap()`, `bitmap.clone()` | Independent copies |
