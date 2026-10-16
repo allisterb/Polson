@@ -351,6 +351,71 @@ public partial class DrawingMcpTools
         return full;
     }
 
+    /// <summary>
+    /// Writes <c>outPdf</c> from the returned paper, or says why it cannot, on the response the agent reads.
+    /// </summary>
+    /// <remarks>
+    /// A refusal is a warning rather than a failed call, as <c>outSvg</c>'s is: the script ran and its peek
+    /// is good, and failing the call would hide the render the agent needs to fix the cause.
+    /// </remarks>
+    private void WritePrintPdf(DrawingExecutionResult result, string outPdf, PrintSize size, float bleedPt, float safePt, string? stage, string executionId, string scriptPath)
+    {
+        void Refuse(string message, string reason)
+        {
+            result.Logs.Add($"[WARN] outPdf '{outPdf}' wrote nothing: {message}");
+            Events.Append("render.nopdf", stage, executionId, new Dictionary<string, object?>
+            {
+                ["script"] = scriptPath,
+                ["requested"] = outPdf,
+                ["reason"] = reason
+            });
+        }
+
+        if (!result.RenderedFromPaper || string.IsNullOrWhiteSpace(result.SvgXml))
+        {
+            Refuse("the script did not return a Snap paper, so there is no vector page to print. A raster canvas "
+                + "cannot carry a bleed and prints at whatever resolution it was drawn. Build the poster on "
+                + "Snap(width, height), place any raster material with paper.image(bitmap, x, y, w, h), and return "
+                + "the paper. See polson://manual/14.", "not-a-paper");
+            return;
+        }
+
+        PdfPrintReport report;
+        try
+        {
+            report = SvgPdfWriter.Write(result.SvgXml, ResolveOutputPath(outPdf, nameof(outPdf)), size, bleedPt, safeMarginPt: safePt);
+        }
+        catch (ArgumentException ex)
+        {
+            Refuse(ex.Message, "proportions");
+            return;
+        }
+        catch (InvalidOperationException ex)
+        {
+            // The file exists but lacks its print boxes, which a print shop would misread as a page with no
+            // bleed. Said as plainly as a missing file.
+            Refuse(ex.Message, "boxes");
+            return;
+        }
+
+        result.PdfFilePath = report.Path;
+        result.Logs.Add(PrintPdfRequest.Summary(outPdf, report, safePt));
+        result.Logs.AddRange(report.Warnings.Select(w => $"[WARN] outPdf '{outPdf}': {w}"));
+
+        Events.Append("render", stage, executionId, new Dictionary<string, object?>
+        {
+            ["script"] = scriptPath,
+            ["artifact"] = Events.Relativize(report.Path),
+            ["format"] = "pdf",
+            ["trimMm"] = FormattableString.Invariant($"{report.Trim.WidthPt / PrintSize.PointsPerMm:0.#}x{report.Trim.HeightPt / PrintSize.PointsPerMm:0.#}"),
+            ["bleedMm"] = Math.Round(report.BleedPt / PrintSize.PointsPerMm, 2),
+            ["bitmaps"] = report.Bitmaps.Count == 0 ? null : report.Bitmaps.Count,
+            ["lowestPpi"] = report.Bitmaps.Count == 0 ? null : Math.Round(report.Bitmaps.Min(b => b.EffectivePpi)),
+            ["unmeasuredImages"] = report.UnplacedBitmaps == 0 ? null : report.UnplacedBitmaps,
+            ["warnings"] = report.Warnings.Count == 0 ? null : report.Warnings
+        });
+    }
+
     [McpServerTool(Name = "Search")]
     [Description("Searches the studio's design knowledge and API reference for passages relevant to a technique, " +
         "and returns them ranked with the SDK calls that implement them. The corpus is the studio manuals — classical " +
@@ -657,6 +722,10 @@ public partial class DrawingMcpTools
         [Description("AVOID THIS. Whether to inline the rendered image into the JSON response as base64 (default: true if outFile is omitted, false if outFile is specified). Base64 inflates the image by a third and the whole of it is delivered as TEXT in your context window - a routine 1200x760 WebP is ~126,000 characters, tens of thousands of tokens, and a PNG is four times that. It is not an image content block, so it costs the window without necessarily being viewable. Pass outFile instead and open the saved path with your host's file/image reader; that is both cheaper and the only way you reliably SEE the render.")] bool? includeBytes = null,
         [Description("Set false for a script that draws nothing you need to look at — a measurement or probe pass that samples pixels, diffs against an earlier stage, or stashes a canvas in Session for the next call. A canvas is otherwise rasterised and encoded whenever the script created one, even when the script returns something else, which costs roughly 150 ms at 1600x1200 for an image nothing reads. Refused together with outFile, which asks for the render this suppresses.")] bool? render = null,
         [Description("Optional path to a JavaScript file to execute INSTEAD of `script`, relative to the project directory (e.g. 'artwork.js'). Use this when iterating on a file you maintain: edit the file with your ordinary editor, then run it — rather than re-sending the whole program on every call. Paths outside the project are refused. Give either `script` or `scriptFile`, never both.")] string? scriptFile = null,
+        [Description("Optional path for a PRINT PDF of the returned paper, relative to the project directory (e.g. 'artifacts/poster.pdf'). Vector: text stays text with its fonts embedded. Needs `pdfSize`, and the script must RETURN a Snap paper — a canvas is refused. The paper is the trimmed page; draw backgrounds and anything touching an edge past the paper's edges by the bleed, or the response warns that the artwork stops at the trim. RGB, not CMYK or PDF/X. See polson://manual/14.")] string? outPdf = null,
+        [Description("The trimmed page size for outPdf: 'A0'-'A6', 'B0'-'B3', 'letter', 'legal', 'tabloid' (named sizes follow the paper's orientation), or width x height with a unit, e.g. '420x594mm', '18x24in'. The paper must be in the same proportions.")] string? pdfSize = null,
+        [Description("Bleed added outside the trim on every side for outPdf, with a unit: '3mm' (default; usual in Europe), '0.125in' (usual in the US), or '0' for none. Ask the print shop.")] string? pdfBleed = null,
+        [Description("How far inside the trim text must stay for outPdf, with a unit: '5mm' by default, '0' to skip. Text closer than this, or past the trim, is warned about by what it says.")] string? pdfSafeMargin = null,
         RequestContext<CallToolRequestParams>? context = null,
         IProgress<ProgressNotificationValue>? progress = null,
         CancellationToken cancellationToken = default)
@@ -744,12 +813,34 @@ public partial class DrawingMcpTools
             // actionable; this one route did not.
             //
             // Checking first also means a bad path costs no execution.
-            foreach (var (candidate, parameterName) in new[] { (outFile, nameof(outFile)), (outSvg, nameof(outSvg)) })
+            foreach (var (candidate, parameterName) in new[] { (outFile, nameof(outFile)), (outSvg, nameof(outSvg)), (outPdf, nameof(outPdf)) })
             {
                 if (string.IsNullOrWhiteSpace(candidate)) continue;
                 try
                 {
                     ResolveOutputPath(candidate, parameterName);
+                }
+                catch (ArgumentException ex)
+                {
+                    Events.Append("script.error", session.Stage, executionId, new Dictionary<string, object?>
+                    {
+                        ["script"] = scriptPath,
+                        ["error"] = ex.Message
+                    });
+                    return new DrawingExecutionResult { Success = false, Error = ex.Message };
+                }
+            }
+
+            // The print page is parsed before the script runs too: a size nobody can print should cost
+            // nothing, and a missing one is a decision the brief has to make rather than a default to guess.
+            PrintSize? printSize = null;
+            var bleedPt = 0f;
+            var safePt = 0f;
+            if (!string.IsNullOrWhiteSpace(outPdf))
+            {
+                try
+                {
+                    (printSize, bleedPt, safePt) = PrintPdfRequest.Parse(outPdf, pdfSize, pdfBleed, pdfSafeMargin, PrintPdfRequest.Tool);
                 }
                 catch (ArgumentException ex)
                 {
@@ -857,6 +948,11 @@ public partial class DrawingMcpTools
                     ["script"] = scriptPath,
                     ["requested"] = outSvg
                 });
+            }
+
+            if (printSize is not null && result.Success)
+            {
+                WritePrintPdf(result, outPdf!, printSize, bleedPt, safePt, session.Stage, executionId, scriptPath);
             }
 
             // `ms` is the script; `encodeMs` is turning its result into pixels. They are recorded

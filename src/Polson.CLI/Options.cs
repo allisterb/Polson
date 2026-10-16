@@ -147,5 +147,17 @@ public class EvalOptions : Options
 
     [Option("svg", Required = false, Default = "output.svg", HelpText = "Output path for the rendered SVG XML file.")]
     public string? OutSvg { get; set; } = "output.svg";
+
+    [Option("pdf", Required = false, HelpText = "Also write a print PDF of the paper, with bleed and print boxes (needs --pdf-size). The paper is the trimmed page.")]
+    public string? OutPdf { get; set; }
+
+    [Option("pdf-size", Required = false, HelpText = "Trimmed page for --pdf: 'A0'-'A6', 'B0'-'B3', 'letter', 'legal', 'tabloid', or '420x594mm' / '18x24in'.")]
+    public string? PdfSize { get; set; }
+
+    [Option("pdf-bleed", Required = false, HelpText = "Bleed for --pdf, with a unit (default: '3mm'; '0.125in' in the US; '0' for none).")]
+    public string? PdfBleed { get; set; }
+
+    [Option("pdf-safe-margin", Required = false, HelpText = "How far inside the trim text must stay for --pdf (default: '5mm'; '0' to skip).")]
+    public string? PdfSafeMargin { get; set; }
     #endregion
 }

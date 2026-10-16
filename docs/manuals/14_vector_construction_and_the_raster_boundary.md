@@ -23,7 +23,7 @@ That is the whole argument. **A vector description is resolution-independent unt
 | The brief says | The deliverable is | Because |
 | :--- | :--- | :--- |
 | "an SVG", "vector", "a logo", "an icon" | a `.svg` file, written with `outSvg` | It will be scaled to sizes nobody has chosen yet |
-| "for print", "a poster", "a book cover" | vector where the artwork allows; otherwise raster at 2 × lpi at final size | The RIP rasterises once, at the device's grid |
+| "for print", "a poster", "a book cover" | a `.pdf` at the trim size with bleed, written with `outPdf` from a paper (§3a); raster material inside it at 2 × lpi at final size | The RIP rasterises once, at the device's grid, and a print shop reads the page size and bleed from the PDF |
 | "a painting", "a texture", "photographic" | raster, and say the pixel dimensions | The content *is* pixels; there is no outline to preserve |
 | nothing about output | render raster, and write `outSvg` too when the scene is vector | It costs one argument and forecloses nothing |
 
@@ -78,7 +78,7 @@ Nothing forces one choice for a whole project. A vector scene can be composited 
 
 ## 3. Getting It Out
 
-> **Implemented by**: the `outSvg` and `outFile` arguments of `ExecuteScript`; `paper.toString()`, `paper.toDataUri(...)`, `paper.toImageBytes(...)` inside a script.
+> **Implemented by**: the `outSvg` and `outFile` arguments of `ExecuteScript` (and `outPdf` for print, §3a); `paper.toString()`, `paper.toDataUri(...)`, `paper.toImageBytes(...)` inside a script.
 
 `ExecuteScript` takes both output arguments, and they are independent:
 
@@ -99,6 +99,52 @@ Inside a script the same markup is `paper.toString()`, which returns the seriali
 > Decide in §2, before the first script. That is the cheapest place to make this decision and the only cheap one.
 
 A mixed script — one that builds a paper, then composites it onto a canvas and returns the canvas — keeps the last paper it made, so `outSvg` still writes the vector half. That is deliberate: a mark built in vector and presented on a raster board should still deliver the mark.
+
+## 3a. A Print PDF — Trim, Bleed and Scale
+
+> **Implemented by**: the `outPdf`, `pdfSize` and `pdfBleed` arguments of `ExecuteScript`.
+
+A print shop works from a PDF, not an SVG. The PDF states the physical page, carries its fonts, and marks the **trim** (where the sheet is cut) and the **bleed** (the margin past the cut that is printed and thrown away). An SVG names its fonts without carrying them and has no idea of a bleed.
+
+```
+ExecuteScript(scriptFile: 'poster.js', outFile: 'artifacts/poster.webp',
+              outSvg: 'artifacts/poster.svg', outPdf: 'artifacts/poster.pdf', pdfSize: 'A2')
+```
+
+- **The same file from the command line:** `polson eval poster.js --pdf poster.pdf --pdf-size A2` runs a script, or `polson eval --svg-in final.svg --pdf final.pdf --pdf-size A2` turns an SVG a run left behind into a print file without rerunning anything. `--pdf-bleed` and `--pdf-safe-margin` match the parameters below, and the output and warnings are word for word the same. A refusal exits non-zero.
+- **`pdfSize` is required.** `'A0'`–`'A6'`, `'B0'`–`'B3'`, `'letter'`, `'legal'`, `'tabloid'`, or dimensions with a unit, width first: `'420x594mm'`, `'18x24in'`. A named size takes the paper's orientation. There is no default, because every size check on a poster depends on the answer.
+- **`pdfBleed` defaults to `'3mm'`.** In the US `'0.125in'` is usual. Give `'0'` for none, and ask the print shop when in doubt. A bare number is refused, because `3` and `0.125` are both a usual bleed in different units.
+- **The paper is the trim.** Its `viewBox` becomes the cut page, as a page does in a layout application. The paper must be in the page's proportions, within 1%, or nothing is written: for A-series that is `Snap(1000, 1414.29)`, and the refusal names the right numbers for any other page.
+- **The bleed is outside the paper.** Anything that touches an edge (a background, a full-bleed photograph, a band of colour) must be **drawn past the paper's edge** by at least the bleed: `p.rect(-20, -20, 1040, 1454.29)` rather than `p.rect(0, 0, 1000, 1414.29)`. The peek and `outFile` show only the trimmed page, so you will not see the overhang there. If artwork reaches the trim and stops, the response warns per edge: `Artwork stops at the trim along the top edge`. That is the classic print fault: a cut that drifts half a millimetre leaves a white sliver.
+- **Keep text inside the safe margin.** `pdfSafeMargin` defaults to `'5mm'`, the middle of the 3–6 mm cutting tolerance print shops quote; `'0'` skips the check. Each text element is rendered on its own and measured by its ink, not its `x`, so a centred line that runs wide is caught. Anything that comes closer to the trim than the margin is named in the response: `"Call 0800 123 456" comes within about 4 mm of the left trim`, or `… crosses the left trim by about 1 mm and will be cut off`. The figure is good to about a millimetre. **It sees `<text>` only**: lettering converted to paths and type drawn into a bitmap are pictures of text, and are not checked. Logos and other marks near the edge aren't checked either.
+- **Lines of type are checked for length and for grouping.** A line is a `<text>` or, for a paragraph built the documented way, each `<tspan>` with its own `y`. A span that only shifts `dx`/`dy` stays part of its line.
+  - **More than 60 characters on a line** is reported with its count. Carter, Day & Meggs put comfortable reading at 60–70 at most (*Typographic Design*, p. 81). Break long copy where the sense breaks.
+  - **A gap that is neither the same group nor a new one** is reported. Within each stack of lines, the tightest gap is taken as the line spacing. A gap from 1.3× to 1.9× that reads as neither, and the warning names the two lines either side of it: `The space between "Saturday mornings in May" and "at the clinic" is 1.5x the tightest line spacing …`. Make it equal, or at least double: the book's worked example uses one unit of space within a group and two between (p. 72).
+  - **Text over a busy or uneven background** is reported. The poster is rendered with its text taken out, and the lightness under each line is sampled at an eighth of its type size, so the figure measures texture at the scale of the strokes, whatever the render resolution. Two figures come out. **Texture** is the mean change in lightness between samples. Flat colour and broad gradients are near 0; a painting or photograph under the line is 3–7; raw noise is about 23. From 3 it is flagged. **Spread** is how far the background runs from dark to light. From 40 points of L* it is flagged, because no single text colour then holds 4.5:1 all along the line. Type over photographs and texture is slow to read (Carter et al., p. 84). The fixes are a panel behind the line, which counts as the background because it is not text, a calmer part of the image, or softening the image under it.
+  - Gaps are measured between **line boxes**, from the font's ascent to its descent, after transforms, and divided by the type size. They are not measured on ink, because descenders and capitals move the inked gap by almost as much as the difference being looked for. Lines side by side are not compared, and rotated lines are left out.
+- **It needs a returned paper.** A script that returns a canvas is refused, even if it built a paper along the way: that paper is only part of the picture, and printing it would drop the raster half. Put raster material inside the paper with `paper.image(bitmap, x, y, w, h)` and return the paper.
+
+The response carries one line that turns the drawing's units into millimetres:
+
+```
+[PDF] artifacts/poster.pdf: trim 420 x 594 mm, bleed 3 mm. One paper unit prints at 0.42 mm, …
+```
+
+**Use it for every size check.** A cap height of 60 units on that page prints at 25.2 mm. That is the number to compare with a legibility floor, not the font size you asked for.
+
+**What it is, and what it is not:**
+
+- **Vector.** Shapes stay shapes, and text stays text with its font embedded as a subset. Effects PDF cannot express (filters, some blends) are rasterised at 300 dpi.
+- **Raster material keeps the resolution it had, and the response measures it.** A bitmap placed on the paper is embedded at its own pixel size, so a 1024 px image across an A2 page prints at about 62 ppi. After writing, the engine reads the PDF back and sizes every bitmap the page draws, after every transform, group and clone, because it measures the PDF rather than the SVG. Any bitmap under **150 ppi** is reported with its printed size, its position on the trim, and the pixels it would need:
+
+  ```
+  [WARN] outPdf 'artifacts/poster.pdf': A 100 x 100 px bitmap prints 210 x 210 mm, at 12 ppi — under 150, …
+         At that size it needs … px for 150 ppi (… for 300), or it must print smaller. It sits … from the top of the trim.
+  ```
+
+  150 ppi is the floor for a poster read from a step away; 300 is the usual target for anything read in the hand. The `[PDF]` line reports the lowest figure on the page even when nothing fails. **Bitmaps used as a pattern fill are not measured**: Skia draws them through a shader, which has no placement to size. The response says so, rather than letting the silence read as a pass. Check those by hand. Effects Skia rasterised itself are measured too, and come out at 300.
+- **RGB, not CMYK.** There is no PDF/X output intent and no conversion. Many digital print shops accept RGB; offset printers usually convert it themselves or ask for PDF/X. Saturated screen greens, blues and oranges print duller.
+- **The TrimBox and BleedBox are written** (Skia writes neither; they are added as an incremental update), so a preflight reads the page correctly. No crop marks are drawn.
 
 ---
 
@@ -509,7 +555,7 @@ error, so it is worth a `Stage.check` on the bounds rather than a glance.
 An honest list, because the failure mode is reaching for a raster capability halfway through a vector scene and rebuilding everything.
 
 > [!NOTE]
-> This section is about capabilities the *surface* lacks. There is a second list — properties the **renderer** accepts and then ignores, so the declaration reaches the file and changes nothing — in `polson://manual/27` §4. `letter-spacing` is the one worth carrying in your head here: it works on canvas and does nothing in SVG, so a tracked wordmark loses its tracking on exactly the surface a wordmark ships on.
+> This section is about capabilities the *surface* lacks. There is a second list — properties the **renderer** accepts and then ignores, so the declaration reaches the file and changes nothing — in `polson://manual/27` §4. `letter-spacing` is the one worth carrying in your head here: it works on canvas and does nothing in SVG, so a tracked wordmark loses its tracking on exactly the surface a wordmark ships on. **Track with `paper.trackedText(x, y, text, tracking, attrs)` instead**: it takes the same units `ctx.letterSpacing` does (`'0.12em'`), honours `text-anchor` for the whole run, and the print checks read the run as one line.
 
 - **No drawing *media*.** `Skia.Brush.*` is a bundle of canvas state — a pencil's granular deposit, a chalk's soft edge — and there is no vector equivalent, because a paper has no context to hold it. §6a1's brush strokes give you the *mark's shape*, not the medium's texture; the two together cover most of what a drawn line is, and the gap that remains is grain rather than form.
 - **No stamped or hatched path effects.** `Skia.PathEffect.stamp` and `.hatch` are canvas-side. A repeated motif along a curve, or hatching as scalable geometry, is raster.

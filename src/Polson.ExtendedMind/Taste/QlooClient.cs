@@ -151,7 +151,19 @@ public sealed class QlooClient : Runtime, IDisposable
         }, cancellationToken);
 
         response.Warn(warnings);
-        if (response.IsEmpty)
+        if (response.IsEmpty && query.Has("filter.results.entities") && query.Names.Any(n => n.StartsWith("signal.", StringComparison.Ordinal)))
+        {
+            // Measured 2026-10-16: with no signal the same ids all come back; with a place signal, an id from that
+            // place's own list comes back and three well-known films did not. The filter narrows what the signals
+            // already return — it does not score an entity of your choosing. A generic "broaden the query" sent a
+            // poster run to the wrong conclusion about its data.
+            response.Warn("Qloo returned none of the entities in filter.results.entities. Under a signal, that filter "
+                        + "keeps only entities already among this audience's results — it narrows them, it does not score "
+                        + "entities you name. None of these are in this audience's list. To ask who an entity appeals to, "
+                        + "use op 'demographics' on it (age and gender); to compare it with what this audience loves, "
+                        + "look for it in op 'profile' or plain 'insights' results.");
+        }
+        else if (response.IsEmpty)
         {
             response.Warn("Qloo returned no results. It also answers this way when a parameter is unsupported for "
                         + "the filter.type, or when the hackathon data has nothing for a place — broaden the query "

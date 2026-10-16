@@ -172,7 +172,7 @@ public static partial class SnapAttributes
 
             case "fontfamily":
             case "font-family":
-                element.FontFamily = valStr;
+                element.FontFamily = SingleQuoted(valStr);
                 break;
 
             case "fontsize":
@@ -346,8 +346,37 @@ public static partial class SnapAttributes
 #pragma warning restore CS0618
         }
 
+        // A fill or stroke that is not a colour used to become black, silently: the poster2 run passed an object
+        // where a colour belonged and its title rendered black with nothing to say why. Refused instead, in the JS
+        // spelling a script author will type — except the CSS keywords, which stay as they were.
+        if (!IsColour(str) && !CssPaintKeywords.Contains(str))
+        {
+            var shown = value is string ? $"'{Shorten(str)}'" : $"a {value.GetType().Name} ({Shorten(str)})";
+            throw new ArgumentException(
+                $"{shown} is not a colour. Give a fill or stroke as '#rrggbb', 'rgb(r, g, b)', 'hsl(h, s%, l%)', a CSS "
+              + "colour name, 'none', or a gradient or pattern from paper.gradient(...) / paper.pattern(...).");
+        }
+
         var color = ParseColor(str);
         return new SvgColourServer(color);
+    }
+
+    /// <summary>CSS keywords a paint may legitimately be, left as they always were.</summary>
+    private static readonly HashSet<string> CssPaintKeywords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "currentColor", "inherit", "initial", "unset", "context-fill", "context-stroke",
+    };
+
+    private static string Shorten(string s) => s.Length > 40 ? s[..39] + "…" : s;
+
+    /// <summary>Whether <paramref name="str"/> is a colour <see cref="ParseColor"/> understands, rather than one it falls back to black for.</summary>
+    internal static bool IsColour(string str)
+    {
+        if (string.IsNullOrWhiteSpace(str)) return false;
+        var s = str.Trim();
+        if (s.StartsWith('#'))
+            return s.Length is 4 or 5 or 7 or 9 && System.Linq.Enumerable.All(s[1..], Uri.IsHexDigit);
+        return RgbRegex().IsMatch(s) || HslRegex().IsMatch(s) || Color.FromName(s).IsKnownColor;
     }
 
     public static Color ParseColor(string? colorStr)
@@ -1062,6 +1091,24 @@ public static partial class SnapAttributes
             _ => null
         };
     #endregion
+
+    /// <summary>
+    /// A <c>font-family</c> list with its double-quoted names single-quoted — the same list to CSS and SVG.
+    /// </summary>
+    /// <remarks>
+    /// Svg.Skia 5.2.1 measures a <c>text-anchor</c> offset with a different face than it draws when a
+    /// double-quoted name sits in a list: <c>"Agency FB", Bahnschrift, sans-serif</c> at <c>middle</c> was drawn
+    /// about 85 of 1000 units left of centre, while <c>getBBox()</c> — which measures with the drawn face — reported
+    /// it centred. A lone quoted name, a single-quoted list and an unquoted list all centre correctly (probed
+    /// 2026-10-16, after the poster1 run found it). Manual 11 tells agents to write exactly the failing spelling,
+    /// so it is rewritten here rather than warned about. A name that itself contains an apostrophe keeps its
+    /// double quotes, since single-quoting it would break the name.
+    /// </remarks>
+    internal static string SingleQuoted(string families) =>
+        families.Contains('"') ? DoubleQuotedName().Replace(families, "'$1'") : families;
+
+    [GeneratedRegex("\"([^\"']*)\"")]
+    private static partial Regex DoubleQuotedName();
 
     /// <summary>Unit suffixes <see cref="ParseUnit"/> understands, longest first so `px` wins over `x`.</summary>
     private static readonly string[] Suffixes = ["px", "em", "%"];

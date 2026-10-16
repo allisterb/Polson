@@ -9,6 +9,10 @@
 > when the answer is vector, and pass **both** `outFile` and `outSvg` on every stage that draws one —
 > the render is what the director looks at, the SVG is what they asked for. `polson://manual/14`
 > covers the decision and the vector API.
+>
+> **A brief for print is answered by a PDF.** Return a paper in the page's proportions and pass
+> `outPdf` with `pdfSize` (`'A2'`, `'18x24in'`) and, if the print shop says so, `pdfBleed`. Draw
+> backgrounds past the paper's edges into the bleed. Manual 14 §3a covers it.
 
 **Write these with your host's ordinary file-writing tool**, as plain files in this project
 directory. They are the one category of file you author yourself: `scripts/` is written for you by

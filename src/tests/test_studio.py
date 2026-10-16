@@ -1048,6 +1048,62 @@ class ArtifactRouteTests(unittest.TestCase):
             self.assertEqual(page.status_code, 404, attempt)
             self.assertNotIn(b"never", page.content)
 
+    # region Print PDFs and the director's documents
+    def _record(self, *events) -> None:
+        """Writes `server.jsonl` the way the MCP server does."""
+        events_dir = self.root / "acme" / "events"
+        events_dir.mkdir(exist_ok=True)
+        (events_dir / "server.jsonl").write_text(
+            "\n".join(json.dumps(e) for e in events) + "\n", encoding="utf-8")
+
+    def _supplied(self) -> None:
+        """What a director attaches: a report and a photograph, under `documents/`."""
+        documents = self.root / "acme" / "documents"
+        documents.mkdir(exist_ok=True)
+        (documents / "report.pdf").write_bytes(b"%PDF client figures")
+        (documents / "photo.jpg").write_bytes(b"client photo")
+
+    def test_a_print_pdf_the_engine_wrote_is_served_inline(self):
+        (self.root / "acme" / "artifacts" / "poster.pdf").write_bytes(b"%PDF the print file")
+        self._record({"type": "render", "artifact": "artifacts/poster.pdf", "format": "pdf"})
+
+        page = self.client.get("/runs/acme-1/artifact/artifacts/poster.pdf")
+
+        self.assertEqual(page.status_code, 200)
+        self.assertEqual(page.content, b"%PDF the print file")
+        self.assertTrue(page.headers["content-type"].startswith("application/pdf"), page.headers["content-type"])
+        self.assertEqual(page.headers["content-disposition"], 'inline; filename="poster.pdf"')
+        self.assertEqual(page.headers["x-content-type-options"], "nosniff")
+
+    def test_a_pdf_the_record_does_not_name_is_refused(self):
+        """A suffix is not enough for a PDF: it is the commonest thing a director supplies."""
+        (self.root / "acme" / "notes.pdf").write_bytes(b"%PDF never")
+        (self.root / "acme" / "artifacts" / "poster.pdf").write_bytes(b"%PDF never")
+        # Named, but as something else: only a `pdf` render is outPdf's.
+        self._record({"type": "render", "artifact": "artifacts/poster.pdf", "format": "webp"},
+                     {"type": "script.ok", "artifact": "notes.pdf", "format": "pdf"})
+
+        for attempt in ("notes.pdf", "artifacts/poster.pdf"):
+            page = self.client.get(f"/runs/acme-1/artifact/{attempt}")
+            self.assertEqual(page.status_code, 404, attempt)
+            self.assertNotIn(b"never", page.content)
+
+    def test_the_directors_documents_are_never_served(self):
+        """`documents/` is refused whatever the suffix, and even when a render event names a file there.
+
+        Before 2026-10-16 a supplied photograph at `documents/photo.jpg` was reachable by name: the
+        route takes a path and `.jpg` is an image suffix.
+        """
+        self._supplied()
+        self._record({"type": "render", "artifact": "documents/report.pdf", "format": "pdf"})
+
+        for attempt in ("documents/report.pdf", "documents/photo.jpg", "Documents/photo.jpg",
+                        "artifacts/../documents/photo.jpg"):
+            page = self.client.get(f"/runs/acme-1/artifact/{attempt}")
+            self.assertEqual(page.status_code, 404, attempt)
+            self.assertNotIn(b"client", page.content)
+    # endregion
+
 
 class InterjectionTests(unittest.TestCase):
     """Speaking to a run that is already going.
@@ -1559,6 +1615,21 @@ class DeliverableRouteTests(unittest.TestCase):
         path = self.root / "acme" / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(body)
+
+    def test_the_print_pdf_joins_the_finished_piece_last(self):
+        """The PDF is the same piece in its print form: one more button on the row, after the picture."""
+        self._made("artifacts/poster.webp")
+        self._made("artifacts/poster.pdf", b"%PDF")
+        self._render_events(
+            {"type": "render", "ts": "2026-10-16T10:00:00Z", "artifact": "artifacts/poster.pdf", "format": "pdf"},
+            {"type": "render", "ts": "2026-10-16T10:00:00Z", "artifact": "artifacts/poster.webp", "format": "webp"})
+
+        body = self.client.get("/runs/acme-1/deliverables").json()["deliverables"]
+        picture = next(d for d in body if d["kind"] == "render")
+
+        self.assertEqual(picture["name"], "poster")
+        self.assertEqual([f["format"] for f in picture["formats"]], ["webp", "pdf"])
+        self.assertEqual(self.client.get("/runs/acme-1/artifact/artifacts/poster.pdf").status_code, 200)
 
     def test_the_finished_piece_is_one_row_carrying_both_formats(self):
         """A raster and a vector of the same artwork are one deliverable, not two pieces."""

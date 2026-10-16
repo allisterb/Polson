@@ -227,6 +227,18 @@ public partial class DrawingMcpTools
             });
         }
 
+        // Qloo echoes where it placed a location *name*, never one given as an id — and an id is what the tool tells an
+        // agent to pass for an ambiguous place like Lagos. Both poster runs then had nothing in the reply to confirm the
+        // place by. The id came from a `resolve` earlier in this session, so name it from there.
+        var localityNote = (string?)null;
+        if (locality is null && place == "signal.location" && template[place] is string placeId)
+        {
+            locality = ResolvedLocality(registry, placeId);
+            localityNote = locality is null
+                ? $"The location was given as the id {placeId}, which Qloo does not echo and this session never resolved. Resolve it (op 'resolve', type 'locality') to see which place it is."
+                : "Named from this session's resolve: Qloo does not echo a place given by id.";
+        }
+
         object?[] placeTags = [];
         string? tagsRequest = null;
         if (responses.All(r => r.Success))
@@ -280,6 +292,11 @@ public partial class DrawingMcpTools
         };
         if (!result.Ok) { reply["error"] = result.Error; reply["remedy"] = result.Remedy; }
         if (locality is not null) reply["locality"] = new JsonObject { ["name"] = locality.Name, ["disambiguation"] = locality.Disambiguation };
+        if (localityNote is not null)
+        {
+            reply["locality"] ??= new JsonObject { ["id"] = (string?)template[place] };
+            ((JsonObject)reply["locality"]!)["note"] = localityNote;
+        }
         reply["domains"] = new JsonArray([.. domainNodes.Cast<Dictionary<string, object?>>().Select(d => (JsonNode)new JsonObject
         {
             ["type"] = (string?)d["type"],
@@ -370,6 +387,14 @@ public partial class DrawingMcpTools
     }
 
     /// <summary>A short type name to its Qloo URN, or the URN as given; null when it is neither.</summary>
+    /// <summary>A locality this session resolved, by its Qloo id — the name an id-given location never comes back with.</summary>
+    private static QlooLocality? ResolvedLocality(TasteRegistry registry, string id) =>
+        registry.All.Where(r => r.Op == "resolve")
+            .SelectMany(r => r.Entities.OfType<Dictionary<string, object?>>())
+            .Where(e => string.Equals(e.GetValueOrDefault("id") as string, id, StringComparison.OrdinalIgnoreCase))
+            .Select(e => new QlooLocality(id, e.GetValueOrDefault("name") as string ?? id, e.GetValueOrDefault("disambiguation") as string, null, null))
+            .FirstOrDefault();
+
     internal static string? TasteType(string? type) => Trimmed(type)?.ToLowerInvariant() switch
     {
         null => null,

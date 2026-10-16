@@ -42,6 +42,7 @@ from orchestrator import csm
 from orchestrator.events import read_events
 
 from . import archive
+from . import direction as direction_mod
 from . import projects
 from . import observe as observe_mod
 from .runs import DEFAULT_PROMPT, Registry, Run, StudioError
@@ -98,11 +99,28 @@ FORMATTER = HtmlFormatter(style="friendly", cssclass="code", linenos="table", li
 
 #: What a render can produce, and therefore the whole of what the artifact route will serve.
 #:
-#: `outFile` writes webp, png or jpeg; `outSvg` writes svg; `saveVideo` writes mp4 or webm. Nothing else
-#: is an artifact, so nothing else is reachable by a visitor-supplied name — see `serve_artifact`, which
-#: resolves against the project root rather than a single directory and needs this to keep that boundary
-#: narrow. The spoken lines in `audio/` are deliberately not here: the film carries them.
-ARTIFACT_SUFFIXES = frozenset({".webp", ".png", ".jpg", ".jpeg", ".svg", ".mp4", ".webm"})
+#: `outFile` writes webp, png or jpeg; `outSvg` writes svg; `saveVideo` writes mp4 or webm; `outPdf` writes
+#: pdf. Nothing else is an artifact, so nothing else is reachable by a visitor-supplied name — see
+#: `serve_artifact`, which resolves against the project root rather than a single directory and needs this
+#: to keep that boundary narrow. The spoken lines in `audio/` are deliberately not here: the film carries them.
+ARTIFACT_SUFFIXES = frozenset({".webp", ".png", ".jpg", ".jpeg", ".svg", ".mp4", ".webm", ".pdf"})
+
+#: Suffixes served only when the run record says the engine wrote that very file.
+#:
+#: **A suffix is not enough for a PDF**, because a PDF is the commonest thing a director supplies: a
+#: client's report under `documents/` for `Documents.ask` to read. Every other suffix above is something
+#: only a render produces in practice; this one is not. So a PDF is served when a `render` event in the
+#: project's `server.jsonl` names exactly that path with format `pdf` — which only `outPdf` writes, after
+#: the engine's own containment — and refused otherwise, however it got there.
+RECORDED_ONLY_SUFFIXES = frozenset({".pdf"})
+
+#: Folders of the director's own material, never served by any route whatever the suffix.
+#:
+#: `documents/` holds supplied files — PDFs, and images too, since `Documents.ask` reads `.png`, `.jpg`
+#: and `.webp`. The deliverables route keeps it out by having no path parameter; the artifact route has
+#: one, so it says so explicitly. Until 2026-10-16 it did not, and a supplied photograph at
+#: `documents/x.jpg` was reachable by name.
+PRIVATE_FOLDERS = frozenset({"documents"})
 
 #: Prose, so no line numbers. A drawing script is cited by line and a report is not.
 PROSE = HtmlFormatter(style="friendly", cssclass="code")
@@ -134,6 +152,9 @@ PROSE = HtmlFormatter(style="friendly", cssclass="code")
 #: worth. That is the order a judge wants them in, and the page shows them in the order given.
 DELIVERABLES: tuple[tuple[str, str], ...] = (
     ("brief.md", "the commission, as the agent received it"),
+    # The poster workflow's: every visual choice and the evidence it rests on, Qloo or research. Second,
+    # because it is what a judge of a taste-grounded poster reads straight after the brief.
+    ("direction.md", "why it looks like this: every choice and the evidence behind it"),
     ("artwork.js", "the drawing itself, as code"),
     ("accuracy.md", "what was checked against a source, and what could not be"),
     ("findings.md", "the agent's own account of friction, gaps and surprise"),
@@ -471,7 +492,8 @@ def create_app(root: Path | None = None, registry: Registry | None = None,
         """
         run = found(app.state.registry, run_id)
 
-        if Path(name).suffix.lower() not in ARTIFACT_SUFFIXES:
+        suffix = Path(name).suffix.lower()
+        if suffix not in ARTIFACT_SUFFIXES or private(name):
             # Refused on the name alone, before touching the disk: whether the file exists is not
             # something a visitor should be able to learn about a path we would never serve.
             raise HTTPException(status_code=404, detail=f"not an artifact: {name}")
@@ -481,9 +503,21 @@ def create_app(root: Path | None = None, registry: Registry | None = None,
         except StudioError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
+        if private(path.relative_to(Path(run.project.root).resolve()).as_posix()):
+            # The same rule after resolution, so `artifacts/../documents/x.jpg` cannot walk round it.
+            raise HTTPException(status_code=404, detail=f"not an artifact: {name}")
+
+        if suffix in RECORDED_ONLY_SUFFIXES and not recorded_render(run, path):
+            raise HTTPException(status_code=404, detail=f"not an artifact: {name}")
+
         if not path.is_file():
             raise HTTPException(status_code=404, detail=f"no such artifact: {name}")
 
+        if suffix == ".pdf":
+            # Inline, so a click opens it in the browser's viewer; named, so saving it keeps the name.
+            return FileResponse(path, media_type="application/pdf",
+                                headers={"Content-Disposition": f'inline; filename="{path.name}"',
+                                         "X-Content-Type-Options": "nosniff"})
         return FileResponse(path)
 
     @app.get("/runs/{run_id}/deliverables")
@@ -523,8 +557,13 @@ def create_app(root: Path | None = None, registry: Registry | None = None,
                 continue
             if not path.is_file():
                 continue
-            written.append({"kind": "document", "name": name, "what": what,
-                            "bytes": path.stat().st_size})
+            entry: dict[str, Any] = {"kind": "document", "name": name, "what": what,
+                                     "bytes": path.stat().st_size}
+            # The direction also feeds a panel of its own (`/why`). Said here, so the page asks the listing which
+            # document that is rather than naming one in its code.
+            if name == "direction.md":
+                entry["panel"] = "why"
+            written.append(entry)
 
         return JSONResponse({"deliverables": written})
 
@@ -581,6 +620,28 @@ def create_app(root: Path | None = None, registry: Registry | None = None,
 
         return HTMLResponse(highlight(source, JavascriptLexer() if code else MarkdownLexer(),
                                       FORMATTER if code else PROSE))
+
+    @app.get("/runs/{run_id}/why")
+    async def why(run_id: str) -> JSONResponse:
+        """*Why it looks like this*: `direction.md` as choices beside their evidence, with the Taste queries cited.
+
+        The poster workflow's argument is that every visual choice rests on evidence, and this is where a judge
+        checks it without reading Markdown tables. Read from the one fixed name, `direction.md`, through the same
+        containment as every deliverable; a run without one is a 404 and the page shows no panel. The Taste
+        queries come from this run's own record, so a `t5` in a row opens the request that produced it — the
+        Qloo request line, never the key, which the server never records.
+        """
+        run = found(app.state.registry, run_id)
+        try:
+            path = contain(run.project.root, "direction.md")
+        except StudioError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        if not path.is_file():
+            raise HTTPException(status_code=404, detail="not written yet: direction.md")
+
+        text = path.read_text(encoding="utf-8", errors="replace")
+        events = read_events(run.project.server_events)
+        return JSONResponse(direction_mod.explain(text, events, run.since))
     # endregion
 
     return app
@@ -607,11 +668,40 @@ def contain(root: Path, name: str) -> Path:
     return candidate
 
 
+def private(relative: str) -> bool:
+    """Whether a project-relative path lies in one of the director's own folders."""
+    first = relative.replace("\\", "/").lstrip("/").split("/", 1)[0].lower()
+    return first in PRIVATE_FOLDERS
+
+
+def recorded_render(run: Run, path: Path) -> bool:
+    """Whether the project's server record has a `render` event naming exactly this file as a PDF.
+
+    Compared on resolved paths, so the record's `artifacts/poster.pdf` matches a request for it however
+    it was spelt. Any run in the project counts: the record outlives runs, and an earlier run's print file
+    is still one the engine wrote.
+    """
+    root = Path(run.project.root).resolve()
+    for event in read_events(run.project.server_events):
+        if event.get("type") != "render" or (event.get("format") or "").lower() != "pdf":
+            continue
+        artifact = event.get("artifact")
+        if not artifact:
+            continue
+        try:
+            if contain(root, artifact) == path:
+                return True
+        except StudioError:
+            continue
+    return False
+
+
 #: Rasters before vector in the finished-piece row. The first entry is what the page shows when a
 #: reader clicks, and a raster is the one that always displays; the SVG is the file they want *after*
 #: seeing it. Not a claim about which is the real deliverable — for a vector piece that is the SVG.
 #: A video comes first of all: it is the film with its sound, and a WebP beside it is a silent copy.
-FORMAT_ORDER = ("mp4", "webm", "webp", "png", "jpeg", "jpg", "svg")
+#: The print PDF comes last: it is the file sent to a print shop, and no browser shows it as a picture.
+FORMAT_ORDER = ("mp4", "webm", "webp", "png", "jpeg", "jpg", "svg", "pdf")
 
 
 def final_render(run: Run) -> dict[str, Any] | None:

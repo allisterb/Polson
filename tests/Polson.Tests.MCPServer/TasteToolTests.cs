@@ -323,6 +323,54 @@ public class TasteToolTests : TestsRuntime, IDisposable
         Assert.Equal("55_and_older", read["age"]!.GetValue<string>());
     }
 
+    private const string PlaceId = "1b96428c-0000-4000-8000-000000000001";
+
+    /// <summary>
+    /// Qloo as it answers a location given by id: a search names the place, and insights carry no locality echo.
+    /// </summary>
+    private void ServeProfileById() =>
+        DrawingMcpTools.TasteClient = new QlooClient("test-key", new HttpClient(new StubHandler(r =>
+        {
+            Interlocked.Increment(ref calls);
+            var q = Uri.UnescapeDataString(r.RequestUri!.Query);
+            var body = r.RequestUri!.AbsolutePath.Contains("/search")
+                ? $$"""{ "results": [ { "name": "Port Sample", "entity_id": "{{PlaceId}}", "types": ["urn:entity:locality"], "disambiguation": "Port Sample, Examplia" } ] }"""
+                : q.Contains("filter.type=urn:tag")
+                    ? """{ "results": { "tags": [] } }"""
+                    : """{ "results": { "entities": [ { "name": "Theirs", "entity_id": "E-1", "type": "urn:entity", "subtype": "urn:entity:movie", "query": { "affinity": 0.9 } } ] } }""";
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
+        })), QlooClient.HackathonBaseUrl);
+
+    /// <summary>
+    /// A place given by id is named in the reply from the session's own resolve, since Qloo echoes only names.
+    /// </summary>
+    /// <remarks>Both poster runs passed Lagos by id, as the tool tells them to, and had nothing in the reply to confirm it by.</remarks>
+    [Fact]
+    public async Task Profile_APlaceGivenByIdIsNamedFromTheSessionsResolve()
+    {
+        ServeProfileById();
+        var tools = new DrawingMcpTools();
+
+        await tools.Taste("resolve", name: "Port Sample", type: "locality");
+        var reply = await tools.Taste("profile", audience: $$"""{"location":"{{PlaceId}}","age":"24_and_younger"}""", type: "movie");
+
+        Assert.True(reply["ok"]!.GetValue<bool>(), reply.ToJsonString());
+        Assert.Equal("Port Sample", reply["locality"]!["name"]!.GetValue<string>());
+        Assert.Equal("Port Sample, Examplia", reply["locality"]!["disambiguation"]!.GetValue<string>());
+        Assert.Contains("Qloo does not echo", reply["locality"]!["note"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task Profile_AnUnresolvedIdSaysHowToFindOutWhereItIs()
+    {
+        ServeProfileById();
+
+        var reply = await new DrawingMcpTools().Taste("profile", audience: $$"""{"location":"{{PlaceId}}","age":"24_and_younger"}""", type: "movie");
+
+        Assert.Equal(PlaceId, reply["locality"]!["id"]!.GetValue<string>());
+        Assert.Contains("never resolved", reply["locality"]!["note"]!.GetValue<string>());
+    }
+
     [Theory]
     [InlineData("film", "urn:entity:movie")]
     [InlineData("tv", "urn:entity:tv_show")]

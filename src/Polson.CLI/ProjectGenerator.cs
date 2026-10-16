@@ -47,7 +47,7 @@ internal static class ProjectGenerator
     /// exists at all, and which types it offers — is discovered from its embedded templates, so
     /// adding either is adding a file rather than editing this class.
     /// </remarks>
-    static readonly Dictionary<string, string> DefaultTypes = new() { ["harness"] = "image", ["drawing"] = "review", ["comic"] = "review" };
+    static readonly Dictionary<string, string> DefaultTypes = new() { ["harness"] = "image", ["drawing"] = "review", ["comic"] = "review", ["poster"] = "film" };
 
     /// <summary>Used when the optional third positional is omitted.</summary>
     const string DefaultSdk = "agy";
@@ -598,6 +598,10 @@ internal static class ProjectGenerator
         // plus the passes that follow seeing what came back. Longer than `storyboard_quick`, whose
         // whole point is that it buys nothing, and far shorter than `painting`, which constructs.
         ["cover"] = 25,
+        // Forty-five against `cover`'s twenty-five: the film type makes two posters, not one, and before
+        // either there is a profile per audience (seconds per request, about seven requests each) and a
+        // direction to write. No measured run behind it yet; tune after the first.
+        ["poster"] = 45,
         // Thirty against `drawing`'s forty-five: one scene, constructed from mannequins and taken no
         // further than a rough, with no turns to wait on a director between. Seven stages, each one
         // script and one check, and the figures are built by calls rather than by hand.
@@ -1352,6 +1356,10 @@ internal static class ProjectGenerator
         // workflow cannot compose. 16 is here rather than in any other workflow because this is the
         // only one where buying material is the intended route rather than a last resort.
         ["cover"] = ["09", "16", "20"],
+        // Composition and type are the craft; 14 because its §3a is the print file every comp writes and
+        // its size arithmetic. 16 (requisition) and 13 (cultural research) are named by URI where they
+        // apply rather than imported, to keep the instructions inside the host's comfortable size.
+        ["poster"] = ["09", "11", "14"],
         // Gesture is the method and the line of action is its first step; composition carries the
         // mood family, staging the camera if the brief implies one. 23 is absent: at sketch size the
         // head's tilt and the look carry the expression, and the instructions name it by URI.

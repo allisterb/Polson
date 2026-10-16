@@ -760,6 +760,23 @@ internal class Program : Runtime
         // two stay unconfigured here because a metered surface should be turned on deliberately.
         ConfigurePhotos();
 
+        // The print page is read before anything runs, as ExecuteScript reads it: a size nobody can print
+        // should cost nothing, and a missing one is a decision rather than a default to guess.
+        (PrintSize Size, float BleedPt, float SafePt)? print = null;
+        if (!string.IsNullOrWhiteSpace(opts.OutPdf))
+        {
+            try
+            {
+                print = PrintPdfRequest.Parse(opts.OutPdf, opts.PdfSize, opts.PdfBleed, opts.PdfSafeMargin, PrintPdfRequest.Cli);
+            }
+            catch (ArgumentException ex)
+            {
+                AnsiConsole.MarkupLine($"[bold red]error:[/] {Markup.Escape(ex.Message)}");
+                Environment.ExitCode = 1;
+                return Task.CompletedTask;
+            }
+        }
+
         var engine = new JsDrawingEngine();
         DrawingExecutionResult result;
 
@@ -833,7 +850,55 @@ internal class Program : Runtime
             AnsiConsole.MarkupLine($"[bold green]Rendered SVG saved:[/] {svgPath} ({result.SvgXml.Length:N0} chars)");
         }
 
+        if (print is { } page && result.Success)
+        {
+            WritePrintPdf(opts.OutPdf!, page.Size, page.BleedPt, page.SafePt, result,
+                fromFile: !string.IsNullOrWhiteSpace(opts.SvgIn));
+        }
+
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Writes <c>--pdf</c> and prints what <c>ExecuteScript</c>'s <c>outPdf</c> would have said, word for word.
+    /// </summary>
+    /// <remarks>
+    /// Unlike the tool, a refusal here exits non-zero: <c>eval --pdf</c> is asked for one file, and a script calling
+    /// it needs to know the file is not there. The warnings — bleed, resolution, margins, lines — do not: the PDF
+    /// was written, and whether a warning matters is the reader's call.
+    /// </remarks>
+    static void WritePrintPdf(string outPdf, PrintSize size, float bleedPt, float safePt, DrawingExecutionResult result, bool fromFile)
+    {
+        void Refuse(string message)
+        {
+            AnsiConsole.MarkupLine($"[bold red]error:[/] {Markup.Escape($"--pdf '{outPdf}' wrote nothing: {message}")}");
+            Environment.ExitCode = 1;
+        }
+
+        // An SVG read from disk is a vector page by definition; a script must have returned its paper, or the
+        // paper is only part of the picture — the same rule, and the same reason, as the tool's.
+        if (string.IsNullOrWhiteSpace(result.SvgXml) || !(fromFile || result.RenderedFromPaper))
+        {
+            Refuse("the script did not return a Snap paper, so there is no vector page to print. Build the poster on "
+                + "Snap(width, height), place raster material with paper.image(bitmap, x, y, w, h), and return the paper.");
+            return;
+        }
+
+        PdfPrintReport report;
+        try
+        {
+            report = SvgPdfWriter.Write(result.SvgXml, Path.GetFullPath(outPdf), size, bleedPt, safeMarginPt: safePt);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            Refuse(ex.Message);
+            return;
+        }
+
+        AnsiConsole.MarkupLine($"[bold green]Print PDF saved:[/] {Markup.Escape(report.Path)}");
+        AnsiConsole.MarkupLine($"[grey]{Markup.Escape(PrintPdfRequest.Summary(outPdf, report, safePt))}[/]");
+        foreach (var warning in report.Warnings)
+            AnsiConsole.MarkupLine($"[yellow][[WARN]][/] {Markup.Escape(warning)}");
     }
 
     /// <summary>Whether <c>--svg</c> is still at its default rather than having been asked for.</summary>

@@ -432,3 +432,48 @@ label.modebox .swatch { width: 9px; height: 9px; border-radius: 2px; display: in
 }
 
 .delivered .copy:hover { color: var(--accent); border-color: var(--accent); border-style: solid; }
+
+/* Why it looks like this. One block per section of `direction.md`, a row per choice: the choice, its evidence,
+   and the kind of evidence as a badge. Read top to bottom like the document, but scannable by badge. */
+.direction .whylead { max-width: 60rem; line-height: 1.5; }
+.direction .whysec { margin: 1.1rem 0 0; }
+.direction .whysec h3 { font-size: .95rem; margin: 0 0 .3rem; }
+.direction .whysec .lead { color: var(--dim); font-size: .85rem; margin: 0 0 .5rem; max-width: 60rem; line-height: 1.45; }
+.direction .whyrows { list-style: none; margin: 0; padding: 0; display: grid; gap: .3rem; }
+.direction .whyrow {
+  display: grid; grid-template-columns: minmax(12rem, 2fr) 3fr auto; gap: .9rem; align-items: start;
+  padding: .55rem .8rem; background: var(--panel); border: 1px solid var(--line); border-radius: 3px;
+  font-size: .87rem; line-height: 1.45;
+}
+.direction .whyrow.k-qloo { border-left: 3px solid var(--accent); }
+.direction .whyrow.k-research { border-left: 3px solid var(--good); }
+.direction .whyrow.k-assumed { border-left: 3px solid #c08a1e; }
+.direction .choice { font-weight: 600; }
+.direction .evidence { color: #2c3a48; }
+.direction .kinds { display: flex; flex-wrap: wrap; gap: .25rem; justify-content: flex-end; }
+.direction .kind {
+  font-size: .7rem; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap;
+  padding: .1rem .4rem; border-radius: 2px; border: 1px solid var(--line); color: var(--dim); background: var(--ground);
+}
+.direction .kind.k-qloo { color: #fff; background: var(--accent); border-color: var(--accent); }
+.direction .kind.k-research { color: #fff; background: var(--good); border-color: var(--good); }
+.direction .kind.k-brief { color: var(--ink); border-color: var(--ink); }
+.direction .kind.k-assumed { color: #7a5410; background: #fbf0d9; border-color: #e0c27f; }
+.direction code { font-family: var(--mono); font-size: .82em; }
+
+/* A Taste reference opens in place: what the query was for, then the request itself. */
+.direction details.tq { display: inline-block; margin: .15rem .25rem 0 0; vertical-align: top; }
+.direction details.tq summary {
+  cursor: pointer; list-style: none; font-family: var(--mono); font-size: .74rem; color: var(--accent);
+  border: 1px solid var(--line); border-radius: 2px; padding: 0 .35rem; background: #f3f8fa;
+}
+.direction details.tq summary::-webkit-details-marker { display: none; }
+.direction details.tq[open] { display: block; }
+.direction details.tq .tqbody { display: block; margin: .3rem 0 .2rem; padding: .4rem .55rem; background: var(--ground);
+  border: 1px solid var(--line); border-radius: 3px; font-size: .78rem; }
+.direction details.tq .tqbody code { display: block; margin-top: .25rem; word-break: break-all; color: var(--dim); }
+
+@media (max-width: 760px) {
+  .direction .whyrow { grid-template-columns: 1fr; gap: .35rem; }
+  .direction .kinds { justify-content: flex-start; }
+}

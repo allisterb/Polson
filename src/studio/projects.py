@@ -56,6 +56,8 @@ WORKFLOWS: dict[str, tuple[str, ...]] = {
     "storyboard": (),
     "storyboard_cast": (),
     "cover": (),
+    # Taste-grounded posters (Qloo). `film` first; `outreach` follows when its template is written.
+    "poster": ("film",),
     # The constructed route through a single scene, from Stanchfield's gesture method. No types.
     "sketch_scene": (),
     # One action, keyed and checked, delivered as an animated WebP (Manual 25 §10). No types.

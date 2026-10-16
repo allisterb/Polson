@@ -62,6 +62,19 @@ public class DrawingExecutionResult
 
     public string? SvgFilePath { get; set; }
 
+    public string? PdfFilePath { get; set; }
+
+    /// <summary>
+    /// Whether the rendered image is <see cref="SvgXml"/> — false when the script returned a canvas and
+    /// <see cref="SvgXml"/> is only the last paper it happened to build.
+    /// </summary>
+    /// <remarks>
+    /// <c>outSvg</c> may save that paper, as the vector half of a mixed script. <c>outPdf</c> may not: a
+    /// print file is the whole picture, and the paper alone would print a poster with its raster half missing.
+    /// </remarks>
+    [JsonIgnore]
+    public bool RenderedFromPaper { get; set; }
+
     /// <summary>
     /// Identifies this tool call in the run's record. Cite it when referring to a specific render.
     /// </summary>

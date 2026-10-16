@@ -71,8 +71,9 @@ public class VectorTrackedTextTests : TestsRuntime
 
     /// <summary>The run reaches the deliverable as real, individually placed text elements.</summary>
     /// <remarks>
-    /// Not tspans: this renderer's serialiser drops child nodes of a <c>&lt;text&gt;</c> entirely, so a
-    /// span-per-glyph run is absent from the markup and from the render while reporting success.
+    /// One <c>&lt;text&gt;</c> per glyph rather than tspans, because scripts address the glyphs as the group's children.
+    /// The reason first recorded here — that the serialiser dropped a <c>&lt;text&gt;</c>'s children — no longer holds
+    /// (checked 2026-10-16), and repeating it in Manual 27 sent the poster1 run away from per-line tspans.
     /// </remarks>
     [Fact]
     public void TestEachGlyphIsItsOwnTextElementInTheMarkup()
