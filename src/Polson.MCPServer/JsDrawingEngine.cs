@@ -827,6 +827,7 @@ public partial class JsDrawingEngine : Runtime
             {
                 result.SvgXml = finalPaper.ToString();
                 result.ImageBytes = Encode(() => RenderPaper(finalPaper, defaultWidth, defaultHeight, format, quality));
+                result.RenderedFromPaper = true;
             }
             else if (papers.Count > 0)
             {
@@ -859,6 +860,7 @@ public partial class JsDrawingEngine : Runtime
                 var finalPaper = papers.Last();
                 result.SvgXml = finalPaper.ToString();
                 result.ImageBytes = Encode(() => RenderPaper(finalPaper, defaultWidth, defaultHeight, format, quality));
+                result.RenderedFromPaper = true;
             }
         }
         catch (PromiseRejectedException prex)

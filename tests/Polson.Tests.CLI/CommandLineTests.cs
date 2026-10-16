@@ -86,6 +86,89 @@ public class CommandLineTests : TestsRuntime
         Assert.Contains("eval", output, StringComparison.Ordinal);
     }
 
+    /// <summary>A temporary directory, and the arguments that keep <c>eval</c>'s image and SVG out of the repository root.</summary>
+    static (string Dir, string[] Outputs) Scratch()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "polson-cli-pdf-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        return (dir, ["--img", Path.Combine(dir, "out.webp"), "--svg", Path.Combine(dir, "out.svg")]);
+    }
+
+    const string BledPoster =
+        "const p = Snap(1000, 1414.29); p.rect(-20, -20, 1040, 1454.29).attr({ fill: '#c0392b' }); "
+      + "p.text(100, 300, 'Get screened').attr({ 'font-size': 80 }); p;";
+
+    /// <summary><c>eval --pdf</c> writes the print file and reports it as <c>outPdf</c> does.</summary>
+    [Fact]
+    public async Task TestEvalWritesAPrintPdf()
+    {
+        var (dir, outputs) = Scratch();
+        try
+        {
+            var script = Path.Combine(dir, "poster.js");
+            File.WriteAllText(script, BledPoster);
+            var pdf = Path.Combine(dir, "poster.pdf");
+
+            var (exitCode, output) = await RunAsync(TimeSpan.FromSeconds(60),
+                ["eval", script, .. outputs, "--pdf", pdf, "--pdf-size", "A2"]);
+
+            Assert.True(exitCode == 0, output);
+            Assert.True(File.Exists(pdf), output);
+            Assert.Contains("/TrimBox", System.Text.Encoding.Latin1.GetString(File.ReadAllBytes(pdf)));
+            Assert.Contains("trim 420 x 594 mm, bleed 3 mm", output, StringComparison.Ordinal);
+            Assert.Contains("One paper unit prints at 0.42 mm", output, StringComparison.Ordinal);
+        }
+        finally { Directory.Delete(dir, recursive: true); }
+    }
+
+    /// <summary>An SVG a run left behind can be made into a print file without rerunning anything.</summary>
+    [Fact]
+    public async Task TestEvalMakesAPrintPdfFromAnSvgOnDisk()
+    {
+        var (dir, outputs) = Scratch();
+        try
+        {
+            var svg = Path.Combine(dir, "final.svg");
+            File.WriteAllText(svg, """
+                <svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1414.29" viewBox="0 0 1000 1414.29">
+                  <rect x="-20" y="-20" width="1040" height="1454.29" fill="#1a5276"/>
+                </svg>
+                """);
+            var pdf = Path.Combine(dir, "final.pdf");
+
+            var (exitCode, output) = await RunAsync(TimeSpan.FromSeconds(60),
+                ["eval", "--svg-in", svg, .. outputs, "--pdf", pdf, "--pdf-size", "A2", "--pdf-bleed", "0.125in"]);
+
+            Assert.True(exitCode == 0, output);
+            Assert.True(File.Exists(pdf), output);
+            Assert.Contains("bleed 3.2 mm", output, StringComparison.Ordinal);
+        }
+        finally { Directory.Delete(dir, recursive: true); }
+    }
+
+    /// <summary>A refusal exits non-zero, so <c>polson eval … --pdf … || exit 1</c> fires.</summary>
+    [Theory]
+    [InlineData("needs --pdf-size", false)]
+    [InlineData("did not return a Snap paper", true)]
+    public async Task TestEvalPdfRefusalsFailTheProcess(string expected, bool withSize)
+    {
+        var (dir, outputs) = Scratch();
+        try
+        {
+            var script = Path.Combine(dir, "canvas.js");
+            File.WriteAllText(script, "const c = createCanvas(100, 141); c.getContext('2d').fillRect(0, 0, 10, 10); c;");
+            var pdf = Path.Combine(dir, "poster.pdf");
+            string[] size = withSize ? ["--pdf-size", "A2"] : [];
+
+            var (exitCode, output) = await RunAsync(TimeSpan.FromSeconds(60), ["eval", script, .. outputs, "--pdf", pdf, .. size]);
+
+            Assert.NotEqual(0, exitCode);
+            Assert.Contains(expected, output.ReplaceLineEndings(" "), StringComparison.Ordinal);
+            Assert.False(File.Exists(pdf));
+        }
+        finally { Directory.Delete(dir, recursive: true); }
+    }
+
     /// <summary>Asking for help is not a failure, so it keeps exit 0.</summary>
     [Fact]
     public async Task TestAskingForHelpSucceeds()

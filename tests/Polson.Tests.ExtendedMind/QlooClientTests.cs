@@ -221,6 +221,31 @@ public class QlooClientTests : TestsRuntime
         Assert.True(r.IsEmpty);
         Assert.Contains(r.Warnings, w => w.Contains("no results") && w.Contains("unsupported"));
     }
+
+    /// <summary>
+    /// An empty answer to <c>filter.results.entities</c> under a signal says why, and what to ask instead.
+    /// </summary>
+    /// <remarks>
+    /// The poster1 run asked how two audiences ranked three comparable films, got nothing twice, and was told only to
+    /// broaden the query. Measured afterwards: the filter keeps only entities already in the audience's results.
+    /// </remarks>
+    [Fact]
+    public async Task Insights_AnEmptyEntityFilterUnderASignalExplainsItself()
+    {
+        var (client, _) = MakeClient(EmptyInsights);
+
+        var r = await client.Insights(new QlooQuery
+        {
+            ["filter.type"] = "urn:entity:movie", ["filter.results.entities"] = "A,B,C",
+            ["signal.location.query"] = "Port Sample", ["signal.demographics.age"] = "55_and_older",
+        });
+
+        Assert.True(r.IsEmpty);
+        var warning = Assert.Single(r.Warnings, w => w.Contains("filter.results.entities"));
+        Assert.Contains("keeps only entities already among this audience's results", warning);
+        Assert.Contains("'demographics'", warning);
+        Assert.DoesNotContain(r.Warnings, w => w.Contains("broaden"));
+    }
     #endregion
 
     #region Request and response

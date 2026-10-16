@@ -170,6 +170,20 @@
     </h2>
     <ul id="deliverables"></ul>
   </section>
+
+  {#- The poster workflow's argument, made checkable: every choice in `direction.md` beside the evidence it rests
+      on, with the kind of evidence marked and each Taste result it cites one click from the request behind it.
+      Hidden unless the run wrote a direction — no other workflow does. -#}
+  <section class="direction" id="why" hidden>
+    <h2>Why it looks like this
+      <span class="hint" id="whytally"></span>
+    </h2>
+    <p class="hint whylead">Each choice beside its evidence. <b>Qloo</b> lines rest on what the audience measurably loves
+      — open a <code>t</code> reference for the request that produced it. <b>Research</b> lines cite a source;
+      <b>assumed</b> lines are answers the agent proposed and the director let stand. Qloo's results are aggregate
+      tastes of a place and an age band, never facts about a person.</p>
+    <div id="whybody"></div>
+  </section>
 </main>
 
 <footer class="site">
@@ -410,9 +424,7 @@
     // A document appearing mid-run is worth showing then rather than at the end. Most workflows
     // write their report last, but `findings.md` is meant to be kept open as the work happens, and a
     // run that is halted by the breaker never reaches its own ending.
-    if (kind === 'tool.call' && /(^|_)write_script$/.test((event.tool || '').replace(/^mcp__[^_]+__/, ''))) {
-      refreshDeliverables();
-    }
+    if (changesDeliverables(kind, event)) refreshDeliverables();
 
     if (kind === 'question.open') ask(event);
     if (kind === 'question.closed') settle(event.id);
@@ -478,7 +490,9 @@
       // One pass can render several things: a raster and an SVG, and with Motion an animation, its
       // contact sheet and the still the script returned. `shows` ranks them; a later render of equal
       // rank wins. The sheet is also kept on its own, so the pane can show it beside the animation.
-      if (kind === 'render' && event.artifact) {
+      // A print PDF is a file to hand on, not a picture: an <img> cannot show it, and a pass whose only
+      // render was its PDF would otherwise show a broken image. It is offered in the finished-piece row.
+      if (kind === 'render' && event.artifact && !isPdf(event.artifact)) {
         if (event.motion === 'sheet') { made.sheet = event.artifact; made.sheetV = n; }
         const rank = shows(event);
         if (!made.artifact || rank >= made.rank) {
@@ -1197,7 +1211,20 @@
   lightboxVideo.addEventListener('click', (e) => e.stopPropagation());
 
   // An MP4 or WebM is a film with sound, played by a <video>; everything else the studio renders is an image.
+  // Whether an event can have changed what the run has delivered, so the listing is worth asking for again.
+  // **Every host's write tool, and every render.** It used to be Antigravity's `write_script` alone, and a run
+  // watched from Claude Code writes with `Write` and `Edit` and sends no `run.end` — so the listing was read once,
+  // when only `brief.md` existed, and the finished piece, the direction and the findings never appeared until a
+  // reload (poster2, 2026-10-16). A render changes the finished-piece row whoever wrote it.
+  function changesDeliverables(kind, event) {
+    if (kind === 'render') return true;
+    if (kind !== 'tool.call') return false;
+    const tool = (event.tool || '').replace(/^mcp__[^_]+__/, '');
+    return /(^|_)(write_script|write|edit|multiedit|notebookedit)$/i.test(tool);
+  }
+
   function isVideo(path) { return /\.(mp4|webm)$/i.test(path || ''); }
+  function isPdf(path) { return /\.pdf$/i.test(path || ''); }
 
   // Puts a render in the overlay in whichever element can show it, and empties the other.
   function showMedia(src, label) {
@@ -1311,6 +1338,87 @@
     deliverables.innerHTML = items.map(
       (d) => d.kind === 'render' ? finalRow(d) : docRow(d)).join('');
     delivered.hidden = false;
+
+    // The direction is a deliverable like the others and, where there is one, also the panel below. The listing
+    // says which document that is, so the page names none.
+    if (items.some((d) => d.panel === 'why')) loadWhy();
+  }
+
+  // ── why it looks like this ─────────────────────────────────────────────────────────────────
+  // `direction.md`, read by the server into choices, evidence and kinds. **Every string in it is agent-written**,
+  // so each is escaped before the three inline marks the agent uses — `code`, **bold**, *italic* — are put back.
+  const why = document.getElementById('why');
+  const whyBody = document.getElementById('whybody');
+  const whyTally = document.getElementById('whytally');
+
+  function inline(s) {
+    return esc(s)
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+      .replace(/\*([^*]+)\*/g, '<i>$1</i>');
+  }
+
+  // A cited Taste result, opening in place to what it was for and the request it made.
+  function tasteRef(handle, queries) {
+    const q = queries[handle];
+    if (!q) return '';
+    const what = [q.op, q.label].filter(Boolean).join(': ');
+    const cost = q.fromCache ? 'from the cache' : (q.requests ? `${q.requests} requests` : '1 request');
+    return `<details class="tq"><summary>${esc(handle)} · ${esc(q.op || 'taste')}</summary>` +
+      `<span class="tqbody">${esc(what)} <span class="hint">· ${esc(cost)}</span>` +
+      (q.request ? `<code>${esc(q.request)}</code>` : '') + `</span></details>`;
+  }
+
+  async function loadWhy() {
+    let data;
+    try {
+      const response = await fetch(`${base}/runs/${runId}/why`);
+      if (!response.ok) { why.hidden = true; return; }
+      data = await response.json();
+    } catch (err) {
+      return;
+    }
+    const sections = data.sections || [];
+    if (!sections.length) { why.hidden = true; return; }
+
+    // Leave a reference the reader opened open: the panel refreshes while the run is still writing its direction.
+    const open = new Set([...whyBody.querySelectorAll('details.tq[open]')].map((d) => d.dataset.at));
+
+    const tally = {};
+    let rows = 0;
+    whyBody.innerHTML = sections.map((s, si) => {
+      const lead = s.lead
+        ? `<p class="lead">${inline(s.lead)} ${(s.leadRefs || []).map((h) => tasteRef(h, data.queries || {})).join('')}</p>`
+        : '';
+      const items = s.rows.map((r) => {
+        rows += 1;
+        r.kinds.forEach((k) => { tally[k.key] = (tally[k.key] || 0) + 1; });
+        const first = r.kinds.length ? r.kinds[0].key : 'other';
+        // A kind is a word or two; an agent sometimes adds a parenthetical ("Qloo (Palmer & Schloss: …)"), which
+        // belongs in the tooltip rather than stretching the badge across the row.
+        const badges = r.kinds.map((k) => {
+          const short = k.label.split('(')[0].trim() || k.label;
+          return `<span class="kind k-${esc(k.key)}" title="${esc(k.label)}">${esc(short)}</span>`;
+        }).join('');
+        const chips = r.refs.map((h) => tasteRef(h, data.queries || {})).join('');
+        return `<li class="whyrow k-${esc(first)}"><span class="choice">${inline(r.choice)}</span>` +
+          `<span class="evidence">${inline(r.evidence)}${chips ? '<br>' + chips : ''}</span>` +
+          `<span class="kinds">${badges}</span></li>`;
+      }).join('');
+      return `<section class="whysec"><h3>${inline(s.title || 'Direction')}</h3>${lead}` +
+        `<ul class="whyrows">${items}</ul></section>`;
+    }).join('') + (data.truncated ? '<p class="hint">The direction is longer than this panel shows; the document above has the rest.</p>' : '');
+
+    // Stable keys for the open references, by position, so a refresh can put them back.
+    whyBody.querySelectorAll('details.tq').forEach((d, i) => {
+      d.dataset.at = String(i);
+      if (open.has(String(i))) d.open = true;
+    });
+
+    const order = ['qloo', 'research', 'brief', 'assumed', 'check', 'judgement', 'workaround', 'other'];
+    whyTally.textContent = `${rows} choices — ` + order.filter((k) => tally[k])
+      .map((k) => `${tally[k]} ${k === 'other' ? 'other' : k}`).join(' · ');
+    why.hidden = false;
   }
 
   // **A real `<a href>`, not a button, and that is the point of this row.** The overlay is for
@@ -1342,8 +1450,10 @@
   // Not a `.doc`: those open the text overlay, and this opens the image one. Keeping the class off
   // it is what lets one delegated listener serve both without testing for the exception.
   function finalRow(d) {
+    // A PDF opens in the browser's own viewer in a new tab; the lightbox is an <img>.
     const buttons = d.formats.map((f) =>
       `<a class="fmt" href="${base}/runs/${runId}/artifact/${f.path}" ` +
+      (isPdf(f.path) ? `target="_blank" rel="noopener" ` : '') +
       `data-src="${esc(f.path)}" data-format="${esc(f.format)}">` +
       `${f.animated ? '\u25B6 ' : ''}${esc(f.format)} · ${size(f.bytes)}</a>`).join('');
 
@@ -1414,6 +1524,7 @@
       // Plain left-click reads it here; every modified click is left to the browser, so ctrl-click
       // and middle-click still open the artifact in a tab as any link would.
       if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+      if (isPdf(format.dataset.src)) return;   // left to the link, which opens the viewer in a new tab
       e.preventDefault();
       lightboxCode.innerHTML = '';
       showMedia(`${base}/runs/${runId}/artifact/${format.dataset.src}`, format.dataset.src);
