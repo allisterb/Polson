@@ -64,6 +64,25 @@ public class MotionTextTests(ITestOutputHelper output) : TestsRuntime
         Compare(synfig, comp, "text-styles", 0.01);
     }
 
+    /// <summary>
+    /// A face Windows files under a shared family but whose own name table gives it a family of its own: Franklin Gothic
+    /// Heavy is "Franklin Gothic" at 900 here, and "Franklin Gothic Heavy" to fontconfig, which Synfig asks. Written by
+    /// the shared name, trailer1's title opened in Synfig in a fallback face; the .sif now carries the font's own name.
+    /// </summary>
+    [Fact]
+    public void SynfigFindsAFaceWindowsGroupsUnderAnotherFamily()
+    {
+        if (Synfig() is not { } synfig || !Installed("Franklin Gothic")) return;
+
+        var motion = new MotionToolkit();
+        var comp = Ground(motion);
+        comp.Text(Opts(("text", "BE COOL"), ("family", "Franklin Gothic"), ("weight", "heavy"), ("size", 90d),
+            ("origin", new[] { 200d, 120d }), ("color", "#141414"), ("kerning", false)));
+        Assert.Contains("<string>Franklin Gothic Heavy</string>", comp.ToSif());
+
+        Compare(synfig, comp, "text-legacy-family", 0.01);
+    }
+
     /// <summary>Kerning, which Synfig does not do, tightens AV here: the kerned line is narrower.</summary>
     [Fact]
     public void KerningTightensAPair()
@@ -104,6 +123,30 @@ public class MotionTextTests(ITestOutputHelper output) : TestsRuntime
             })));
 
         Compare(synfig, comp, "text-animated", 0.015);
+    }
+    /// <summary>
+    /// Sampled keys keep only what a straight line between the kept keys cannot reproduce: a letter that rises and then
+    /// holds for most of the film is a handful of keys, not one per frame — and still exact at every frame.
+    /// </summary>
+    [Fact]
+    public void AHeldLetterIsAFewKeysNotOnePerFrame()
+    {
+        if (!Installed("Arial")) return;
+        var motion = new MotionToolkit();
+        var comp = motion.Composition(Opts(("width", 300d), ("height", 120d), ("fps", 24d), ("duration", 10d)));
+        comp.Text(Opts(("text", "Hi"), ("family", "Arial"), ("size", 40d), ("origin", new[] { 150d, 60d }), ("animators", new object[]
+        {
+            Opts(("properties", Opts(("position", new[] { 0d, 40d }))),
+                 ("selector", Opts(("shape", "rampUp"), ("offset", motion.Nodes.Animated("real", new object[]
+                 {
+                     Opts(("time", 0d), ("value", -100d), ("ease", "linear")), Opts(("time", 1d), ("value", 100d), ("ease", "linear")),
+                 }))))),
+        })));
+
+        var sif = comp.ToSif();
+        var waypoints = System.Text.RegularExpressions.Regex.Matches(sif, "<waypoint ").Count;
+        output.WriteLine($"{waypoints} waypoints for two letters over {comp.FrameCount} frames");
+        Assert.True(waypoints < 2 * 60, $"{waypoints} waypoints: the 9 s hold should cost two keys a value, not 216");
     }
     #endregion
 

@@ -328,7 +328,9 @@ is Synfig's, and the craft follows from it:
   the first goes soft — and a cut has no way to say "look here next". It blurs only what is below it in its own group,
   so group what should soften together and leave the rest sharp. Ease it with `halt` at both ends so it settles rather
   than snaps; a focus pull that keeps moving reads as a fault. Keep blur for transitions and depth, not decoration: a
-  composition left blurred is a composition the eye cannot rest on.
+  composition left blurred is a composition the eye cannot rest on. That is also the budget: the Gaussian's cost grows
+  with its size, and a whole film under a wide one will not encode inside a script's time limit, so give a long or wide
+  blur `type: 'fastGaussian'`, which costs the same at any size but turns a small bright shape square.
 - **Make a line of dialogue from its text: `Motion.speech('The cat in the hat.', { start: 0.4 })`.** Which sounds a
   sentence has is the dictionary's business, and mouth charts are coarse enough that accents and weak forms mostly
   land on the same mouth; only the timing has to be chosen, and with no recording to match, natural timing is correct

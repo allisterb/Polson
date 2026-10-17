@@ -159,5 +159,8 @@ public class EvalOptions : Options
 
     [Option("pdf-safe-margin", Required = false, HelpText = "How far inside the trim text must stay for --pdf (default: '5mm'; '0' to skip).")]
     public string? PdfSafeMargin { get; set; }
+
+    [Option("sif", Required = false, HelpText = "Also write the last Motion.composition the script built as Synfig's .sif, pictures beside it. A layer Synfig cannot hold is refused by name.")]
+    public string? OutSif { get; set; }
     #endregion
 }

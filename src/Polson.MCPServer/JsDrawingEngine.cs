@@ -891,7 +891,9 @@ public partial class JsDrawingEngine : Runtime
         }
 
         // Frames are uncompressed bitmaps and can be hundreds of megabytes, so they are released
-        // when the execution ends rather than left for the collector to notice.
+        // when the execution ends rather than left for the collector to notice. The composition outlives them: a .sif is
+        // its graph of layers and nodes, and needs no frame.
+        result.Composition = motionToolkit?.LastComposition;
         motionToolkit?.Dispose();
 
         // The scratchpad crosses back here, after every catch, because this is the last moment the

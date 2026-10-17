@@ -863,6 +863,8 @@ internal class Program : Runtime
                 fromFile: !string.IsNullOrWhiteSpace(opts.SvgIn));
         }
 
+        if (!string.IsNullOrWhiteSpace(opts.OutSif)) WriteSif(opts.OutSif, result);
+
         return Task.CompletedTask;
     }
 
@@ -874,6 +876,48 @@ internal class Program : Runtime
     /// it needs to know the file is not there. The warnings — bleed, resolution, margins, lines — do not: the PDF
     /// was written, and whether a warning matters is the reader's call.
     /// </remarks>
+    /// <summary>
+    /// Writes <c>--sif</c>: the last <c>Motion.composition</c> the script built, as Synfig's file. A run need not write it;
+    /// this takes it from the script when someone wants the film in Synfig Studio. A refusal exits non-zero, as
+    /// <c>--pdf</c>'s does: one file was asked for, and a caller needs to know it is not there.
+    /// </summary>
+    static void WriteSif(string outSif, DrawingExecutionResult result)
+    {
+        void Refuse(string message)
+        {
+            AnsiConsole.MarkupLine($"[bold red]--sif wrote nothing:[/] {Markup.Escape(message)}");
+            Environment.ExitCode = 1;
+        }
+
+        // A script that failed may have built only half its film; writing that would hand someone a .sif that looks
+        // finished. Said rather than skipped: the file was asked for, and silence would read as success.
+        if (!result.Success)
+        {
+            Refuse("the script failed, so its film may be incomplete. Fix the error above and run it again. Outside a "
+                + "run Stage.elapsedMinutes is null, so a script that reads it must guard the read.");
+            return;
+        }
+
+        if (result.Composition is not { } comp)
+        {
+            Refuse("the script built no Motion.composition, so there is no film to write. --sif exports the last "
+                + "composition a script makes; a canvas or a paper has no .sif.");
+            return;
+        }
+
+        try
+        {
+            var path = Path.GetFullPath(outSif);
+            var (bytes, pictures) = MotionSifExport.Write(comp, path);
+            AnsiConsole.MarkupLine($"[bold green]Synfig file saved:[/] {Markup.Escape(path)} ({bytes:N0} bytes"
+                + (pictures.Length > 0 ? $", {pictures.Length} picture(s) beside it" : "") + ")");
+        }
+        catch (InvalidOperationException ex)
+        {
+            Refuse(ex.Message);
+        }
+    }
+
     static void WritePrintPdf(string outPdf, PrintSize size, float bleedPt, float safePt, DrawingExecutionResult result, bool fromFile)
     {
         void Refuse(string message)

@@ -154,7 +154,7 @@ internal sealed class MotionTextLayer : MotionLayer
         return Element("text", "0.5", sif,
             SifWriter.Param("text", new XElement("string", text)),
             sif.Param("color", color),
-            SifWriter.Param("family", new XElement("string", shape.Typeface.FamilyName)),
+            SifWriter.Param("family", new XElement("string", SifFamily(shape.Typeface))),
             SifWriter.Param("style", new XElement("integer", new XAttribute("value", style))),
             SifWriter.Param("weight", new XElement("integer", new XAttribute("value", weight))),
             SifWriter.Param("direction", new XElement("integer", new XAttribute("value", 0))),
@@ -354,6 +354,41 @@ internal sealed class MotionTextLayer : MotionLayer
         _ => throw new ArgumentException($"{who}'s weight is a name ({string.Join(", ", Weights.Keys)}) or a number from 100 to 1000."),
     };
 
+    /// <summary>
+    /// The family name Synfig must be given to find this face: the font's own legacy family (<c>name</c> table, name ID 1),
+    /// which is what fontconfig matches, rather than the family Windows groups it under. They differ for fonts that ship
+    /// each weight as a family of its own: Windows calls Franklin Gothic Heavy a weight of "Franklin Gothic", fontconfig
+    /// knows only "Franklin Gothic Heavy" — so trailer1's title, written as "Franklin Gothic", opened in Synfig in a
+    /// fallback face. Falls back to the face's family when the table cannot be read.
+    /// </summary>
+    internal static string SifFamily(SKTypeface face)
+    {
+        const uint name = 0x6E616D65;   // 'name'
+        if (!face.TryGetTableData(name, out var t) || t.Length < 6) return face.FamilyName;
+
+        int U16(int at) => at + 1 < t.Length ? (t[at] << 8) | t[at + 1] : 0;
+        var count = U16(2);
+        var strings = U16(4);
+        string? best = null;
+        var bestRank = int.MaxValue;
+        for (var r = 0; r < count; r++)
+        {
+            var rec = 6 + r * 12;
+            if (rec + 12 > t.Length) break;
+            int platform = U16(rec), encoding = U16(rec + 2), language = U16(rec + 4), id = U16(rec + 6);
+            int length = U16(rec + 8), offset = U16(rec + 10);
+            if (id != 1 || strings + offset + length > t.Length) continue;
+
+            // Windows Unicode, US English first; then any Windows Unicode; then Mac Roman.
+            var rank = platform == 3 && encoding is 1 or 0 ? (language == 0x409 ? 0 : 1) : platform == 1 && encoding == 0 ? 2 : -1;
+            if (rank < 0 || rank >= bestRank) continue;
+            var span = t.AsSpan(strings + offset, length);
+            best = rank < 2 ? System.Text.Encoding.BigEndianUnicode.GetString(span) : System.Text.Encoding.Latin1.GetString(span);
+            bestRank = rank;
+        }
+        return string.IsNullOrWhiteSpace(best) ? face.FamilyName : best.Trim();
+    }
+
     /// <summary>The installed face for a family at a weight and style, or a refusal naming what is installed.</summary>
     private static SKTypeface Typeface(string family, int weight, int style, string who)
     {
@@ -445,20 +480,47 @@ internal sealed class MotionTextLayer : MotionLayer
         if (origin is MotionConstant && size is MotionConstant) return new MotionConstant(MotionType.Vector, At(0));
         var fps = root?.Fps ?? 24;
         var times = Enumerable.Range(0, root?.FrameCount ?? 1).Select(f => f / fps).ToArray();
-        var values = times.Select(At).ToArray();
-        return new MotionAnimated(MotionType.Vector, [.. times.Select((t, i) =>
-            new MotionWaypoint(t, values[i], MotionEase.Linear, MotionEase.Linear, 0, 0, 0, 0))]);
+        return Keys(MotionType.Vector, times, [.. times.Select(At)]);
     }
 
-    /// <summary>A value sampled at every frame: a constant when it never changes, else linear keys at each frame.</summary>
-    private static MotionNode Sampled(double[] times, TextFrame[] frames, MotionType kind, Func<TextFrame, double[]> at)
+    /// <summary>A value sampled at every frame: a constant when it never changes, else linear keys where it changes.</summary>
+    private static MotionNode Sampled(double[] times, TextFrame[] frames, MotionType kind, Func<TextFrame, double[]> at) =>
+        Keys(kind, times, [.. frames.Select(at)]);
+
+    /// <summary>
+    /// Samples as keys, linear between them, keeping only the samples that a straight line between the keys kept either
+    /// side of them would not reproduce: a hold becomes its two ends, a steady move its ends, and only curving spans keep
+    /// a key a frame. Exact at every frame to <see cref="KeyTolerance"/>. trailer1's .sif was 56 MB with a key per letter
+    /// per frame, most of them letters holding still.
+    /// </summary>
+    internal static MotionNode Keys(MotionType kind, double[] times, double[][] values)
     {
-        var values = frames.Select(at).ToArray();
         if (values.All(v => v.Zip(values[0]).All(p => Math.Abs(p.First - p.Second) < 1e-9)))
             return new MotionConstant(kind, values[0]);
-        return new MotionAnimated(kind, [.. times.Select((t, i) =>
-            new MotionWaypoint(t, values[i], MotionEase.Linear, MotionEase.Linear, 0, 0, 0, 0))]);
+
+        var kept = new List<int> { 0 };
+        for (var i = 1; i < times.Length - 1; i++)
+            if (!Spans(kept[^1], i + 1)) kept.Add(i);
+        kept.Add(times.Length - 1);
+
+        return new MotionAnimated(kind, [.. kept.Select(i =>
+            new MotionWaypoint(times[i], values[i], MotionEase.Linear, MotionEase.Linear, 0, 0, 0, 0))]);
+
+        // Whether a straight line from sample a to sample b passes through every sample between them.
+        bool Spans(int a, int b)
+        {
+            for (var k = a + 1; k < b; k++)
+            {
+                var f = (times[k] - times[a]) / (times[b] - times[a]);
+                for (var c = 0; c < values[k].Length; c++)
+                    if (Math.Abs(values[a][c] + (values[b][c] - values[a][c]) * f - values[k][c]) > KeyTolerance) return false;
+            }
+            return true;
+        }
     }
+
+    /// <summary>How far a dropped sample may sit from the line through its neighbours: far below a pixel, a degree or a colour step.</summary>
+    private const double KeyTolerance = 1e-4;
     #endregion
 
     #region Types
@@ -642,11 +704,13 @@ internal sealed class MotionTextLayer : MotionLayer
             var a = new Animator
             {
                 position = p.Has("position") ? p.Node("position", MotionType.Vector, 0) : null,
-                scale = p.Has("scale")
-                    ? p.Raw("scale") is IConvertible n and not string
-                        ? MotionNodeFactory.Node(new[] { Convert.ToDouble(n), Convert.ToDouble(n) }, MotionType.Vector, $"{who}'s scale")
-                        : p.Node("scale", MotionType.Vector, 0)
-                    : null,
+                scale = p.Raw("scale") switch
+                {
+                    null => null,
+                    IConvertible n and not string => MotionNodeFactory.Node(new[] { Convert.ToDouble(n), Convert.ToDouble(n) }, MotionType.Vector, $"{who}'s scale"),
+                    MotionNode { Kind: MotionType.Real } r => new MotionComposite(r, r),
+                    _ => p.Node("scale", MotionType.Vector, 0),
+                },
                 rotation = p.Has("rotation") ? p.Node("rotation", MotionType.Angle, 0) : null,
                 opacity = p.Has("opacity") ? p.Node("opacity", MotionType.Real, 0) : null,
                 fill = p.Has("fillColor") ? p.Node("fillColor", MotionType.Color, 0) : null,
