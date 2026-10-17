@@ -60,7 +60,7 @@ cd Polson
 [./]build
 ```
 
-That produces **`bin/cli`**, which is the MCP server every project's wiring points at.
+That produces **`bin/cli`**, a Release build of the MCP server every project's wiring points at. Only a Release build is copied there: a Debug build or a test run leaves it as it was, and says so, so run `build` again after changing the code.
 
 ### 2. Configure it
 

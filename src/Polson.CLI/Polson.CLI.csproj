@@ -29,10 +29,26 @@
     <EmbeddedResource Include="ProjectTemplate\**\*.md" />
   </ItemGroup>
 
-  <!-- Skippable, because `bin/cli` is what a running agent session has loaded: while one is open the
-       copy fails and takes every build and test run with it, including ones that never needed the
-       deployed copy. `dotnet test -p:SkipCopyToBin=true` builds and tests without touching it. -->
-  <Target Name="CopyOutputToBin" AfterTargets="Build" Condition="'$(SkipCopyToBin)' != 'true'">
+  <!-- `bin/cli` is what agent runs use, so it is a Release build: only a Release build is copied there
+       (`./build`, or `dotnet build -c Release src/Polson.CLI`). It used to take whichever configuration
+       was built last, so every Debug build and test run quietly swapped the agents' CLI for a Debug one,
+       and per-pixel motion work runs at about half speed in Debug against a 30 s script limit (a
+       full-frame shadow: 30 ms a frame at 720p in Release, 50 in Debug). `-p:CopyToBin=true` copies a
+       Debug build anyway, to debug the server an agent is driving.
+       Still skippable, because a running agent session holds `bin/cli` open and the copy then fails and
+       takes the build with it: `-p:SkipCopyToBin=true`. -->
+  <PropertyGroup>
+    <CopiesToBin Condition="'$(SkipCopyToBin)' != 'true' And ('$(Configuration)' == 'Release' Or '$(CopyToBin)' == 'true')">true</CopiesToBin>
+  </PropertyGroup>
+
+  <!-- Said aloud, at the same importance as the copy's own message: a build that leaves `bin/cli` as it
+       was must not read like one that refreshed it. -->
+  <Target Name="ReportBinUntouched" AfterTargets="Build" Condition="'$(CopiesToBin)' != 'true' And '$(SkipCopyToBin)' != 'true'">
+    <Message Importance="high"
+             Text="Polson CLI ($(Configuration)) built; bin\cli left as it was: it holds the Release build agents run. Refresh it with ./build or dotnet build -c Release src/Polson.CLI." />
+  </Target>
+
+  <Target Name="CopyOutputToBin" AfterTargets="Build" Condition="'$(CopiesToBin)' == 'true'">
     <ItemGroup>
       <!-- Grab all files in the current project's build output directory -->
       <BuildOutputFiles Include="$(TargetDir)**\*.*" />

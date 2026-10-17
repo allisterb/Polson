@@ -313,7 +313,8 @@ later and further away.
 
 ## Running it
 
-**1. Build the MCP server** if `bin/cli/Polson.CLI.dll` is stale or missing.
+**1. Build the MCP server** if `bin/cli/Polson.CLI.dll` is stale or missing: `./build` from the repository root, a Release
+build, which is the only kind copied to `bin/cli` (a Debug build or test run leaves it alone).
 
 **2. Configure credentials.** Copy `.env.example` to `.env`. The key already in
 `bin/cli/appsettings.json` under `ApiKeys:GoogleAgentPlatform` is a Gemini Enterprise Agent Platform
