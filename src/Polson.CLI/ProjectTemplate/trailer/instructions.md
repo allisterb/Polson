@@ -46,6 +46,13 @@ instructions to you.
 | 5. **Checks** | The film as a sheet, and the checks below. | **Q4** Shown the sheet: does the title land, and does the end card hold long enough? |
 | 6. **Deliver** | `output.mp4`, `trailer.js`, the sheets, `direction.md`, `findings.md`. | — |
 
+**Carry a poster's shapes over as its own path data.** `comp.region({ path })` and `comp.outline({ path })`
+take an SVG `d` unchanged, holes and curves included, so paste the poster's `<path>` data into a group whose
+`offset` and `scale` carry the poster's coordinates into the frame, rather than re-drawing the shapes by hand;
+`comp.ellipse` takes an SVG `<ellipse>`, and `comp.linearGradient` / `comp.radialGradient` an SVG gradient
+(blended `onto` the shape it fills, in a group with it). `Motion.pathPoints(d)` gives the same points as values when one of
+them should move. trailer2 re-sampled the poster's curves by hand, built ellipses from 40 points and a gradient from 28 strips.
+
 **Ask all of a stage's questions at once, each with your proposed answer**, so the director can accept
 rather than compose. If the director says to proceed, or has already answered in the brief, proceed on
 your proposal and record it in `direction.md` as *assumed, not confirmed*.
@@ -173,12 +180,15 @@ slow figure. Then record each of these with `Stage.check`:
    This is a rule of thumb, not a sourced figure; say so if you cite it.
 2. **Title safe.** Text stays inside the central 90% of the frame — the broadcast title-safe
    convention — so a cropped player does not cut it. Keep each text's handle (`const title =
-   comp.text(...)`) and read `title.boundsAt(t)` across the film: its ink as drawn, animators applied,
-   with no rendering (the SDK reference's *Type* section has the loop).
+   comp.text(...)`) and read `title.boundsAt(t, { frame: true })` across the film: its ink as drawn,
+   animators applied, in the frame's pixels however many groups it sits in, with no rendering (the SDK
+   reference's *Type* section has the loop).
 3. **Flashes.** Nothing flashes more than three times in any one second (WCAG 2.3.1, *Three Flashes or
-   Below Threshold*): a strobe can trigger seizures, and a trailer must not.
+   Below Threshold*): a strobe can trigger seizures, and a trailer must not. `comp.flashes()` measures it
+   over the whole film in about a second — record its `passed`, `generalFlashes` and `redFlashes`, and
+   read `transitions`: each hard cut is one.
 4. **Contrast.** Text against its ground at 4.5 : 1 or better (WCAG, as for the poster); 3 : 1 for the
-   title at display size.
+   title at display size. `Motion.contrast(text, ground)` gives the ratio.
 5. **The first frame** is not empty, and **the last** holds the end card.
 
 ---

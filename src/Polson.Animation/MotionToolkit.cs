@@ -110,6 +110,47 @@ public class MotionToolkit : IDisposable
     public MotionNodeFactory Nodes { get; } = new();
 
     /// <summary>
+    /// WCAG's contrast ratio between two colours, from 1 to 21: <c>(L₁ + 0.05) / (L₂ + 0.05)</c> on relative luminance,
+    /// linearised sRGB weighted 0.2126 / 0.7152 / 0.0722. Text wants 4.5 or more, display-size type 3. A colour with
+    /// alpha is laid over the opaque one first, so <c>contrast('#ffffff80', '#000000')</c> is grey on black.
+    /// </summary>
+    public double Contrast(string a, string b)
+    {
+        var (x, y) = (Read(a, "first"), Read(b, "second"));
+        if (x[3] < 1 && y[3] < 1) throw new ArgumentException("Motion.contrast: at least one of the two colours is opaque, the ground the other sits on.");
+        if (x[3] < 1) x = Over(x, y);
+        if (y[3] < 1) y = Over(y, x);
+        var (l1, l2) = (Luminance(x), Luminance(y));
+        return Math.Round((Math.Max(l1, l2) + 0.05) / (Math.Min(l1, l2) + 0.05), 2);
+
+        static double[] Read(string c, string which) => MotionTypes.Read(c, MotionType.Color, $"Motion.contrast's {which} colour");
+        static double[] Over(double[] top, double[] ground) => [.. Enumerable.Range(0, 3).Select(i => top[i] * top[3] + ground[i] * (1 - top[3])), 1];
+        static double Luminance(double[] c) =>
+            0.2126 * Linear(c[0]) + 0.7152 * Linear(c[1]) + 0.0722 * Linear(c[2]);
+        static double Linear(double v) => v <= 0.04045 ? v / 12.92 : Math.Pow((v + 0.055) / 1.055, 2.4);
+    }
+
+    /// <summary>
+    /// SVG path data as spline points: <c>[{ points, loop, hole }]</c>, one entry per subpath, outer before inner. Each point
+    /// is <c>{ point, t1, t2 }</c>, ready for <c>comp.region</c> or <c>comp.outline</c>, or to key one point of. <c>options</c>:
+    /// <c>{ fillRule? }</c>, <c>'nonzero'</c> or <c>'evenodd'</c>, which decides <c>hole</c>.
+    /// </summary>
+    /// <remarks><c>comp.region({ path })</c> does this itself, holes and all; this is for when the points are to be changed.</remarks>
+    public List<Dictionary<string, object?>> PathPoints(string d, object? options = null)
+    {
+        var o = new MotionOptions(options, "Motion.pathPoints", "fillRule");
+        var rule = o.Has("fillRule") ? o.Raw("fillRule") as string : "nonzero";
+        if (rule is not ("nonzero" or "evenodd"))
+            throw new ArgumentException("Motion.pathPoints's fillRule is 'nonzero' or 'evenodd', as in SVG.");
+        return [.. MotionSvgPath.Read(d, rule == "evenodd", "Motion.pathPoints", fill: false).Select(c => new Dictionary<string, object?>
+        {
+            ["points"] = c.ToJs(),
+            ["loop"] = c.Loop,
+            ["hole"] = c.Hole,
+        })];
+    }
+
+    /// <summary>
     /// A line of dialogue as phonemes and mouth shapes over time, from its text: <c>{ start?, rate?, set?, pronounce?,
     /// lead?, minimum? }</c>. Its <c>mouths</c> key a <c>comp.switch</c> of drawn mouths; its <c>weights()</c> a face's poses.
     /// </summary>

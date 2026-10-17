@@ -197,6 +197,52 @@ public class MotionTextTests(ITestOutputHelper output) : TestsRuntime
         Assert.Empty(gone.LettersAt(0));
     }
 
+    /// <summary>
+    /// <c>{ frame: true }</c> carries the box out through every group — a view of half the frame's pixels, a scaled and
+    /// moved outer group whose clock runs twice as fast from half a second in, an inner group keyed on that clock — and
+    /// agrees with the rendered ink to within a pixel. The stack's own box does not.
+    /// </summary>
+    [Fact]
+    public void BoundsAtInTheFrameFollowsEveryGroupAbove()
+    {
+        if (!Installed("Arial")) return;
+        var motion = new MotionToolkit();
+        var comp = motion.Composition(Opts(("width", 400d), ("height", 160d), ("duration", 1d), ("view", new[] { 0d, 0d, 200d, 80d })));
+        var camera = comp.Group(Opts(("offset", new[] { 20d, 10d }), ("scale", new[] { 0.8d, 0.8d }), ("timeDilation", 2d), ("timeOffset", 0.5)));
+        var drift = camera.Group(Opts(("offset", motion.Nodes.Linear("vector", new[] { 40d, 0d }, new[] { 0d, 0d }))));
+        var title = drift.Text(Opts(("text", "Frame"), ("family", "Arial"), ("size", 24d), ("origin", new[] { 60d, 30d })));
+
+        foreach (var t in new[] { 0d, 0.25 })
+        {
+            var b = title.BoundsAt(t, Opts(("frame", true)))!;
+            using var frame = comp.Render(t);
+            var ink = InkBox(frame.SkBitmap);
+            output.WriteLine($"t {t}: frame box x {b["x"]:0.0} y {b["y"]:0.0} w {b["width"]:0.0} h {b["height"]:0.0}; ink {ink}");
+            Assert.InRange((double)b["x"]!, ink.Left - 1, ink.Left + 1);
+            Assert.InRange((double)b["y"]!, ink.Top - 1, ink.Top + 1);
+            Assert.InRange((double)b["x"]! + (double)b["width"]!, ink.Right - 1, ink.Right + 1);
+            Assert.InRange((double)b["y"]! + (double)b["height"]!, ink.Bottom - 1, ink.Bottom + 1);
+        }
+
+        Assert.NotEqual((double)title.BoundsAt(0)!["x"]!, (double)title.BoundsAt(0, Opts(("frame", true)))!["x"]!, 1);
+        Assert.Equal(title.LettersAt(0).Count, title.LettersAt(0, Opts(("frame", true))).Count);
+    }
+
+    /// <summary>A text in a switch that is showing another layer is not in the frame.</summary>
+    [Fact]
+    public void ATextASwitchHidesIsNotInTheFrame()
+    {
+        if (!Installed("Arial")) return;
+        var comp = new MotionToolkit().Composition(Opts(("width", 200d), ("height", 100d), ("duration", 1d)));
+        var cards = comp.Switch(Opts(("active", new object[] { new object[] { 0d, "title" }, new object[] { 0.5d, "end" } })));
+        var title = cards.Text(Opts(("text", "Title"), ("family", "Arial"), ("size", 20d), ("origin", new[] { 100d, 50d }), ("desc", "title")));
+        cards.Fill(Opts(("color", "#000000"), ("desc", "end")));
+
+        Assert.NotNull(title.BoundsAt(0.25, Opts(("frame", true))));
+        Assert.Null(title.BoundsAt(0.75, Opts(("frame", true))));
+        Assert.NotNull(title.BoundsAt(0.75));
+    }
+
     /// <summary>Each letter with its box and what it counts as; spaces have no ink and are left out.</summary>
     [Fact]
     public void LettersAtReportsEachVisibleLetter()

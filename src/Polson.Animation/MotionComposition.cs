@@ -57,6 +57,29 @@ public abstract class MotionLayerList
     }
 
     /// <summary>
+    /// A gradient over the whole plane along a line: <c>{ point1, point2, stops?, loop?, zigzag?, amount?, blend?, desc? }</c>.
+    /// <c>stops</c> are colours spread evenly, or <c>[[pos, color], ...]</c> from 0 at <c>point1</c> to 1 at <c>point2</c>.
+    /// To fill a shape with it, put both in a group and give the gradient <c>blend: 'onto'</c>.
+    /// </summary>
+    public MotionLayerList LinearGradient(object? options)
+    {
+        var o = new MotionOptions(options, "linearGradient", "point1", "point2", "stops", "loop", "zigzag", "amount", "blend", "desc");
+        layers.Add(new MotionGradientLayer(o, radial: false));
+        return this;
+    }
+
+    /// <summary>
+    /// A gradient over the whole plane by distance from a centre: <c>{ origin, radius, stops?, loop?, zigzag?, amount?, blend?, desc? }</c>,
+    /// stop 0 at <c>origin</c> and 1 at <c>radius</c> from it. Fills a shape as <see cref="LinearGradient"/> does.
+    /// </summary>
+    public MotionLayerList RadialGradient(object? options)
+    {
+        var o = new MotionOptions(options, "radialGradient", "origin", "radius", "stops", "loop", "zigzag", "amount", "blend", "desc");
+        layers.Add(new MotionGradientLayer(o, radial: true));
+        return this;
+    }
+
+    /// <summary>
     /// A rectangle between two corners, in either order:
     /// <c>{ point1, point2, expand?, color, invert?, amount?, blend?, desc? }</c>. <c>expand</c> grows it on
     /// every side. The bar of a bar chart: keyed corners stay exact in SVG.
@@ -69,24 +92,118 @@ public abstract class MotionLayerList
         return this;
     }
 
-    /// <summary>A filled spline: <c>{ points, loop?, origin?, color, invert?, amount?, blend?, desc? }</c>.</summary>
+    /// <summary>
+    /// An ellipse: <c>{ origin, radius: [rx, ry], angle?, color, invert?, amount?, blend?, desc? }</c>. <c>radius</c> is a
+    /// vector, or a number for a circle; <c>angle</c> turns it about <c>origin</c>.
+    /// </summary>
+    /// <remarks>
+    /// Synfig has no ellipse layer. This is what Synfig Studio's own circle tool leaves under a scaled group: a unit circle
+    /// in a group offset to <c>origin</c>, turned by <c>angle</c> and scaled by <c>radius</c>, so every parameter stays
+    /// keyable and the <c>.sif</c> stays exact.
+    /// </remarks>
+    public MotionLayerList Ellipse(object? options)
+    {
+        var o = new MotionOptions(options, "ellipse", "origin", "radius", "angle", "color", "invert", "amount", "blend", "desc");
+        var radius = o.Raw("radius") switch
+        {
+            null => new[] { 10d, 10d },
+            MotionNode { Kind: not MotionType.Vector } n => throw new ArgumentException(
+                $"ellipse's radius is a vector, [rx, ry], and this node is a {n.Type}. Key a vector node, or use comp.circle for a keyed round radius."),
+            double or int or float or long => (object)Enumerable.Repeat(Convert.ToDouble(o.Raw("radius")), 2).ToArray(),
+            var r => r
+        };
+        var group = new Hashtable { ["scale"] = radius };
+        if (o.Has("origin")) group["offset"] = o.Raw("origin");
+        if (o.Has("angle")) group["angle"] = o.Raw("angle");
+        foreach (var key in new[] { "amount", "blend", "desc" }.Where(o.Has)) group[key] = o.Raw(key);
+        var circle = o.Subset("color", "invert");
+        circle["radius"] = 1d;
+        Group(group).Circle(circle);
+        return this;
+    }
+
+    /// <summary>
+    /// A filled spline: <c>{ points | path, fillRule?, loop?, origin?, color, invert?, amount?, blend?, desc? }</c>.
+    /// <c>path</c> takes SVG path data in place of <c>points</c>; see <see cref="FromPath"/>.
+    /// </summary>
     public MotionLayerList Region(object? options)
     {
-        var o = new MotionOptions(options, "region", "points", "loop", "origin", "color", "invert", "amount", "blend", "desc");
-        layers.Add(new MotionLayer.RegionLayer(o));
+        var o = new MotionOptions(options, "region",
+            "points", "path", "fillRule", "loop", "origin", "color", "invert", "amount", "blend", "desc");
+        if (FromPath(o) is not { } contours)
+        {
+            layers.Add(new MotionLayer.RegionLayer(o));
+            return this;
+        }
+
+        if (contours.Count == 1) return Region(Contour(o, contours[0], "origin", "color", "invert", "amount", "blend", "desc"));
+
+        // Several contours draw in a group of their own, outer first, a hole erasing what is under it; inverted, the
+        // group starts filled and each contour does the opposite.
+        var group = Group(o.Subset("amount", "blend", "desc"));
+        var invert = o.Bool("invert", false);
+        if (invert) group.Fill(o.Subset("color"));
+        foreach (var c in contours)
+        {
+            var paints = c.Hole == invert;
+            var region = Contour(o, c, paints ? ["origin", "color"] : ["origin"]);
+            if (!paints) region["blend"] = "alphaOver";
+            group.Region(region);
+        }
         return this;
     }
 
     /// <summary>
     /// A stroked spline whose width can vary along it:
-    /// <c>{ points, loop?, origin?, width?, color, sharpCusps?, roundTips?, amount?, blend?, desc? }</c>.
+    /// <c>{ points | path, loop?, origin?, width?, color, sharpCusps?, roundTips?, amount?, blend?, desc? }</c>.
+    /// <c>path</c> takes SVG path data in place of <c>points</c>, a group of outlines when it has several subpaths.
     /// </summary>
     public MotionLayerList Outline(object? options)
     {
         var o = new MotionOptions(options, "outline",
-            "points", "loop", "origin", "width", "color", "sharpCusps", "roundTips", "amount", "blend", "desc");
-        layers.Add(new MotionLayer.OutlineLayer(o));
+            "points", "path", "loop", "origin", "width", "color", "sharpCusps", "roundTips", "amount", "blend", "desc");
+        if (FromPath(o, fill: false) is not { } contours)
+        {
+            layers.Add(new MotionLayer.OutlineLayer(o));
+            return this;
+        }
+
+        string[] stroke = ["origin", "width", "color", "sharpCusps", "roundTips"];
+        if (contours.Count == 1) return Outline(Contour(o, contours[0], [.. stroke, "amount", "blend", "desc"]));
+
+        var group = Group(o.Subset("amount", "blend", "desc"));
+        foreach (var c in contours) group.Outline(Contour(o, c, stroke));
         return this;
+    }
+
+    /// <summary>
+    /// The contours of a <c>path</c> option, or null when <c>points</c> is used instead. Every SVG command is read; each
+    /// subpath is a contour that loops when it ends in <c>Z</c>, and its points keep SVG's corners and curves exactly.
+    /// <c>fillRule</c> is SVG's, <c>'nonzero'</c> by default or <c>'evenodd'</c>, and decides which contours are holes.
+    /// </summary>
+    private static List<MotionSvgPath.Contour>? FromPath(MotionOptions o, bool fill = true)
+    {
+        if (!o.Has("path"))
+        {
+            if (o.Has("fillRule")) throw new ArgumentException($"{o.Who}'s fillRule goes with path, which it takes in place of points.");
+            return null;
+        }
+        if (o.Has("points")) throw new ArgumentException($"{o.Who} takes points or path, not both.");
+        if (o.Has("loop")) throw new ArgumentException($"{o.Who}'s path says whether each subpath closes, with Z: drop loop.");
+
+        var rule = o.Has("fillRule") ? o.Raw("fillRule") as string : "nonzero";
+        if (rule is not ("nonzero" or "evenodd"))
+            throw new ArgumentException($"{o.Who}'s fillRule is 'nonzero' or 'evenodd', as in SVG.");
+        return MotionSvgPath.Read(o.Raw("path"), rule == "evenodd", o.Who, fill);
+    }
+
+    /// <summary>The options for one contour's layer: its points and loop, and the given keys of the call's own options.</summary>
+    private static Hashtable Contour(MotionOptions o, MotionSvgPath.Contour c, params string[] keys)
+    {
+        var options = o.Subset(keys);
+        options["points"] = c.ToJs();
+        options["loop"] = c.Loop;
+        return options;
     }
 
     /// <summary>
@@ -137,7 +254,7 @@ public abstract class MotionLayerList
     {
         var o = new MotionOptions(options, "group",
             "origin", "offset", "angle", "skewAngle", "scale", "bone", "amount", "blend", "timeOffset", "timeDilation", "desc");
-        var group = new MotionGroup(o) { Root = Root };
+        var group = new MotionGroup(o) { Root = Root, Parent = this };
         layers.Add(group.Layer);
         return group;
     }
@@ -156,7 +273,7 @@ public abstract class MotionLayerList
     {
         var o = new MotionOptions(options, "switch",
             "active", "origin", "offset", "angle", "skewAngle", "scale", "bone", "amount", "blend", "timeOffset", "timeDilation", "desc");
-        var group = new MotionGroup(o, MotionSwitchTrack.Read(o.Raw("active"), "switch")) { Root = Root };
+        var group = new MotionGroup(o, MotionSwitchTrack.Read(o.Raw("active"), "switch")) { Root = Root, Parent = this };
         layers.Add(group.Layer);
         return group;
     }
@@ -243,7 +360,7 @@ public abstract class MotionLayerList
             "compress", "vcompress", "kerning", "invert", "animators", "amount", "blend", "desc");
         var layer = new MotionTextLayer(o, Root?.YDown ?? true, Root);
         layers.Add(layer);
-        return new MotionText(layer);
+        return new MotionText(layer, this);
     }
 
     /// <summary>
@@ -277,6 +394,9 @@ public abstract class MotionLayerList
 
     /// <summary>The composition this stack belongs to, whose bones it can use.</summary>
     internal MotionComposition? Root { get; private protected set; }
+
+    /// <summary>The stack a group was added to; null for the composition itself.</summary>
+    internal MotionLayerList? Parent { get; private protected set; }
 
     /// <summary>Adds a layer built elsewhere — the text layer's export builds its per-letter groups this way.</summary>
     internal void Add(MotionLayer layer) => layers.Add(layer);
@@ -507,14 +627,19 @@ public sealed class MotionComposition : MotionLayerList
     }
 
     /// <summary>The composition at a time in seconds, on a new canvas.</summary>
-    public SkiaCanvas Render(double time)
+    public SkiaCanvas Render(double time) => Render(time, 1);
+
+    /// <summary>The composition at a time, drawn <paramref name="scale"/> times its size — a whole-film check at a fraction of the cost.</summary>
+    internal SkiaCanvas Render(double time, double scale)
     {
-        var canvas = new SkiaCanvas(Width, Height);
+        var (w, h) = (Math.Max(1, (int)Math.Round(Width * scale)), Math.Max(1, (int)Math.Round(Height * scale)));
+        var frame = SKMatrix.Concat(SKMatrix.CreateScale((float)scale, (float)scale), ViewMatrix());
+        var canvas = new SkiaCanvas(w, h);
         canvas.SkCanvas.Clear(SKColors.Transparent);
         if (!HasBlendedLayersDeep)
         {
             canvas.SkCanvas.Save();
-            canvas.SkCanvas.Concat(ViewMatrix());
+            canvas.SkCanvas.Concat(frame);
             RenderLayers(canvas, time);
             canvas.SkCanvas.Restore();
             return canvas;
@@ -522,9 +647,9 @@ public sealed class MotionComposition : MotionLayerList
 
         // Synfig's surfaces are float, so a subtract can go below zero and a divide above one and carry
         // that into the next layer. Blend on a float surface and clamp once, at the end.
-        using var working = new SkiaCanvas(Width, Height, SKColorType.RgbaF16);
+        using var working = new SkiaCanvas(w, h, SKColorType.RgbaF16);
         working.SkCanvas.Clear(SKColors.Transparent);
-        working.SkCanvas.Concat(ViewMatrix());
+        working.SkCanvas.Concat(frame);
         RenderLayers(working, time);
         canvas.SkCanvas.DrawBitmap(working.SkBitmap, 0, 0);
         return canvas;
@@ -550,6 +675,13 @@ public sealed class MotionComposition : MotionLayerList
         if (HasBlendedLayers) c.Restore();
         c.Restore();
     }
+
+    /// <summary>
+    /// WCAG 2.3.1, three flashes or below, measured over the film: <c>{ passed, generalFlashes, redFlashes, worstAt,
+    /// transitions, frames, width }</c>. <c>options</c>: <c>{ from?, to?, width?, background? }</c>; every frame is drawn
+    /// <c>width</c> pixels wide (160) over <c>background</c> (white, as the video), so a 15 s film takes a few seconds.
+    /// </summary>
+    public Dictionary<string, object?> Flashes(object? options = null) => MotionFlashes.Measure(this, options);
 
     /// <summary>
     /// Renders every frame into <c>Motion</c>'s frame buffer, ready for <c>Motion.sheet</c> or
@@ -695,7 +827,7 @@ public sealed class MotionComposition : MotionLayerList
     /// <summary>Every node the composition holds, the bones' included.</summary>
     internal IEnumerable<MotionNode> AllNodes() => bones.SelectMany(b => b.Nodes).Concat(Nodes());
 
-    private SKMatrix ViewMatrix()
+    internal SKMatrix ViewMatrix()
     {
         var sx = Width / (view[2] - view[0]);
         var sy = Height / (view[3] - view[1]);
@@ -1679,6 +1811,13 @@ internal abstract class MotionLayer
 
         /// <summary>The child a switch shows at a time, refusing a name no child has; null for a plain group or an empty name.</summary>
         private MotionLayer? Shown(double time) => active is null ? null : children.Named(active.At(time), who);
+
+        /// <summary>
+        /// One step from the group's stack into its own: its transform at <paramref name="time"/>, the time its children
+        /// see, and whether <paramref name="child"/> shows then — a switch shows one.
+        /// </summary>
+        internal (SKMatrix Matrix, double Time, bool Shows) Into(double time, MotionLayer child) =>
+            (Matrix(time), time * timeDilation + timeOffset, active is null || ReferenceEquals(Shown(time), child));
 
         /// <summary>
         /// A group as Synfig's group; a switch as Synfig's switch, which is the same paste canvas with <c>layer_name</c> and

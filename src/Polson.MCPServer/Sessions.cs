@@ -121,6 +121,9 @@ public sealed class SessionContext
     /// </remarks>
     public string? Stage { get; set; }
 
+    /// <summary>The notes written with <c>{ once: true }</c>, each keyed by its stage and text, so a re-run script does not repeat them.</summary>
+    public HashSet<(string? Stage, string Text)> NotedOnce { get; } = [];
+
     /// <summary>
     /// True while one or more tool calls are actively executing on this session.
     /// </summary>

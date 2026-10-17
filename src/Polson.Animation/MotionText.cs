@@ -29,7 +29,9 @@ using static MotionTextSelectors;
 /// </para>
 /// <para>
 /// Boxes are in the units of the stack the text was added to, and times are that stack's: at the composition's top
-/// level, the frame's units and the film's seconds. Inside a group, apply the group's transform and clock.
+/// level, the frame's units and the film's seconds. <c>{ frame: true }</c> carries them out through every group above —
+/// transform, clock and switch — into the rendered frame's pixels at the film's time, which is what a title-safe check
+/// measures. trailer2's title sat inside a camera group, where the stack's own units say nothing about the frame.
 /// </para>
 /// <para>
 /// Exposed to the JavaScript sandbox. Members follow .NET naming here; Jint resolves the JS camelCase spelling onto them,
@@ -40,11 +42,12 @@ using static MotionTextSelectors;
 public sealed class MotionText
 {
     #region Constructors
-    internal MotionText(MotionTextLayer layer) => this.layer = layer;
+    internal MotionText(MotionTextLayer layer, MotionLayerList stack) => (this.layer, this.stack) = (layer, stack);
     #endregion
 
     #region Fields
     private readonly MotionTextLayer layer;
+    private readonly MotionLayerList stack;
     #endregion
 
     #region Properties
@@ -55,22 +58,23 @@ public sealed class MotionText
     #region Methods
     /// <summary>
     /// The ink box of every visible letter at <paramref name="time"/> seconds, animators applied, as
-    /// <c>{ x, y, width, height }</c>; null when nothing shows. A blur's spread is not included.
+    /// <c>{ x, y, width, height }</c>; null when nothing shows. A blur's spread is not included. <c>options</c>:
+    /// <c>{ frame? }</c>, true for the rendered frame's pixels at the film's time.
     /// </summary>
-    public Dictionary<string, object?>? BoundsAt(double time)
+    public Dictionary<string, object?>? BoundsAt(double time, object? options = null)
     {
-        var letters = layer.Letters(time);
+        var letters = Letters(time, options, "boundsAt");
         if (letters.Count == 0) return null;
-        var box = letters.Skip(1).Aggregate(letters[0].Ink, (b, l) => SKRect.Union(b, l.Ink));
-        return Box(box);
+        return Box(letters.Skip(1).Aggregate(letters[0].Ink, (b, l) => SKRect.Union(b, l.Ink)));
     }
 
     /// <summary>
     /// Each visible letter at <paramref name="time"/> seconds: <c>{ text, x, y, width, height, opacity, index, word, line }</c>,
     /// its box as drawn and the character, word and line it counts as. Spaces and fully transparent letters are left out.
+    /// <c>options</c> as <see cref="BoundsAt"/>.
     /// </summary>
-    public List<Dictionary<string, object?>> LettersAt(double time) =>
-        [.. layer.Letters(time).Select(l =>
+    public List<Dictionary<string, object?>> LettersAt(double time, object? options = null) =>
+        [.. Letters(time, options, "lettersAt").Select(l =>
         {
             var d = Box(l.Ink);
             d["text"] = l.Cluster;
@@ -80,6 +84,32 @@ public sealed class MotionText
             d["line"] = l.Line;
             return d;
         })];
+
+    /// <summary>
+    /// The letters at a time in the stack's own terms, or carried out to the frame: each group above, outermost first,
+    /// gives its transform and its children's clock, and a switch not showing the way down hides them.
+    /// </summary>
+    private List<(string Cluster, SKRect Ink, double Opacity, int Char, int Word, int Line)> Letters(double time, object? options, string who)
+    {
+        if (!new MotionOptions(options, $"text.{who}", "frame").Bool("frame", false)) return layer.Letters(time);
+
+        var steps = new List<(MotionLayer.GroupLayer Group, MotionLayer Child)>();
+        MotionLayer child = layer;
+        for (var s = stack; s is MotionGroup g; s = g.Parent!)
+        {
+            steps.Add((g.Layer, child));
+            child = g.Layer;
+        }
+
+        var matrix = stack.Root?.ViewMatrix() ?? SKMatrix.Identity;
+        foreach (var (group, inner) in Enumerable.Reverse(steps))
+        {
+            var (m, t, shows) = group.Into(time, inner);
+            if (!shows) return [];
+            (matrix, time) = (SKMatrix.Concat(matrix, m), t);
+        }
+        return [.. layer.Letters(time).Select(l => l with { Ink = matrix.MapRect(l.Ink) })];
+    }
 
     private static Dictionary<string, object?> Box(SKRect r) => new()
     {
@@ -651,7 +681,12 @@ internal sealed class MotionTextLayer : MotionLayer
                 bytes = new byte[stream.Length];
                 stream.Read(bytes, bytes.Length);
             }
-            using var blob = HB.Blob.FromStream(new MemoryStream(bytes));
+            // In memory HarfBuzz owns, not a managed array: shaping crashed the test host with an access violation in
+            // hb_shape_full whenever enough had run before it to bring on a collection, and never alone — the signature of
+            // native code reading bytes the GC has moved. HB.Blob.FromStream hands HarfBuzz a managed buffer.
+            var native = System.Runtime.InteropServices.Marshal.AllocHGlobal(bytes.Length);
+            System.Runtime.InteropServices.Marshal.Copy(bytes, 0, native, bytes.Length);
+            using var blob = new HB.Blob(native, bytes.Length, HB.MemoryMode.ReadOnly, () => System.Runtime.InteropServices.Marshal.FreeHGlobal(native));
             using var face = new HB.Face(blob, index);
             using var hb = new HB.Font(face);
             hb.SetScale(upem, upem);
