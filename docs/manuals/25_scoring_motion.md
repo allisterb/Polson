@@ -338,7 +338,10 @@ is Synfig's, and the craft follows from it:
   already drawn; re-drawing them by hand loses the curves the designer chose. Paste each `<path>`'s `d` into a group
   whose `offset` and `scale` carry the drawing's coordinates into the frame, and the holes and corners come with it.
   When one point should move — a lid that lifts, a flag that flutters — take the same contours as values with
-  `Motion.pathPoints(d)`, key that point, and give the rest back unchanged. A drawn gradient is a layer too:
+  `Motion.pathPoints(d)`, key that point, and give the rest back unchanged. A shape that exists only as points —
+  a sampled curve, a traced outline, landmarks — becomes a few smooth spline points with `Motion.fitPoints(points,
+  { closed: true })`, corners kept: few points are what make a shape keyable, and forty points that each need a key
+  are forty chances for the shape to wobble. A drawn gradient is a layer too:
   `comp.linearGradient({ point1, point2, stops })` or `comp.radialGradient({ origin, radius, stops })`, in a group with
   the shape it fills and `blend: 'onto'`, and a sheen is its two points keyed across the shape.
 - **Check what the eye must not be given, not only what it must read.** More than three flashes in any second can

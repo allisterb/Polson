@@ -23,7 +23,7 @@ public class MotionSvgPathTests(ITestOutputHelper output) : TestsRuntime
     #region Fields
     // Every kind of segment: lines, a quadratic, a cubic, an arc, a relative move, and a subpath with no Z. The arc's
     // ellipse overlaps the first shape wound the other way, so nonzero leaves the overlap empty and the fill goes through
-    // Skia's Simplify — whose own arcs, re-drawn as short quadratics, are 0.09% off the exact path and ours 0.18%.
+    // Skia's Simplify, which keeps the arcs as conics (one cubic each here) but is itself 0.09% off the exact path; ours 0.18%.
     private const string Mixed = "M20 20 L90 20 Q120 40 90 70 C70 90 40 90 30 70 Z m80 30 a25 15 0 1 0 50 0 a25 15 0 1 0 -50 0 Z M150 20 L190 20 L170 50";
 
     // An outer square and an inner one wound the same way: nonzero fills the middle, evenodd leaves it empty.

@@ -51,7 +51,8 @@ take an SVG `d` unchanged, holes and curves included, so paste the poster's `<pa
 `offset` and `scale` carry the poster's coordinates into the frame, rather than re-drawing the shapes by hand;
 `comp.ellipse` takes an SVG `<ellipse>`, and `comp.linearGradient` / `comp.radialGradient` an SVG gradient
 (blended `onto` the shape it fills, in a group with it). `Motion.pathPoints(d)` gives the same points as values when one of
-them should move. trailer2 re-sampled the poster's curves by hand, built ellipses from 40 points and a gradient from 28 strips.
+them should move, and `Motion.fitPoints(points, { closed: true })` turns a shape you only have as points into a few
+smooth ones. trailer2 re-sampled the poster's curves by hand, built ellipses from 40 points and a gradient from 28 strips.
 
 **Ask all of a stage's questions at once, each with your proposed answer**, so the director can accept
 rather than compose. If the director says to proceed, or has already answered in the brief, proceed on

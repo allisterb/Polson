@@ -67,6 +67,23 @@ public class MotionJsBindingTests : TestsRuntime
         Assert.Equal(SKColors.Lime, frame.GetPixel(35, 5));
     }
 
+    /// <summary><c>Motion.fitPoints</c> takes a script's own array of points and hands back points a region takes as they are.</summary>
+    [Fact]
+    public void FitPointsTakesAScriptsPolylineForARegion()
+    {
+        var result = Execute("""
+            const ring = Array.from({ length: 120 }, (_, i) => [20 + 15 * Math.cos(i * Math.PI / 60), 20 + 10 * Math.sin(i * Math.PI / 60)]);
+            const fitted = Motion.fitPoints(ring, { closed: true, error: 0.1 });
+            comp.region({ points: fitted, color: '#ff0000' });
+            log(`fitted ${fitted.length} keys ${Object.keys(fitted[0]).join(',')}`);
+            """);
+
+        Assert.True(result.Success, result.Error);
+        Assert.Contains(result.Logs, l => l.Contains("keys point,t1,t2", System.StringComparison.Ordinal) && !l.Contains("fitted 120", System.StringComparison.Ordinal));
+        using var frame = SKBitmap.Decode(result.ImageBytes);
+        Assert.Equal(SKColors.Red, frame.GetPixel(20, 20));
+    }
+
     /// <summary>Options with no function before them are still refused with what to write.</summary>
     [Fact]
     public void ADrawnLayerWithNoFunctionIsRefusedWithWhatToWrite()
