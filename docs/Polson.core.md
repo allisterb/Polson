@@ -5293,6 +5293,76 @@ Each returns the stack it was added to, except `group`, which returns the group 
   ```
 
   Checked against `synfig` 1.5.5 for every ported type with `size` keyed: within 2 levels in 255 on 98–100% of pixels, the rest along the shapes' own antialiased edges. Past a reach of 32 px Synfig's Gaussian switches to an FFT and this to Skia's Gaussian of the same width, which agree to within 24 levels everywhere.
+- `comp.text({ text, family, weight?, style?, size?, origin?, orient?, color?, compress?, vcompress?, kerning?, invert?, animators?, amount?, blend?, desc? })` — type, Synfig's text layer, with After Effects' text animators on top. See *Type* below.
+
+### Type — `comp.text(options)`
+
+```javascript
+const n = Motion.nodes;
+const comp = Motion.composition({ width: 1280, height: 720, fps: 24, duration: 3 });
+comp.fill({ color: '#0f0f12' });
+
+// The title rises into place letter by letter: each letter starts 80 units low, turned and transparent, and a
+// ramp sweeps across the line so the letters settle one after another, left to right.
+comp.text({
+    text: 'BE COOL', family: 'Franklin Gothic', weight: 'heavy', size: 160,
+    origin: [640, 360], color: '#f2c14e',
+    animators: [{
+        properties: { position: [0, 80], rotation: -20, opacity: 0 },
+        // offset −100: every letter fully selected (low, turned, hidden); 100: none selected (in place).
+        selector: { shape: 'rampUp', easeLow: 60,
+                    offset: n.animated('real', [{ time: 0.2, value: -100, ease: 'linear' }, { time: 1.4, value: 100, ease: 'linear' }]) },
+    }],
+});
+```
+
+**The layer.**
+- `text` is the words, `\n` for a new line; it is not keyable. To change the words, put two texts in a `switch`.
+- `family` is an installed family, and **one that is not installed is refused** with what to write instead. Synfig falls back to sans silently. A weight is not part of the name: `'Franklin Gothic Heavy'` is refused with *"'Franklin Gothic Heavy' is a face of 'Franklin Gothic': use family 'Franklin Gothic' with weight 900"*.
+- `weight` is a name — `thin`, `ultralight`, `light`, `semilight`, `book`, `normal`, `medium`, `semibold`, `bold`, `ultrabold`, `heavy`, `ultraheavy` — or a number from 100 to 1000.
+- `style` is `'normal'`, `'oblique'` or `'italic'`.
+- **`size` is the font's em in units**, default 48. Cap height is about 0.7 of it in most faces.
+- `origin` is where the block sits. `orient` aligns the block on it: `[0, 0]` is its top left (the first line's tallest letter), `[1, 1]` is the right end of the last baseline, and the default `[0.5, 0.5]` is the centre.
+- `compress` multiplies each letter's advance, so it is a tracking that scales with the size. `vcompress` multiplies the line spacing.
+- `kerning` is on by default. `invert` fills everything but the letters, for a knockout with `blend: 'alphaOver'`.
+- `size`, `origin`, `orient`, `color`, `compress` and `vcompress` are keyable like any layer's values.
+- The letters are filled as one shape, as Synfig fills them, so overlapping glyphs show no seam.
+
+**Animators** do what a layer per letter would, with one keyed number. Each is `{ properties, selector }`, or `{ properties, selectors: [...] }` for several. A letter takes each property **in proportion to how far the selectors pick it**: fully selected, it gets the whole value; unselected, nothing. A letter turns and scales about its **anchor**, the middle of its advance on its baseline.
+
+| property | a fully selected letter | |
+| :--- | :--- | :--- |
+| `position` | moves by `[x, y]` units | adds |
+| `scale` | is scaled by `[sx, sy]`, or one number for both; `1` is unchanged | multiplies |
+| `rotation` | turns by degrees, clockwise when y is down | adds |
+| `opacity` | has its opacity multiplied by the value; `0` hides it | multiplies |
+| `fillColor` | takes this colour | mixes in by the selection |
+| `tracking` | gains space, in thousandths of an em, half before it and half after | adds |
+| `blur` | is blurred, `size` as the blur layer's Gaussian | adds |
+
+**A range selector** — the default `{ type: 'range' }` — selects a span of the text.
+- `start`, `end` and `offset` are in **percent** of the text, defaults 0, 100 and 0. With `units: 'index'` they count units instead.
+- **Keying `offset` across −100…100 is the classic sweep.** Keying `start` from 0 to 100 against `opacity: 0` is a typewriter reveal.
+- `shape` is `'square'` (default), `'rampUp'`, `'rampDown'`, `'triangle'`, `'round'` or `'smooth'`. The ramps hold their end value outside the span, which is what makes a sweep land.
+- `smoothness` is the square's soft edge in percent of a unit, default 100. `easeHigh` and `easeLow`, −100…100, slow the change near the fully selected or the unselected end.
+- `amount` is in percent, default 100. A negative amount inverts the property.
+- `randomize: true, seed` selects in a seeded random order.
+- `basedOn` is `'characters'` (default), `'charactersExcludingSpaces'`, `'words'` or `'lines'`.
+- `mode` combines a selector with those above it: `'add'` (default), `'subtract'`, `'intersect'`, `'min'`, `'max'` or `'difference'`.
+
+**A wiggly selector**, `{ type: 'wiggly' }`, selects by smooth seeded noise.
+- `minAmount` and `maxAmount` are percent, defaults −100 and 100.
+- `wigglesPerSecond` defaults to 2. `correlation` is in percent: 100 moves every unit together.
+- `temporalPhase` and `spatialPhase` are in degrees. `lockDimensions` gives one value for x and y. `seed`, `basedOn` and `mode` work as for a range selector.
+
+The selector parameters and property values are nodes, so they key, link and loop. The maths is After Effects' as EffectCraft documents and implements it (MIT), ported.
+
+**Writing it out.**
+- In `.sif`, a text without animators is Synfig's own text layer. Synfig's size is half the em with y up, and it applies `origin` twice; both are converted, so the file opens where this draws it. With animators, Synfig has no equivalent, so it is written as **a group per letter**, each holding a one-glyph text layer, with what the animators do sampled at the frame rate.
+- **Synfig 1.5.5 does not kern**: it never sizes its FreeType face, so the kerning it reads scales to nothing. A kerned text therefore opens a little looser in Synfig than it draws here.
+- In SVG a text is written as **outlines**, `<path>`, never `<text>`: it needs no font on the viewer's machine and draws what this draws. An animated text is a path per letter under its own sampled transform, opacity and fill. Keying `size`, `compress`, `vcompress` or `orient` changes the outlines frame by frame and is **refused for SVG**; key `origin` instead, or use animators. A `blur` animator is refused for SVG too.
+
+> **Checked against Synfig itself.** Two-line text at three alignments, with `size`, `compress` and `origin` keyed, and bold italic and an inverted knockout, differs from `synfig` 1.5.5 in 0.2–0.4% of pixels by more than 24 levels, all along the letters' antialiased edges; an H lands on the same pixels exactly. A text with three animators, written as Synfig's group per letter, differs in at most 0.25% at every frame.
 
 **A spline point** is `{ point, t1?, t2?, width? }`, or a bare `[x, y]` for a corner. Tangents are Synfig's: the curve leaves a point toward `point + t2 / 3` and reaches the next toward `next − t1 / 3`. `t2` defaults to `t1`, which keeps the point smooth. Any of the four can be a node, so the shape itself animates.
 
@@ -5776,6 +5846,7 @@ comp.render(2);                            // and a still of the last frame, to 
 - **A path keeps the same commands at every frame**, a cubic for every segment, so one frame's `d` interpolates into the next.
 - **A tapered outline** is written as a filled polygon with a fixed number of vertices; an even one is a stroke.
 - **A drawn layer is refused by name**, as `.sif` refuses it: SMIL cannot run a script. Capture it as frames instead.
+- **A text** is written as outlines, a `<path>`, never `<text>`; with animators, a path per letter under sampled transforms. Keyed `size`, `compress`, `vcompress` or `orient`, and a `blur` animator, are refused by name.
 - **A blur** wraps everything below it in an SVG `<feGaussianBlur>`, its deviation tracked from `size`. Only `'gaussian'` and `'fastGaussian'` (written as a Gaussian of the same width) at a full `amount`; a box or cross blur, or a partial `amount`, is refused by name.
 - **An image** is inlined as a PNG data URI under a translate and a scale, exact wherever one of its corners holds still.
 - **Blends**: `behind` is written by reordering, `alphaOver` (and so every cutout) as an SVG `<mask>`, and `multiply`, `screen`, `overlay`, `hardLight`, `brighten`, `darken` and `difference` as CSS `mix-blend-mode`, which agrees with Synfig's only over an opaque backdrop — the header comment counts those. `onto`, `add`, `subtract` and `divide` have no SVG form and are refused by name.
