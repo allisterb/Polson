@@ -211,6 +211,22 @@ public class PrintPdfTests : TestsRuntime, IDisposable
     #endregion
 
     #region Methods (private)
+    /// <summary>
+    /// A family Skia does not have is warned about on every paper render, asked for a print file or not, and recorded.
+    /// </summary>
+    [Fact]
+    public async Task TestAMissingFontFamilyIsWarnedOnAnyPaperRender()
+    {
+        var result = await Tools().ExecuteScript(
+            "const p = Snap(400, 200); p.text(10, 50, 'x').attr({ id: 'title', 'font-family': \"'Polson Nonexistent Face 7Q', serif\" }); p;",
+            outFile: "artifacts/a.png");
+
+        Assert.True(result.Success, result.Error);
+        var warning = Assert.Single(result.Logs, l => l.StartsWith("[WARN] font-family", StringComparison.Ordinal));
+        Assert.Contains("(#title) names no installed family", warning);
+        Assert.Contains("render.fontsubstituted", File.ReadAllText(Path.Combine(root, "events", "server.jsonl")), StringComparison.Ordinal);
+    }
+
     private DrawingMcpTools Tools() => new(null, null, null, root);
     #endregion
 }

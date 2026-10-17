@@ -40,11 +40,11 @@ concepts when a comp fails is normal, and is recorded rather than hidden.
 | 1. **Project** | Read the brief. Fill the table in `brief.md`; anything it leaves blank is a question, not a guess. | **Q1** Who exactly is it for, and who else does it reach? **Q2** Where will it be seen, at what size, and how far away? |
 | 2. **Audience** | `Taste` op `profile` for each audience (below). Write a short audience profile from it. | **Q3** Shown with the distinctive references: are any of these wrong to borrow from? |
 | 3. **Message** | Draft the words: short, plain, the main point, true, memorable. Keep two or three candidates, separate, never blended. | **Q4** If they take away one thing, which is it? **Q5** How should it sound — warm, funny, sober, unsettling? |
-| 4. **Concepts** | Word lists, timed; **strike the obvious answers** and go again. Three directions as small thumbnails, each naming the operation it uses (below). | **Q6** Which direction will this audience decode first time? |
+| 4. **Concepts** | Word lists, timed; **strike the obvious answers** and go again. **Three genuinely different concepts per audience**, rendered as thumbnails, each naming the operation it uses (below). | **Q6** Which direction will this audience decode first time? |
 | 5. **Direction** | `direction.md`: every choice with its evidence (below). | — decide and cite |
 | 6. **Comps** | Two or three comps on the paper, then the checks. | **Q7** In a two-second glance, what must a passer-by take in — and does the focal point deliver it? |
 | 7. **Feedback** | The director looks fresh; revise. | **Q8** Does it hold from across the room? — answered with the distance renders beside the comp |
-| 8. **Variant / series** | The next audience: hold the system (grid, type), vary image and palette. | — |
+| 8. **Variant / series** | Across the audiences: hold the system (grid, type, title) if it serves both — never the image, its composition or the palette, which are what each audience's evidence decides. | — |
 | 9. **Deliver** | Picture, print file, `direction.md`, `findings.md`. | — |
 
 **Ask all of a stage's questions at once, each with your proposed answer**, so the director can accept
@@ -102,6 +102,24 @@ groupings at most**; unequal areas rather than equal ones; white space over fill
 central image in open ground holds the eye and is cut off from the posters beside it; a surface
 divided into blocks running to its edges leaks into its neighbours.
 
+### Three concepts per audience, genuinely different
+
+**Draw three concepts for each audience before you choose one**, and render them. Both of this
+workflow's first runs drew one concept, refined it, and for the second audience asked only whether the
+evidence objected to it. It never objects, and the pair came out as one poster twice.
+
+- **Different means a different dominant element, a different composition, and a different palette
+  key** — not one of the three. Where the dominant element sits and at what scale; light ground or
+  dark; which colour leads. One composition recoloured, recropped or retyped is one concept.
+- **Each uses a different operation** from the lists above, and **each starts from a different item in
+  that audience's profile** — name it.
+- **The second audience's concepts come from its own profile, drawn before you look back at the first
+  audience's choice.** Holding the system (grid, type, title) is decided afterwards, in stage 8.
+- **Thumbnails are rough**: tone blocks, the dominant shape, one line for the title. Three on one sheet,
+  `artifacts/03_concepts_a.png`, `03_concepts_b.png` — minutes, not comps.
+
+Then choose, and record all three in `direction.md` (below) with why the other two lost.
+
 ---
 
 ## Stage 5 — `direction.md`
@@ -121,6 +139,14 @@ One file, written before the comps and held to after. Each line is a choice and 
 - **Research lines** cite a source you were given or that `Research` returned and you checked. Do not
   cite from memory.
 - **Assumed answers** to the director's questions go here too, marked as such.
+
+**Each audience's section opens with its three concepts**, in a table of its own:
+
+| Concept | Operation | Dominant element, composition, palette | Evidence | Kind |
+| :-- | :-- | :-- | :-- | :-- |
+| **Chosen** — the listening dish | scale as narrative | a small figure under a dish filling the top two-thirds; dark ground, sodium orange leads | *(distinctive film)*, profile `t5` item 4 | Qloo |
+| Rejected — the waveform title | text as image | the title drawn as a signal trace across the middle; pale ground, black leads | *(distinctive artist)*, `t5` item 11 — lost: the genre does not read from across the room | Qloo / Check |
+| Rejected — … | | | | |
 
 The run page shows this file to the people judging the poster as *why it looks like this*. Write it
 for them.
@@ -187,7 +213,12 @@ number to hold against a legibility floor, not the font size you asked for.
 artwork that stops at the trim instead of continuing into the bleed; bitmaps under 150 ppi at printed
 size; text inside the safe margin; lines over 60 characters; a gap between lines that reads as neither
 one group nor two; type set over a busy or uneven background. A warning you keep is a decision: say
-why in `direction.md`.
+why in `direction.md`. A line whose length is fixed by something other than reading can be marked
+`.attr({ 'data-print-exempt': 'line-length' })` — the same rule, decided once.
+
+**On every render, a `font-family` naming no installed face is warned about**: the type is then drawn
+in a substitute, and `direction.md` would credit a face the poster does not use. A weight is not part
+of a family's name — `'Franklin Gothic Heavy'` is `'Franklin Gothic'` at `font-weight: 900`.
 
 **And these, which you run and record with `Stage.check`:**
 
@@ -196,7 +227,8 @@ why in `direction.md`.
    about *H* × 0.6 / *D* mm tall, about 3.8 px a mm. For an A2 poster: about 120 px tall from 11 m,
    340 px from 4 m (`paper.toImageBytes(w, h, 'png')`, then `Skia.Image.fromBytes(...)`). **From the
    far render, the headline and the image must read; from the near one, the key facts.**
-2. **The squint.** Blur the comp (`Skia.ImageFilter.blur`) until the type is gone. One dominant shape
+2. **The squint.** Blur the comp until the type is gone — on a canvas, set
+   `ctx.filter = Skia.ImageFilter.blur(8, 8)` and then draw the comp's image onto it. One dominant shape
    should remain, and it should be the one you meant.
 3. **The crowd** (Munari). Place the comp among others — its sibling comps at least — at the far
    render's size. A poster approved alone can vanish among neighbours.

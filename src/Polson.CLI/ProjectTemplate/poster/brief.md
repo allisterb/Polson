@@ -16,17 +16,18 @@ BRIEF-END
 ## The poster
 
 Fill these in with the director. Where the brief above is silent, ask — do not invent a value and
-proceed as though the client had chosen it.
+proceed as though the client had chosen it. A value you looked up is marked *looked up* until the
+director confirms it.
 
 | Parameter | Value |
 | :--- | :--- |
-| What it announces — the film, with its title | |
+| What it announces — the film, with its title (fictional, or real with its year) | |
 | Logline, in one sentence | |
-| Comparable titles (real, two or three) | |
+| Comparable titles (real, two or three; optional for a real film) | |
 | Audience A — place, age band, optionally gender | |
 | Audience B — place, age band, optionally gender | |
 | Tagline, if any | |
-| Billing — names and companies, all fictional | |
+| Billing — fictional for a fictional film; the real credits, as text, for a real one | |
 | Where it will be seen, and from how far | |
 | Page size (`pdfSize`) and bleed | |
 | Language | |

@@ -850,6 +850,13 @@ internal class Program : Runtime
             AnsiConsole.MarkupLine($"[bold green]Rendered SVG saved:[/] {svgPath} ({result.SvgXml.Length:N0} chars)");
         }
 
+        // What ExecuteScript warns on every paper, so `eval --svg-in` can audit a finished run's artifacts too.
+        if (result.Success && (result.RenderedFromPaper || !string.IsNullOrWhiteSpace(opts.SvgIn)))
+        {
+            foreach (var warning in FontAudit.Check(result.SvgXml ?? ""))
+                AnsiConsole.MarkupLine($"[yellow][[WARN]][/] {Markup.Escape(warning)}");
+        }
+
         if (print is { } page && result.Success)
         {
             WritePrintPdf(opts.OutPdf!, page.Size, page.BleedPt, page.SafePt, result,

@@ -57,6 +57,19 @@ public static partial class PosterTypeAudit
     /// </remarks>
     public const float SpreadFrom = 40f;
 
+    /// <summary>
+    /// The attribute that excuses a line, or every line in a group, from named checks: <c>data-print-exempt="line-length"</c>.
+    /// </summary>
+    /// <remarks>
+    /// For a line whose length is fixed by something other than reading — the legal line a real film's unofficial poster
+    /// must carry whole, which fired on every print file of poster3. An exemption is a decision, so the workflow asks for
+    /// its reason in <c>direction.md</c>; the check says nothing about the line once it is marked.
+    /// </remarks>
+    public const string ExemptAttribute = "data-print-exempt";
+
+    /// <summary>The name <see cref="ExemptAttribute"/> uses for <see cref="CheckLineLength"/>.</summary>
+    public const string LineLengthCheck = "line-length";
+
     private const int MaxReported = 6;
     #endregion
 
@@ -89,10 +102,11 @@ public static partial class PosterTypeAudit
         return lines;
     }
 
-    /// <summary>Lines carrying more than <see cref="MaxCharactersPerLine"/> characters.</summary>
+    /// <summary>Lines carrying more than <see cref="MaxCharactersPerLine"/> characters, except those marked exempt.</summary>
     public static IEnumerable<string> CheckLineLength(IReadOnlyList<TypeLine> lines)
     {
-        var long_ = lines.Where(l => l.Words.Length > MaxCharactersPerLine).OrderByDescending(l => l.Words.Length).ToList();
+        var long_ = lines.Where(l => l.Words.Length > MaxCharactersPerLine && !l.Exempt.Contains(LineLengthCheck))
+            .OrderByDescending(l => l.Words.Length).ToList();
         foreach (var line in long_.Take(MaxReported))
         {
             yield return Invariant($"{Quote(line.Words)} runs to {line.Words.Length} characters on one line. ")
@@ -303,7 +317,7 @@ public static partial class PosterTypeAudit
         }
 
         var box = ordered.Skip(1).Aggregate(ordered[0].Bounds, (b, g) => SKRect.Union(b, g.Bounds));
-        lines.Add(new TypeLine(words.ToString(), box, ordered.Max(g => g.SizePaper), ordered.All(g => g.Upright)));
+        lines.Add(new TypeLine(words.ToString(), box, ordered.Max(g => g.SizePaper), ordered.All(g => g.Upright), Exemptions(run)));
     }
 
     private static void Add(List<TypeLine> lines, SvgTextBase line, SvgText container, string words)
@@ -330,7 +344,19 @@ public static partial class PosterTypeAudit
         var scale = MathF.Sqrt(MathF.Abs(toPaper.ScaleX * toPaper.ScaleY - toPaper.SkewX * toPaper.SkewY));
         var upright = MathF.Abs(toPaper.SkewX) < 1e-4f && MathF.Abs(toPaper.SkewY) < 1e-4f;
 
-        lines.Add(new TypeLine(words, box, size * scale, upright));
+        lines.Add(new TypeLine(words, box, size * scale, upright, Exemptions(line)));
+    }
+
+    /// <summary>The checks an element is excused from, by <see cref="ExemptAttribute"/> on it or any ancestor.</summary>
+    private static HashSet<string> Exemptions(SvgElement element)
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var e = element; e is not null and not SvgDocument; e = e.Parent)
+        {
+            if (e.CustomAttributes.TryGetValue(ExemptAttribute, out var value))
+                names.UnionWith(value.Split([' ', ','], StringSplitOptions.RemoveEmptyEntries));
+        }
+        return names;
     }
 
     /// <summary>The transform from an element's own units to the paper's: every <c>transform</c> from the root down.</summary>
@@ -402,7 +428,7 @@ public static partial class PosterTypeAudit
 
 /// <summary>A line of type as it sits on the paper: its words, its line box, its font size after transforms.</summary>
 /// <remarks>A class rather than a record on purpose: two lines with the same words in the same place are still two lines.</remarks>
-public sealed class TypeLine(string words, SKRect bounds, float sizePaper, bool upright)
+public sealed class TypeLine(string words, SKRect bounds, float sizePaper, bool upright, IReadOnlySet<string>? exempt = null)
 {
     #region Properties
     public string Words { get; } = words;
@@ -413,5 +439,8 @@ public sealed class TypeLine(string words, SKRect bounds, float sizePaper, bool 
     public float SizePaper { get; } = sizePaper;
 
     public bool Upright { get; } = upright;
+
+    /// <summary>The checks this line is excused from (<see cref="PosterTypeAudit.ExemptAttribute"/>).</summary>
+    public IReadOnlySet<string> Exempt { get; } = exempt ?? new HashSet<string>();
     #endregion
 }
