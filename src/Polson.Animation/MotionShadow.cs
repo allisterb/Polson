@@ -108,14 +108,7 @@ internal sealed class MotionShadowLayer : MotionLayer, IMotionStackFilter
         // The shadow is the layer, the stack what it lands on. Synfig's composite, behind and onto at an amount are exactly
         // Skia's source-over, destination-over and source-atop with the source scaled by it, and those run natively; any
         // other blend takes the Synfig formula as a runtime blender, five times slower at 720p.
-        var native = Blend.Name switch
-        {
-            "composite" => SKBlendMode.SrcOver,
-            "behind" => SKBlendMode.DstOver,
-            "onto" => SKBlendMode.SrcATop,
-            _ => (SKBlendMode?)null,
-        };
-        if (native is { } mode)
+        if (Blend.Native is { } mode)
         {
             using var paint = new SKPaint { BlendMode = mode, Color = SKColors.White.WithAlpha((byte)Math.Round(amount * 255)) };
             result.SkCanvas.DrawBitmap(shade, 0, 0, paint);

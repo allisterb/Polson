@@ -91,12 +91,12 @@ public sealed class MotionText
     /// </summary>
     private List<(string Cluster, SKRect Ink, double Opacity, int Char, int Word, int Line)> Letters(double time, object? options, string who)
     {
-        if (!new MotionOptions(options, $"text.{who}", "frame").Bool("frame", false)) return layer.Letters(time);
+        if (!new MotionOptions(options, $"text.{who}", "frame").Bool("frame", false)) return layer.Letters(stack.TimeFor(layer, time));
 
         var (space, local, own, visible) = stack.SpaceAt(time);
         if (!visible || stack is MotionGroup g && !g.Layer.Shows(own, layer)) return [];
         var matrix = SKMatrix.Concat(stack.Root?.ViewMatrix() ?? SKMatrix.Identity, space.Plane);
-        return [.. layer.Letters(local).Select(l => l with { Ink = matrix.MapRect(l.Ink) })];
+        return [.. layer.Letters(stack.TimeFor(layer, local)).Select(l => l with { Ink = matrix.MapRect(l.Ink) })];
     }
 
     private static Dictionary<string, object?> Box(SKRect r) => new()

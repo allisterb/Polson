@@ -52,6 +52,11 @@ take an SVG `d` unchanged, holes and curves included, so paste the poster's `<pa
 `comp.ellipse` takes an SVG `<ellipse>`, and `comp.linearGradient` / `comp.radialGradient` an SVG gradient
 (blended `onto` the shape it fills, in a group with it).
 
+**Four more tools, each a choice to make once for the film:** a line that draws itself on (`trimEnd` on an outline,
+keyed 0 → 1); a wipe for a beat change that means something (`comp.wipe`, the hard cut still the default); one grade over
+the whole film (`comp.colorCorrect` at the top, evidence-led, as the poster's palette was); and stepped, hand-drawn time
+for the drawn layers (`comp.posterizeTime({ fps: 12 })`).
+
 **A camera move gives a poster depth.** Set the poster's layers at depths — groups with `z`, backdrop far, type at 0 —
 add `comp.camera()`, and key one move (a push-in, a pan) as a beat of its own, eased in and out. It changes nothing
 until it moves, so the poster's composition holds at rest. `comp.warp` pins a layer to four corners, and
