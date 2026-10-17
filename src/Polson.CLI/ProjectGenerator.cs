@@ -1358,7 +1358,8 @@ internal static class ProjectGenerator
         ["cover"] = ["09", "16", "20"],
         // Composition and type are the craft; 14 because its §3a is the print file every comp writes and
         // its size arithmetic. 16 (requisition) and 13 (cultural research) are named by URI where they
-        // apply rather than imported, to keep the instructions inside the host's comfortable size.
+        // apply rather than imported. With the film type this comes to ~164k, past the 150k total at which
+        // Claude Code warns — a warning, not truncation (see ImportedManuals), and kept on purpose.
         ["poster"] = ["09", "11", "14"],
         // Gesture is the method and the line of action is its first step; composition carries the
         // mood family, staging the camera if the brief implies one. 23 is absent: at sketch size the
@@ -1388,7 +1389,11 @@ internal static class ProjectGenerator
     /// file of its own and still arrive in full, unasked — the property that made inlining work. Inlined, the
     /// animation workflow's three came to ~95k of a 158k-character <c>CLAUDE.md</c>, past the 150k at which Claude
     /// Code warns. <b>This does not make the context any smaller</b>: an import is loaded exactly as the inline text
-    /// was. What it buys is a file of a size the host does not warn about, and manuals a person can open on their own.
+    /// was. What it buys is manuals a person can open on their own — and no longer a quieter start: Claude Code now
+    /// also warns when the instruction files <i>together</i> pass 150k (poster3, 164k, 2026-10-16). <b>That is a
+    /// warning, not a cut</b>: Claude Code's docs describe the combined check as a warning only, and the one size at
+    /// which a file is skipped is 4 MiB. The director's call is that the agent having every relevant manual is worth
+    /// the warning, so workflows are not trimmed to silence it.
     /// </para>
     /// <para>
     /// No other host expands an import. Antigravity is told to read <c>GEMINI.md</c> and ADK reads the file itself,

@@ -21,4 +21,7 @@ Answer these in `findings.md`:
 - **The distance renders.** Did the far render change what you did? Was the arithmetic in the
   instructions enough to make one, or did you have to work it out?
 - **The director's questions.** Which did you ask, which did you assume, and was the list the right one?
+- **The concepts.** Were your three per audience genuinely different — dominant element, composition,
+  palette — or one idea three ways? Which item in the profile started each, and why did the chosen one
+  win?
 - **The pair.** Could a stranger tell the two posters were for different people — and for the right ones?

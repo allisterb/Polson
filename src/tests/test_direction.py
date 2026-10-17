@@ -107,6 +107,17 @@ class ParseTests(unittest.TestCase):
         self.assertEqual(payload["queries"]["t5"]["requests"], 7)
         self.assertFalse(payload["truncated"])
 
+    def test_a_concepts_table_is_a_section_with_its_middle_columns_as_evidence(self):
+        """The template's concepts table has five columns; the three between choice and kind are the evidence."""
+        concepts = direction.parse(
+            "## Audience B\n\n| Concept | Operation | Dominant | Evidence | Kind |\n| :-- | :-- | :-- | :-- | :-- |\n"
+            "| **Chosen** — the dish | scale as narrative | dark ground | `t5` item 4 | Qloo |\n"
+            "| Rejected — … | | | | |\n")
+        rows = concepts[0]["rows"]
+        self.assertEqual(rows[0]["evidence"], "scale as narrative — dark ground — `t5` item 4")
+        self.assertEqual(rows[0]["refs"], ["t5"])
+        self.assertEqual(rows[1]["kinds"], [])
+
     def test_a_handle_in_prose_needs_its_boundaries(self):
         self.assertEqual(direction.refs("t2026 is a year, at5 is not a handle, (t7) is"), ["t7"])
 

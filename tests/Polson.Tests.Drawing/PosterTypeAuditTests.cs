@@ -55,6 +55,36 @@ public class PosterTypeAuditTests : TestsRuntime
         Assert.StartsWith("\"Screening is free. Screening is…\"", warning);
     }
 
+    /// <summary>
+    /// A line marked <c>data-print-exempt="line-length"</c>, on itself or a group around it, is not reported; its unmarked
+    /// neighbour still is. poster3's mandated "Unofficial poster study" line fired on every print file.
+    /// </summary>
+    [Fact]
+    public void TestAnExemptLineIsNotReportedAndItsNeighbourIs()
+    {
+        const string legal = "Unofficial poster study — not affiliated with the film's studio or distributors.";
+        var other = string.Concat(Enumerable.Repeat("Screening is free. ", 4)).Trim();
+
+        var warnings = Length($"""
+            <text x="50" y="300" {Face} font-size="24" data-print-exempt="line-length">{legal}</text>
+            <g data-print-exempt="safe-area, line-length"><text x="50" y="400" {Face} font-size="24">{legal} Again.</text></g>
+            <text x="50" y="500" {Face} font-size="24">{other}</text>
+            """);
+
+        Assert.StartsWith("\"Screening", Assert.Single(warnings));
+    }
+
+    /// <summary>The attribute set from a script survives into the document the checks read, and exempts there too.</summary>
+    [Fact]
+    public void TestAnExemptionSetThroughSnapReachesTheCheck()
+    {
+        var paper = Snap.Create(1000, 1414);
+        paper.Text(50, 300, "Unofficial poster study — not affiliated with the film's studio or distributors.")
+            .Attr(PosterTypeAudit.ExemptAttribute, PosterTypeAudit.LineLengthCheck);
+
+        Assert.Empty(PosterTypeAudit.CheckLineLength(PosterTypeAudit.Lines(SvgDocument.FromSvg<SvgDocument>(paper.ToString()))));
+    }
+
     [Fact]
     public void TestEachTspanWithItsOwnYIsALine()
     {

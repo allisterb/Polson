@@ -1050,6 +1050,8 @@ A **fallback list** in `ctx.font` is the other half of this: `'40px Didot, "Play
 - `Skia.Font.has(family: string)` → `boolean` — Whether `family` resolves to itself rather than a substitute.
 - `Skia.Font.resolve(family: string)` → `string` — The family that would actually be used. When it differs from what you asked for, the request fell back.
 
+**A weight is not part of a family's name.** `'Franklin Gothic Heavy'` names one face of `'Franklin Gothic'`, and as a family it is not found: write `font-family: 'Franklin Gothic'` with `font-weight: 900`. **On a Snap paper the response warns** — `[WARN] font-family "'Franklin Gothic Heavy'" (#title) names no installed family …` — for every list that names no installed family, and where the missing name is a family plus a weight or slant that is installed, it says which `font-family` and `font-weight` to use instead. The substitute a paper draws is not necessarily the one `resolve` reports, so the warning does not name it.
+
 ```javascript
 const wanted = ['Didot', 'Bodoni MT', 'Playfair Display', 'Garamond', 'Georgia'];
 const usable = wanted.filter(f => Skia.Font.has(f));

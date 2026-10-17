@@ -950,6 +950,18 @@ public partial class DrawingMcpTools
                 });
             }
 
+            // A family Skia does not have draws in a substitute with no signal at all, so the type in the peek is not
+            // the type the script and the direction name (poster3's review). Checked on every paper, asked or not.
+            if (result.Success && result.RenderedFromPaper && FontAudit.Check(result.SvgXml ?? "") is { Count: > 0 } fonts)
+            {
+                result.Logs.AddRange(fonts.Select(f => "[WARN] " + f));
+                Events.Append("render.fontsubstituted", session.Stage, executionId, new Dictionary<string, object?>
+                {
+                    ["script"] = scriptPath,
+                    ["warnings"] = fonts
+                });
+            }
+
             if (printSize is not null && result.Success)
             {
                 WritePrintPdf(result, outPdf!, printSize, bleedPt, safePt, session.Stage, executionId, scriptPath);
