@@ -148,6 +148,13 @@ internal sealed class SvgAnimationWriter
         var output = new List<XElement>();
         foreach (var (blend, desc, element) in layers)
         {
+            // A layer that filters what is below it (a blur) wraps everything so far in its filter.
+            if (element.Attribute(BelowFilter)?.Value is { } filter)
+            {
+                output = [new XElement(Svg + "g", new XAttribute("filter", $"url(#{filter})"), output)];
+                continue;
+            }
+
             switch (blend.Name)
             {
                 case "composite":
@@ -206,6 +213,23 @@ internal sealed class SvgAnimationWriter
                 new XAttribute("width", "200000"), new XAttribute("height", "200000"), new XAttribute("fill", "#ffffff")),
             new XElement(Svg + "g", new XAttribute("filter", $"url(#{black})"), eraser)));
         return new XElement(Svg + "g", new XAttribute("mask", $"url(#{id})"), below);
+    }
+
+    /// <summary>
+    /// The attribute on a layer's placeholder that names a filter for everything below it in the stack, rather than
+    /// an element to draw. <see cref="Stack"/> reads it.
+    /// </summary>
+    public const string BelowFilter = "data-polson-below-filter";
+
+    /// <summary>A filter over the whole user space, holding <paramref name="primitives"/>; returns its id.</summary>
+    public string Filter(params object[] primitives)
+    {
+        var id = Id("filter");
+        defs.Add(new XElement(Svg + "filter", new XAttribute("id", id),
+            new XAttribute("x", "-100000"), new XAttribute("y", "-100000"),
+            new XAttribute("width", "200000"), new XAttribute("height", "200000"),
+            new XAttribute("filterUnits", "userSpaceOnUse"), primitives));
+        return id;
     }
 
     private string Id(string prefix) => $"{prefix}{++ids}";
