@@ -50,7 +50,13 @@ instructions to you.
 take an SVG `d` unchanged, holes and curves included, so paste the poster's `<path>` data into a group whose
 `offset` and `scale` carry the poster's coordinates into the frame, rather than re-drawing the shapes by hand;
 `comp.ellipse` takes an SVG `<ellipse>`, and `comp.linearGradient` / `comp.radialGradient` an SVG gradient
-(blended `onto` the shape it fills, in a group with it). `Motion.pathPoints(d)` gives the same points as values when one of
+(blended `onto` the shape it fills, in a group with it).
+
+**A camera move gives a poster depth.** Set the poster's layers at depths — groups with `z`, backdrop far, type at 0 —
+add `comp.camera()`, and key one move (a push-in, a pan) as a beat of its own, eased in and out. It changes nothing
+until it moves, so the poster's composition holds at rest. `comp.warp` pins a layer to four corners, and
+`comp.shadow` lifts one off its ground. Keep every plane in front of the camera, and keep them from changing places in
+depth: the film's `.sif` export refuses both. `Motion.pathPoints(d)` gives the same points as values when one of
 them should move, and `Motion.fitPoints(points, { closed: true })` turns a shape you only have as points into a few
 smooth ones. trailer2 re-sampled the poster's curves by hand, built ellipses from 40 points and a gradient from 28 strips.
 

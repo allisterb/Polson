@@ -128,8 +128,8 @@ function Find-Cli {
 
     $apphost = if ($OnWindows) { 'Polson.CLI.exe' } else { 'Polson.CLI' }
 
-    # One output directory rather than a Release/Debug search: the CLI builds to bin/cli, which is
-    # what an agent harness's .mcp.json already points at.
+    # One output directory rather than a Release/Debug search: a Release build of the CLI is copied
+    # to bin/cli (./build), which is what an agent harness's .mcp.json already points at.
     $dir = Join-Path $RepoRoot 'bin/cli'
 
     # The apphost when the build produced one, because it needs no dotnet on PATH.

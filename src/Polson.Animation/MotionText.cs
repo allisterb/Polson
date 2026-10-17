@@ -93,22 +93,10 @@ public sealed class MotionText
     {
         if (!new MotionOptions(options, $"text.{who}", "frame").Bool("frame", false)) return layer.Letters(time);
 
-        var steps = new List<(MotionLayer.GroupLayer Group, MotionLayer Child)>();
-        MotionLayer child = layer;
-        for (var s = stack; s is MotionGroup g; s = g.Parent!)
-        {
-            steps.Add((g.Layer, child));
-            child = g.Layer;
-        }
-
-        var matrix = stack.Root?.ViewMatrix() ?? SKMatrix.Identity;
-        foreach (var (group, inner) in Enumerable.Reverse(steps))
-        {
-            var (m, t, shows) = group.Into(time, inner);
-            if (!shows) return [];
-            (matrix, time) = (SKMatrix.Concat(matrix, m), t);
-        }
-        return [.. layer.Letters(time).Select(l => l with { Ink = matrix.MapRect(l.Ink) })];
+        var (space, local, own, visible) = stack.SpaceAt(time);
+        if (!visible || stack is MotionGroup g && !g.Layer.Shows(own, layer)) return [];
+        var matrix = SKMatrix.Concat(stack.Root?.ViewMatrix() ?? SKMatrix.Identity, space.Plane);
+        return [.. layer.Letters(local).Select(l => l with { Ink = matrix.MapRect(l.Ink) })];
     }
 
     private static Dictionary<string, object?> Box(SKRect r) => new()

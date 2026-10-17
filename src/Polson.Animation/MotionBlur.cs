@@ -38,20 +38,22 @@ internal sealed class MotionBlurLayer : MotionLayer, IMotionStackFilter
         if (!Blend.IsComposite)
             throw new ArgumentException($"{o.Who} replaces the stack below it with its blur, as Synfig's straight blend does; it takes amount, not blend.");
 
-        // A number is both axes, and so is a keyed number — a focus pull is keyed as one value, as an agent writes it
-        // first — linked into both of a composite so it stays one value in .sif too. Anything else is read as a vector.
-        size = o.Raw("size") switch
-        {
-            IConvertible n and not string => MotionNodeFactory.Node(new[] { Convert.ToDouble(n), Convert.ToDouble(n) }, MotionType.Vector, $"{o.Who}'s size"),
-            MotionNode { Kind: MotionType.Real } r => new MotionComposite(r, r),
-            // Synfig's default is 0.1 of its units, which are 60 px by default: 6 px. Ours are the view's, pixels
-            // unless the composition says otherwise, where 0.1 is no blur at all (trailer1 found the docs' example
-            // invisible).
-            _ => o.Node("size", MotionType.Vector, new[] { 6d, 6d }),
-        };
-
+        size = ReadSize(o);
         type = o.Has("type") ? ParseType(o.Raw("type")?.ToString(), o.Who) : BlurType.FastGaussian;
     }
+
+    /// <summary>
+    /// A blur's <c>size</c>: a number is both axes, and so is a keyed number — a focus pull is keyed as one value, as an
+    /// agent writes it first — linked into both of a composite so it stays one value in .sif too. Anything else is a vector.
+    /// </summary>
+    internal static MotionNode ReadSize(MotionOptions o) => o.Raw("size") switch
+    {
+        IConvertible n and not string => MotionNodeFactory.Node(new[] { Convert.ToDouble(n), Convert.ToDouble(n) }, MotionType.Vector, $"{o.Who}'s size"),
+        MotionNode { Kind: MotionType.Real } r => new MotionComposite(r, r),
+        // Synfig's default is 0.1 of its units, which are 60 px by default: 6 px. Ours are the view's, pixels unless the
+        // composition says otherwise, where 0.1 is no blur at all (trailer1 found the docs' example invisible).
+        _ => o.Node("size", MotionType.Vector, new[] { 6d, 6d }),
+    };
     #endregion
 
     #region Types
@@ -111,14 +113,20 @@ internal sealed class MotionBlurLayer : MotionLayer, IMotionStackFilter
     public bool IsIdle(SKMatrix matrix, double time)
     {
         if (AmountAt(time) <= 0) return true;
-        var (sx, sy) = Pixels(matrix, time);
+        var (sx, sy) = Pixels(size, matrix, time);
         return sx <= 1e-10 && sy <= 1e-10;
     }
 
     /// <summary>Synfig's extra size: how far beyond what is kept the blur reads, per axis, in device pixels.</summary>
     public (int X, int Y) Margin(SKMatrix matrix, double time)
     {
-        var (sx, sy) = Pixels(matrix, time);
+        var (sx, sy) = Pixels(size, matrix, time);
+        return MarginFor(type, sx, sy);
+    }
+
+    /// <summary>The extra size of a blur of <paramref name="type"/> and these device-pixel sizes.</summary>
+    internal static (int X, int Y) MarginFor(BlurType type, double sx, double sy)
+    {
         var k = ExtraFactor(type);
         return (Extra(sx * k), Extra(sy * k));
 
@@ -130,14 +138,14 @@ internal sealed class MotionBlurLayer : MotionLayer, IMotionStackFilter
         var amount = AmountAt(time);
         var result = new SkiaCanvas(below.Width, below.Height, below.SkBitmap.ColorType);
         result.SkCanvas.Clear(SKColors.Transparent);
-        var (sx, sy) = Pixels(matrix, time);
+        var (sx, sy) = Pixels(size, matrix, time);
         if (amount <= 0 || (sx <= 1e-10 && sy <= 1e-10))
         {
             result.SkCanvas.DrawBitmap(below.SkBitmap, 0, 0);
             return result;
         }
 
-        using var blurred = Blurred(below.SkBitmap, sx, sy, Margin(matrix, time));
+        using var blurred = Blurred(below.SkBitmap, type, sx, sy, Margin(matrix, time));
 
         // Straight blend on premultiplied colour: (blurred − below)·amount + below.
         if (amount >= 1)
@@ -153,7 +161,44 @@ internal sealed class MotionBlurLayer : MotionLayer, IMotionStackFilter
     }
 
     /// <summary><c>size</c> in device pixels along each axis: Synfig's <c>size.multiply_coords(ppu)</c>.</summary>
-    private (double X, double Y) Pixels(SKMatrix matrix, double time)
+    /// <summary>
+    /// One channel blurred as <see cref="Blurred"/> blurs four: a shadow is one colour, so only its coverage needs it, at a
+    /// quarter of the work. Wide Gaussians take Skia's Gaussian at the same σ, as the four-channel path does.
+    /// </summary>
+    internal static float[] BlurredAlpha(float[] alpha, int w, int h, BlurType type, double sizeX, double sizeY, (int X, int Y) extra)
+    {
+        static int Round(double v) => (int)Math.Round(v, MidpointRounding.AwayFromZero);
+        if (type == BlurType.Gaussian && (extra.X >= 32 || extra.Y >= 32))
+        {
+            using var mask = new SKBitmap(new SKImageInfo(w, h, SKColorType.AlphaF16, SKAlphaType.Premul));
+            using var source = new SKBitmap(new SKImageInfo(w, h, SKColorType.AlphaF16, SKAlphaType.Premul));
+            var span = MemoryMarshal.Cast<byte, Half>(source.GetPixelSpan());
+            for (var i = 0; i < alpha.Length; i++) span[i] = (Half)alpha[i];
+            source.NotifyPixelsChanged();
+            using (var canvas = new SKCanvas(mask))
+            {
+                canvas.Clear(SKColors.Transparent);
+                using var filter = SKImageFilter.CreateBlur((float)(0.5 + GaussAmplifier * sizeX), (float)(0.5 + GaussAmplifier * sizeY), SKShaderTileMode.Decal);
+                using var paint = new SKPaint { ImageFilter = filter };
+                canvas.DrawBitmap(source, 0, 0, paint);
+            }
+            var result = MemoryMarshal.Cast<byte, Half>(mask.GetPixelSpan());
+            var output = new float[alpha.Length];
+            for (var i = 0; i < output.Length; i++) output[i] = (float)result[i];
+            return output;
+        }
+
+        return type switch
+        {
+            BlurType.Gaussian => SynfigBlur.Gaussian(alpha, w, h, GaussAmplifier * sizeX, GaussAmplifier * sizeY, extra, 1),
+            BlurType.FastGaussian => SynfigBlur.Box(alpha, w, h, Round(GaussAmplifier * FastGaussStretch * sizeX), Round(GaussAmplifier * FastGaussStretch * sizeY), false, 1),
+            BlurType.Box => SynfigBlur.Box(alpha, w, h, Round(BoxAmplifier * sizeX), Round(BoxAmplifier * sizeY), false, 1),
+            BlurType.Cross => SynfigBlur.Box(alpha, w, h, Round(sizeX), Round(sizeY), true, 1),
+            _ => throw new InvalidOperationException($"A {Name(type)} blur is not ported."),
+        };
+    }
+
+    internal static (double X, double Y) Pixels(MotionNode size, SKMatrix matrix, double time)
     {
         var s = size.Evaluate(time);
         var ppuX = Math.Sqrt(matrix.ScaleX * matrix.ScaleX + matrix.SkewY * matrix.SkewY);
@@ -162,7 +207,7 @@ internal sealed class MotionBlurLayer : MotionLayer, IMotionStackFilter
     }
 
     /// <summary>The stack blurred, as Synfig's software renderer does it, on premultiplied float colour.</summary>
-    private SKBitmap Blurred(SKBitmap source, double sizeX, double sizeY, (int X, int Y) extra)
+    internal static SKBitmap Blurred(SKBitmap source, BlurType type, double sizeX, double sizeY, (int X, int Y) extra)
     {
         int w = source.Width, h = source.Height;
         var info = new SKImageInfo(w, h, SKColorType.RgbaF32, SKAlphaType.Premul);
@@ -205,7 +250,7 @@ internal sealed class MotionBlurLayer : MotionLayer, IMotionStackFilter
         static int Round(double v) => (int)Math.Round(v, MidpointRounding.AwayFromZero);
     }
 
-    private static BlurType ParseType(string? name, string who) => name?.Trim().ToLowerInvariant() switch
+    internal static BlurType ParseType(string? name, string who) => name?.Trim().ToLowerInvariant() switch
     {
         "box" => BlurType.Box,
         "fastgaussian" => BlurType.FastGaussian,
@@ -217,7 +262,7 @@ internal sealed class MotionBlurLayer : MotionLayer, IMotionStackFilter
         _ => throw new ArgumentException($"{who}'s type is 'gaussian', 'fastGaussian', 'box' or 'cross'; '{name}' is not."),
     };
 
-    private static string Name(BlurType t) => t switch
+    internal static string Name(BlurType t) => t switch
     {
         BlurType.FastGaussian => "fastGaussian",
         _ => t.ToString().ToLowerInvariant(),
@@ -238,7 +283,7 @@ internal sealed class MotionBlurLayer : MotionLayer, IMotionStackFilter
     #endregion
 
     #region Fields (static)
-    private const double GaussAmplifier = 3.0 / 8.0;
+    internal const double GaussAmplifier = 3.0 / 8.0;
     private const double FastGaussStretch = 1.662155813;
     private static readonly double BoxAmplifier = 0.25 * Math.Sqrt(Math.PI);
     #endregion
@@ -253,15 +298,17 @@ internal static class SynfigBlur
     /// extra size, normalised over the whole, run along rows into a fresh surface and then along its columns.
     /// Outside the extra size from any edge the result is left empty, as Synfig's is.
     /// </summary>
-    public static float[] Gaussian(float[] src, int w, int h, double ax, double ay, (int X, int Y) extra)
+    /// <remarks><paramref name="channels"/> per pixel, interleaved: 4 for premultiplied RGBA, 1 for a shadow's alpha alone.</remarks>
+    public static float[] Gaussian(float[] src, int w, int h, double ax, double ay, (int X, int Y) extra, int channels = 4)
     {
         var rowPattern = Pattern(extra.X + 1, 0.5 + Math.Abs(ax));
         var colPattern = Pattern(extra.Y + 1, 0.5 + Math.Abs(ay));
+        var n = channels;
 
         var rows = new float[src.Length];
-        Parallel.For(0, h, y => Convolve(src, rows, y * w * 4, 4, w, rowPattern));
+        Parallel.For(0, h, y => Convolve(src, rows, y * w * n, n, w, rowPattern, n));
         var cols = new float[src.Length];
-        Parallel.For(0, w, x => Convolve(rows, cols, x * 4, w * 4, h, colPattern));
+        Parallel.For(0, w, x => Convolve(rows, cols, x * n, w * n, h, colPattern, n));
         return cols;
     }
 
@@ -270,20 +317,21 @@ internal static class SynfigBlur
     /// <paramref name="ry"/> along columns, in place. <paramref name="cross"/> halves the stack, runs the row pass on one
     /// copy and the column pass on the other, and sums them.
     /// </summary>
-    public static float[] Box(float[] src, int w, int h, int rx, int ry, bool cross)
+    public static float[] Box(float[] src, int w, int h, int rx, int ry, bool cross, int channels = 4)
     {
+        var n = channels;
         var surface = (float[])src.Clone();
         if (!cross)
         {
-            Parallel.For(0, h, y => BoxLine(surface, y * w * 4, 4, w, rx));
-            Parallel.For(0, w, x => BoxLine(surface, x * 4, w * 4, h, ry));
+            Parallel.For(0, h, y => BoxLine(surface, y * w * n, n, w, rx, n));
+            Parallel.For(0, w, x => BoxLine(surface, x * n, w * n, h, ry, n));
             return surface;
         }
 
         for (var i = 0; i < surface.Length; i++) surface[i] *= 0.5f;
         var copy = (float[])surface.Clone();
-        Parallel.For(0, h, y => BoxLine(surface, y * w * 4, 4, w, rx));
-        Parallel.For(0, w, x => BoxLine(copy, x * 4, w * 4, h, ry));
+        Parallel.For(0, h, y => BoxLine(surface, y * w * n, n, w, rx, n));
+        Parallel.For(0, w, x => BoxLine(copy, x * n, w * n, h, ry, n));
         for (var i = 0; i < surface.Length; i++) surface[i] += copy[i];
         return surface;
     }
@@ -302,13 +350,13 @@ internal static class SynfigBlur
     }
 
     /// <summary><c>blur_pattern</c> along one line of <paramref name="count"/> pixels, every channel.</summary>
-    private static void Convolve(float[] src, float[] dst, int start, int stride, int count, double[] pattern)
+    private static void Convolve(float[] src, float[] dst, int start, int stride, int count, double[] pattern, int channels)
     {
         var size = pattern.Length - 1;
         for (var i = size; i < count - size; i++)
         {
             var at = start + i * stride;
-            for (var c = 0; c < 4; c++)
+            for (var c = 0; c < channels; c++)
             {
                 var v = src[at + c] * pattern[0];
                 for (var k = 1; k <= size; k++) v += (src[at - k * stride + c] + src[at + k * stride + c]) * pattern[k];
@@ -321,21 +369,22 @@ internal static class SynfigBlur
     /// <c>blur_box_discrete</c> in place: each pixel from <paramref name="radius"/> to <c>count − radius − 1</c> becomes
     /// the mean of the window around it, read before it was overwritten; the ends are left as they were.
     /// </summary>
-    private static void BoxLine(float[] x, int start, int stride, int count, int radius)
+    private static void BoxLine(float[] x, int start, int stride, int count, int radius, int channels)
     {
         var s = Math.Abs(radius);
         var full = 1 + 2 * s;
         if (s == 0 || count < full) return;
         var weight = 1.0 / full;
+        var n = channels;
 
-        Span<double> sum = stackalloc double[4];
-        var window = new float[full * 4];
+        Span<double> sum = stackalloc double[n];
+        var window = new float[full * n];
         for (var i = 0; i < full; i++)
         {
-            for (var c = 0; c < 4; c++)
+            for (var c = 0; c < n; c++)
             {
                 var v = x[start + i * stride + c];
-                window[i * 4 + c] = v;
+                window[i * n + c] = v;
                 sum[c] += v;
             }
         }
@@ -343,12 +392,12 @@ internal static class SynfigBlur
         var head = 0;
         for (int i = full, j = s; i < count; i++, j++)
         {
-            for (var c = 0; c < 4; c++)
+            for (var c = 0; c < n; c++)
             {
                 x[start + j * stride + c] = (float)(weight * sum[c]);
                 var incoming = x[start + i * stride + c];
-                sum[c] += incoming - window[head * 4 + c];
-                window[head * 4 + c] = incoming;
+                sum[c] += incoming - window[head * n + c];
+                window[head * n + c] = incoming;
             }
             head = (head + 1) % full;
         }

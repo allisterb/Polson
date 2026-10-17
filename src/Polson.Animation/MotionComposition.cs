@@ -253,8 +253,26 @@ public abstract class MotionLayerList
     public MotionGroup Group(object? options = null)
     {
         var o = new MotionOptions(options, "group",
-            "origin", "offset", "angle", "skewAngle", "scale", "bone", "amount", "blend", "timeOffset", "timeDilation", "desc");
+            "origin", "offset", "angle", "skewAngle", "scale", "z", "rotateX", "rotateY", "bone", "amount", "blend", "timeOffset", "timeDilation", "desc");
         var group = new MotionGroup(o) { Root = Root, Parent = this };
+        layers.Add(group.Layer);
+        return group;
+    }
+
+    /// <summary>
+    /// A group whose layers are pinned to four corners: <c>{ from: [left, top, right, bottom], to: [tl, tr, br, bl], clip?,
+    /// ...the group's options }</c>, returned so layers can be added to it. The rectangle <c>from</c>, in the layers' units,
+    /// is drawn onto the corners <c>to</c>, each keyable; <c>clip</c> (true) shows nothing outside the rectangle.
+    /// </summary>
+    /// <remarks>
+    /// Synfig's warp layer ("Perspective"), on top of the layers in a group of their own. The pinned layers are drawn as
+    /// vectors through the perspective, so type stays sharp.
+    /// </remarks>
+    public MotionGroup Warp(object? options)
+    {
+        var o = new MotionOptions(options, "warp",
+            "from", "to", "clip", "origin", "offset", "angle", "skewAngle", "scale", "amount", "blend", "timeOffset", "timeDilation", "desc");
+        var group = new MotionGroup(o, pin: MotionPin.Read(o)) { Root = Root, Parent = this };
         layers.Add(group.Layer);
         return group;
     }
@@ -272,7 +290,7 @@ public abstract class MotionLayerList
     public MotionGroup Switch(object? options)
     {
         var o = new MotionOptions(options, "switch",
-            "active", "origin", "offset", "angle", "skewAngle", "scale", "bone", "amount", "blend", "timeOffset", "timeDilation", "desc");
+            "active", "origin", "offset", "angle", "skewAngle", "scale", "z", "rotateX", "rotateY", "bone", "amount", "blend", "timeOffset", "timeDilation", "desc");
         var group = new MotionGroup(o, MotionSwitchTrack.Read(o.Raw("active"), "switch")) { Root = Root, Parent = this };
         layers.Add(group.Layer);
         return group;
@@ -380,6 +398,25 @@ public abstract class MotionLayerList
     }
 
     /// <summary>
+    /// A shadow of everything below it in this stack: <c>{ offset?, size?, type?, color?, invert?, amount?, blend?, desc? }</c>.
+    /// The stack's shape in <c>color</c> (black), moved by <c>offset</c> ([6, 6]) and blurred by <c>size</c> (6, a number or
+    /// <c>[x, y]</c>, keyable, the blur's kinds), blended <c>behind</c> the stack at <c>amount</c> 0.75 unless told otherwise.
+    /// An inner shadow is <c>invert: true, blend: 'onto'</c>.
+    /// </summary>
+    /// <remarks>Synfig's shade layer. Like the blur it stops at its own group: put it in a group with what casts it.</remarks>
+    public MotionLayerList Shadow(object? options = null)
+    {
+        var given = JsInterop.AsDict(options) ?? (options is null ? new Hashtable() : throw new ArgumentException("shadow takes an options object."));
+        var withDefaults = new Hashtable();
+        foreach (DictionaryEntry e in given) withDefaults[e.Key] = e.Value;
+        if (!withDefaults.Contains("amount") || withDefaults["amount"] is null) withDefaults["amount"] = 0.75;
+        if (!withDefaults.Contains("blend") || withDefaults["blend"] is null) withDefaults["blend"] = "behind";
+        var o = new MotionOptions(withDefaults, "shadow", "offset", "size", "type", "color", "invert", "amount", "blend", "desc");
+        layers.Add(new MotionShadowLayer(o));
+        return this;
+    }
+
+    /// <summary>
     /// Rigs one drawing to bend: bones from its landmarks, and the drawing in a group with a skeleton deformation
     /// over it. <c>landmarks</c> is <c>Character.detect(image)</c> or <c>{ leftShoulder: [x, y], ... }</c>.
     /// <c>options</c>: <c>{ tl?, br?, poses?, turns?, move?, prefix?, subdivisions?, desc? }</c>.
@@ -397,6 +434,48 @@ public abstract class MotionLayerList
 
     /// <summary>The stack a group was added to; null for the composition itself.</summary>
     internal MotionLayerList? Parent { get; private protected set; }
+
+    /// <summary>
+    /// Where this stack's units go at a time in the composition's seconds, through every group above: its space, the time
+    /// its layers see, the time of the stack it sits in, and whether it shows (a switch shows one layer; a pin with no map
+    /// shows nothing).
+    /// </summary>
+    internal (MotionSpace Space, double Time, double OwnTime, bool Visible) SpaceAt(double rootTime)
+    {
+        if (this is not MotionGroup g || g.Parent is null) return (MotionSpace.Root, rootTime, rootTime, true);
+        var (ps, pt, pOwn, pv) = g.Parent.SpaceAt(rootTime);
+        var (s, t) = g.Layer.Enter(ps, Root?.CameraAt(rootTime), pt);
+        var shown = g.Parent is not MotionGroup pg || pg.Layer.Shows(pOwn, g.Layer);
+        return (s ?? ps, t, pt, pv && shown && s is not null);
+    }
+
+    /// <summary>Whether a skeleton deformation sits here or in any group below.</summary>
+    internal bool HasDeformationDeep =>
+        layers.Any(l => l is MotionDeformationLayer || l is MotionLayer.GroupLayer g && g.Children.HasDeformationDeep);
+
+    /// <summary>
+    /// The layers in drawing order: each run of consecutive 3D groups sorted far to near by its anchor's camera depth, as
+    /// After Effects sorts a run of 3D layers; ties, and everything 2D, keep the stack's order.
+    /// </summary>
+    internal List<MotionLayer> Ordered(MotionSpace space, MotionCameraFrame? camera, double time)
+    {
+        if (camera is null || !layers.Any(l => l is MotionLayer.GroupLayer { Is3D: true })) return layers;
+        var result = new List<MotionLayer>();
+        var run = new List<MotionLayer.GroupLayer>();
+        foreach (var layer in layers.Append(null))
+        {
+            if (layer is MotionLayer.GroupLayer { Is3D: true } g)
+            {
+                run.Add(g);
+                continue;
+            }
+            result.AddRange(run.Select((r, i) => (r, i, d: r.AnchorDepth(space, camera, time)))
+                .OrderByDescending(x => x.d).ThenBy(x => x.i).Select(x => (MotionLayer)x.r));
+            run.Clear();
+            if (layer is not null) result.Add(layer);
+        }
+        return result;
+    }
 
     /// <summary>Adds a layer built elsewhere — the text layer's export builds its per-letter groups this way.</summary>
     internal void Add(MotionLayer layer) => layers.Add(layer);
@@ -417,11 +496,12 @@ public abstract class MotionLayerList
         // A filter that does nothing at this time is passed over, and a stack whose filters all do nothing is drawn in
         // place: drawing it apart and back costs a frame-sized surface for no change.
         var canvas = surface.SkCanvas;
-        var frame = canvas.TotalMatrix;
+        var frame = Tangent(canvas.TotalMatrix, surface.Width / 2f, surface.Height / 2f);
+        var ordered = Root?.Frame is { } camera ? Ordered(Root.Space, camera, time) : layers;
         var active = layers.OfType<IMotionStackFilter>().Where(f => !f.IsIdle(frame, time)).ToHashSet();
         if (active.Count == 0)
         {
-            foreach (var layer in layers.Where(l => l is not IMotionStackFilter)) layer.Render(surface, time);
+            foreach (var layer in ordered.Where(l => l is not IMotionStackFilter)) layer.Render(surface, time);
             return;
         }
 
@@ -431,11 +511,13 @@ public abstract class MotionLayerList
         // Padded by the widest filter's margin, so a blur near the frame's edge reads what lies beyond it.
         var (mx, my) = active.Select(f => f.Margin(frame, time))
             .Aggregate((X: 0, Y: 0), (a, b) => (Math.Max(a.X, b.X), Math.Max(a.Y, b.Y)));
-        var matrix = SKMatrix.Concat(SKMatrix.CreateTranslation(mx, my), frame);
+        var shift = SKMatrix.CreateTranslation(mx, my);
+        var matrix = SKMatrix.Concat(shift, canvas.TotalMatrix);
+        var filterMatrix = SKMatrix.Concat(shift, frame);
         var stack = Fresh(surface, matrix, mx, my);
         try
         {
-            foreach (var layer in layers)
+            foreach (var layer in ordered)
             {
                 if (layer is not IMotionStackFilter filter)
                 {
@@ -444,7 +526,7 @@ public abstract class MotionLayerList
                 }
                 if (!active.Contains(filter)) continue;
 
-                var filtered = filter.Apply(stack, matrix, time);
+                var filtered = filter.Apply(stack, filterMatrix, time);
                 stack.Dispose();
                 stack = filtered;
                 stack.SkCanvas.SetMatrix(matrix);
@@ -469,7 +551,49 @@ public abstract class MotionLayerList
         }
     }
 
-    internal IEnumerable<XElement> LayersToSif(SifWriter sif) => layers.Select(l => l.ToSif(sif));
+    /// <summary>
+    /// The layers as <c>.sif</c>, a run of 3D groups in the order the camera sorts them. Synfig's order is fixed, so a run
+    /// whose order changes during the film is refused, naming the two groups and when they cross.
+    /// </summary>
+    internal IEnumerable<XElement> LayersToSif(SifWriter sif)
+    {
+        if (Root?.HasCamera != true || !layers.Any(l => l is MotionLayer.GroupLayer { Is3D: true }))
+            return [.. layers.Select(l => l.ToSif(sif))];
+
+        List<MotionLayer>? first = null;
+        for (var f = 0; f < Root.FrameCount; f++)
+        {
+            var t = f / Root.Fps;
+            var (space, local, _, _) = SpaceAt(t);
+            var order = Ordered(space, Root.CameraAt(t), local);
+            if (first is null) first = order;
+            else if (!order.SequenceEqual(first))
+            {
+                var i = Enumerable.Range(0, order.Count).First(k => !ReferenceEquals(order[k], first[k]));
+                throw new InvalidOperationException(
+                    $"The 3D groups {Name(first[i])} and {Name(order[i])} change places in depth at {MotionTypes.Format(t)} s, and a .sif "
+                    + "holds one order for the whole film. Keep one in front of the other throughout (its z), or render the film as video.");
+            }
+        }
+        return [.. first!.Select(l => l.ToSif(sif))];
+
+        static string Name(MotionLayer l) => l.Desc is null ? "(a group with no desc)" : $"'{l.Desc}'";
+    }
+
+    /// <summary>
+    /// A frame as a filter reads it: itself when affine; under a perspective (a 3D group, a pin), its tangent where the
+    /// device point (<paramref name="x"/>, <paramref name="y"/>) falls — the plane's scale and direction there — so a blur
+    /// or shadow inside works on the picture as the camera sees it, sized as at the frame's centre.
+    /// </summary>
+    internal static SKMatrix Tangent(SKMatrix m, float x, float y)
+    {
+        if (Math.Abs(m.Persp0) < 1e-12 && Math.Abs(m.Persp1) < 1e-12) return m;
+        if (!m.TryInvert(out var back)) return m;
+        var at = back.MapPoint(x, y);
+        var (p, px, py) = (m.MapPoint(at), m.MapPoint(at.X + 1, at.Y), m.MapPoint(at.X, at.Y + 1));
+        var (ax, ay) = (px - p, py - p);
+        return new SKMatrix(ax.X, ay.X, p.X - ax.X * at.X - ay.X * at.Y, ax.Y, ay.Y, p.Y - ax.Y * at.X - ay.Y * at.Y, 0, 0, 1);
+    }
 
     internal IEnumerable<XElement> LayersToSvg(SvgAnimationWriter svg, MotionTimeMap map) =>
         [.. svg.Stack([.. layers.Select(l => (l.Blend, l.Desc, l.ToSvg(svg, map)))])];
@@ -519,7 +643,7 @@ public abstract class MotionLayerList
 public sealed class MotionGroup : MotionLayerList
 {
     #region Constructors
-    internal MotionGroup(MotionOptions o, MotionSwitchTrack? active = null) => Layer = new MotionLayer.GroupLayer(o, this, active);
+    internal MotionGroup(MotionOptions o, MotionSwitchTrack? active = null, MotionPin? pin = null) => Layer = new MotionLayer.GroupLayer(o, this, active, pin);
     #endregion
 
     #region Properties
@@ -626,6 +750,44 @@ public sealed class MotionComposition : MotionLayerList
         return this;
     }
 
+    /// <summary>
+    /// The composition's camera: <c>{ target?, targetZ?, distance?, orbit?, tilt?, roll?, zoom? | focalLength? }</c>. Groups
+    /// given <c>z</c>, <c>rotateX</c> or <c>rotateY</c> become planes it sees in perspective. It looks at <c>target</c> (the
+    /// frame's centre) from <c>distance</c> (the lens's own, which shows z = 0 at 100%), swung <c>orbit</c> degrees round
+    /// the vertical and raised <c>tilt</c> degrees, rolled <c>roll</c>; <c>zoom</c> is the lens in units, or
+    /// <c>focalLength</c> in millimetres on 36 mm film (50). Every option keys. Returns the composition.
+    /// </summary>
+    public MotionComposition Camera(object? options = null)
+    {
+        if (camera is not null) throw new InvalidOperationException("This composition has a camera already; key its options rather than adding another.");
+        camera = new MotionCamera(new MotionOptions(options, "camera",
+            "target", "targetZ", "distance", "orbit", "tilt", "roll", "zoom", "focalLength"), View);
+        return this;
+    }
+
+    internal bool HasCamera => camera is not null;
+
+    internal MotionCameraFrame? CameraAt(double time) => camera?.At(time);
+
+    /// <summary>The camera at the frame being drawn, null with no camera.</summary>
+    internal MotionCameraFrame? Frame { get; private set; }
+
+    /// <summary>The space of the stack being drawn: pushed by each group as it draws its layers.</summary>
+    internal MotionSpace Space => spaces.Count > 0 ? spaces.Peek() : MotionSpace.Root;
+
+    internal void PushSpace(MotionSpace space) => spaces.Push(space);
+
+    internal void PopSpace() => spaces.Pop();
+
+    private void BeginFrame(double time)
+    {
+        spaces.Clear();
+        Frame = camera?.At(time);
+    }
+
+    private MotionCamera? camera;
+    private readonly Stack<MotionSpace> spaces = new();
+
     /// <summary>The composition at a time in seconds, on a new canvas.</summary>
     public SkiaCanvas Render(double time) => Render(time, 1);
 
@@ -636,6 +798,7 @@ public sealed class MotionComposition : MotionLayerList
         var frame = SKMatrix.Concat(SKMatrix.CreateScale((float)scale, (float)scale), ViewMatrix());
         var canvas = new SkiaCanvas(w, h);
         canvas.SkCanvas.Clear(SKColors.Transparent);
+        BeginFrame(time);
         if (!HasBlendedLayersDeep)
         {
             canvas.SkCanvas.Save();
@@ -662,6 +825,7 @@ public sealed class MotionComposition : MotionLayerList
     public void Draw(CanvasRenderingContext2D ctx, double time)
     {
         ArgumentNullException.ThrowIfNull(ctx);
+        BeginFrame(time);
         var c = ctx.Canvas.SkCanvas;
         c.Save();
         // The composition's own frame and nothing outside it: a fill paints everything it can reach, so unclipped, one
@@ -1635,10 +1799,14 @@ internal abstract class MotionLayer
 
     public sealed class GroupLayer : MotionLayer
     {
-        public GroupLayer(MotionOptions o, MotionGroup children, MotionSwitchTrack? active = null) : base(o)
+        public GroupLayer(MotionOptions o, MotionGroup children, MotionSwitchTrack? active = null, MotionPin? pin = null) : base(o)
         {
             this.children = children;
-            (this.active, who) = (active, o.Who);
+            (this.active, who, this.pin) = (active, o.Who, pin);
+            z = o.Node("z", MotionType.Real, 0d);
+            rotateX = o.Node("rotateX", MotionType.Angle, 0d);
+            rotateY = o.Node("rotateY", MotionType.Angle, 0d);
+            Is3D = o.Has("z") || o.Has("rotateX") || o.Has("rotateY");
             origin = o.Node("origin", MotionType.Vector, new[] { 0d, 0d });
             offset = o.Node("offset", MotionType.Vector, new[] { 0d, 0d });
             angle = o.Node("angle", MotionType.Angle, 0d);
@@ -1651,7 +1819,7 @@ internal abstract class MotionLayer
             {
                 if (o.Raw("bone") is not MotionBone b)
                     throw new ArgumentException($"{o.Who}'s bone is a bone made by composition.bone(...); a weighted list binds points, not groups.");
-                var own = new[] { "origin", "offset", "angle", "skewAngle", "scale" }.Where(o.Has).ToArray();
+                var own = new[] { "origin", "offset", "angle", "skewAngle", "scale", "z", "rotateX", "rotateY" }.Where(o.Has).ToArray();
                 if (own.Length > 0)
                     throw new ArgumentException(
                         $"{o.Who} follows bone '{b.Name}', which gives it its transform: drop {string.Join(", ", own)}, or put them on a group inside it.");
@@ -1664,7 +1832,11 @@ internal abstract class MotionLayer
         private readonly MotionAffine restInverse;
 
         private readonly MotionGroup children;
-        private readonly MotionNode origin, offset, angle, skewAngle, scale;
+        private readonly MotionNode origin, offset, angle, skewAngle, scale, z, rotateX, rotateY;
+        private readonly MotionPin? pin;
+
+        /// <summary>A plane the camera sees in perspective: given <c>z</c>, <c>rotateX</c> or <c>rotateY</c>.</summary>
+        internal bool Is3D { get; }
         /// <summary>For a switch, which child shows, read at the switch's own time; null for a plain group.</summary>
         private readonly MotionSwitchTrack? active;
         private readonly string who;
@@ -1673,7 +1845,7 @@ internal abstract class MotionLayer
         private readonly double timeOffset, timeDilation;
 
         public override IEnumerable<MotionNode> Nodes() =>
-            new[] { Amount, origin, offset, angle, skewAngle, scale }.Concat(children.Nodes());
+            new[] { Amount, origin, offset, angle, skewAngle, scale, z, rotateX, rotateY }.Concat(pin?.To ?? []).Concat(children.Nodes());
 
         /// <summary>
         /// Draws the children in the group's frame. They are drawn on a surface of their own whenever that
@@ -1686,9 +1858,35 @@ internal abstract class MotionLayer
             var only = Shown(time);
             if (active is not null && only is null) return;
 
+            var root = children.Root;
+            var parent = root?.Space ?? MotionSpace.Root;
+            var (space, childTime) = Enter(parent, root?.Frame, time);
+            if (space is not { } inner) return;
+            if ((Is3D || pin is not null) && children.HasDeformationDeep)
+                throw new InvalidOperationException($"The {(Is3D ? "3D group" : "warp")}{Named} holds a skeleton deformation, whose bones live on a flat "
+                    + "page, not seen in perspective. Put the 3D group or warp round the deformed drawing's group instead, or keep it flat.");
+
             var canvas = surface.SkCanvas;
             canvas.Save();
-            canvas.Concat(Matrix(time));
+            if (Is3D)
+            {
+                if (!parent.Plane.TryInvert(out var back)) { canvas.Restore(); return; }
+                canvas.Concat(SKMatrix.Concat(back, inner.Plane));
+                // Only what lies in front of the camera's near plane: a half-plane of the layer's own units.
+                var clip = NearClip(inner, root!.Frame!);
+                if (clip is null) { canvas.Restore(); return; }
+                using (clip) if (!clip.IsEmpty) canvas.ClipPath(clip, SKClipOperation.Intersect, true);
+            }
+            else
+            {
+                canvas.Concat(Matrix(time));
+                if (pin is not null)
+                {
+                    canvas.Concat(pin.At(time)!.Value);
+                    if (pin.Clip) canvas.ClipRect(pin.Rect, SKClipOperation.Intersect, true);
+                }
+            }
+
             var isolate = amount < 1 || children.HasBlendedLayers;
             if (isolate)
             {
@@ -1696,9 +1894,105 @@ internal abstract class MotionLayer
                 canvas.SaveLayer(fade);
             }
 
-            children.RenderLayers(surface, time * timeDilation + timeOffset, only);
+            root?.PushSpace(inner);
+            try
+            {
+                children.RenderLayers(surface, childTime, only);
+            }
+            finally
+            {
+                root?.PopSpace();
+            }
             if (isolate) canvas.Restore();
             canvas.Restore();
+        }
+
+        private string Named => Desc is null ? "" : $" '{Desc}'";
+
+        /// <summary>
+        /// The layer's units in front of the camera's near plane, as a clip in those units: an empty path when all of a large
+        /// square round the layer is in front (no clip needed), null when none of it is.
+        /// </summary>
+        private static SKPath? NearClip(MotionSpace space, MotionCameraFrame camera)
+        {
+            // Camera depth is affine on the plane: depth(u, v) = A·u + B·v + C.
+            var m = camera.View * space.World;
+            var (a, b, c) = (m[2, 0], m[2, 1], m[2, 3] - MotionCameraFrame.Near);
+            const double R = 1e5;
+            var square = new[] { (-R, -R), (R, -R), (R, R), (-R, R) };
+            if (square.All(p => a * p.Item1 + b * p.Item2 + c >= 0)) return new SKPath();
+
+            // Sutherland–Hodgman against the one edge.
+            var kept = new List<(double X, double Y)>();
+            for (var i = 0; i < 4; i++)
+            {
+                var (p, q) = (square[i], square[(i + 1) % 4]);
+                var (dp, dq) = (a * p.Item1 + b * p.Item2 + c, a * q.Item1 + b * q.Item2 + c);
+                if (dp >= 0) kept.Add(p);
+                if (dp >= 0 != dq >= 0)
+                {
+                    var t = dp / (dp - dq);
+                    kept.Add((p.Item1 + (q.Item1 - p.Item1) * t, p.Item2 + (q.Item2 - p.Item2) * t));
+                }
+            }
+            if (kept.Count < 3) return null;
+            var path = new SKPath();
+            path.AddPoly([.. kept.Select(k => new SKPoint((float)k.X, (float)k.Y))]);
+            return path;
+        }
+
+        /// <summary>
+        /// One step from the group's stack into its own: the space its layers draw in and the time they see. A 3D group is
+        /// a plane through the camera; a pin whose corners make no map gives no space.
+        /// </summary>
+        internal (MotionSpace? Space, double Time) Enter(MotionSpace parent, MotionCameraFrame? camera, double time)
+        {
+            var childTime = time * timeDilation + timeOffset;
+            if (Is3D)
+            {
+                if (camera is null)
+                    throw new InvalidOperationException($"The group{Named} is 3D (it has z, rotateX or rotateY), and the composition has no camera: add comp.camera().");
+                if (parent.Warped)
+                    throw new InvalidOperationException($"The 3D group{Named} sits inside a warp, whose corner pin has no place in the camera's world. Put the warp inside the 3D group instead.");
+                var world = parent.World * Local4(time);
+                return (new MotionSpace(world, (camera.Projection * world).Plane(), false), childTime);
+            }
+
+            var m = Matrix(time);
+            var lifted = parent.World * Mat4.Lift(m);
+            if (pin is null) return (new MotionSpace(lifted, SKMatrix.Concat(parent.Plane, m), parent.Warped), childTime);
+            return pin.At(time) is { } h
+                ? (new MotionSpace(lifted, SKMatrix.Concat(parent.Plane, SKMatrix.Concat(m, h)), true), childTime)
+                : (null, childTime);
+        }
+
+        /// <summary>Whether <paramref name="child"/> shows at the group's own <paramref name="time"/>: always, but in a switch.</summary>
+        internal bool Shows(double time, MotionLayer child) => active is null || ReferenceEquals(Shown(time), child);
+
+        /// <summary>The camera depth of the group's anchor (its origin), how a run of 3D groups is sorted.</summary>
+        internal double AnchorDepth(MotionSpace parent, MotionCameraFrame camera, double time)
+        {
+            var o = origin.Evaluate(time);
+            var p = (parent.World * Local4(time)).Apply(o[0], o[1], 0);
+            return camera.Depth(p.X, p.Y, p.Z);
+        }
+
+        /// <summary>
+        /// The plane's world matrix, After Effects' order: <c>translate(offset, z) · rotZ(angle) · rotY · rotX · skew · scale ·
+        /// translate(−origin)</c>. With no rotateX, rotateY or z it is the 2D transform exactly.
+        /// </summary>
+        private Mat4 Local4(double time)
+        {
+            var o = origin.Evaluate(time);
+            var off = offset.Evaluate(time);
+            var a = angle.Evaluate(time)[0] * Math.PI / 180;
+            var sk = skewAngle.Evaluate(time)[0] * Math.PI / 180;
+            var sc = scale.Evaluate(time);
+            var (sa, ca) = Math.SinCos(a);
+            var rz = Mat4.Rows(ca, -sa, 0, 0, sa, ca, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
+            var ks = Mat4.Rows(sc[0], -Math.Sin(sk) * sc[1], 0, 0, 0, Math.Cos(sk) * sc[1], 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
+            return Mat4.Translate(off[0], off[1], z.Evaluate(time)[0]) * rz * Mat4.RotateY(rotateY.Evaluate(time)[0])
+                * Mat4.RotateX(rotateX.Evaluate(time)[0]) * ks * Mat4.Translate(-o[0], -o[1], 0);
         }
 
         /// <summary>Synfig's summary transformation: <c>offset · axes(scale, angle, skew) · translate(−origin)</c>.</summary>
@@ -1725,6 +2019,9 @@ internal abstract class MotionLayer
         /// </summary>
         public override XElement ToSvg(SvgAnimationWriter svg, MotionTimeMap map)
         {
+            if (Is3D || pin is not null)
+                throw new InvalidOperationException($"The {(Is3D ? "3D group" : "warp")}{Named} cannot be written as animated SVG: SVG has no "
+                    + "perspective. Write a .sif, or capture the composition as frames.");
             var outer = SvgElement("g");
             Opacity(outer, svg, map);
             if (children.HasBlendedLayers) outer.SetAttributeValue("style", "isolation:isolate");
@@ -1816,9 +2113,6 @@ internal abstract class MotionLayer
         /// One step from the group's stack into its own: its transform at <paramref name="time"/>, the time its children
         /// see, and whether <paramref name="child"/> shows then — a switch shows one.
         /// </summary>
-        internal (SKMatrix Matrix, double Time, bool Shows) Into(double time, MotionLayer child) =>
-            (Matrix(time), time * timeDilation + timeOffset, active is null || ReferenceEquals(Shown(time), child));
-
         /// <summary>
         /// A group as Synfig's group; a switch as Synfig's switch, which is the same paste canvas with <c>layer_name</c> and
         /// <c>layer_depth</c> (−1: by name) added, its children locked as Synfig Studio makes them. Every name it shows is
@@ -1827,19 +2121,75 @@ internal abstract class MotionLayer
         public override XElement ToSif(SifWriter sif)
         {
             foreach (var name in active?.Names ?? []) children.Named(name, who);
-            return Element(active is null ? "group" : "switch", active is null ? "0.3" : "0.0", sif, GroupParams(sif),
+            return Element(active is null ? "group" : "switch", active is null ? "0.3" : "0.0", sif, Is3D ? BakedParams(sif) : GroupParams(sif),
                 active is null ? null : SifWriter.Param("layer_name", active.ToSif()),
                 active is null ? null : SifWriter.Param("layer_depth", new XElement("integer", new XAttribute("value", "-1"))));
         }
 
-        private object[] GroupParams(SifWriter sif) =>
-        [
+        private object[] GroupParams(SifWriter sif) => CanvasParams(sif,
             sif.Param("origin", origin),
             SifWriter.Param("transformation", bone is null
                 ? new XElement("composite", new XAttribute("type", "transformation"),
                     sif.Link("offset", offset), sif.Link("angle", angle), sif.Link("skew_angle", skewAngle), sif.Link("scale", scale))
                 : BoneTransformation(sif)),
-            SifWriter.Param("canvas", new XElement("canvas", children.LayersToSif(sif))),
+            new XElement("canvas", children.LayersToSif(sif), pin?.ToSif(sif)));
+
+        /// <summary>
+        /// A 3D group as Synfig can hold it: no transformation of its own, and a warp on top of its layers carrying the whole
+        /// projection — a plane through a perspective camera is a homography — with the warp's corners sampled at the frame
+        /// rate and held where they do not move. Refused at a frame where the plane is behind the camera or edge-on.
+        /// </summary>
+        private object[] BakedParams(SifWriter sif)
+        {
+            var root = children.Root!;
+            var o = origin.Evaluate(0);
+            const double half = 50;
+            var from = new[] { o[0] - half, o[1] - half, o[0] + half, o[1] + half };
+            var corners = new[] { (from[0], from[1]), (from[2], from[1]), (from[2], from[3]), (from[0], from[3]) };
+            var times = new List<double>();
+            var values = Enumerable.Range(0, 4).Select(_ => new List<double[]>()).ToArray();
+            for (var f = 0; f < root.FrameCount; f++)
+            {
+                var t = f / root.Fps;
+                var (parentSpace, parentTime, _, _) = children.Parent!.SpaceAt(t);
+                var (space, local) = Enter(parentSpace, root.CameraAt(t), parentTime);
+                if (!parentSpace.Plane.TryInvert(out var back))
+                    throw new InvalidOperationException($"The 3D group{Named}'s parent has no inverse at {MotionTypes.Format(t)} s, so it cannot be written to .sif.");
+                var rel = SKMatrix.Concat(back, space!.Value.Plane);
+                times.Add(local);
+                for (var k = 0; k < 4; k++)
+                {
+                    var (x, y) = corners[k];
+                    var w = rel.Persp0 * x + rel.Persp1 * y + rel.Persp2;
+                    if (w <= 1e-9)
+                        throw new InvalidOperationException($"The 3D group{Named} turns away from or behind the camera at {MotionTypes.Format(t)} s, "
+                            + "which Synfig's warp cannot draw. Keep it facing the camera, or render the film as video.");
+                    var p = rel.MapPoint((float)x, (float)y);
+                    values[k].Add([p.X, p.Y]);
+                }
+            }
+
+            // Keys in the group's own clock, the time the warp inside it is evaluated at.
+            var order = Enumerable.Range(0, times.Count).OrderBy(i => times[i]).ToArray();
+            var keyTimes = order.Select(i => times[i]).ToArray();
+            var to = values.Select(v => MotionTextLayer.Keys(MotionType.Vector, keyTimes, [.. order.Select(i => v[i])])).ToArray();
+            var warp = new MotionPin(from, to, false);
+            var zero = new MotionConstant(MotionType.Vector, [0, 0]);
+            return CanvasParams(sif,
+                sif.Param("origin", zero),
+                SifWriter.Param("transformation", new XElement("composite", new XAttribute("type", "transformation"),
+                    new XElement("offset", SifWriter.Value(MotionType.Vector, [0, 0])),
+                    new XElement("angle", SifWriter.Value(MotionType.Angle, [0])),
+                    new XElement("skew_angle", SifWriter.Value(MotionType.Angle, [0])),
+                    new XElement("scale", SifWriter.Value(MotionType.Vector, [1, 1])))),
+                new XElement("canvas", children.LayersToSif(sif), warp.ToSif(sif)));
+        }
+
+        private object[] CanvasParams(SifWriter sif, XElement originParam, XElement transformation, XElement canvas) =>
+        [
+            originParam,
+            transformation,
+            SifWriter.Param("canvas", canvas),
             SifWriter.Param("time_dilation", new XElement("real", new XAttribute("value", MotionTypes.Format(timeDilation)))),
             SifWriter.Param("time_offset", new XElement("time", new XAttribute("value", MotionTypes.Time(timeOffset)))),
             SifWriter.Param("children_lock", SifWriter.Bool(active is not null)),

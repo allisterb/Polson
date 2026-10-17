@@ -344,6 +344,23 @@ is Synfig's, and the craft follows from it:
   are forty chances for the shape to wobble. A drawn gradient is a layer too:
   `comp.linearGradient({ point1, point2, stops })` or `comp.radialGradient({ origin, radius, stops })`, in a group with
   the shape it fills and `blend: 'onto'`, and a sheen is its two points keyed across the shape.
+- **Move the camera through the poster, not the poster past the camera: `comp.camera()`, layers at depths.** Give a
+  poster's layers `z` — the backdrop far, the object nearer, the type at 0 — and a camera move turns a flat design into
+  a space. Choose the move for what it says. A **push-in** (`distance` keyed down) closes on something and raises the
+  stakes: near layers grow faster than far ones, which is what makes it read as moving rather than enlarging. A
+  **zoom** (`zoom` keyed) magnifies everything alike and reads as a looking-glass, flat and observed; use it when the
+  picture should feel watched, not entered. A **pan** (`target` keyed) slides near layers past far ones, and that
+  parallax is depth the eye believes without a single shaded form. A camera move is a beat like any other: ease it in
+  and out (`halt` at both ends) and let it settle before the type lands, because a title read while the camera still
+  drifts is read badly. Keep each layer at its own depth and in front of the camera; layers that cross are not cut
+  against each other.
+- **Tip, turn and lay type on a surface with a corner pin: `comp.warp({ from, to })`.** Four keyed corners put a card
+  on a table, swing a poster into place, or set a line on a wall in perspective; the pinned layers stay vectors, so the
+  type stays sharp.
+- **Lift a shape off its ground with a shadow: `comp.shadow({ offset, size })`, in a group with what casts it.** A soft
+  shadow, offset down and away from the light, separates a layer from the one beneath; keying `offset` as a layer
+  rises makes it float. `invert: true, blend: 'onto'` cuts the shape into its ground instead. Use one light for the
+  whole frame: shadows cast in different directions make a frame of stickers, not a scene.
 - **Check what the eye must not be given, not only what it must read.** More than three flashes in any second can
   trigger seizures (WCAG 2.3.1); `comp.flashes()` measures the whole film in about a second and lists every
   transition, so a run of hard cuts shows up as the number it is. Type must also stand off its ground —

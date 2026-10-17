@@ -14,9 +14,8 @@ using ModelContextProtocol.Protocol;
 using Xunit;
 
 /// <summary>
-/// Stdio protocol tests: a real MCP client launches the shipped <c>bin/cli</c> build as a child
-/// process and drives several tool calls down one pipe — which is exactly what an agent host's
-/// stdio MCP wiring does.
+/// Stdio protocol tests: a real MCP client launches the CLI build as a child process and drives several
+/// tool calls down one pipe — which is exactly what an agent host's stdio MCP wiring does.
 /// </summary>
 /// <remarks>
 /// <see cref="MCPServerProtocolTests"/> covers the same tools over HTTP, and session identity is
@@ -25,8 +24,10 @@ using Xunit;
 /// executions by living on that session, so persistence is only proven for the transport an agent
 /// actually uses by testing that transport.
 /// <para>
-/// This is also the only test that exercises the build in <c>bin/cli</c> — the output every
-/// harness's MCP wiring points at, and the one thing a passing in-process test says nothing about.
+/// This is also the only test that exercises a built CLI — the program every harness's MCP wiring
+/// starts, and the one thing a passing in-process test says nothing about. It runs the CLI this test
+/// run built (<c>src/Polson.CLI/bin/&lt;configuration&gt;</c>), not <c>bin/cli</c>: <c>bin/cli</c> holds
+/// only the Release build agents run, so a Debug test run against it would test an older build.
 /// </para>
 /// </remarks>
 public class StdioTransportTests : TestsRuntime, IDisposable
@@ -38,7 +39,8 @@ public class StdioTransportTests : TestsRuntime, IDisposable
 
     #region Fields
     private static readonly string RepoRoot = FindRepoRoot();
-    private static readonly string CliDll = Path.Combine(RepoRoot, "bin", "cli", "Polson.CLI.dll");
+    private static readonly string CliDll = Path.Combine(RepoRoot, "src", "Polson.CLI", "bin",
+        new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name, new DirectoryInfo(AppContext.BaseDirectory).Name, "Polson.CLI.dll");
 
     private readonly string project = Path.Combine(Path.GetTempPath(), "polson-stdio-" + Guid.NewGuid().ToString("N"));
     #endregion
@@ -66,7 +68,7 @@ public class StdioTransportTests : TestsRuntime, IDisposable
     private async Task<McpClient> NewClientAsync()
     {
         Assert.True(File.Exists(CliDll),
-            $"The CLI is not built: {CliDll}. bin/cli comes from Polson.CLI's post-build copy, so build the solution first.");
+            $"The CLI is not built: {CliDll}. Building this test project builds it; build the solution first.");
 
         var transport = new StdioClientTransport(new StdioClientTransportOptions
         {

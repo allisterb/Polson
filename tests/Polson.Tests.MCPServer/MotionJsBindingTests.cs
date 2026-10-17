@@ -84,6 +84,29 @@ public class MotionJsBindingTests : TestsRuntime
         Assert.Equal(SKColors.Red, frame.GetPixel(20, 20));
     }
 
+    /// <summary>A camera, a 3D group, a corner pin and a shadow, all from a script, as the reference writes them.</summary>
+    [Fact]
+    public void CameraWarpAndShadowBindFromAScript()
+    {
+        var result = Execute("""
+            comp.fill({ color: '#ffffff' });
+            comp.camera({ distance: 28 });
+            const card = comp.group({ z: 0 });
+            card.rectangle({ point1: [15, 15], point2: [25, 25], color: '#ff0000' });
+            const pin = comp.warp({ from: [0, 0, 10, 10], to: [[0, 30], [10, 30], [10, 40], [0, 40]] });
+            pin.rectangle({ point1: [0, 0], point2: [10, 10], color: '#0000ff' });
+            const lifted = comp.group();
+            lifted.rectangle({ point1: [28, 2], point2: [34, 8], color: '#00ff00' });
+            lifted.shadow({ offset: [3, 3], size: 0 });
+            """);
+
+        Assert.True(result.Success, result.Error);
+        using var frame = SKBitmap.Decode(result.ImageBytes);
+        Assert.Equal(SKColors.Red, frame.GetPixel(11, 11));           // pushed in: the 10-unit card now spans past 11
+        Assert.Equal(SKColors.Blue, frame.GetPixel(5, 35));
+        Assert.True(frame.GetPixel(35, 10).Red < 200, "no shadow under the green square");
+    }
+
     /// <summary>Options with no function before them are still refused with what to write.</summary>
     [Fact]
     public void ADrawnLayerWithNoFunctionIsRefusedWithWhatToWrite()

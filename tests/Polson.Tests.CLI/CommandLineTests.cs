@@ -9,8 +9,9 @@ using System.Threading.Tasks;
 using Xunit;
 
 /// <summary>
-/// How the shipped <c>bin/cli</c> build behaves when it is invoked, as opposed to what the generator
-/// writes once it is running.
+/// How the built CLI behaves when it is invoked, as opposed to what the generator writes once it is
+/// running. It is the CLI this test run built, in its own configuration, not <c>bin/cli</c>, which holds
+/// only the Release build agents run.
 /// </summary>
 /// <remarks>
 /// Driven as a real process because the behaviour under test is argument dispatch in <c>Main</c>, and
@@ -21,7 +22,8 @@ public class CommandLineTests : TestsRuntime
 {
     #region Fields
     static readonly string RepoRoot = FindRepoRoot();
-    static readonly string CliDll = Path.Combine(RepoRoot, "bin", "cli", "Polson.CLI.dll");
+    static readonly string CliDll = Path.Combine(RepoRoot, "src", "Polson.CLI", "bin",
+        new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name, new DirectoryInfo(AppContext.BaseDirectory).Name, "Polson.CLI.dll");
     #endregion
 
     #region Methods

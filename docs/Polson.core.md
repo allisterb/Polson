@@ -5305,7 +5305,8 @@ comp.render(1);
 ```
 - `comp.image({ image, tl?, br?, interpolation?, amount?, blend?, desc? })` — a picture, its top-left corner drawn at `tl` and its bottom-right at `br`, so keying either moves or stretches it and **swapping a pair of coordinates mirrors it**. Left out, the picture sits at its own size at the origin. `interpolation` is `'nearest'`, `'linear'` (default) or `'cubic'`.
 - `comp.cutout(image, points, options?)` → a group holding one piece of a picture; see *Cutout puppets* below.
-- `comp.group({ origin?, offset?, angle?, skewAngle?, scale?, amount?, blend?, timeOffset?, timeDilation?, desc? })` → a group with the same layer methods. Its transform is applied about `origin` and then moved to `offset`; its children see time as `t × timeDilation + timeOffset`, which is how one passage is reused later or faster.
+- `comp.group({ origin?, offset?, angle?, skewAngle?, scale?, z?, rotateX?, rotateY?, amount?, blend?, timeOffset?, timeDilation?, desc? })` → a group with the same layer methods. Its transform is applied about `origin` and then moved to `offset`; its children see time as `t × timeDilation + timeOffset`, which is how one passage is reused later or faster. **Given `z`, `rotateX` or `rotateY` it is a plane in 3D**, seen through the composition's camera — see *The camera* below.
+- `comp.warp({ from, to, clip?, ...the group's options })` → **a group whose layers are pinned to four corners**, Synfig's warp ("Perspective") layer. `from` is the rectangle pinned, `[left, top, right, bottom]` in the layers' units; `to` is the four corners it lands on, `[topLeft, topRight, bottomRight, bottomLeft]`, each a point or a node, so they key. `clip` (true) shows nothing outside the rectangle. A poster tipping into place, a card turning, type laid on a slanted surface. The pinned layers are drawn as vectors through the perspective, so type stays sharp. Corners in a line, or a quad folding through itself, are refused. To `.sif` as a group with a warp on top of its layers (checked against `synfig`: within 2 levels more than 3 pixels from an edge; along edges Synfig, which resamples what it pins, softens by a pixel or two). SVG has no perspective, so it is refused there. A blur or shadow *inside* a pin works on the picture as it is seen, sized at the pin's scale where it crosses the frame's centre; Synfig, reading the `.sif`, applies it on the flat layers before the pin, so the two part as the pin's perspective grows. A skeleton deformation inside a pin is refused.
 - `comp.switch({ active, ...the group's options })` → a group that **shows one of its layers at a time**, chosen by the layer's `desc`. `active` is a name, or held keys `[{ time, value: name }, ...]` or `[[time, name], ...]`; names do not blend, so each key holds until the next, and the name changes on the key's time. `''` shows nothing. Where two layers share a name the topmost (last added) shows. A name no layer has is **refused when the switch first draws, listing the names it has**. The keys are read at the switch's own time, not its children's dilated clock. For a mouth chart, a hand's poses, or a feature drawn in detail for the close-up and plainly for the wide shot: draw each once, name it, key which shows, and drive them all from the same nodes so the performance carries across the change. Synfig's switch layer, written to `.sif` as one (every frame agrees with `synfig`, including frames exactly on a key); in SVG each layer's `display` is animated, so a switch whose layers blend other than by compositing is refused there.
 
 - `comp.blur({ size?, type?, amount?, desc? })` — **blurs everything below it in its stack**, Synfig's blur layer. `size` is in the composition's units — **pixels, unless the composition's `view` says otherwise** — a number for both axes or `[x, y]`, default `6`, and keyable: a focus pull, a title that blurs in, a soft dissolve are a keyed `size`. Visible blur starts at a few units: 2 softens an edge, 12–20 is a strong focus pull at 1280 × 720. `type` is `'fastGaussian'` (default), `'gaussian'`, `'box'` or `'cross'`; `'disc'` is not ported yet and is refused. Like Synfig's it **stops at its own group**, so put it in a group with what it should soften, and it reads what lies beyond the frame's edge, so a blurred full-frame fill stays full to the corner. It replaces the stack at full `amount` and fades back to the sharp one as `amount` falls; it takes no `blend`.
@@ -5460,6 +5461,50 @@ Every layer, groups included, takes `blend`: how it combines with **what is unde
 > **A blend reaches only its own stack.** A group's children blend with each other, never with what lies under the group, so an eraser inside a group erases only that group's content. Wrap a passage in a group to keep its blends to itself.
 >
 > `'straight'`, `'alpha'` and the YUV methods (`'color'`, `'hue'`, `'saturation'`, `'luminance'`) are refused by name: the first two clear everything outside the layer, which depends on how Synfig bounds its rendering, and the last four are not ported yet.
+
+### Shadows — `comp.shadow(options?)`
+
+`{ offset?, size?, type?, color?, invert?, amount?, blend?, desc? }` — **a shadow of everything below it in its stack**, Synfig's shade layer: the stack's shape in `color` (black), moved by `offset` (`[6, 6]`), softened by `size` (6, a number or `[x, y]`, with the blur's kinds by `type`), and blended **`behind` the stack at `amount` 0.75** unless told otherwise. Every option keys: a shadow that lengthens as a light swings is a keyed `offset`. Like the blur it **stops at its own group**, so put it in a group with what casts it. **An inner shadow is `invert: true, blend: 'onto'`**: the shape's outside, moved in, darkens the edge away from the offset. The colour's own alpha plays no part, as in Synfig; `amount` is the strength.
+
+```javascript
+const comp = Motion.composition({ width: 480, height: 270, duration: 1 });
+comp.fill({ color: '#f2efe8' });
+const card = comp.group();
+card.rectangle({ point1: [140, 70], point2: [340, 200], color: '#e9c46a' });
+card.shadow({ offset: [10, 12], size: 14 });          // soft, behind, three quarters
+comp.render(0);
+```
+
+**Cost**: about 30 ms a frame at 1280 × 720 in a Release build (50 in Debug) — a 15 s film spends some 11–18 s of its 30 s script budget on one full-frame shadow, so key `amount` to 0 where it is not seen, which skips it. To `.sif` as Synfig's shade layer (checked against `synfig` for every blur kind with the offset keyed: within 8 levels on 99.4% of pixels). **One difference, Synfig's**: it draws an inverted shade only within the bounding box of what is below, so in Synfig an edge lying on that box gets no inner shadow; this shades every edge alike. To SVG the default shadow (behind, not inverted, a Gaussian kind) is a filter under the stack; anything else is refused there.
+
+### The camera — `comp.camera(options?)` and groups in 3D
+
+`{ target?, targetZ?, distance?, orbit?, tilt?, roll?, zoom? | focalLength? }` → the composition. **One camera, and groups become planes it sees in perspective** as soon as they have `z`, `rotateX` or `rotateY`: After Effects' 3D layers and camera, by way of EffectCraft. The world is the composition's units with x right, y down and **z away from the viewer**. A group's plane is its own layers, placed by `offset` and `z`, turned by `angle` (about z), `rotateY` and `rotateX`, and scaled, all about `origin`.
+
+- The camera looks at `target` (the frame's centre) at depth `targetZ` (0) from `distance` away, swung `orbit` degrees round the vertical (positive to the right), raised `tilt` degrees, and rolled `roll`. `zoom` is the lens in units, or `focalLength` in millimetres on 36 mm film (50).
+- **At rest it changes nothing**: the defaults put the camera at the 50 mm lens's own distance, which shows the z = 0 plane at exactly 100%. A plane at `z: 0` looks as it would with no camera; one further back is smaller and moves less.
+- **Camera language is keys**: a **push-in** is `distance` keyed down (the camera moves, and near planes grow faster than far ones); a **zoom** is `zoom` or `focalLength` keyed (the lens changes, and everything grows alike); a **pan** is `target` keyed (near planes slide past far ones: parallax); an **orbit** is `orbit` keyed.
+- Consecutive 3D groups in a stack are drawn **far to near by the depth of their `origin`**, whatever order they were added in; a 2D layer between them ends the run. Planes that intersect are not cut against each other, so keep layers at separate depths.
+- What lies behind the camera is not drawn; a plane passing through it is cut at the near plane.
+- A blur or shadow **inside** a 3D group works on the plane as the camera sees it, sized at the plane's scale where it crosses the frame's centre — a shadow under type on a plane is written the natural way. Synfig, reading the `.sif`, applies it on the plane before the perspective; on a plane turned 15° under a 10° orbit the two differ by more than 24 levels on 0.9% of pixels, and they part further as a plane turns edge-on.
+- Refused, each saying what to do instead: a 3D group with no camera, a skeleton deformation inside a 3D group, a 3D group inside a warp, and a second camera.
+
+```javascript
+const comp = Motion.composition({ width: 480, height: 270, duration: 3 });
+comp.fill({ color: '#141414' });
+const n = Motion.nodes;
+// A slow push-in through three layers: from the lens's own distance (667 units here) to 450 over three seconds.
+comp.camera({ distance: n.animated('real', [{ time: 0, value: 667, ease: 'halt' }, { time: 3, value: 450, ease: 'halt' }]) });
+const sky = comp.group({ z: 600 });                       // far: barely moves
+sky.rectangle({ point1: [-200, -150], point2: [680, 420], color: '#3a0ca3' });
+const disc = comp.group({ z: 200 });
+disc.circle({ origin: [300, 130], radius: 70, color: '#f72585' });
+const title = comp.group({ z: 0 });                       // at 100% at the start, nearest
+title.rectangle({ point1: [60, 170], point2: [260, 210], color: '#f2efe8' });
+comp.render(1.5);
+```
+
+**To `.sif`, baked**: Synfig has no camera, but a plane seen through a perspective camera is exactly a corner pin, so each 3D group is written as a group with no transformation of its own and a warp on top whose four corners are sampled at the frame rate (held where they do not move). Checked against `synfig` on a push-in with an orbit, a turned plane and one inside a moved 2D group: within 24 levels on 98–99% of pixels, the rest along edges. Refused when two planes change places in depth during the film (a `.sif` holds one order), naming them and the time, and when a plane turns away from or behind the camera. SVG has no perspective: refused.
 
 ### Cutout puppets — `comp.cutout(image, points, options?)`
 
