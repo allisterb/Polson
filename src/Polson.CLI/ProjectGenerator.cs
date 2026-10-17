@@ -610,6 +610,9 @@ internal static class ProjectGenerator
         // once per beat, and every pass then captures every frame. Frames are cheap (Manual 25 §6)
         // but a run renders its film three or four times, at draft size and at full size.
         ["animation"] = 40,
+        // Fifteen seconds of motion graphics: beats, an animatic, keys, two sheets and a video that takes a quarter of a
+        // minute to encode. A poster's forty-five, plus the motion.
+        ["trailer"] = 60,
         ["infographic"] = 30,
         // Same allowance as `infographic`: the vector discipline changes what is built, not how long
         // it takes. Two Apollo vector runs finished inside it, the longer at 18.6 minutes.
@@ -1089,8 +1092,9 @@ internal static class ProjectGenerator
         "events", "scripts", "artifacts", "audio",
         "findings.md", "critique_log.md", "artwork.js", "output.webp", "output.svg", "output.png", "output.mp4",
         // Workflow deliverables: drawing's turns.md, painting's materials.md, sketch_scene's sketch.md,
-        // animation's animation.md.
-        "turns.md", "materials.md", "sketch.md", "animation.md"
+        // animation's animation.md, poster's and trailer's direction.md and scripts, trailer's Synfig file.
+        "turns.md", "materials.md", "sketch.md", "animation.md",
+        "direction.md", "poster.js", "trailer.js", "trailer.sif"
     ];
 
     /// <summary>What a clear actually managed to do.</summary>
@@ -1369,6 +1373,9 @@ internal static class ProjectGenerator
         // action and the pose method supply the keys. Composition and staging are left out: one
         // figure, one action, and the frame is not what is being judged.
         ["animation"] = ["25", "24", "28"],
+        // Scoring motion is the method; composition and type are what a trailer moves. 24 and 28 (the figure) are absent:
+        // a trailer here is shapes and type, not a character.
+        ["trailer"] = ["25", "09", "11"],
         ["painting"] = ["09", "07"],
         ["vector_infographic"] = ["09", "13"],
         ["infographic"] = ["09", "13"],

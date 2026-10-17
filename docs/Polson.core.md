@@ -5265,7 +5265,7 @@ comp.render(1.0);                               // one frame, returned as a canv
 - `comp.capture(options?)` → `number` — renders frames into `Motion`'s buffer for `Motion.sheet` and `Motion.save`. `{ fps?, from?, to? }`; a lower `fps` samples the same timeline more sparsely. Each frame keeps its film frame and time, so a sheet labels it truthfully without being told the rate.
 - `comp.toSvg(options?)` → `string` — the composition as an **animated SVG**; see *Vector animation* below. `comp.saveSvg(path, options?)` writes it into the project and returns the path.
 - `comp.saveVideo(path, options?)` → as `Motion.saveVideo` — renders the composition **straight into a video with sound**, `{ fps?, from?, to?, quality?, background?, audio? }` (`fps` the composition's, both ends included as `capture` does). Frames go to the encoder one at a time and are not held, so **a long film is not bounded by the frame buffer**, and nothing needs capturing first. `audio` as in *Video with sound* above: `comp.saveVideo('output.mp4', { audio: line })` for a line timed by its recording.
-- `comp.toSif()` → `string` — the composition as Synfig's `.sif` XML. `comp.saveSif(path)` writes it into the project and returns the path.
+- `comp.toSif()` → `string` — the composition as Synfig's `.sif` XML. `comp.saveSif(path)` writes it into the project and returns the path. **The same export from outside a run**: `polson eval film.js --sif film.sif` runs the script and writes the last composition it built — so a film need not write its `.sif` while it is being made, and a script kept runnable on its own is the film's editable source. Anything Synfig has no layer for is written as what it draws, sampled: text animators become a group per letter whose motion is keyed only where it changes (a hold is two keys).
 
 ### Layers
 
@@ -5281,18 +5281,29 @@ Each returns the stack it was added to, except `group`, which returns the group 
 - `comp.group({ origin?, offset?, angle?, skewAngle?, scale?, amount?, blend?, timeOffset?, timeDilation?, desc? })` → a group with the same layer methods. Its transform is applied about `origin` and then moved to `offset`; its children see time as `t × timeDilation + timeOffset`, which is how one passage is reused later or faster.
 - `comp.switch({ active, ...the group's options })` → a group that **shows one of its layers at a time**, chosen by the layer's `desc`. `active` is a name, or held keys `[{ time, value: name }, ...]` or `[[time, name], ...]`; names do not blend, so each key holds until the next, and the name changes on the key's time. `''` shows nothing. Where two layers share a name the topmost (last added) shows. A name no layer has is **refused when the switch first draws, listing the names it has**. The keys are read at the switch's own time, not its children's dilated clock. For a mouth chart, a hand's poses, or a feature drawn in detail for the close-up and plainly for the wide shot: draw each once, name it, key which shows, and drive them all from the same nodes so the performance carries across the change. Synfig's switch layer, written to `.sif` as one (every frame agrees with `synfig`, including frames exactly on a key); in SVG each layer's `display` is animated, so a switch whose layers blend other than by compositing is refused there.
 
-- `comp.blur({ size?, type?, amount?, desc? })` — **blurs everything below it in its stack**, Synfig's blur layer. `size` is in units, a number for both axes or `[x, y]`, default `0.1`, and keyable: a focus pull, a title that blurs in, a soft dissolve are a keyed `size`. `type` is `'fastGaussian'` (default), `'gaussian'`, `'box'` or `'cross'`; `'disc'` is not ported yet and is refused. Like Synfig's it **stops at its own group**, so put it in a group with what it should soften, and it reads what lies beyond the frame's edge, so a blurred full-frame fill stays full to the corner. It replaces the stack at full `amount` and fades back to the sharp one as `amount` falls; it takes no `blend`.
+- `comp.blur({ size?, type?, amount?, desc? })` — **blurs everything below it in its stack**, Synfig's blur layer. `size` is in the composition's units — **pixels, unless the composition's `view` says otherwise** — a number for both axes or `[x, y]`, default `6`, and keyable: a focus pull, a title that blurs in, a soft dissolve are a keyed `size`. Visible blur starts at a few units: 2 softens an edge, 12–20 is a strong focus pull at 1280 × 720. `type` is `'fastGaussian'` (default), `'gaussian'`, `'box'` or `'cross'`; `'disc'` is not ported yet and is refused. Like Synfig's it **stops at its own group**, so put it in a group with what it should soften, and it reads what lies beyond the frame's edge, so a blurred full-frame fill stays full to the corner. It replaces the stack at full `amount` and fades back to the sharp one as `amount` falls; it takes no `blend`.
 
   ```javascript
   const n = Motion.nodes;
   const title = comp.group();
   title.rectangle({ point1: [40, 100], point2: [440, 170], color: '#f2c14e' });
-  // Racks into focus over the first 0.8 s: 0.6 units of blur down to none.
-  title.blur({ type: 'gaussian', size: n.animated('vector', [
-      { time: 0, value: [0.6, 0.6], ease: 'halt' }, { time: 0.8, value: [0, 0], ease: 'halt' }]) });
+  // Racks into focus over the first 0.8 s: 14 pixels of blur down to none. A keyed number is both axes.
+  title.blur({ type: 'gaussian', size: n.animated('real', [
+      { time: 0, value: 14, ease: 'halt' }, { time: 0.8, value: 0, ease: 'halt' }]) });
   ```
 
-  Checked against `synfig` 1.5.5 for every ported type with `size` keyed: within 2 levels in 255 on 98–100% of pixels, the rest along the shapes' own antialiased edges. Past a reach of 32 px Synfig's Gaussian switches to an FFT and this to Skia's Gaussian of the same width, which agree to within 24 levels everywhere.
+  Checked against `synfig` 1.5.5 for every ported type with `size` keyed, and for a Gaussian whose x and y sizes differ: within 2 levels in 255 on 98–100% of pixels, the rest along the shapes' own antialiased edges. Past a reach of 32 px Synfig's Gaussian switches to an FFT and this to Skia's Gaussian of the same width, which agree to within 24 levels everywhere.
+
+  **Which type: look against cost.** `size` can also be a keyed number, `n.linear('real', -6, 6)`, for both axes.
+  - **`'fastGaussian'` is one box pass**, as Synfig draws it. Synfig's code means two, and a `bool` makes it one; this matches what Synfig actually draws, so a `.sif` renders the same there. Its softness matches the Gaussian's, but its kernel is square. Hard edges fade in a straight ramp, and a small bright shape blurs into a soft-edged square, not a soft disc.
+  - **`'gaussian'` is the true bell curve**, smooth in every direction, and it costs more as it grows.
+
+  | per frame at 1280 × 720 | size 6 | size 12 | size 20 |
+  | :--- | :--- | :--- | :--- |
+  | `'fastGaussian'` | 52 ms | 53 ms | 58 ms |
+  | `'gaussian'` | 86 ms | 120 ms | 255 ms |
+
+  **Use `'gaussian'` for stills and for short or small blurs; use `'fastGaussian'` for a long or wide blur in a video.** `comp.saveVideo` renders every frame inside one script's time limit, and fifteen seconds at 24 fps is 360 frames: a size-20 Gaussian on every one of them is about 92 s on its own, which no script survives. A Gaussian focus pull lasting a second (24 frames) costs about 6 s; the same blur held under a whole film does not fit. Where a small bright shape must stay round, give that passage the Gaussian and the rest the fast one.
 - `comp.text({ text, family, weight?, style?, size?, origin?, orient?, color?, compress?, vcompress?, kerning?, invert?, animators?, amount?, blend?, desc? })` — type, Synfig's text layer, with After Effects' text animators on top. See *Type* below.
 
 ### Type — `comp.text(options)`
@@ -5344,7 +5355,7 @@ comp.text({
 - `start`, `end` and `offset` are in **percent** of the text, defaults 0, 100 and 0. With `units: 'index'` they count units instead.
 - **Keying `offset` across −100…100 is the classic sweep.** Keying `start` from 0 to 100 against `opacity: 0` is a typewriter reveal.
 - `shape` is `'square'` (default), `'rampUp'`, `'rampDown'`, `'triangle'`, `'round'` or `'smooth'`. The ramps hold their end value outside the span, which is what makes a sweep land.
-- `smoothness` is the square's soft edge in percent of a unit, default 100. `easeHigh` and `easeLow`, −100…100, slow the change near the fully selected or the unselected end.
+- `smoothness` is the square's soft edge in percent of a unit, default 100. `easeHigh` and `easeLow`, −100…100, slow the change near the fully selected or the unselected end. **In a sweep that brings letters in — offset −100 → 100, the property being where a letter starts — the unselected end is where it lands, so `easeLow` is the control for "decelerate into place"**, and `easeHigh` for a slow departure from the starting pose.
 - `amount` is in percent, default 100. A negative amount inverts the property.
 - `randomize: true, seed` selects in a seeded random order.
 - `basedOn` is `'characters'` (default), `'charactersExcludingSpaces'`, `'words'` or `'lines'`.

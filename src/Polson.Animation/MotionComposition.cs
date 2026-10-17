@@ -528,6 +528,9 @@ public sealed class MotionComposition : MotionLayerList
         ArgumentNullException.ThrowIfNull(ctx);
         var c = ctx.Canvas.SkCanvas;
         c.Save();
+        // The composition's own frame and nothing outside it: a fill paints everything it can reach, so unclipped, one
+        // frame drawn onto a sheet erased every frame drawn before it.
+        c.ClipRect(new SKRect(0, 0, Width, Height));
         c.Concat(ViewMatrix());
 
         // A blend reaches only the composition's own layers, never the drawing it is placed in.
@@ -646,13 +649,7 @@ public sealed class MotionComposition : MotionLayerList
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
         var full = ProjectPath.Resolve(projectRoot, filePath, nameof(filePath), "Write to");
-        var dir = Path.GetDirectoryName(full)!;
-        var writer = new SifWriter(this, Path.GetFileNameWithoutExtension(full));
-        var xml = writer.Write();
-        Directory.CreateDirectory(dir);
-        foreach (var (name, png) in writer.Pictures) File.WriteAllBytes(Path.Combine(dir, name), png);
-        var bytes = new UTF8Encoding(false).GetBytes(xml);
-        File.WriteAllBytes(full, bytes);
+        var (bytes, pictures) = WriteSif(full);
 
         // Not a render: nothing in a browser plays a .sif. Recorded as an export so the file the run
         // left behind is still accounted for, pictures included.
@@ -660,10 +657,26 @@ public sealed class MotionComposition : MotionLayerList
         {
             ["motion"] = "sif",
             ["format"] = "sif",
-            ["bytes"] = (long)bytes.Length,
-            ["pictures"] = writer.Pictures.Select(p => (object?)Path.Combine(dir, p.Name)).ToList()
+            ["bytes"] = bytes,
+            ["pictures"] = pictures.Select(p => (object?)p).ToList()
         });
         return full;
+    }
+
+    /// <summary>
+    /// Writes the <c>.sif</c> and its pictures to a path already resolved — the project's, for <see cref="SaveSif"/>, or
+    /// the one <c>polson eval --sif</c> was given. Returns the bytes written and the pictures' paths.
+    /// </summary>
+    internal (long Bytes, string[] Pictures) WriteSif(string full)
+    {
+        var dir = Path.GetDirectoryName(full)!;
+        var writer = new SifWriter(this, Path.GetFileNameWithoutExtension(full));
+        var xml = writer.Write();
+        Directory.CreateDirectory(dir);
+        foreach (var (name, png) in writer.Pictures) File.WriteAllBytes(Path.Combine(dir, name), png);
+        var bytes = new UTF8Encoding(false).GetBytes(xml);
+        File.WriteAllBytes(full, bytes);
+        return (bytes.Length, [.. writer.Pictures.Select(p => Path.Combine(dir, p.Name))]);
     }
 
     internal double[] View => view;

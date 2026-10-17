@@ -59,6 +59,34 @@ public class MotionBlurTests(ITestOutputHelper output) : TestsRuntime
             Assert.True(differing < 0.02, $"{type} differs from synfig in {differing:P2} at frame {i}");
         }
     }
+    /// <summary>
+    /// A Gaussian whose x and y sizes differ, on Synfig's pattern path (both reaches under 32 px). Synfig once blurred the
+    /// vertical pass with the row kernel (synfig/synfig#3682, fixed 2026-02); this port follows the fix, and so does the
+    /// Synfig 1.5.5 used here — measured identical, 0.00% of pixels by more than 2 levels. A Synfig build from before the
+    /// fix fails this for <c>[2, 18]</c>, its vertical blur drawn two units wide.
+    /// </summary>
+    [Theory]
+    [InlineData(2d, 18d)]
+    [InlineData(18d, 2d)]
+    public void SynfigAndSkiaBlurAnisotropically(double x, double y)
+    {
+        if (Synfig() is not { } synfig) return;
+
+        var motion = new MotionToolkit();
+        var comp = motion.Composition(Opts(("width", 240d), ("height", 160d), ("fps", 1d), ("duration", 0d)));
+        comp.Fill(Opts(("color", "#f2efe8")));
+        var g = comp.Group();
+        g.Rectangle(Opts(("point1", new[] { 60d, 50d }), ("point2", new[] { 180d, 110d }), ("color", "#1d3557")));
+        g.Blur(Opts(("type", "gaussian"), ("size", new[] { x, y })));
+
+        using var theirs = Assert.Single(RenderWithSynfig(synfig, comp, $"blur-aniso-{x}-{y}"));
+        using var ours = comp.Render(0);
+        Dump(ours.SkBitmap, theirs, $"blur-aniso-{x}-{y}");
+
+        var differing = Differing(ours.SkBitmap, theirs, 2);
+        output.WriteLine($"gaussian [{x}, {y}]: {differing:P2} differ from synfig by more than 2");
+        Assert.True(differing < 0.005, $"gaussian [{x}, {y}] differs from synfig in {differing:P2}");
+    }
     #endregion
 
     #region Behaviour
@@ -101,6 +129,22 @@ public class MotionBlurTests(ITestOutputHelper output) : TestsRuntime
         using var frame = comp.Render(0);
         Assert.Equal(SKColors.Black, frame.SkBitmap.GetPixel(19, 10));
         Assert.Equal(0, frame.SkBitmap.GetPixel(20, 10).Alpha);
+    }
+
+    /// <summary>A size keyed as one number is both axes, as a plain number is; it was refused as "not a vector".</summary>
+    [Fact]
+    public void AKeyedNumberIsBothAxes()
+    {
+        var motion = new MotionToolkit();
+        var comp = motion.Composition(Opts(("width", 40d), ("height", 20d), ("duration", 1d)));
+        comp.Rectangle(Opts(("point1", new[] { 0d, 0d }), ("point2", new[] { 20d, 20d }), ("color", "#000000")));
+        comp.Blur(Opts(("type", "gaussian"), ("size", motion.Nodes.Linear("real", -6, 6))));
+
+        using var soft = comp.Render(0);
+        using var sharp = comp.Render(1);
+        Assert.True(soft.SkBitmap.GetPixel(21, 10).Alpha > 0, "at 0 s the edge should be soft");
+        Assert.Equal(0, sharp.SkBitmap.GetPixel(21, 10).Alpha);
+        Assert.Contains("<composite type=\"vector\"", comp.ToSif());
     }
 
     [Fact]

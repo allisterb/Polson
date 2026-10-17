@@ -38,10 +38,17 @@ internal sealed class MotionBlurLayer : MotionLayer, IMotionStackFilter
         if (!Blend.IsComposite)
             throw new ArgumentException($"{o.Who} replaces the stack below it with its blur, as Synfig's straight blend does; it takes amount, not blend.");
 
-        // A plain number is both axes; anything else — a vector, a node — is read as a vector.
-        size = o.Raw("size") is IConvertible n and not string
-            ? MotionNodeFactory.Node(new[] { Convert.ToDouble(n), Convert.ToDouble(n) }, MotionType.Vector, $"{o.Who}'s size")
-            : o.Node("size", MotionType.Vector, new[] { 0.1, 0.1 });
+        // A number is both axes, and so is a keyed number — a focus pull is keyed as one value, as an agent writes it
+        // first — linked into both of a composite so it stays one value in .sif too. Anything else is read as a vector.
+        size = o.Raw("size") switch
+        {
+            IConvertible n and not string => MotionNodeFactory.Node(new[] { Convert.ToDouble(n), Convert.ToDouble(n) }, MotionType.Vector, $"{o.Who}'s size"),
+            MotionNode { Kind: MotionType.Real } r => new MotionComposite(r, r),
+            // Synfig's default is 0.1 of its units, which are 60 px by default: 6 px. Ours are the view's, pixels
+            // unless the composition says otherwise, where 0.1 is no blur at all (trailer1 found the docs' example
+            // invisible).
+            _ => o.Node("size", MotionType.Vector, new[] { 6d, 6d }),
+        };
 
         type = o.Has("type") ? ParseType(o.Raw("type")?.ToString(), o.Who) : BlurType.FastGaussian;
     }

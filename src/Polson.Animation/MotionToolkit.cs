@@ -98,7 +98,13 @@ public class MotionToolkit : IDisposable
     /// <c>options</c> is <c>{ width?, height?, fps?, duration?, view? }</c>; duration in seconds, and
     /// <c>view</c> the <c>[left, top, right, bottom]</c> its layers' units map onto, pixels by default.
     /// </remarks>
-    public MotionComposition Composition(object? options = null) => new(options, this, projectRoot);
+    public MotionComposition Composition(object? options = null) => LastComposition = new(options, this, projectRoot);
+
+    /// <summary>
+    /// The composition the script built last: what <c>polson eval script.js --sif</c> writes, so a film's <c>.sif</c> is an
+    /// export taken on demand from its script rather than a file every run has to write.
+    /// </summary>
+    internal MotionComposition? LastComposition { get; private set; }
 
     /// <summary>SPIKE: the value nodes a composition's parameters can be: constants, keys and formulas.</summary>
     public MotionNodeFactory Nodes { get; } = new();

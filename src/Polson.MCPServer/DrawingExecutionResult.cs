@@ -75,6 +75,10 @@ public class DrawingExecutionResult
     [JsonIgnore]
     public bool RenderedFromPaper { get; set; }
 
+    /// <summary>The last <c>Motion.composition</c> the script built, for the CLI's <c>--sif</c> export; null if none.</summary>
+    [JsonIgnore]
+    public Polson.Animation.MotionComposition? Composition { get; set; }
+
     /// <summary>
     /// Identifies this tool call in the run's record. Cite it when referring to a specific render.
     /// </summary>

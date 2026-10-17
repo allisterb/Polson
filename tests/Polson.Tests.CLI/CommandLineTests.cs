@@ -169,6 +169,65 @@ public class CommandLineTests : TestsRuntime
         finally { Directory.Delete(dir, recursive: true); }
     }
 
+    /// <summary>
+    /// <c>eval --sif</c> writes the last composition a script built, so a film's <c>.sif</c> is taken from its script on
+    /// demand rather than written by every run — and a held letter costs two keys, not one per frame.
+    /// </summary>
+    [Fact]
+    public async Task TestEvalWritesTheScriptsCompositionAsSif()
+    {
+        var (dir, outputs) = Scratch();
+        try
+        {
+            var script = Path.Combine(dir, "film.js");
+            File.WriteAllText(script, """
+                const n = Motion.nodes;
+                const draft = Motion.composition({ width: 64, height: 36 });         // not the last: not written
+                const comp = Motion.composition({ width: 320, height: 180, fps: 24, duration: 4 });
+                comp.fill({ color: '#efe6d2' });
+                comp.circle({ origin: [160, 90], radius: n.linear('real', 10, 20), color: '#d23f26', desc: 'disc' });
+                comp.render(1);
+                """);
+            var sif = Path.Combine(dir, "film.sif");
+
+            var (exitCode, output) = await RunAsync(TimeSpan.FromSeconds(60), ["eval", script, .. outputs, "--sif", sif]);
+
+            Assert.True(exitCode == 0, output);
+            Assert.True(File.Exists(sif), output);
+            var xml = File.ReadAllText(sif);
+            Assert.Contains("width=\"320\"", xml, StringComparison.Ordinal);
+            Assert.Contains("desc=\"disc\"", xml, StringComparison.Ordinal);
+            Assert.Contains("Synfig file saved", output.ReplaceLineEndings(" "), StringComparison.Ordinal);
+        }
+        finally { Directory.Delete(dir, recursive: true); }
+    }
+
+    /// <summary>
+    /// A script with no composition, one Synfig cannot hold, or one that failed writes nothing and fails the process — the
+    /// last because half a film written as a .sif would look finished.
+    /// </summary>
+    [Theory]
+    [InlineData("const c = createCanvas(10, 10); c;", "built no Motion.composition")]
+    [InlineData("const comp = Motion.composition(); comp.drawn((ctx, v, t) => {}, {}); comp.render(0);", "drawn layer")]
+    [InlineData("const comp = Motion.composition(); comp.fill({ color: '#000' }); log(Stage.elapsedMinutes.toFixed(1));", "script failed")]
+    public async Task TestEvalSifRefusalsFailTheProcess(string body, string expected)
+    {
+        var (dir, outputs) = Scratch();
+        try
+        {
+            var script = Path.Combine(dir, "nofilm.js");
+            File.WriteAllText(script, body);
+            var sif = Path.Combine(dir, "nofilm.sif");
+
+            var (exitCode, output) = await RunAsync(TimeSpan.FromSeconds(60), ["eval", script, .. outputs, "--sif", sif]);
+
+            Assert.NotEqual(0, exitCode);
+            Assert.Contains(expected, output.ReplaceLineEndings(" "), StringComparison.Ordinal);
+            Assert.False(File.Exists(sif));
+        }
+        finally { Directory.Delete(dir, recursive: true); }
+    }
+
     /// <summary>Asking for help is not a failure, so it keeps exit 0.</summary>
     [Fact]
     public async Task TestAskingForHelpSucceeds()

@@ -135,6 +135,36 @@ public class MotionCompositionTests(ITestOutputHelper output) : TestsRuntime
         Assert.Equal(90, x, 0);
         Assert.Equal(50, y, 0);
     }
+
+    /// <summary>
+    /// <c>comp.draw(ctx, t)</c> stays inside the composition's frame: frames drawn one below another on a sheet each keep
+    /// their own, where a fill used to paint the whole canvas and leave only the last.
+    /// </summary>
+    [Fact]
+    public void DrawStaysInsideTheCompositionsFrame()
+    {
+        var motion = new MotionToolkit();
+        var comp = motion.Composition(Opts(("width", 40d), ("height", 20d), ("duration", 1d)));
+        comp.Fill(Opts(("color", "#000000")));
+        comp.Rectangle(Opts(("point1", new[] { 0d, 0d }), ("point2", motion.Nodes.Linear("vector", new[] { 40d, 0d }, new[] { 0d, 20d })), ("color", "#ff0000")));
+
+        using var sheet = new SkiaCanvas(40, 60);
+        var ctx = sheet.GetContext("2d");
+        ctx.FillStyle = "#ffffff";
+        ctx.FillRect(0, 0, 40, 60);
+        foreach (var (t, i) in new[] { (0.25, 0), (0.75, 1) })
+        {
+            ctx.Save();
+            ctx.Translate(0, i * 20);
+            comp.Draw(ctx, t);
+            ctx.Restore();
+        }
+
+        Assert.Equal(SKColors.Red, sheet.SkBitmap.GetPixel(5, 10));      // the first frame survives the second
+        Assert.Equal(SKColors.Black, sheet.SkBitmap.GetPixel(35, 10));
+        Assert.Equal(SKColors.Red, sheet.SkBitmap.GetPixel(25, 30));
+        Assert.Equal(SKColors.White, sheet.SkBitmap.GetPixel(20, 50));   // below both frames, untouched
+    }
     #endregion
 
     #region Oracle

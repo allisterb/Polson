@@ -62,6 +62,8 @@ WORKFLOWS: dict[str, tuple[str, ...]] = {
     "sketch_scene": (),
     # One action, keyed and checked, delivered as an animated WebP (Manual 25 §10). No types.
     "animation": (),
+    # Motion graphics: shapes and type in the animation model, delivered as a video. No types.
+    "trailer": (),
     "harness": ("image", "infographic", "logo"),
 }
 
