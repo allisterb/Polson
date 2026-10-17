@@ -65,6 +65,14 @@ public static class FontAudit
         }
         return warnings;
     }
+    /// <summary>
+    /// For a family name that is not installed, the installed family and weight or style it names, checked to exist —
+    /// <c>'Franklin Gothic Heavy' is a face of 'Franklin Gothic': …</c> — or null when there is none to suggest.
+    /// </summary>
+    public static string? Suggestion(string name) => Suggest(name, [.. InstalledFamilies()], FaceWeight);
+
+    /// <summary>Whether <paramref name="family"/> is installed under that name, rather than substituted.</summary>
+    public static bool Installed(string family) => IsInstalled(family);
     #endregion
 
     #region Methods (private)

@@ -314,6 +314,15 @@ is Synfig's, and the craft follows from it:
   close-up and plainly for the wide shot, where the same marks would clump into noise. Draw each version once inside
   the switch, name it with `desc`, and key which shows; key the camera's cut on the same times. Drive every version
   from the same channel nodes, so the performance runs on unbroken while only the drawing changes.
+- **Animate type with one number, not a layer per letter: `comp.text({ ..., animators: [{ properties, selector }] })`.**
+  Kinetic type is overlap and cascade: letters doing the same thing a beat apart, the way a line of dancers does. An
+  animator states once what a letter does when fully selected — rise from 80 units below, turn 20°, fade in — and a
+  range selector's `offset`, keyed from −100 to 100 with `shape: 'rampUp'`, hands that motion from letter to letter,
+  left to right — at −100 every letter is fully selected and waits in its starting pose, at 100 none is and all have
+  landed. Key it the other way to send them out. That keeps the timing in one curve the eye reads as a single gesture; per-letter keys drift apart
+  and read as noise. Ease the selector (`easeLow`) rather than the key, so each letter settles. Base it on `words` for
+  a line that should land a word at a time, and let the title hold still once it lands: the read happens after the
+  motion stops, so give it at least as long as the arrival took.
 - **Pull focus rather than cut: `group.blur({ type: 'gaussian', size })` with `size` keyed.** A blur that eases from
   soft to sharp directs the eye the way a camera's focus does — to the title as it resolves, to the second subject as
   the first goes soft — and a cut has no way to say "look here next". It blurs only what is below it in its own group,

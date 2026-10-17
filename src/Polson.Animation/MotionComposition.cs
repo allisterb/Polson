@@ -225,6 +225,21 @@ public abstract class MotionLayerList
     }
 
     /// <summary>
+    /// A line or lines of type, Synfig's text layer:
+    /// <c>{ text, family, weight?, style?, size?, origin?, orient?, color?, compress?, vcompress?, kerning?, invert?, animators?, amount?, blend?, desc? }</c>.
+    /// <c>size</c> is the font's em in units; <c>orient</c> aligns the block on <c>origin</c>, <c>[0, 0]</c> its top left and
+    /// the default <c>[0.5, 0.5]</c> its centre. <c>animators</c> move, scale, turn, fade, recolour, track and blur letters,
+    /// words or lines by how far a selector picks them; see the SDK reference.
+    /// </summary>
+    public MotionLayerList Text(object? options)
+    {
+        var o = new MotionOptions(options, "text", "text", "family", "weight", "style", "size", "origin", "orient", "color",
+            "compress", "vcompress", "kerning", "invert", "animators", "amount", "blend", "desc");
+        layers.Add(new MotionTextLayer(o, Root?.YDown ?? true, Root));
+        return this;
+    }
+
+    /// <summary>
     /// A blur of everything below it in this stack: <c>{ size?, type?, amount?, desc? }</c>. <c>size</c> is in units, a
     /// number for both axes or <c>[x, y]</c>, and keyable — a focus pull is a keyed size. <c>type</c> is
     /// <c>'fastGaussian'</c> (the default), <c>'gaussian'</c>, <c>'box'</c> or <c>'cross'</c>.
@@ -255,6 +270,9 @@ public abstract class MotionLayerList
 
     /// <summary>The composition this stack belongs to, whose bones it can use.</summary>
     internal MotionComposition? Root { get; private protected set; }
+
+    /// <summary>Adds a layer built elsewhere — the text layer's export builds its per-letter groups this way.</summary>
+    internal void Add(MotionLayer layer) => layers.Add(layer);
 
     /// <summary>Every layer here and in the groups below.</summary>
     internal IEnumerable<MotionLayer> AllLayers() =>
@@ -438,6 +456,9 @@ public sealed class MotionComposition : MotionLayerList
 
     /// <summary>How many frames <see cref="Capture"/> renders: one per frame, both ends included.</summary>
     public int FrameCount => (int)Math.Floor(Duration * Fps + 1e-9) + 1;
+
+    /// <summary>Whether y grows down the screen in the units layers use: the view's top is above its bottom.</summary>
+    internal bool YDown => view[3] > view[1];
     #endregion
 
     #region Methods
