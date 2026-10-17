@@ -81,13 +81,14 @@ public abstract class MotionLayerList
 
     /// <summary>
     /// A rectangle between two corners, in either order:
-    /// <c>{ point1, point2, expand?, color, invert?, amount?, blend?, desc? }</c>. <c>expand</c> grows it on
-    /// every side. The bar of a bar chart: keyed corners stay exact in SVG.
+    /// <c>{ point1, point2, expand?, radius?, color, invert?, amount?, blend?, desc? }</c>. <c>expand</c> grows it on
+    /// every side; <c>radius</c> rounds its corners, Synfig's bevel, at most half the shorter side. The bar of a bar chart:
+    /// keyed corners stay exact in SVG.
     /// </summary>
     public MotionLayerList Rectangle(object? options)
     {
         var o = new MotionOptions(options, "rectangle",
-            "point1", "point2", "expand", "color", "invert", "amount", "blend", "desc");
+            "point1", "point2", "expand", "radius", "color", "invert", "amount", "blend", "desc");
         layers.Add(new MotionLayer.RectangleLayer(o));
         return this;
     }
@@ -255,7 +256,7 @@ public abstract class MotionLayerList
     public MotionGroup Group(object? options = null)
     {
         var o = new MotionOptions(options, "group",
-            "origin", "offset", "angle", "skewAngle", "scale", "z", "rotateX", "rotateY", "bone", "amount", "blend", "timeOffset", "timeDilation", "desc");
+            "origin", "offset", "angle", "skewAngle", "scale", "z", "rotateX", "rotateY", "keepSize", "bone", "amount", "blend", "timeOffset", "timeDilation", "desc");
         var group = new MotionGroup(o) { Root = Root, Parent = this };
         layers.Add(group.Layer);
         return group;
@@ -292,7 +293,7 @@ public abstract class MotionLayerList
     public MotionGroup Switch(object? options)
     {
         var o = new MotionOptions(options, "switch",
-            "active", "origin", "offset", "angle", "skewAngle", "scale", "z", "rotateX", "rotateY", "bone", "amount", "blend", "timeOffset", "timeDilation", "desc");
+            "active", "origin", "offset", "angle", "skewAngle", "scale", "z", "rotateX", "rotateY", "keepSize", "bone", "amount", "blend", "timeOffset", "timeDilation", "desc");
         var group = new MotionGroup(o, MotionSwitchTrack.Read(o.Raw("active"), "switch")) { Root = Root, Parent = this };
         layers.Add(group.Layer);
         return group;
@@ -386,7 +387,7 @@ public abstract class MotionLayerList
     /// <summary>
     /// A blur of everything below it in this stack: <c>{ size?, type?, amount?, desc? }</c>. <c>size</c> is in units, a
     /// number for both axes or <c>[x, y]</c>, and keyable — a focus pull is a keyed size. <c>type</c> is
-    /// <c>'fastGaussian'</c> (the default), <c>'gaussian'</c>, <c>'box'</c> or <c>'cross'</c>.
+    /// <c>'gaussian'</c> (the default), <c>'fastGaussian'</c>, <c>'box'</c> or <c>'cross'</c>.
     /// </summary>
     /// <remarks>
     /// Synfig's blur layer. Like Synfig's it stops at its own group: put it in a group with what it should blur.
@@ -706,9 +707,24 @@ public abstract class MotionLayerList
     /// <summary>Whether a layer here blends other than by compositing, so the stack must be drawn on its own.</summary>
     internal bool HasBlendedLayers => layers.Any(l => !l.Blend.IsComposite);
 
-    /// <summary>Whether any layer here or in a group below blends other than by compositing.</summary>
-    internal bool HasBlendedLayersDeep =>
-        HasBlendedLayers || layers.OfType<MotionLayer.GroupLayer>().Any(g => g.Children.HasBlendedLayersDeep);
+    /// <summary>
+    /// Whether any layer here at <paramref name="time"/> blends other than by compositing and changes something, so the
+    /// stack must be drawn on its own: a wipe at completion 0 does not.
+    /// </summary>
+    internal bool HasBlendedLayersAt(double time)
+    {
+        if (!HasBlendedLayers) return false;
+        var at = Times(time);
+        return layers.Any(l => !l.Blend.IsComposite && !l.IsVoid(at(l)));
+    }
+
+    /// <summary>
+    /// Whether any layer here or in a group below blends by a formula that can leave [0, 1] — a subtract, a divide — so the
+    /// film must be drawn on a float surface. The Porter–Duff blends (behind, onto, alpha over) cannot, and stay on 8 bits:
+    /// trailer3's one iris, shown for 16 frames, had put all 361 on a half-float surface.
+    /// </summary>
+    internal bool NeedsFloatDeep =>
+        layers.Any(l => l.Blend.Native is null) || layers.OfType<MotionLayer.GroupLayer>().Any(g => g.Children.NeedsFloatDeep);
     #endregion
 }
 
@@ -848,6 +864,9 @@ public sealed class MotionComposition : MotionLayerList
 
     internal MotionCameraFrame? CameraAt(double time) => camera?.At(time);
 
+    /// <summary>The camera's target, its depth and the camera's distance from it at a time; null with no camera.</summary>
+    internal (double X, double Y, double Z, double Distance)? CameraTargetAt(double time) => camera?.TargetAt(time);
+
     /// <summary>The camera at the frame being drawn, null with no camera.</summary>
     internal MotionCameraFrame? Frame { get; private set; }
 
@@ -878,7 +897,7 @@ public sealed class MotionComposition : MotionLayerList
         var canvas = new SkiaCanvas(w, h);
         canvas.SkCanvas.Clear(SKColors.Transparent);
         BeginFrame(time);
-        if (!HasBlendedLayersDeep)
+        if (!NeedsFloatDeep)
         {
             canvas.SkCanvas.Save();
             canvas.SkCanvas.Concat(frame);
@@ -913,9 +932,10 @@ public sealed class MotionComposition : MotionLayerList
         c.Concat(ViewMatrix());
 
         // A blend reaches only the composition's own layers, never the drawing it is placed in.
-        if (HasBlendedLayers) c.SaveLayer();
+        var isolate = HasBlendedLayersAt(time);
+        if (isolate) c.SaveLayer();
         RenderLayers(ctx.Canvas, time);
-        if (HasBlendedLayers) c.Restore();
+        if (isolate) c.Restore();
         c.Restore();
     }
 
@@ -1130,6 +1150,7 @@ internal abstract class MotionLayer
     /// </summary>
     public void Render(SkiaCanvas surface, double time)
     {
+        if (IsVoid(time)) return;
         var amount = AmountAt(time);
         if (Blend.IsComposite)
         {
@@ -1153,6 +1174,12 @@ internal abstract class MotionLayer
         Draw(surface, time, 1);
         canvas.Restore();
     }
+
+    /// <summary>
+    /// Whether the layer changes nothing at this time, so it is passed over — no layer of its own, and no isolation of its
+    /// group for it. An iris at completion 0 still cost trailer3 25 ms a frame before this.
+    /// </summary>
+    internal virtual bool IsVoid(double time) => false;
 
     /// <summary>Draws the layer's content at a time, at <paramref name="amount"/> opacity.</summary>
     protected abstract void Draw(SkiaCanvas surface, double time, double amount);
@@ -1301,17 +1328,67 @@ internal abstract class MotionLayer
         private readonly MotionNode point1 = o.Node("point1", MotionType.Vector, new[] { 0d, 0d });
         private readonly MotionNode point2 = o.Node("point2", MotionType.Vector, new[] { 10d, 10d });
         private readonly MotionNode expand = o.Node("expand", MotionType.Real, 0d);
+        private readonly MotionNode radius = o.Node("radius", MotionType.Real, 0d);
         private readonly MotionNode color = o.Node("color", MotionType.Color, "#000000");
         private readonly bool invert = o.Bool("invert", false);
 
-        public override IEnumerable<MotionNode> Nodes() => [Amount, point1, point2, expand, color];
+        public override IEnumerable<MotionNode> Nodes() => [Amount, point1, point2, expand, radius, color];
 
         protected override void Draw(SkiaCanvas surface, double time, double amount)
         {
             using var paint = Paint(color.Evaluate(time), amount);
             using var path = new SKPath { FillType = invert ? SKPathFillType.InverseWinding : SKPathFillType.Winding };
-            path.AddRect(Bounds(time));
+            var r = Bounds(time);
+            var b = (float)Bevel(time);
+            if (b <= 0) path.AddRect(r);
+            else
+            {
+                // Synfig's rounded rectangle: each corner a quadratic whose control point is the corner, so a quarter of the
+                // radius short of a circular arc at the corner's middle (about 4% of the radius inside SVG's rx).
+                path.MoveTo(r.Right - b, r.Top);
+                path.QuadTo(r.Right, r.Top, r.Right, r.Top + b);
+                path.LineTo(r.Right, r.Bottom - b);
+                path.QuadTo(r.Right, r.Bottom, r.Right - b, r.Bottom);
+                path.LineTo(r.Left + b, r.Bottom);
+                path.QuadTo(r.Left, r.Bottom, r.Left, r.Bottom - b);
+                path.LineTo(r.Left, r.Top + b);
+                path.QuadTo(r.Left, r.Top, r.Left + b, r.Top);
+                path.Close();
+            }
             surface.SkCanvas.DrawPath(path, paint);
+        }
+
+        /// <summary>The outline as SVG path data at a time: four sides, or four sides with Synfig's quadratic corners.</summary>
+        private string Outline(double time)
+        {
+            var r = Bounds(time);
+            var b = (float)Bevel(time);
+            static string N(double v) => SvgAnimationWriter.N(v);
+            if (b <= 0) return $"M{N(r.Left)} {N(r.Top)}H{N(r.Right)}V{N(r.Bottom)}H{N(r.Left)}Z";
+            return $"M{N(r.Right - b)} {N(r.Top)}Q{N(r.Right)} {N(r.Top)} {N(r.Right)} {N(r.Top + b)}V{N(r.Bottom - b)}"
+                + $"Q{N(r.Right)} {N(r.Bottom)} {N(r.Right - b)} {N(r.Bottom)}H{N(r.Left + b)}"
+                + $"Q{N(r.Left)} {N(r.Bottom)} {N(r.Left)} {N(r.Bottom - b)}V{N(r.Top + b)}"
+                + $"Q{N(r.Left)} {N(r.Top)} {N(r.Left + b)} {N(r.Top)}Z";
+        }
+
+        /// <summary>The corners' radius now, at most half the shorter side: a pill at its largest.</summary>
+        private double Bevel(double time)
+        {
+            var (_, w) = Corners(time, 0);
+            var (_, h) = Corners(time, 1);
+            return Math.Clamp(radius.Evaluate(time)[0], 0, Math.Min(w, h) / 2);
+        }
+
+        /// <summary>
+        /// Synfig's <c>bevel</c> for the radius: a fraction of the shorter side, so that with <c>bevCircle</c> each corner is
+        /// <c>min(w, h)·bevel/2</c> along both sides.
+        /// </summary>
+        private double SifBevel(double time)
+        {
+            var (_, w) = Corners(time, 0);
+            var (_, h) = Corners(time, 1);
+            var shorter = Math.Min(w, h);
+            return shorter <= 0 ? 0 : Math.Clamp(2 * Bevel(time) / shorter, 0, 1);
         }
 
         private SKRect Bounds(double time)
@@ -1326,19 +1403,27 @@ internal abstract class MotionLayer
             SifWriter.Param("invert", SifWriter.Bool(invert)),
             SifWriter.Param("feather_x", new XElement("real", new XAttribute("value", "0"))),
             SifWriter.Param("feather_y", new XElement("real", new XAttribute("value", "0"))),
-            SifWriter.Param("bevel", new XElement("real", new XAttribute("value", "0"))),
+            BevelToSif(sif),
             SifWriter.Param("bevCircle", SifWriter.Bool(true)));
+
+        /// <summary>The bevel: fixed when nothing it depends on moves, otherwise sampled a frame at a time and compacted.</summary>
+        private XElement BevelToSif(SifWriter sif)
+        {
+            var count = (int)Math.Floor(sif.Duration * sif.Fps + 1e-9) + 1;
+            var times = Enumerable.Range(0, count).Select(f => f / sif.Fps).ToArray();
+            var bevel = MotionTextLayer.Keys(MotionType.Real, times, [.. times.Select(t => new[] { SifBevel(t) })]);
+            return sif.Param("bevel", bevel);
+        }
 
         public override XElement ToSvg(SvgAnimationWriter svg, MotionTimeMap map)
         {
-            if (invert)
+            // Rounded corners go out as a path with the same quadratic corners as the render and Synfig, not as rx, whose
+            // corners are circular arcs.
+            var rounded = svg.Track(radius, 0, map) is not { IsStatic: true } still || still.Values[0] > 0;
+            if (invert || rounded)
             {
-                var path = SvgElement("path", new XAttribute("fill-rule", "evenodd"));
-                svg.Attribute(path, "d", t =>
-                {
-                    var r = Bounds(map.Local(t));
-                    return $"{SvgAnimationWriter.Everything}M{P(new(r.Left, r.Top))}H{SvgAnimationWriter.N(r.Right)}V{SvgAnimationWriter.N(r.Bottom)}H{SvgAnimationWriter.N(r.Left)}Z";
-                });
+                var path = invert ? SvgElement("path", new XAttribute("fill-rule", "evenodd")) : SvgElement("path");
+                svg.Attribute(path, "d", t => (invert ? SvgAnimationWriter.Everything : "") + Outline(map.Local(t)));
                 Paint(path, "fill", color, svg, map);
                 Opacity(path, svg, map);
                 return path;
@@ -2090,6 +2175,9 @@ internal abstract class MotionLayer
             rotateX = o.Node("rotateX", MotionType.Angle, 0d);
             rotateY = o.Node("rotateY", MotionType.Angle, 0d);
             Is3D = o.Has("z") || o.Has("rotateX") || o.Has("rotateY");
+            keepSize = o.Bool("keepSize", false);
+            if (keepSize && !Is3D)
+                throw new ArgumentException($"{o.Who}'s keepSize holds a plane at depth to its size at z 0; give the group a z, or drop keepSize.");
             origin = o.Node("origin", MotionType.Vector, new[] { 0d, 0d });
             offset = o.Node("offset", MotionType.Vector, new[] { 0d, 0d });
             angle = o.Node("angle", MotionType.Angle, 0d);
@@ -2116,6 +2204,7 @@ internal abstract class MotionLayer
 
         private readonly MotionGroup children;
         private readonly MotionNode origin, offset, angle, skewAngle, scale, z, rotateX, rotateY;
+        private readonly bool keepSize;
         private readonly MotionPin? pin;
 
         /// <summary>A plane the camera sees in perspective: given <c>z</c>, <c>rotateX</c> or <c>rotateY</c>.</summary>
@@ -2170,7 +2259,7 @@ internal abstract class MotionLayer
                 }
             }
 
-            var isolate = amount < 1 || children.HasBlendedLayers;
+            var isolate = amount < 1 || children.HasBlendedLayersAt(childTime);
             if (isolate)
             {
                 using var fade = new SKPaint { Color = new SKColor(255, 255, 255, (byte)Math.Round(amount * 255)) };
@@ -2237,7 +2326,7 @@ internal abstract class MotionLayer
                     throw new InvalidOperationException($"The group{Named} is 3D (it has z, rotateX or rotateY), and the composition has no camera: add comp.camera().");
                 if (parent.Warped)
                     throw new InvalidOperationException($"The 3D group{Named} sits inside a warp, whose corner pin has no place in the camera's world. Put the warp inside the 3D group instead.");
-                var world = parent.World * Local4(time);
+                var world = World(parent, time);
                 return (new MotionSpace(world, (camera.Projection * world).Plane(), false), childTime);
             }
 
@@ -2256,8 +2345,25 @@ internal abstract class MotionLayer
         internal double AnchorDepth(MotionSpace parent, MotionCameraFrame camera, double time)
         {
             var o = origin.Evaluate(time);
-            var p = (parent.World * Local4(time)).Apply(o[0], o[1], 0);
+            var p = World(parent, time).Apply(o[0], o[1], 0);
             return camera.Depth(p.X, p.Y, p.Z);
+        }
+
+        /// <summary>
+        /// The plane's world matrix: its own after its parent's. With <c>keepSize</c> it is also scaled about the camera's
+        /// target by <c>(distance − targetZ + z) / (distance − targetZ)</c>, all read at time 0, so at the film's start it looks
+        /// exactly as it would at z 0 — a poster split into planes at depths is unchanged until the camera moves, and then
+        /// each plane moves at its depth. Exact when the camera looks straight on at time 0; a plane inside another 3D plane
+        /// counts only its own z.
+        /// </summary>
+        private Mat4 World(MotionSpace parent, double time)
+        {
+            var world = parent.World * Local4(time);
+            if (!keepSize || children.Root?.CameraTargetAt(0) is not { } rest) return world;
+            var near = rest.Distance - rest.Z;
+            var k = (near + z.Evaluate(0)[0]) / near;
+            return Mat4.Translate(rest.X, rest.Y, 0) * Mat4.Rows(k, 0, 0, 0, 0, k, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)
+                * Mat4.Translate(-rest.X, -rest.Y, 0) * world;
         }
 
         /// <summary>
@@ -2718,8 +2824,14 @@ internal sealed class MotionOptions
 
     public object? Raw(string key) => values[key];
 
+    /// <remarks>
+    /// What a script passes must be finite (<see cref="MotionTypes.Read"/>); a default may be NaN, as a text selector's
+    /// <c>end</c> is for "not set", so a fallback that is not finite is taken as it is.
+    /// </remarks>
     public MotionNode Node(string key, MotionType kind, object fallback) =>
-        MotionNodeFactory.Node(Has(key) ? values[key] : fallback, kind, $"{who}'s {key}");
+        !Has(key) && fallback is double d && !double.IsFinite(d)
+            ? new MotionConstant(kind, [d])
+            : MotionNodeFactory.Node(Has(key) ? values[key] : fallback, kind, $"{who}'s {key}");
 
     public double Number(string key, double fallback) =>
         Has(key) ? MotionTypes.Read(values[key], MotionType.Real, $"{who}'s {key}")[0] : fallback;

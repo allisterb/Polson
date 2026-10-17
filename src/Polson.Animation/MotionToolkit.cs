@@ -131,6 +131,14 @@ public class MotionToolkit : IDisposable
     }
 
     /// <summary>
+    /// A grade without a film: <c>{ hue?, brightness?, contrast?, exposure?, saturation?, gamma? }</c>, as
+    /// <c>comp.colorCorrect</c> takes them (a <c>desc</c> is allowed and ignored, so the same object serves both), returning
+    /// <c>{ apply(color, t?) }</c> — what that grade makes of a colour, to the pixel the render draws.
+    /// </summary>
+    public MotionGrade Grade(object? options = null) => new(new MotionColorCorrectLayer(
+        new MotionOptions(options, "Motion.grade", "hue", "brightness", "contrast", "exposure", "saturation", "gamma", "desc")));
+
+    /// <summary>
     /// A few smooth spline points fitted to many: <c>[{ point, t1, t2 }]</c>, every input point within <c>error</c> of the
     /// curve, ready for <c>comp.region</c> or <c>comp.outline</c>. <c>points</c> are <c>[x, y]</c> or <c>{ x, y }</c>.
     /// <c>options</c>: <c>{ error?, closed?, corner? }</c> — <c>error</c> in units (0.5), <c>closed</c> to fit round to

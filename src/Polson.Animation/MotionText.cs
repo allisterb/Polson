@@ -86,6 +86,50 @@ public sealed class MotionText
         })];
 
     /// <summary>
+    /// When the text stops moving: from <paramref name="from"/> seconds on, the first frame from which no visible letter's
+    /// box or opacity changes, and how long it then holds — <c>{ at, until, seconds }</c>, <c>until</c> the last frame
+    /// before anything changes again (or the film's end); null when it is never visible and unchanged across a frame step.
+    /// The layer's <c>amount</c> counts: a text faded out by it is not visible. <c>options</c>:
+    /// <c>{ frame? }</c> as <see cref="BoundsAt"/>, true to count a text still only when it is still on screen, as a text in
+    /// a moving group is not.
+    /// </summary>
+    /// <remarks>
+    /// The reading-time check: trailer4 found when its tagline came to rest by diffing <c>boundsAt</c> and
+    /// <c>lettersAt</c> frame by frame. Read at the composition's frame rate, to a hundredth of a unit and 1/500 of opacity.
+    /// </remarks>
+    public Dictionary<string, object?>? SettledAt(double from = 0, object? options = null)
+    {
+        var root = stack.Root ?? throw new InvalidOperationException("text.settledAt needs the text's composition.");
+        var fps = root.Fps;
+        var first = (int)Math.Ceiling(from * fps - 1e-9);
+        var last = (int)Math.Floor(root.Duration * fps + 1e-9);
+        var frames = Enumerable.Range(first, Math.Max(0, last - first + 1))
+            .Select(f => (Frame: f, Letters: Letters(f / fps, options, "settledAt"))).ToList();
+
+        for (var i = 0; i < frames.Count; i++)
+        {
+            // Still means unchanged across at least one frame step: the film's last frame alone has nothing to compare with.
+            if (frames[i].Letters.Count == 0 || i + 1 >= frames.Count || !Same(frames[i].Letters, frames[i + 1].Letters)) continue;
+            var j = i;
+            while (j + 1 < frames.Count && Same(frames[i].Letters, frames[j + 1].Letters)) j++;
+            return new()
+            {
+                ["at"] = frames[i].Frame / fps,
+                ["until"] = frames[j].Frame / fps,
+                ["seconds"] = (frames[j].Frame - frames[i].Frame) / fps,
+            };
+        }
+        return null;
+
+        static bool Same(List<(string Cluster, SKRect Ink, double Opacity, int Char, int Word, int Line)> a,
+            List<(string Cluster, SKRect Ink, double Opacity, int Char, int Word, int Line)> b) =>
+            a.Count == b.Count && a.Zip(b).All(p => p.First.Char == p.Second.Char
+                && Math.Abs(p.First.Ink.Left - p.Second.Ink.Left) < 0.01 && Math.Abs(p.First.Ink.Top - p.Second.Ink.Top) < 0.01
+                && Math.Abs(p.First.Ink.Right - p.Second.Ink.Right) < 0.01 && Math.Abs(p.First.Ink.Bottom - p.Second.Ink.Bottom) < 0.01
+                && Math.Abs(p.First.Opacity - p.Second.Opacity) < 0.002);
+    }
+
+    /// <summary>
     /// The letters at a time in the stack's own terms, or carried out to the frame: each group above, outermost first,
     /// gives its transform and its children's clock, and a switch not showing the way down hides them.
     /// </summary>
@@ -412,11 +456,13 @@ internal sealed class MotionTextLayer : MotionLayer
     {
         var frame = Frame(time);
         var letters = new List<(string, SKRect, double, int, int, int)>();
+        // The layer's own amount fades every letter: a text faded out by it shows nothing, so it has no visible letters.
+        var amount = AmountAt(time);
         for (var i = 0; i < frame.Glyphs.Length; i++)
         {
             var g = frame.Glyphs[i];
             if (g.Path is null) continue;
-            var opacity = animators.Length == 0 ? 1 : Math.Clamp(g.State.Opacity, 0, 1);
+            var opacity = amount * (animators.Length == 0 ? 1 : Math.Clamp(g.State.Opacity, 0, 1));
             if (opacity <= 0) continue;
 
             using var placed = new SKPath(g.Path);

@@ -296,6 +296,36 @@ public class MotionTextTests(ITestOutputHelper output) : TestsRuntime
         Assert.True(InkRows(frame.SkBitmap, 150, 300).Min() > 90);
     }
 
+    /// <summary>
+    /// <c>text.settledAt</c>: a cascade that finishes at 1 s is still from then to the film's end, and fading out ends the
+    /// hold; a text in a moving group is still in its own stack, but never on screen. trailer4 found its tagline's rest by
+    /// diffing boxes frame by frame.
+    /// </summary>
+    [Fact]
+    public void SettledAtFindsWhenTheTextStopsMoving()
+    {
+        if (!Installed("Arial")) return;
+        var motion = new MotionToolkit();
+        var comp = motion.Composition(Opts(("width", 300d), ("height", 160d), ("fps", 24d), ("duration", 4d)));
+        var title = comp.Text(Opts(("text", "LAND"), ("family", "Arial"), ("size", 40d), ("origin", new[] { 150d, 60d }),
+            ("amount", motion.Nodes.Animated("real", new object[] { Opts(("time", 3d), ("value", 1d)), Opts(("time", 3.5d), ("value", 0d)) })),
+            ("animators", new object[]
+            {
+                Opts(("properties", Opts(("position", new[] { 0d, 60d }))),
+                    ("selector", Opts(("offset", motion.Nodes.Animated("real", new object[] { Opts(("time", 0d), ("value", -100d)), Opts(("time", 1d), ("value", 100d)) }))))),
+            })));
+
+        var s = Assert.IsType<System.Collections.Generic.Dictionary<string, object?>>(title.SettledAt());
+        output.WriteLine($"settled at {s["at"]}, until {s["until"]}, {s["seconds"]} s");
+        Assert.InRange((double)s["at"]!, 1 - 1e-9, 1 + 1 / 24d + 1e-9);
+        Assert.InRange((double)s["until"]!, 2.9, 3.0 + 1e-9);         // amount starts falling after 3 s
+
+        var mover = comp.Group(Opts(("offset", motion.Nodes.Linear("vector", new[] { 20d, 0d }, new[] { 0d, 0d }))));
+        var riding = mover.Text(Opts(("text", "RIDE"), ("family", "Arial"), ("size", 30d), ("origin", new[] { 100d, 120d })));
+        Assert.Equal(0d, (double)riding.SettledAt()!["at"]!);
+        Assert.Null(riding.SettledAt(0, Opts(("frame", true))));
+    }
+
     [Fact]
     public void ARandomizedSelectorIsSeededAndRepeatable()
     {

@@ -325,18 +325,20 @@ is Synfig's, and the craft follows from it:
   motion stops, so give it at least as long as the arrival took. Keep the text's handle —
   `const title = comp.text(...)` — and check it rather than guessing: `title.boundsAt(t, { frame: true })` is its ink as drawn,
   animators and all, in the frame's pixels through any group it sits in, which is the title-safe check, and `title.lettersAt(t)` gives each letter's box for placing a
-  thing on a word.
+  thing on a word. How long it holds is `title.settledAt(arrival)`: when the letters stop moving and for how many
+  seconds they stay still, the number a reading-time check compares against the words.
 - **Pull focus rather than cut: `group.blur({ type: 'gaussian', size })` with `size` keyed.** A blur that eases from
   soft to sharp directs the eye the way a camera's focus does — to the title as it resolves, to the second subject as
   the first goes soft — and a cut has no way to say "look here next". It blurs only what is below it in its own group,
   so group what should soften together and leave the rest sharp. Ease it with `halt` at both ends so it settles rather
   than snaps; a focus pull that keeps moving reads as a fault. Keep blur for transitions and depth, not decoration: a
-  composition left blurred is a composition the eye cannot rest on. That is also the budget: the Gaussian's cost grows
-  with its size, and a whole film under a wide one will not encode inside a script's time limit, so give a long or wide
-  blur `type: 'fastGaussian'`, which costs the same at any size but turns a small bright shape square.
+  composition left blurred is a composition the eye cannot rest on. The default `'gaussian'` is the smooth blur and the
+  cheapest, about the same cost at any size; `'fastGaussian'` costs half as much again and turns a small bright shape
+  square. Key it off when the pull is done, and a blur doing nothing costs nothing.
 - **Bring a vector drawing into motion as its own path data: `comp.region({ path: d })`.** A poster's shapes are
   already drawn; re-drawing them by hand loses the curves the designer chose. Paste each `<path>`'s `d` into a group
-  whose `offset` and `scale` carry the drawing's coordinates into the frame, and the holes and corners come with it.
+  whose `offset` and `scale` carry the drawing's coordinates into the frame, and the holes and corners come with it; a
+  `<rect rx>` is `comp.rectangle({ point1, point2, radius: rx })`.
   When one point should move — a lid that lifts, a flag that flutters — take the same contours as values with
   `Motion.pathPoints(d)`, key that point, and give the rest back unchanged. A shape that exists only as points —
   a sampled curve, a traced outline, landmarks — becomes a few smooth spline points with `Motion.fitPoints(points,
@@ -346,7 +348,8 @@ is Synfig's, and the craft follows from it:
   the shape it fills and `blend: 'onto'`, and a sheen is its two points keyed across the shape.
 - **Move the camera through the poster, not the poster past the camera: `comp.camera()`, layers at depths.** Give a
   poster's layers `z` — the backdrop far, the object nearer, the type at 0 — and a camera move turns a flat design into
-  a space. Choose the move for what it says. A **push-in** (`distance` keyed down) closes on something and raises the
+  a space. `keepSize: true` on each plane keeps the poster looking exactly as designed until the camera moves. Choose
+  the move for what it says. A **push-in** (`distance` keyed down) closes on something and raises the
   stakes: near layers grow faster than far ones, which is what makes it read as moving rather than enlarging. A
   **zoom** (`zoom` keyed) magnifies everything alike and reads as a looking-glass, flat and observed; use it when the
   picture should feel watched, not entered. A **pan** (`target` keyed) slides near layers past far ones, and that
@@ -364,6 +367,8 @@ is Synfig's, and the craft follows from it:
 - **Grade the film once, at the top: `comp.colorCorrect({ hue, saturation, exposure, ... })` over everything.** One
   correction is one light, and it holds the frames together where per-layer tweaks pull them apart. The same film graded
   warm for one audience and cool for another is a choice the evidence can make; a keyed `exposure` is a flash on a cut.
+  A grade moves every colour the poster chose, so see where it takes the important ones before rendering the film:
+  `Motion.grade(sameOptions).apply('#C8205A')` is the colour the film will show, and it is the one to check contrast on.
 - **Step time on purpose, not by accident: `comp.posterizeTime({ fps: 12 })`.** Motion on twos reads as drawn and
   deliberate; smooth motion reads as machine. Put the drawn layers under it and the camera or the type above, and the
   film reads as hand-made inside a modern frame.

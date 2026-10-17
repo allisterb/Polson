@@ -213,6 +213,69 @@ public class MotionCameraTests(ITestOutputHelper output) : TestsRuntime
         }
     }
 
+    /// <summary>
+    /// <c>keepSize</c>: a plane at depth looks at time 0 exactly as it would at z 0 — scaled about the camera's target, so an
+    /// off-centre card stays where it was — and a push-in still shows its depth: it grows less than a plane at z 0.
+    /// trailer4 pre-scaled every plane of its poster by hand to get this.
+    /// </summary>
+    [Fact]
+    public void KeepSizeHoldsAPlaneAtDepthToItsFlatSizeAtRest()
+    {
+        var motion = new MotionToolkit();
+        void OffCentre(MotionLayerList s) =>
+            s.Rectangle(Opts(("point1", new[] { 80d, 60d }), ("point2", new[] { 140d, 100d }), ("color", "#1d3557")));
+
+        // A gentle push (to three quarters of the distance), so the cards stay inside the frame and their ink is whole.
+        var flat = Scene(motion);
+        OffCentre(flat);
+        var deep = Scene(motion);
+        deep.Camera(Opts(("distance", motion.Nodes.Linear("real", -Standard / 4, Standard))));
+        OffCentre(deep.Group(Opts(("z", 300d), ("keepSize", true))));
+        var near = Scene(motion);
+        near.Camera(Opts(("distance", motion.Nodes.Linear("real", -Standard / 4, Standard))));
+        OffCentre(near.Group(Opts(("z", 0d))));
+
+        using var a = flat.Render(0);
+        using var b = deep.Render(0);
+        Assert.Equal(0, Differing(a.SkBitmap, b.SkBitmap, 2));
+
+        using var deep1 = deep.Render(1);
+        using var near1 = near.Render(1);
+        var (d, n, f) = (Ink(deep1.SkBitmap), Ink(near1.SkBitmap), Ink(a.SkBitmap));
+        output.WriteLine($"at rest {f}; pushed: kept-size plane at z 300 {d}, plane at z 0 {n}");
+        Assert.True(d.Width > f.Width + 2, "the push did not move the kept-size plane");
+        Assert.True(d.Width < n.Width - 2, "the kept-size plane grew as much as one at z 0: its depth is lost");
+
+        var e = Assert.Throws<ArgumentException>(() => Scene(motion).Group(Opts(("keepSize", true))));
+        Assert.Contains("give the group a z", e.Message);
+    }
+
+    /// <summary>A kept-size plane goes to <c>.sif</c> through the same warp bake, and Synfig draws it the same.</summary>
+    [Fact]
+    public void SynfigDrawsAKeptSizePlaneTheSame()
+    {
+        var motion = new MotionToolkit();
+        var comp = motion.Composition(Opts(("width", W), ("height", H), ("fps", 1d), ("duration", 1d)));
+        comp.Fill(Opts(("color", "#f2efe8")));
+        comp.Camera(Opts(("distance", motion.Nodes.Linear("real", -Standard / 2, Standard))));
+        var back = comp.Group(Opts(("z", 250d), ("keepSize", true)));
+        back.Rectangle(Opts(("point1", new[] { 30d, 25d }), ("point2", new[] { 210d, 135d }), ("color", "#a8dadc")));
+        var front = comp.Group(Opts(("z", 40d), ("keepSize", true)));
+        front.Rectangle(Opts(("point1", new[] { 100d, 60d }), ("point2", new[] { 150d, 100d }), ("color", "#e63946")));
+
+        if (SynfigOracle.Find() is not { } synfig) return;
+        var theirs = SynfigOracle.Render(synfig, comp, "camera-keepsize", output);
+        for (var i = 0; i < theirs.Length; i++)
+        {
+            using var ours = comp.Render(i);
+            using var bitmap = theirs[i];
+            SynfigOracle.Dump(ours.SkBitmap, bitmap, $"camera-keepsize-{i}");
+            var differing = Differing(ours.SkBitmap, bitmap, 24);
+            output.WriteLine($"frame {i}: {differing:P2} differ by more than 24");
+            Assert.True(differing < 0.03, $"{differing:P2} differ from synfig at frame {i}");
+        }
+    }
+
     private static bool Installed(string family)
     {
         using var face = SKFontManager.Default.MatchFamily(family);

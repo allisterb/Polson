@@ -205,6 +205,14 @@ internal sealed class MotionWipeLayer : MotionLayer
 
     // ------------------------------------------------------------------ the render
 
+    /// <summary>
+    /// Nothing in the frame is erased: at amount 0, or at completion 0 — except feathered blinds, whose bands begin half
+    /// erased. An inverted iris at 0 is a circle reaching the frame's farthest corner plus twice its feather, wider than the
+    /// feather softens, so it erases nothing either (trailer4 probed it: nothing visible).
+    /// </summary>
+    internal override bool IsVoid(double time) =>
+        AmountAt(time) <= 0 || (Done(time) <= 0 && (type != "blinds" || Feather(time) <= 0));
+
     protected override void Draw(SkiaCanvas surface, double time, double amount)
     {
         var canvas = surface.SkCanvas;

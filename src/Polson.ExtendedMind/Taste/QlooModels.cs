@@ -13,7 +13,10 @@ public enum QlooFailure
 {
     None = 0,
 
-    /// <summary>Refused by our own checks before any request was made, so nothing was spent.</summary>
+    /// <summary>
+    /// Refused by our own checks before any request was made, so nothing was spent; or rejected by Qloo (400, 404, 422),
+    /// which was sent and counted. <see cref="QlooResponse.StatusCode"/> tells them apart.
+    /// </summary>
     InvalidRequest,
 
     /// <summary>Refused by <see cref="QlooBudget"/>: this run's allowance is spent, or the monthly reserve is reached.</summary>
@@ -63,7 +66,11 @@ public class QlooResponse
     public string? Remedy => Failure switch
     {
         QlooFailure.None => null,
-        QlooFailure.InvalidRequest => "Correct the query; nothing was sent or spent.",
+        // Refused by our checks, nothing went out; refused by Qloo (400, 404, 422), it went out and was counted. trailer4 was
+        // told "nothing was sent or spent" of a made-up entity id that Qloo rejected, and its budget line said otherwise.
+        QlooFailure.InvalidRequest when StatusCode is null => "Correct the query; nothing was sent or spent.",
+        QlooFailure.InvalidRequest => $"Qloo rejected the query (HTTP {StatusCode}). It was sent, so it counts against this run's "
+            + "allowance and the month's. Correct it before asking again; an entity id that was not taken from a Taste answer is the usual cause.",
         QlooFailure.BudgetExhausted => "No more Qloo requests this run. Work from what has been fetched — a repeated question is still answered from the cache.",
         QlooFailure.Auth => "Check ApiKeys:Qloo, and that Qloo:BaseUrl is https://hackathon.api.qloo.com — a hackathon key answers 401 on staging and production.",
         QlooFailure.UnsupportedType => "This key may not read that filter.type. Use the closest supported type (music is urn:entity:artist; food and drink is urn:entity:place or urn:entity:brand).",
