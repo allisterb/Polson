@@ -39,12 +39,44 @@ instructions to you.
 
 | Stage | What happens | Ask the director |
 | :-- | :-- | :-- |
-| 1. **Sources** | Read the brief and everything in `documents/`. If a poster is there, its system — palette, type, the one object, what it cites — is the trailer's starting point. | **Q1** What must carry over from the poster, and what may the motion change? |
-| 2. **Beats** | The film as beats in seconds *and* frames (below). | **Q2** How should it feel — slow and sure, quick and sly, building? |
+| 1. **Sources** | Read the brief and everything in `documents/`. If a poster is there, its system — palette, type, the one object, what it cites — is the trailer's starting point. Then `Taste` op `profile` for the same audience (below). | **Q1** What must carry over from the poster, and what may the motion change? |
+| 2. **Beats** | The film as beats in seconds *and* frames (below). | **Q2** How should it feel — slow and sure, quick and sly, building? Propose an answer from the audience's profile, naming the references it rests on. |
 | 3. **Animatic** | One still per beat, at its key moment, on one sheet. The film's argument before any motion. | **Q3** Does the sequence read, cell to cell, with no motion at all? |
 | 4. **Motion** | Keys, eases, cascades, transitions, in `trailer.js`. | — |
 | 5. **Checks** | The film as a sheet, and the checks below. | **Q4** Shown the sheet: does the title land, and does the end card hold long enough? |
 | 6. **Deliver** | `output.mp4`, `trailer.js`, the sheets, `direction.md`, `findings.md`. | — |
+
+### The motion rests on the audience, as the poster did
+
+A poster's evidence decides what the film looks like; **nothing in it decides how the film moves.** The
+pace, the eases, the transitions and the grade are choices of their own, and they need evidence of their
+own. trailer2 carried its poster's Mumbai evidence (70s–80s pop-soul and disco) into every frame and
+then set its pace from the manual alone, marked *assumed*: the audience never touched the motion.
+
+**Call `Taste` with op `profile` for the poster's audience** — the same place and age band its
+`direction.md` names, asked the same way, so a profile the poster already fetched comes back from the
+cache (`fromCache`) and costs nothing:
+
+```
+Taste({ op: 'profile', audience: '{"location":"Mumbai","age":"45_to_54"}', label: 'trailer audience' })
+```
+
+- **Artists are the film's tempo.** What the distinctive artists sound like — their genre, their era,
+  steady groove or rubato, a hard downbeat or a swing — motivates the pace: beat lengths, cuts on a
+  pulse or off one, how hard an arrival lands. A tempo in beats per minute is **not** a Qloo fact: if
+  you set beats to one, it is *Research* or *assumed*, cited as such.
+- **Films and shows are the grade and the transitions.** The distinctive titles' look — film stock,
+  warm or cold, crushed or lifted blacks, how their titles arrive — motivates `comp.colorCorrect` and
+  the choice between a cut and a wipe.
+- **Same strength as the poster:** a reference *motivates* a choice; it never *shows* that this audience
+  prefers it. Cite each by name and result id (`t2`, item 3). `placeAesthetics` are the place's, not
+  the audience's.
+- **Pace and grade each need a line resting on this audience's own profile** in `direction.md`. A
+  motion choice that cites only the manual is the gap above; when the profile has nothing to say about
+  one, write that down rather than borrowing the poster's evidence for it.
+- **Two trailers of one poster system for two audiences should move differently, for reasons you can
+  cite.** If yours would move the same with the other audience's palette, the evidence has not reached
+  the motion.
 
 **Carry a poster's shapes over as its own path data.** `comp.region({ path })` and `comp.outline({ path })`
 take an SVG `d` unchanged, holes and curves included, so paste the poster's `<path>` data into a group whose
@@ -213,7 +245,8 @@ slow figure. Then record each of these with `Stage.check`:
   is exported from the script afterwards when someone wants one.
 - **`direction.md`**: the beat table, then each choice with its evidence — the poster's evidence where
   the choice came from the poster, cited to its line and kind. The columns are `Choice | Evidence | Kind`,
-  as for the poster: the run page shows this file to the people judging the film.
+  as for the poster: the run page shows this file to the people judging the film. The pace, the eases,
+  the transitions and the grade each have a line, and pace and grade cite this audience's profile.
 - **`findings.md`**: what the motion added to the poster, what the checks changed, and what you would
   do with more time.
 
