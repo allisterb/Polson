@@ -131,6 +131,39 @@ public class MotionToolkit : IDisposable
     }
 
     /// <summary>
+    /// A few smooth spline points fitted to many: <c>[{ point, t1, t2 }]</c>, every input point within <c>error</c> of the
+    /// curve, ready for <c>comp.region</c> or <c>comp.outline</c>. <c>points</c> are <c>[x, y]</c> or <c>{ x, y }</c>.
+    /// <c>options</c>: <c>{ error?, closed?, corner? }</c> — <c>error</c> in units (0.5), <c>closed</c> to fit round to
+    /// the start (false), and <c>corner</c> the turn in degrees above which a point stays a sharp corner (60), or false to
+    /// fit everything smooth as paper.js does.
+    /// </summary>
+    /// <remarks>paper.js's <c>Path.simplify</c>, ported; see <see cref="MotionCurveFit"/>.</remarks>
+    public List<Dictionary<string, object?>> FitPoints(object? points, object? options = null)
+    {
+        const string who = "Motion.fitPoints";
+        var o = new MotionOptions(options, who, "error", "closed", "corner");
+        if (points is not System.Collections.IList list || list.Count < 2)
+            throw new ArgumentException($"{who} takes at least two points, [[x, y], ...] or [{{ x, y }}, ...].");
+        var input = list.Cast<object?>().Select((p, i) => MotionTypes.Read(p, MotionType.Vector, $"{who}'s point {i}"))
+            .Select(p => new MotionCurveFit.V(p[0], p[1])).ToList();
+        var error = o.Number("error", 0.5);
+        if (!(error > 0)) throw new ArgumentException($"{who}'s error is a distance in units, more than 0.");
+        double? corner = o.Raw("corner") switch
+        {
+            null => 60,
+            false => null,
+            bool => throw new ArgumentException($"{who}'s corner is an angle in degrees, or false for no corners."),
+            _ => o.Number("corner", 60)
+        };
+        return [.. MotionCurveFit.Fit(input, o.Bool("closed", false), error, corner).Select(k => new Dictionary<string, object?>
+        {
+            ["point"] = new[] { k.Point.X, k.Point.Y },
+            ["t1"] = new[] { -3 * k.HandleIn.X, -3 * k.HandleIn.Y },
+            ["t2"] = new[] { 3 * k.HandleOut.X, 3 * k.HandleOut.Y },
+        })];
+    }
+
+    /// <summary>
     /// SVG path data as spline points: <c>[{ points, loop, hole }]</c>, one entry per subpath, outer before inner. Each point
     /// is <c>{ point, t1, t2 }</c>, ready for <c>comp.region</c> or <c>comp.outline</c>, or to key one point of. <c>options</c>:
     /// <c>{ fillRule? }</c>, <c>'nonzero'</c> or <c>'evenodd'</c>, which decides <c>hole</c>.

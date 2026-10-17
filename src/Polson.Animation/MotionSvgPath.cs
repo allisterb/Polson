@@ -35,7 +35,8 @@ internal static class MotionSvgPath
             throw new ArgumentException($"{who}'s path draws nothing: '{Clip(data)}' has no segment.");
 
         // Holes by nesting are exact only while no contour crosses another. Where one does, the fill is re-drawn as
-        // contours that do not cross — different points from the data's, so only then.
+        // contours that do not cross — different points from the data's, so only then. Skia keeps arcs as conics there,
+        // so the result is as compact as the data; its SVG text, which has no conics, is not.
         if (fill && Crosses(contours, evenOdd))
         {
             path.FillType = evenOdd ? SKPathFillType.EvenOdd : SKPathFillType.Winding;
