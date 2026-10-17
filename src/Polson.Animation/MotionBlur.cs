@@ -107,6 +107,14 @@ internal sealed class MotionBlurLayer : MotionLayer, IMotionStackFilter
         return new XElement(SvgAnimationWriter.Svg + "g", new XAttribute(SvgAnimationWriter.BelowFilter, svg.Filter(blur)));
     }
 
+    /// <summary>A blur at no amount, or of no size, changes nothing — the stack is then drawn in place.</summary>
+    public bool IsIdle(SKMatrix matrix, double time)
+    {
+        if (AmountAt(time) <= 0) return true;
+        var (sx, sy) = Pixels(matrix, time);
+        return sx <= 1e-10 && sy <= 1e-10;
+    }
+
     /// <summary>Synfig's extra size: how far beyond what is kept the blur reads, per axis, in device pixels.</summary>
     public (int X, int Y) Margin(SKMatrix matrix, double time)
     {

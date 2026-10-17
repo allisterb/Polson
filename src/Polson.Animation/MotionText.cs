@@ -18,6 +18,80 @@ using HB = HarfBuzzSharp;
 using static MotionTextSelectors;
 
 /// <summary>
+/// A text in a composition, as <c>comp.text(...)</c> returns it: where its letters are at any time.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Asked for by both trailer runs: each built its title-safe check by measuring the type some other way — rebuilding
+/// the composition with text only and diffing renders, or laying the line out again with <c>ctx.measureText</c> on the
+/// assumption that it would match. Read from the layer itself, the boxes are the letters as drawn, animators and all,
+/// with no rendering.
+/// </para>
+/// <para>
+/// Boxes are in the units of the stack the text was added to, and times are that stack's: at the composition's top
+/// level, the frame's units and the film's seconds. Inside a group, apply the group's transform and clock.
+/// </para>
+/// <para>
+/// Exposed to the JavaScript sandbox. Members follow .NET naming here; Jint resolves the JS camelCase spelling onto them,
+/// so a script calling <c>x.doThing()</c> reaches <c>DoThing()</c>. The camelCase form is the one documented in
+/// <c>docs/Polson.core.md</c> and the studio manuals.
+/// </para>
+/// </remarks>
+public sealed class MotionText
+{
+    #region Constructors
+    internal MotionText(MotionTextLayer layer) => this.layer = layer;
+    #endregion
+
+    #region Fields
+    private readonly MotionTextLayer layer;
+    #endregion
+
+    #region Properties
+    /// <summary>The words, as given.</summary>
+    public string Text => layer.Words;
+    #endregion
+
+    #region Methods
+    /// <summary>
+    /// The ink box of every visible letter at <paramref name="time"/> seconds, animators applied, as
+    /// <c>{ x, y, width, height }</c>; null when nothing shows. A blur's spread is not included.
+    /// </summary>
+    public Dictionary<string, object?>? BoundsAt(double time)
+    {
+        var letters = layer.Letters(time);
+        if (letters.Count == 0) return null;
+        var box = letters.Skip(1).Aggregate(letters[0].Ink, (b, l) => SKRect.Union(b, l.Ink));
+        return Box(box);
+    }
+
+    /// <summary>
+    /// Each visible letter at <paramref name="time"/> seconds: <c>{ text, x, y, width, height, opacity, index, word, line }</c>,
+    /// its box as drawn and the character, word and line it counts as. Spaces and fully transparent letters are left out.
+    /// </summary>
+    public List<Dictionary<string, object?>> LettersAt(double time) =>
+        [.. layer.Letters(time).Select(l =>
+        {
+            var d = Box(l.Ink);
+            d["text"] = l.Cluster;
+            d["opacity"] = l.Opacity;
+            d["index"] = l.Char;
+            d["word"] = l.Word;
+            d["line"] = l.Line;
+            return d;
+        })];
+
+    private static Dictionary<string, object?> Box(SKRect r) => new()
+    {
+        ["x"] = (double)r.Left,
+        ["y"] = (double)r.Top,
+        ["width"] = (double)r.Width,
+        ["height"] = (double)r.Height,
+    };
+    #endregion
+}
+
+/// <summary>
 /// Synfig's text layer, with After Effects' text animators on top.
 /// </summary>
 /// <remarks>
@@ -307,6 +381,32 @@ internal sealed class MotionTextLayer : MotionLayer
             result[i] = new Glyph(g.Path, matrix, anchor, animated, st, cx, cy);
         }
         return new TextFrame(result, s, sy, o);
+    }
+
+    /// <summary>The text's words, as given.</summary>
+    internal string Words => text;
+
+    /// <summary>
+    /// Each visible letter as drawn at a time: its ink box after every animator, in the stack's units, with what the
+    /// selectors count it as. A letter at zero opacity is left out; a space has no ink and never appears.
+    /// </summary>
+    internal List<(string Cluster, SKRect Ink, double Opacity, int Char, int Word, int Line)> Letters(double time)
+    {
+        var frame = Frame(time);
+        var letters = new List<(string, SKRect, double, int, int, int)>();
+        for (var i = 0; i < frame.Glyphs.Length; i++)
+        {
+            var g = frame.Glyphs[i];
+            if (g.Path is null) continue;
+            var opacity = animators.Length == 0 ? 1 : Math.Clamp(g.State.Opacity, 0, 1);
+            if (opacity <= 0) continue;
+
+            using var placed = new SKPath(g.Path);
+            placed.Transform(SKMatrix.Concat(g.Animated, g.Matrix));
+            var s = shape.Glyphs[i];
+            letters.Add((s.Cluster, placed.TightBounds, opacity, s.Char, s.Word, s.Line));
+        }
+        return letters;
     }
 
     /// <summary>Every glyph's accumulated animator state at a time — EffectCraft's <c>char_transforms</c>.</summary>

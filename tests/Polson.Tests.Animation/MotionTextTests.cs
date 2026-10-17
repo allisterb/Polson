@@ -150,6 +150,70 @@ public class MotionTextTests(ITestOutputHelper output) : TestsRuntime
     }
     #endregion
 
+    #region The handle
+    /// <summary>
+    /// <c>text.boundsAt(t)</c> is the letters as drawn: it agrees with the rendered ink to within a pixel, which is what
+    /// both trailer runs had to reconstruct by other means for their title-safe checks.
+    /// </summary>
+    [Fact]
+    public void BoundsAtIsTheInkAsDrawn()
+    {
+        if (!Installed("Arial")) return;
+        var comp = new MotionToolkit().Composition(Opts(("width", 400d), ("height", 160d)));
+        var title = comp.Text(Opts(("text", "Bounds, ag"), ("family", "Arial"), ("size", 60d), ("origin", new[] { 200d, 80d })));
+
+        var b = title.BoundsAt(0)!;
+        using var frame = comp.Render(0);
+        var ink = InkBox(frame.SkBitmap);
+        output.WriteLine($"boundsAt x {b["x"]:0.0} y {b["y"]:0.0} w {b["width"]:0.0} h {b["height"]:0.0}; ink {ink}");
+        Assert.InRange((double)b["x"]!, ink.Left - 1, ink.Left + 1);
+        Assert.InRange((double)b["y"]!, ink.Top - 1, ink.Top + 1);
+        Assert.InRange((double)b["x"]! + (double)b["width"]!, ink.Right - 1, ink.Right + 1);
+        Assert.InRange((double)b["y"]! + (double)b["height"]!, ink.Bottom - 1, ink.Bottom + 1);
+    }
+
+    /// <summary>Animators are applied: a fully selected offset moves the box, and a letter at zero opacity leaves it.</summary>
+    [Fact]
+    public void BoundsAtFollowsTheAnimators()
+    {
+        if (!Installed("Arial")) return;
+        var motion = new MotionToolkit();
+        var comp = motion.Composition(Opts(("width", 400d), ("height", 200d), ("duration", 1d)));
+        var title = comp.Text(Opts(("text", "MOVE"), ("family", "Arial"), ("size", 50d), ("origin", new[] { 200d, 60d }), ("animators", new object[]
+        {
+            // Offset −100 → 0: the square span starts wholly before the text (nothing selected) and ends over all of it.
+            Opts(("properties", Opts(("position", new[] { 0d, 80d }))), ("selector", Opts(("offset", motion.Nodes.Linear("real", 100, -100))))),
+        })));
+
+        var before = title.BoundsAt(0)!;
+        var after = title.BoundsAt(1)!;
+        output.WriteLine($"y at 0 s {before["y"]:0.0}, at 1 s {after["y"]:0.0}");
+        Assert.Equal((double)before["y"]! + 80, (double)after["y"]!, 3);
+        Assert.Equal((double)before["x"]!, (double)after["x"]!, 3);
+
+        var hidden = motion.Composition(Opts(("width", 400d), ("height", 200d)));
+        var gone = hidden.Text(Opts(("text", "GONE"), ("family", "Arial"), ("animators", new object[] { Opts(("properties", Opts(("opacity", 0d)))) })));
+        Assert.Null(gone.BoundsAt(0));
+        Assert.Empty(gone.LettersAt(0));
+    }
+
+    /// <summary>Each letter with its box and what it counts as; spaces have no ink and are left out.</summary>
+    [Fact]
+    public void LettersAtReportsEachVisibleLetter()
+    {
+        if (!Installed("Arial")) return;
+        var comp = new MotionToolkit().Composition(Opts(("width", 400d), ("height", 200d)));
+        var text = comp.Text(Opts(("text", "Be cool\nnow"), ("family", "Arial"), ("size", 40d), ("origin", new[] { 200d, 100d }), ("kerning", false)));
+
+        var letters = text.LettersAt(0);
+        Assert.Equal("Becoolnow", string.Concat(letters.Select(l => (string)l["text"]!)));
+        Assert.Equal([0, 0, 1, 1, 1, 1, 2, 2, 2], letters.Select(l => (int)l["word"]!));
+        Assert.Equal([0, 0, 0, 0, 0, 0, 1, 1, 1], letters.Select(l => (int)l["line"]!));
+        Assert.True((double)letters[^1]["y"]! > (double)letters[0]["y"]!, "the second line sits below the first");
+        Assert.Equal("Be cool\nnow", text.Text);
+    }
+    #endregion
+
     #region Animators
     /// <summary>The classic reveal: opacity 0, the range's start keyed 0 → 100, so letters appear left to right.</summary>
     [Fact]
@@ -354,6 +418,17 @@ public class MotionTextTests(ITestOutputHelper output) : TestsRuntime
             for (var x = x0; x < x1; x++)
                 if (bmp.GetPixel(x, y).Alpha > 64) n++;
         return n;
+    }
+
+    /// <summary>The box of every pixel with any coverage, edges inclusive, as a rectangle of pixel edges.</summary>
+    private static SKRect InkBox(SKBitmap bmp)
+    {
+        int minX = int.MaxValue, minY = int.MaxValue, maxX = -1, maxY = -1;
+        for (var y = 0; y < bmp.Height; y++)
+            for (var x = 0; x < bmp.Width; x++)
+                if (bmp.GetPixel(x, y).Alpha > 0)
+                    (minX, minY, maxX, maxY) = (Math.Min(minX, x), Math.Min(minY, y), Math.Max(maxX, x), Math.Max(maxY, y));
+        return new SKRect(minX, minY, maxX + 1, maxY + 1);
     }
 
     private static int[] InkRows(SKBitmap bmp, int x0, int x1) =>

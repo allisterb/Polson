@@ -5269,7 +5269,7 @@ comp.render(1.0);                               // one frame, returned as a canv
 
 ### Layers
 
-Each returns the stack it was added to, except `group`, which returns the group so layers can go in it. **An option a layer does not have is refused by name**, listing the ones it has.
+Each returns the stack it was added to, except `group`, which returns the group so layers can go in it, and `face` and `text`, which return a handle that reports where they are at any time. **An option a layer does not have is refused by name**, listing the ones it has.
 
 - `comp.fill({ color, amount?, blend?, desc? })` — a flat colour over the whole frame.
 - `comp.circle({ origin, radius, color, invert?, amount?, blend?, desc? })`.
@@ -5298,12 +5298,20 @@ Each returns the stack it was added to, except `group`, which returns the group 
   - **`'fastGaussian'` is one box pass**, as Synfig draws it. Synfig's code means two, and a `bool` makes it one; this matches what Synfig actually draws, so a `.sif` renders the same there. Its softness matches the Gaussian's, but its kernel is square. Hard edges fade in a straight ramp, and a small bright shape blurs into a soft-edged square, not a soft disc.
   - **`'gaussian'` is the true bell curve**, smooth in every direction, and it costs more as it grows.
 
-  | per frame at 1280 × 720 | size 6 | size 12 | size 20 |
-  | :--- | :--- | :--- | :--- |
-  | `'fastGaussian'` | 52 ms | 53 ms | 58 ms |
-  | `'gaussian'` | 86 ms | 120 ms | 255 ms |
+  **The cost depends on the scene as much as on the type**, because a blur draws everything below it in its group onto a frame of its own first. Per frame at 1280 × 720:
 
-  **Use `'gaussian'` for stills and for short or small blurs; use `'fastGaussian'` for a long or wide blur in a video.** `comp.saveVideo` renders every frame inside one script's time limit, and fifteen seconds at 24 fps is 360 frames: a size-20 Gaussian on every one of them is about 92 s on its own, which no script survives. A Gaussian focus pull lasting a second (24 frames) costs about 6 s; the same blur held under a whole film does not fit. Where a small bright shape must stay round, give that passage the Gaussian and the rest the fast one.
+  | | no blur | `'fastGaussian'` | `'gaussian'` |
+  | :--- | :--- | :--- | :--- |
+  | two shapes in a group, size 6 / 12 / 20 | — | 52 / 53 / 58 ms | 86 / 120 / 255 ms |
+  | a real trailer frame: ~50 layers in a scaled camera group, size about 8 | 9 ms | 95 ms | 330 ms |
+
+  **Use `'gaussian'` for stills and for short or small blurs; use `'fastGaussian'` for a long or wide blur in a video.** `comp.saveVideo` renders every frame inside one script's time limit, and fifteen seconds at 24 fps is 360 frames. On a real scene a Gaussian costs about a third of a second a frame, so a one-second Gaussian pull (24 frames) costs about 8 s of the budget on its own, and the same blur held across a film cannot fit. Measure your own frame with `comp.render(t)` timed over a few runs before you commit to a type. Where a small bright shape must stay round, give that passage the Gaussian and the rest the fast one.
+
+  **Key the blur off when it is done.** Key `amount` to 0, or `size` to 0, after the focus pull. A blur doing nothing at a time is passed over entirely: its group is drawn in place, at no cost.
+
+  ```javascript
+  pic.blur({ type: 'fastGaussian', size: n.animated('real', [{ time: 0, value: 14, ease: 'halt' }, { time: 1.2, value: 0, ease: 'halt' }]) });
+  ```
 - `comp.text({ text, family, weight?, style?, size?, origin?, orient?, color?, compress?, vcompress?, kerning?, invert?, animators?, amount?, blend?, desc? })` — type, Synfig's text layer, with After Effects' text animators on top. See *Type* below.
 
 ### Type — `comp.text(options)`
@@ -5367,6 +5375,27 @@ comp.text({
 - `temporalPhase` and `spatialPhase` are in degrees. `lockDimensions` gives one value for x and y. `seed`, `basedOn` and `mode` work as for a range selector.
 
 The selector parameters and property values are nodes, so they key, link and loop. The maths is After Effects' as EffectCraft documents and implements it (MIT), ported.
+
+**Where the letters are: the handle.** `comp.text(...)` returns the text, which reads its own letters at any time, animators applied, without rendering:
+- `text.boundsAt(t)` → `{ x, y, width, height }` — the ink box of every visible letter at `t`, or `null` when nothing shows. A blur's spread is not included.
+- `text.lettersAt(t)` → `[{ text, x, y, width, height, opacity, index, word, line }]` — each visible letter's box and what the selectors count it as. Spaces have no ink and are left out, as is a letter at zero opacity.
+- `text.text` — the words, as given.
+
+Boxes are in the units of the stack the text was added to, and `t` is that stack's time. At the composition's top level, that is the frame's pixels and the film's seconds; inside a group, apply the group's transform and clock. **This is the title-safe check** — the ink against the central 90% of the frame — and where a thing is placed on a word:
+
+```javascript
+const comp = Motion.composition({ width: 1280, height: 720, fps: 24, duration: 3 });
+const title = comp.text({ text: 'BE COOL', family: 'Arial', weight: 'heavy', size: 140, origin: [70, 470], orient: [0, 1] });
+const safe = { x: 0.05 * 1280, y: 0.05 * 720, right: 0.95 * 1280, bottom: 0.95 * 720 };
+const outside = [];
+for (let f = 0; f <= comp.frameCount; f += 6) {                       // every quarter second
+    const b = title.boundsAt(f / comp.fps);
+    if (b && (b.x < safe.x || b.y < safe.y || b.x + b.width > safe.right || b.y + b.height > safe.bottom)) outside.push(f);
+}
+Stage.check('title inside title-safe', outside.length === 0, outside.length ? `outside at frames ${outside.join(', ')}` : 'inside throughout');
+```
+
+Checked against the render: the box agrees with the drawn ink to within a pixel.
 
 **Writing it out.**
 - In `.sif`, a text without animators is Synfig's own text layer. Synfig's size is half the em with y up, and it applies `origin` twice; both are converted, so the file opens where this draws it. With animators, Synfig has no equivalent, so it is written as **a group per letter**, each holding a one-glyph text layer, with what the animators do sampled at the frame rate.
