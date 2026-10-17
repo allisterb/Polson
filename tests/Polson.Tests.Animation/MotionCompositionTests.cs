@@ -97,7 +97,35 @@ public class MotionCompositionTests(ITestOutputHelper output) : TestsRuntime
         var comp = motion.Composition();
         var e = Assert.Throws<ArgumentException>(() =>
             comp.Circle(new Dictionary<string, object?> { ["radius"] = motion.Nodes.Composite(1d, 2d) }));
-        Assert.Contains("takes a real", e.Message);
+        Assert.Contains("takes a 'real' node", e.Message);
+
+        // trailer3 keyed a group's angle with a 'real' node and learned the 'angle' type only from this message.
+        e = Assert.Throws<ArgumentException>(() =>
+            comp.Group(new Dictionary<string, object?> { ["angle"] = motion.Nodes.Linear("real", 0d, 90d) }));
+        Assert.Contains("takes an 'angle' node, and this node is 'real'", e.Message);
+        Assert.Contains("Motion.nodes.animated('angle', ...)", e.Message);
+    }
+
+    /// <summary>
+    /// trailer4 computed a wipe centre from a vector's <c>.at(t)</c> read as <c>[x, y]</c>, got <c>[NaN, NaN]</c>, and the
+    /// inverted iris erased its group at every time with no error. A number that is not finite is refused, as a constant
+    /// or a key, naming the option and the likely cause.
+    /// </summary>
+    [Fact]
+    public void ANumberThatIsNotFiniteIsRefused()
+    {
+        var motion = new MotionToolkit();
+        var comp = motion.Composition();
+        var g = comp.Group();
+        var e = Assert.Throws<ArgumentException>(() =>
+            g.Wipe(new Dictionary<string, object?> { ["type"] = "iris", ["invert"] = true, ["center"] = new object[] { double.NaN, double.NaN } }));
+        Assert.Contains("center", e.Message);
+        Assert.Contains("finite", e.Message);
+        Assert.Contains("{ x, y }", e.Message);
+
+        e = Assert.Throws<ArgumentException>(() => comp.Circle(new Dictionary<string, object?> { ["radius"] = double.PositiveInfinity }));
+        Assert.Contains("finite", e.Message);
+        Assert.Throws<ArgumentException>(() => motion.Nodes.Linear("real", 0d, double.NaN));
     }
 
     [Fact]

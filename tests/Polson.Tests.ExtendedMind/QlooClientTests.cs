@@ -546,6 +546,25 @@ public class QlooClientTests : TestsRuntime
         Assert.Equal(0, budget.Spent);
     }
 
+    /// <summary>
+    /// A query Qloo itself rejects was sent, so it is charged and the remedy says so. trailer4 was told "nothing was sent or
+    /// spent" of a made-up entity id that Qloo answered 400, while its budget line counted the request.
+    /// </summary>
+    [Fact]
+    public async Task Budget_AQueryQlooRejectsIsChargedAndSaysSo()
+    {
+        var budget = new QlooBudget(5);
+        var client = Offline(new StubHandler(_ => Respond("""{ "message": "entity not found" }""", HttpStatusCode.BadRequest)), [], budget: budget);
+
+        var r = await client.Audiences();
+
+        Assert.Equal(QlooFailure.InvalidRequest, r.Failure);
+        Assert.Equal(400, r.StatusCode);
+        Assert.Equal(1, budget.Spent);
+        Assert.DoesNotContain("nothing was sent", r.Remedy);
+        Assert.Contains("It was sent", r.Remedy);
+    }
+
     [Fact]
     public async Task Budget_WhenSpentRefusesButStillServesTheCache()
     {

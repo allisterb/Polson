@@ -132,6 +132,32 @@ public class MotionJsBindingTests : TestsRuntime
         Assert.True(frame.GetPixel(35, 35).Red > 0x80, "the grade did not brighten the square");
     }
 
+    /// <summary>
+    /// trailer4's asks from a script: a plane that keeps its size at depth, a rounded rectangle, when a text settles, and a
+    /// grade applied to one colour that <c>Motion.contrast</c> reads straight back.
+    /// </summary>
+    [Fact]
+    public void KeepSizeRadiusSettledAtAndGradeBindFromAScript()
+    {
+        var result = Execute("""
+            comp.fill({ color: '#ffffff' });
+            comp.camera();
+            const plane = comp.group({ z: 200, keepSize: true });
+            plane.rectangle({ point1: [4, 4], point2: [36, 36], radius: 8, color: '#000000' });
+            const word = comp.text({ text: 'Hi', family: 'Arial', size: 12, origin: [20, 20] });
+            const still = word.settledAt(0);
+            const grade = Motion.grade({ contrast: 1.06, saturation: 1.04, gamma: 0.96, desc: 'grade' });
+            const graded = grade.apply('#C8205A');
+            log(`still ${still.at} graded ${graded} contrast ${Motion.contrast(graded, '#ffffff') === Motion.contrast(graded.slice(0, 7), '#ffffff')}`);
+            """);
+
+        Assert.True(result.Success, result.Error);
+        Assert.Contains(result.Logs, l => l.Contains("still 0 graded #", System.StringComparison.Ordinal) && l.Contains("contrast true", System.StringComparison.Ordinal));
+        using var frame = SKBitmap.Decode(result.ImageBytes);
+        Assert.Equal(SKColors.White, frame.GetPixel(4, 4));             // the corner is rounded off, at the size it had flat
+        Assert.Equal(SKColors.Black, frame.GetPixel(8, 8));
+    }
+
     /// <summary>Options with no function before them are still refused with what to write.</summary>
     [Fact]
     public void ADrawnLayerWithNoFunctionIsRefusedWithWhatToWrite()

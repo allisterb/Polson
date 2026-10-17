@@ -62,8 +62,14 @@ public class MotionBlurTests(ITestOutputHelper output) : TestsRuntime
     /// <summary>
     /// A Gaussian whose x and y sizes differ, on Synfig's pattern path (both reaches under 32 px). Synfig once blurred the
     /// vertical pass with the row kernel (synfig/synfig#3682, fixed 2026-02); this port follows the fix, and so does the
-    /// Synfig 1.5.5 used here — measured identical, 0.00% of pixels by more than 2 levels. A Synfig build from before the
-    /// fix fails this for <c>[2, 18]</c>, its vertical blur drawn two units wide.
+    /// Synfig 1.5.5 used here. A Synfig build from before the fix fails this for <c>[2, 18]</c>, its vertical blur drawn two
+    /// units wide — far more than 24 levels off along the edges.
+    /// <para>
+    /// <b>This deliberately breaks the studio's 2-level Synfig parity</b> (decided 2026-10-17). The exact port matched to
+    /// 0.00% of pixels by more than 2 levels, at 67–71 ms a 720p frame; the Gaussian is now Skia's, banded across the cores,
+    /// at 6–12 ms, and puts 0.57% / 1.20% of pixels 3–24 levels off — none further. Blur is common in motion work, and the
+    /// difference does not show.
+    /// </para>
     /// </summary>
     [Theory]
     [InlineData(2d, 18d)]
@@ -84,12 +90,79 @@ public class MotionBlurTests(ITestOutputHelper output) : TestsRuntime
         Dump(ours.SkBitmap, theirs, $"blur-aniso-{x}-{y}");
 
         var differing = Differing(ours.SkBitmap, theirs, 2);
-        output.WriteLine($"gaussian [{x}, {y}]: {differing:P2} differ from synfig by more than 2");
-        Assert.True(differing < 0.005, $"gaussian [{x}, {y}] differs from synfig in {differing:P2}");
+        var far = Differing(ours.SkBitmap, theirs, 24);
+        output.WriteLine($"gaussian [{x}, {y}]: {differing:P2} differ from synfig by more than 2, {far:P2} by more than 24");
+        Assert.Equal(0, far);
+        Assert.True(differing < 0.02, $"gaussian [{x}, {y}] differs from synfig by more than 2 levels in {differing:P2}");
     }
     #endregion
 
     #region Behaviour
+    /// <summary>
+    /// Below σ 2 the Gaussian on 8-bit colour is Synfig's own kernel run row-major (Skia's exact pass there is slow,
+    /// rust-skia/rust-skia#1142), and must be the float port to within rounding, empty edge band included.
+    /// </summary>
+    [Theory]
+    [InlineData(1d, 1d)]
+    [InlineData(3d, 2d)]
+    [InlineData(3.9d, 0d)]
+    public void ASmallGaussianOnEightBitsIsTheFloatPort(double x, double y)
+    {
+        using var source = new SKBitmap(new SKImageInfo(150, 90, SKColorType.Rgba8888, SKAlphaType.Premul));
+        using (var c = new SKCanvas(source))
+        {
+            c.Clear(SKColors.Transparent);
+            c.DrawRect(10, 10, 80, 50, new SKPaint { Color = SKColor.Parse("#1d3557") });
+            c.DrawCircle(95, 45, 30, new SKPaint { Color = SKColor.Parse("#e6394680"), IsAntialias = true });
+        }
+        using var single = new SKBitmap(new SKImageInfo(150, 90, SKColorType.RgbaF32, SKAlphaType.Premul));
+        using (var c = new SKCanvas(single)) { c.Clear(SKColors.Transparent); c.DrawBitmap(source, 0, 0); }
+
+        var extra = MotionBlurLayer.MarginFor(MotionBlurLayer.BlurType.Gaussian, x, y);
+        using var eight = MotionBlurLayer.Blurred(source, MotionBlurLayer.BlurType.Gaussian, x, y, extra);
+        using var port = MotionBlurLayer.Blurred(single, MotionBlurLayer.BlurType.Gaussian, x, y, extra);
+        using var back = new SKBitmap(source.Info);
+        using (var c = new SKCanvas(back)) { c.Clear(SKColors.Transparent); c.DrawBitmap(port, 0, 0); }
+
+        var worst = eight.GetPixelSpan().ToArray().Zip(back.GetPixelSpan().ToArray(), (a, b) => Math.Abs(a - b)).Max();
+        output.WriteLine($"gaussian [{x}, {y}] (extra {extra}): worst channel difference {worst}");
+        Assert.True(worst <= 1, $"gaussian [{x}, {y}]: the 8-bit pass differs from the float port by {worst} levels");
+    }
+
+    /// <summary>
+    /// The box family on 8-bit colour is integer window sums, row-major across the cores; it must be the float port's
+    /// arithmetic to within rounding — the same windows, and the same untouched ends — for every type, at a radius of 0, at
+    /// one wider than the line, and over translucent pixels.
+    /// </summary>
+    [Theory]
+    [InlineData("fastGaussian", 6d, 6d)]
+    [InlineData("box", 14d, 3d)]
+    [InlineData("cross", 9d, 9d)]
+    [InlineData("cross", 0d, 7d)]
+    [InlineData("box", 300d, 4d)]
+    public void TheBoxFamilyOnEightBitsIsTheFloatPort(string type, double x, double y)
+    {
+        using var source = new SKBitmap(new SKImageInfo(150, 90, SKColorType.Rgba8888, SKAlphaType.Premul));
+        using (var c = new SKCanvas(source))
+        {
+            c.Clear(SKColors.Transparent);
+            c.DrawRect(10, 10, 80, 50, new SKPaint { Color = SKColor.Parse("#1d3557") });
+            c.DrawCircle(95, 45, 30, new SKPaint { Color = SKColor.Parse("#e6394680"), IsAntialias = true });
+        }
+        using var single = new SKBitmap(new SKImageInfo(150, 90, SKColorType.RgbaF32, SKAlphaType.Premul));
+        using (var c = new SKCanvas(single)) { c.Clear(SKColors.Transparent); c.DrawBitmap(source, 0, 0); }
+
+        var kind = MotionBlurLayer.ParseType(type, "test");
+        using var eight = MotionBlurLayer.Blurred(source, kind, x, y, (0, 0));
+        using var port = MotionBlurLayer.Blurred(single, kind, x, y, (0, 0));
+        using var back = new SKBitmap(source.Info);
+        using (var c = new SKCanvas(back)) { c.Clear(SKColors.Transparent); c.DrawBitmap(port, 0, 0); }
+
+        var worst = eight.GetPixelSpan().ToArray().Zip(back.GetPixelSpan().ToArray(), (a, b) => Math.Abs(a - b)).Max();
+        output.WriteLine($"{type} [{x}, {y}]: worst channel difference {worst}");
+        Assert.True(worst <= 1, $"{type} [{x}, {y}]: the 8-bit box differs from the float port by {worst} levels");
+    }
+
     /// <summary>A full-frame fill stays full to the corner: the stack is drawn past the frame for the blur to read.</summary>
     [Fact]
     public void TheFramesEdgeDoesNotFadeIn()

@@ -38,6 +38,39 @@ public class MotionWipeTests(ITestOutputHelper output) : TestsRuntime
         Assert.True(Share(all.SkBitmap, Content) < 0.001, $"{type} at 1 left something");
     }
 
+    /// <summary>
+    /// trailer3: an iris waiting at completion 0 cost 25 ms a frame, and its erasing blend put the whole film on a half-float
+    /// surface. A wipe that erases nothing is now passed over, frame for frame the same as no wipe — an inverted iris too,
+    /// whose circle at 0 is wider than the frame and its feather; feathered blinds begin half erased and are not; and an
+    /// eraser alone keeps the film on 8 bits.
+    /// </summary>
+    [Theory]
+    [InlineData("linear", 0d, false, true)]
+    [InlineData("linear", 12d, false, true)]
+    [InlineData("radial", 12d, false, true)]
+    [InlineData("iris", 0d, false, true)]
+    [InlineData("iris", 12d, false, true)]
+    [InlineData("iris", 0d, true, true)]
+    [InlineData("iris", 12d, true, true)]
+    [InlineData("blinds", 0d, false, true)]
+    [InlineData("blinds", 12d, false, false)]
+    public void AWipeThatErasesNothingIsPassedOver(string type, double feather, bool invert, bool passed)
+    {
+        var options = Opts(("type", type), ("completion", 0d), ("feather", feather));
+        if (invert) options["invert"] = true;
+        var comp = Wiped(options);
+        var wipe = comp.AllLayers().OfType<MotionWipeLayer>().Single();
+        Assert.Equal(passed, wipe.IsVoid(0));
+        Assert.False(comp.NeedsFloatDeep);
+        if (!passed) return;
+
+        var plain = Scene();
+        plain.Group().Rectangle(Opts(("point1", new[] { 0d, 0d }), ("point2", new[] { W, H }), ("color", "#1d3557")));
+        using var a = comp.Render(0);
+        using var b = plain.Render(0);
+        Assert.Equal(0, Differing(a.SkBitmap, b.SkBitmap, 0));
+    }
+
     [Fact]
     public void ALinearWipeCrossesAlongItsAngle()
     {

@@ -60,8 +60,21 @@ internal static class MotionTypes
         _ => 1
     };
 
-    /// <summary>A script value read as one of the model's types; refuses what cannot be one.</summary>
+    /// <summary>A script value read as one of the model's types; refuses what cannot be one, and any number not finite.</summary>
+    /// <remarks>
+    /// trailer4 passed a wipe <c>center</c> of <c>[NaN, NaN]</c> — <c>[v[0], v[1]]</c> on a vector's <c>.at(t)</c>, which is
+    /// <c>{ x, y }</c> — and the inverted iris silently erased its whole group at every time.
+    /// </remarks>
     public static double[] Read(object? value, MotionType type, string who)
+    {
+        var read = ReadAny(value, type, who);
+        if (read.Any(v => !double.IsFinite(v)))
+            throw new ArgumentException($"{who} reads as {string.Join(", ", read.Select(Format))}, and every number must be finite. "
+                + "NaN is usually a value read from something undefined: a vector's .at(t) is { x, y }, not [x, y].");
+        return read;
+    }
+
+    private static double[] ReadAny(object? value, MotionType type, string who)
     {
         switch (type)
         {
@@ -1169,7 +1182,8 @@ public sealed class MotionNodeFactory
     internal static MotionNode Node(object? value, MotionType kind, string who) => value switch
     {
         MotionNode n when n.Kind == kind => n,
-        MotionNode n => throw new ArgumentException($"{who} takes a {MotionTypes.Name(kind)}, and this node is a {n.Type}."),
+        MotionNode n => throw new ArgumentException($"{who} takes {(kind == MotionType.Angle ? "an" : "a")} '{MotionTypes.Name(kind)}' node, and this node is "
+            + $"'{n.Type}'. Make it with that type: Motion.nodes.animated('{MotionTypes.Name(kind)}', ...)."),
         _ => new MotionConstant(kind, MotionTypes.Read(value, kind, who))
     };
 

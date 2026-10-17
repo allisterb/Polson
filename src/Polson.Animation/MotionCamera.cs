@@ -49,6 +49,13 @@ internal sealed class MotionCamera
     #endregion
 
     #region Methods
+    /// <summary>What the camera looks at, and from how far, at a time: its target, the target's depth and its distance.</summary>
+    public (double X, double Y, double Z, double Distance) TargetAt(double time)
+    {
+        var t = target.Evaluate(time);
+        return (t[0], t[1], targetZ.Evaluate(time)[0], distance.Evaluate(time)[0]);
+    }
+
     /// <summary>The camera at a time in the composition's seconds.</summary>
     public MotionCameraFrame At(double time)
     {

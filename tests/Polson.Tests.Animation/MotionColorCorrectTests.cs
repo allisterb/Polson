@@ -1,6 +1,7 @@
 namespace Polson.Tests.Animation;
 
 using System;
+using System.Linq;
 
 using Polson.Animation;
 
@@ -98,6 +99,87 @@ public class MotionColorCorrectTests(ITestOutputHelper output) : TestsRuntime
         Assert.Equal(0x40, at1.SkBitmap.GetPixel(25, 25).Red);
         Assert.Equal(0x40, at0.SkBitmap.GetPixel(75, 25).Red);
         Assert.InRange(at1.SkBitmap.GetPixel(75, 25).Red, 0x40 * 2.718 - 2, 0x40 * 2.718 + 2);   // × e
+    }
+
+    /// <summary>
+    /// On 8-bit colour the correction is one banded pass — Skia's filter band by band for the matrix alone, a managed pass
+    /// with a 256 × 256 table for saturation and gamma — and must agree with the float path it replaced. trailer3 dropped
+    /// saturation from its grade because the float path cost 47 ms a frame.
+    /// </summary>
+    [Theory]
+    [InlineData("contrast")]
+    [InlineData("saturation")]
+    [InlineData("gamma")]
+    [InlineData("all")]
+    [InlineData("satUp")]
+    public void TheEightBitPassAgreesWithTheFloatPass(string what)
+    {
+        var comp = Scene();
+        var g = comp.Group();
+        Content(g);
+        g.ColorCorrect(what switch
+        {
+            "contrast" => Opts(("contrast", 0.93), ("brightness", 0.025)),
+            "saturation" => Opts(("saturation", 0.85)),
+            "gamma" => Opts(("gamma", 1.6)),
+            "satUp" => Opts(("saturation", 1.4), ("gamma", 1.5)),
+            _ => Opts(("hue", -40d), ("exposure", 0.3), ("brightness", -0.05), ("contrast", 1.3), ("gamma", 1.5), ("saturation", 1.4)),
+        });
+        var layer = comp.AllLayers().OfType<MotionColorCorrectLayer>().Single();
+        var (s, power) = what switch { "saturation" => (0.85f, 1f), "gamma" => (1f, 1 / 1.6f), "satUp" => (1.4f, 1 / 1.5f), "all" => (1.4f, 1 / 1.5f), _ => (1f, 1f) };
+        using var source = Plain().Render(0);
+        using var eight = new SKBitmap(source.SkBitmap.Info);
+        using var single = new SKBitmap(source.SkBitmap.Info);
+        MotionColorCorrectLayer.Correct8(source.SkBitmap, eight, layer.Matrix(0), s, power);
+        using (var canvas = new SKCanvas(single))
+        {
+            canvas.Clear(SKColors.Transparent);
+            MotionColorCorrectLayer.CorrectFloat(source.SkBitmap, canvas, layer.Matrix(0), s, power);
+        }
+        var (x, y) = (eight.GetPixelSpan().ToArray(), single.GetPixelSpan().ToArray());
+        var worst = x.Zip(y, (p, q) => Math.Abs(p - q)).Max();
+        output.WriteLine($"{what}: worst channel difference {worst}");
+        Assert.True(worst <= 1, $"{what}: the 8-bit pass differs from the float pass by {worst} levels");
+    }
+
+    /// <summary>
+    /// <c>Motion.grade(options).apply(color)</c> is the colour a <c>comp.colorCorrect</c> with the same options draws, to a
+    /// level: trailer4 rendered a 4 × 4 probe composition and read a pixel back to learn what its grade did to magenta.
+    /// </summary>
+    [Theory]
+    [InlineData("contrast")]
+    [InlineData("saturation")]
+    [InlineData("gamma")]
+    [InlineData("hue")]
+    [InlineData("trailer4")]
+    [InlineData("keyed")]
+    public void AGradeAppliedToAColourIsWhatTheRenderDraws(string what)
+    {
+        var motion = new MotionToolkit();
+        System.Collections.Generic.Dictionary<string, object?> Options() => what switch
+        {
+            "contrast" => Opts(("contrast", 0.93), ("brightness", 0.025)),
+            "saturation" => Opts(("saturation", 0.6)),
+            "gamma" => Opts(("gamma", 1.6)),
+            "hue" => Opts(("hue", 40d), ("exposure", 0.2)),
+            "trailer4" => Opts(("hue", 2d), ("contrast", 1.06), ("saturation", 1.04), ("gamma", 0.96), ("desc", "grade")),
+            _ => Opts(("exposure", motion.Nodes.Linear("real", 0.5, 0d))),
+        };
+        var grade = motion.Grade(Options());
+        foreach (var colour in new[] { "#C8205A", "#F2C14E", "#EFE6D2", "#141414", "#2a6f97" })
+        {
+            var comp = motion.Composition(Opts(("width", 4d), ("height", 4d), ("fps", 1d), ("duration", 1d)));
+            comp.Fill(Opts(("color", colour)));
+            comp.ColorCorrect(Options());
+            var t = what == "keyed" ? 1d : 0d;
+            using var frame = comp.Render(t);
+            var drawn = frame.SkBitmap.GetPixel(2, 2);
+            var applied = SKColor.Parse(grade.Apply(colour, t)[..7]);     // CSS #RRGGBBAA; Skia would read eight digits as #AARRGGBB
+            output.WriteLine($"{what} {colour}: drawn {drawn}, applied {applied}");
+            Assert.InRange(Math.Abs(drawn.Red - applied.Red), 0, 1);
+            Assert.InRange(Math.Abs(drawn.Green - applied.Green), 0, 1);
+            Assert.InRange(Math.Abs(drawn.Blue - applied.Blue), 0, 1);
+        }
     }
 
     private static MotionComposition Scene() =>

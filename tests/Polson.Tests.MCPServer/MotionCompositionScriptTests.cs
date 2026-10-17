@@ -40,7 +40,7 @@ public class MotionCompositionScriptTests : TestsRuntime
 
     [Theory]
     [InlineData("comp.circle({ radious: 4 });", "has no 'radious'")]
-    [InlineData("comp.circle({ radius: n.composite(1, 2) });", "takes a real")]
+    [InlineData("comp.circle({ radius: n.composite(1, 2) });", "takes a 'real' node")]
     [InlineData("n.animated('real', [{ time: 0, value: 1, eas: 'halt' }]);", "has no 'eas'")]
     [InlineData("comp.region({ points: [[0, 0], [1, 1]], loops: true });", "has no 'loops'")]
     [InlineData("comp.outline({ points: [{ pont: [0, 0] }] });", "has no 'pont'")]

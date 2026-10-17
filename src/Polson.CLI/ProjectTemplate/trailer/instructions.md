@@ -69,7 +69,8 @@ Taste({ op: 'profile', audience: '{"location":"Mumbai","age":"45_to_54"}', label
   warm or cold, crushed or lifted blacks, how their titles arrive — motivates `comp.colorCorrect` and
   the choice between a cut and a wipe.
 - **Same strength as the poster:** a reference *motivates* a choice; it never *shows* that this audience
-  prefers it. Cite each by name and result id (`t2`, item 3). `placeAesthetics` are the place's, not
+  prefers it. Cite each by name and result id (`t2`, item 3); ids are numbered per run, so the poster's `t4` may be your `t1`,
+  and the name is what carries across. `placeAesthetics` are the place's, not
   the audience's.
 - **Pace and grade each need a line resting on this audience's own profile** in `direction.md`. A
   motion choice that cites only the manual is the gap above; when the profile has nothing to say about
@@ -80,7 +81,8 @@ Taste({ op: 'profile', audience: '{"location":"Mumbai","age":"45_to_54"}', label
 
 **Carry a poster's shapes over as its own path data.** `comp.region({ path })` and `comp.outline({ path })`
 take an SVG `d` unchanged, holes and curves included, so paste the poster's `<path>` data into a group whose
-`offset` and `scale` carry the poster's coordinates into the frame, rather than re-drawing the shapes by hand;
+`offset` and `scale` carry the poster's coordinates into the frame, rather than re-drawing the shapes by hand; a
+`<rect rx>` is `comp.rectangle({ point1, point2, radius: rx })`;
 `comp.ellipse` takes an SVG `<ellipse>`, and `comp.linearGradient` / `comp.radialGradient` an SVG gradient
 (blended `onto` the shape it fills, in a group with it).
 
@@ -89,9 +91,10 @@ keyed 0 → 1); a wipe for a beat change that means something (`comp.wipe`, the 
 the whole film (`comp.colorCorrect` at the top, evidence-led, as the poster's palette was); and stepped, hand-drawn time
 for the drawn layers (`comp.posterizeTime({ fps: 12 })`).
 
-**A camera move gives a poster depth.** Set the poster's layers at depths — groups with `z`, backdrop far, type at 0 —
-add `comp.camera()`, and key one move (a push-in, a pan) as a beat of its own, eased in and out. It changes nothing
-until it moves, so the poster's composition holds at rest. `comp.warp` pins a layer to four corners, and
+**A camera move gives a poster depth.** Set the poster's layers at depths — groups with `z` and `keepSize: true`,
+backdrop far, type at 0 — add `comp.camera()`, and key one move (a push-in, a pan) as a beat of its own, eased in and
+out. `keepSize` holds each plane at its flat size at the start, so the poster's composition is exactly as designed
+until the camera moves (trailer4 pre-scaled every plane by hand to get this). `comp.warp` pins a layer to four corners, and
 `comp.shadow` lifts one off its ground. Keep every plane in front of the camera, and keep them from changing places in
 depth: the film's `.sif` export refuses both. `Motion.pathPoints(d)` gives the same points as values when one of
 them should move, and `Motion.fitPoints(points, { closed: true })` turns a shape you only have as points into a few
@@ -158,8 +161,10 @@ const comp = Motion.composition({ width: 1280, height: 720, fps: 24, duration: 1
 **1280 × 720 at 24 fps, fifteen seconds.** `comp.saveVideo` renders and encodes every frame inside one
 script, and a script has thirty seconds unless the server was started with another limit: measured, a fifteen-second film of a few shapes,
 a turning group, a blur and an animated title took 23 s at 1280 × 720 and **ran out of time at
-1920 × 1080**. Keep per-frame work light — a blur is the dearest layer — and draft the sheets at a
-quarter size.
+1920 × 1080**. Keep per-frame work light — a Gaussian blur costs about 20 ms a frame and the box-family blurs
+about 30; a whole-film grade 10–15, and a wipe waiting at completion 0 nothing — and draft the sheets at a quarter size.
+Before encoding, time a few frames with `comp.render(t)`: 361 frames at 80 ms is 29 s, and a script that runs
+out of time keeps nothing.
 
 What the model gives you for a trailer, in `polson://sdk/core/Motion` (*Layers*, *Type*, *Nodes*):
 
@@ -168,10 +173,10 @@ What the model gives you for a trailer, in `polson://sdk/core/Motion` (*Layers*,
   `shape: 'rampUp'`, hands it from letter to letter. That is the whole of a cascade. Base it on `words` to
   land a word at a time. The family must be installed, and a weight is not part of its name.
 - **Focus: `group.blur({ type, size })`** with `size` keyed. A focus pull directs the eye where a cut
-  cannot. It blurs only what is below it in its own group. **Mind its cost**, which grows with the scene:
-  on trailer2's real frame the Gaussian took 330 ms and `'fastGaussian'` 95 ms, against 9 ms with no blur.
-  So prefer `'fastGaussian'` for anything longer than a moment (a small bright shape blurs square), and
-  **key `size` or `amount` to 0 when the pull is done** — a blur doing nothing is then free.
+  cannot. It blurs only what is below it in its own group. **The default, `'gaussian'`, is the one to use**:
+  the smooth blur and the cheapest (about 20 ms a frame at 720p, against about 30 for `'fastGaussian'`,
+  whose square kernel blurs a small bright shape into a square). **Key `size` or `amount` to 0 when the
+  pull is done** — a blur doing nothing is then free.
 - **Reuse and stagger: a group's `timeOffset`.** Make a passage once and play it later.
 - **Cuts: `comp.switch({ active: [[0, 'open'], [2.5, 'record']] })`**, each child named with `desc`.
 - **Wipes and reveals: a shape with `blend: 'alphaOver'`** erases what is below it in its group; a
@@ -207,6 +212,9 @@ director and no record. So:
 
 **The sheet is how you see the film.** Draw a cell every half second (thirty cells for fifteen
 seconds) onto one sheet, as in stage 3, and write it as `artifacts/05_sheet.png`. Read it in order.
+**A beat shorter than half a second falls between its cells**: give it a sheet of its own, a cell every two
+frames. trailer3's crack write-on looked right on the half-second sheet; frame by frame, it was invisible for
+its first four frames, because each crack began under the bullet hole.
 
 **Run checks that scan the whole film at a reduced scale.** Every frame at 1280 × 720 inside one script
 runs past the time limit: trailer2's full-size flash scan of 361 frames did. The same scan at a quarter
@@ -221,7 +229,8 @@ slow figure. Then record each of these with `Stage.check`:
 
 1. **Reading time.** Every line of text holds still long enough to read: as a working rule, about
    three words a second plus half a second to find the line, and the title at least two seconds still.
-   This is a rule of thumb, not a sourced figure; say so if you cite it.
+   This is a rule of thumb, not a sourced figure; say so if you cite it. `text.settledAt(arrival)` gives when a line
+   comes to rest and how many seconds it holds (`{ frame: true }` if it sits in a moving group).
 2. **Title safe.** Text stays inside the central 90% of the frame — the broadcast title-safe
    convention — so a cropped player does not cut it. Keep each text's handle (`const title =
    comp.text(...)`) and read `title.boundsAt(t, { frame: true })` across the film: its ink as drawn,
@@ -232,7 +241,9 @@ slow figure. Then record each of these with `Stage.check`:
    over the whole film in about a second — record its `passed`, `generalFlashes` and `redFlashes`, and
    read `transitions`: each hard cut is one.
 4. **Contrast.** Text against its ground at 4.5 : 1 or better (WCAG, as for the poster); 3 : 1 for the
-   title at display size. `Motion.contrast(text, ground)` gives the ratio.
+   title at display size. `Motion.contrast(text, ground)` gives the ratio — on the **graded** colours, which are
+   what the film shows: `const grade = Motion.grade(GRADE)` with the options you gave `comp.colorCorrect`, then
+   `grade.apply(colour)`.
 5. **The first frame** is not empty, and **the last** holds the end card.
 
 ---
