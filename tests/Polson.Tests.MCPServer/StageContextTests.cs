@@ -295,6 +295,34 @@ public class StageContextTests : TestsRuntime, IDisposable
 
         Assert.DoesNotContain(Events(), e => Type(e) == "note");
     }
+
+    /// <summary>
+    /// A note written <c>{ once: true }</c> is recorded the first time its text is noted in a stage, however often the
+    /// script runs — and again in another stage. A plain note still repeats.
+    /// </summary>
+    [Fact]
+    public async Task TestNoteOnceIsWrittenOncePerStage()
+    {
+        const string film = "Stage.begin('Motion'); Stage.note('the disc brakes in 0.3 s', { once: true }); Stage.note('render'); exit('ok');";
+        var tools = Tools();
+        await tools.ExecuteScript(film);
+        await tools.ExecuteScript(film);
+        await tools.ExecuteScript("Stage.begin('Checks'); Stage.note('the disc brakes in 0.3 s', { once: true }); exit('ok');");
+
+        var notes = Events().Where(e => Type(e) == "note").Select(e => (Stage(e), e.GetProperty("message").GetString())).ToArray();
+        Assert.Equal(2, notes.Count(n => n.Item2 == "render"));
+        Assert.Equal([("Motion", "the disc brakes in 0.3 s"), ("Checks", "the disc brakes in 0.3 s")],
+            notes.Where(n => n.Item2 != "render").ToArray());
+    }
+
+    [Fact]
+    public async Task TestNoteRefusesAnOptionItDoesNotHave()
+    {
+        var result = await Tools().ExecuteScript("Stage.note('x', { onlyOnce: true });");
+
+        Assert.False(result.Success);
+        Assert.Contains("has no option 'onlyOnce'", result.Error);
+    }
     #endregion
 
     #region Input Handling Tests

@@ -232,6 +232,15 @@ internal sealed class SvgAnimationWriter
         return id;
     }
 
+    /// <summary>Adds <paramref name="element"/> to the defs under a fresh id, and returns the id.</summary>
+    public string Define(string prefix, XElement element)
+    {
+        var id = Id(prefix);
+        element.SetAttributeValue("id", id);
+        defs.Add(element);
+        return id;
+    }
+
     private string Id(string prefix) => $"{prefix}{++ids}";
 
     /// <summary>One component of a node over the composition, exact where possible.</summary>

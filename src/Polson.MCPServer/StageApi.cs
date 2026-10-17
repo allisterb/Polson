@@ -139,13 +139,36 @@ public sealed class StageApi
     /// For the reasoning that would otherwise be lost — why a direction was abandoned, what a render
     /// was meant to test. <c>log(...)</c> reaches only the caller of this one tool call; a note
     /// persists into the run directory and is what a reader sees afterwards.
+    /// <para>
+    /// <c>{ once: true }</c> writes the note only the first time its text is noted in this stage. A film kept as one
+    /// script runs many times, so a note inside it repeated on every run, and trailer1 wrote its reasons in a separate
+    /// script after the fact instead.
+    /// </para>
     /// </remarks>
-    public void Note(string message)
+    public void Note(string message, object? options = null)
     {
+        var once = NoteOptions(options);
         var clean = Clean(message, MaxNoteLength);
         if (clean.Length == 0) return;
+        if (once && session is not null && !session.NotedOnce.Add((session.Stage, clean))) return;
 
         events?.Append("note", session?.Stage, executionId, new Dictionary<string, object?> { ["message"] = clean });
+    }
+
+    private static bool NoteOptions(object? options)
+    {
+        if (options is null) return false;
+        var dict = JsInterop.AsDict(options)
+            ?? throw new ArgumentException("Stage.note's second argument is an options object: { once: true }.");
+        foreach (var key in dict.Keys)
+            if (key?.ToString() is not "once")
+                throw new ArgumentException($"Stage.note has no option '{key}'. It takes once (true to write the note only the first time its text is noted in this stage).");
+        return dict["once"] switch
+        {
+            null => false,
+            bool b => b,
+            _ => throw new ArgumentException("Stage.note: once is true or false.")
+        };
     }
 
     /// <summary>

@@ -201,7 +201,7 @@ number to hold against a legibility floor, not the font size you asked for.
 - **Value contrast is what reads.** Complementary hues of similar lightness vibrate where they meet —
   never set type in them. Check text against its background with WCAG contrast — relative luminance
   *L* = 0.2126 R + 0.7152 G + 0.0722 B on linearised sRGB, ratio (L₁ + 0.05) / (L₂ + 0.05) — at
-  4.5 : 1 or better for anything smaller than display size.
+  4.5 : 1 or better for anything smaller than display size. `Motion.contrast(text, ground)` computes it.
 
 {{SCRIPT_FILE}}
 

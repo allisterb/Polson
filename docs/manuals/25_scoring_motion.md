@@ -323,8 +323,8 @@ is Synfig's, and the craft follows from it:
   and read as noise. Ease the selector (`easeLow`) rather than the key, so each letter settles. Base it on `words` for
   a line that should land a word at a time, and let the title hold still once it lands: the read happens after the
   motion stops, so give it at least as long as the arrival took. Keep the text's handle —
-  `const title = comp.text(...)` — and check it rather than guessing: `title.boundsAt(t)` is its ink as drawn,
-  animators and all, which is the title-safe check, and `title.lettersAt(t)` gives each letter's box for placing a
+  `const title = comp.text(...)` — and check it rather than guessing: `title.boundsAt(t, { frame: true })` is its ink as drawn,
+  animators and all, in the frame's pixels through any group it sits in, which is the title-safe check, and `title.lettersAt(t)` gives each letter's box for placing a
   thing on a word.
 - **Pull focus rather than cut: `group.blur({ type: 'gaussian', size })` with `size` keyed.** A blur that eases from
   soft to sharp directs the eye the way a camera's focus does — to the title as it resolves, to the second subject as
@@ -334,6 +334,18 @@ is Synfig's, and the craft follows from it:
   composition left blurred is a composition the eye cannot rest on. That is also the budget: the Gaussian's cost grows
   with its size, and a whole film under a wide one will not encode inside a script's time limit, so give a long or wide
   blur `type: 'fastGaussian'`, which costs the same at any size but turns a small bright shape square.
+- **Bring a vector drawing into motion as its own path data: `comp.region({ path: d })`.** A poster's shapes are
+  already drawn; re-drawing them by hand loses the curves the designer chose. Paste each `<path>`'s `d` into a group
+  whose `offset` and `scale` carry the drawing's coordinates into the frame, and the holes and corners come with it.
+  When one point should move — a lid that lifts, a flag that flutters — take the same contours as values with
+  `Motion.pathPoints(d)`, key that point, and give the rest back unchanged. A drawn gradient is a layer too:
+  `comp.linearGradient({ point1, point2, stops })` or `comp.radialGradient({ origin, radius, stops })`, in a group with
+  the shape it fills and `blend: 'onto'`, and a sheen is its two points keyed across the shape.
+- **Check what the eye must not be given, not only what it must read.** More than three flashes in any second can
+  trigger seizures (WCAG 2.3.1); `comp.flashes()` measures the whole film in about a second and lists every
+  transition, so a run of hard cuts shows up as the number it is. Type must also stand off its ground —
+  `Motion.contrast(text, ground)` at 4.5 or more, 3 for display size — and a ground that moves under the type is
+  checked at its worst frame, not its first.
 - **Make a line of dialogue from its text: `Motion.speech('The cat in the hat.', { start: 0.4 })`.** Which sounds a
   sentence has is the dictionary's business, and mouth charts are coarse enough that accents and weak forms mostly
   land on the same mouth; only the timing has to be chosen, and with no recording to match, natural timing is correct

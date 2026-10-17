@@ -43,6 +43,30 @@ public class MotionJsBindingTests : TestsRuntime
         Assert.Contains(result.Logs, l => l.Contains("bounds true letters 2 first H words Hi", System.StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// <c>Motion.pathPoints</c> comes back as arrays a script can map over and change, and a region takes them back — as it
+    /// takes the path itself.
+    /// </summary>
+    [Fact]
+    public void PathPointsReadAsArraysAScriptCanChange()
+    {
+        var result = Execute("""
+            const [square] = Motion.pathPoints('M0 0 H20 V20 H0 Z');
+            const moved = square.points.map(p => ({ ...p, point: [p.point[0] + 10, p.point[1] + 10] }));
+            comp.region({ points: moved, loop: square.loop, color: '#ff0000' });
+            comp.region({ path: 'M0 30 H10 V40 H0 Z', color: '#0000ff' });
+            comp.ellipse({ origin: [35, 5], radius: [4, 2], color: '#00ff00' });
+            log(`count ${square.points.length} hole ${square.hole} first ${moved[0].point.join(',')}`);
+            """);
+
+        Assert.True(result.Success, result.Error);
+        Assert.Contains(result.Logs, l => l.Contains("count 4 hole false first 10,10", System.StringComparison.Ordinal));
+        using var frame = SKBitmap.Decode(result.ImageBytes);
+        Assert.Equal(SKColors.Red, frame.GetPixel(25, 25));
+        Assert.Equal(SKColors.Blue, frame.GetPixel(5, 35));
+        Assert.Equal(SKColors.Lime, frame.GetPixel(35, 5));
+    }
+
     /// <summary>Options with no function before them are still refused with what to write.</summary>
     [Fact]
     public void ADrawnLayerWithNoFunctionIsRefusedWithWhatToWrite()
