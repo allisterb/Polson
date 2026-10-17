@@ -107,6 +107,31 @@ public class MotionJsBindingTests : TestsRuntime
         Assert.True(frame.GetPixel(35, 10).Red < 200, "no shadow under the green square");
     }
 
+    /// <summary>A write-on, a wipe, a colour correction and stepped time, all from a script.</summary>
+    [Fact]
+    public void TrimWipeGradeAndStepBindFromAScript()
+    {
+        var result = Execute("""
+            comp.fill({ color: '#ffffff' });
+            comp.outline({ points: [[2, 5], [38, 5]], width: 4, color: '#000000', trimEnd: 0.5 });
+            const card = comp.group();
+            card.rectangle({ point1: [0, 10], point2: [40, 40], color: '#ff0000' });
+            card.wipe({ type: 'linear', completion: 0.5 });
+            const graded = comp.group();
+            graded.rectangle({ point1: [30, 30], point2: [40, 40], color: '#404040' });
+            graded.colorCorrect({ exposure: 1 });
+            comp.posterizeTime({ fps: 12 });
+            """);
+
+        Assert.True(result.Success, result.Error);
+        using var frame = SKBitmap.Decode(result.ImageBytes);
+        Assert.Equal(SKColors.Black, frame.GetPixel(10, 5));            // the first half of the line
+        Assert.Equal(SKColors.White, frame.GetPixel(30, 5));            // trimmed away
+        Assert.Equal(SKColors.White, frame.GetPixel(10, 20));           // wiped
+        Assert.Equal(SKColors.Red, frame.GetPixel(28, 20));
+        Assert.True(frame.GetPixel(35, 35).Red > 0x80, "the grade did not brighten the square");
+    }
+
     /// <summary>Options with no function before them are still refused with what to write.</summary>
     [Fact]
     public void ADrawnLayerWithNoFunctionIsRefusedWithWhatToWrite()

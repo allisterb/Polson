@@ -354,6 +354,19 @@ is Synfig's, and the craft follows from it:
   and out (`halt` at both ends) and let it settle before the type lands, because a title read while the camera still
   drifts is read badly. Keep each layer at its own depth and in front of the camera; layers that cross are not cut
   against each other.
+- **Draw a line on rather than fading it in: `comp.outline({ ..., trimEnd })` keyed 0 → 1.** A rule under a title, a
+  route on a map, the groove of a record: a line that draws itself has a direction and a moment of arrival, where one
+  that fades has neither. Ease it as you would a move — fast out, settling into the end — and let it finish before the
+  next thing starts.
+- **Change beats with a wipe only when the change means something: `comp.wipe({ type, completion })`.** The hard cut is
+  the default and usually right. A wipe says "and meanwhile" or "elsewhere", an iris closing on a face (`type: 'iris',
+  invert: true`) says "remember this one", a radial sweep reads as a clock. Pick one kind for the film and keep it.
+- **Grade the film once, at the top: `comp.colorCorrect({ hue, saturation, exposure, ... })` over everything.** One
+  correction is one light, and it holds the frames together where per-layer tweaks pull them apart. The same film graded
+  warm for one audience and cool for another is a choice the evidence can make; a keyed `exposure` is a flash on a cut.
+- **Step time on purpose, not by accident: `comp.posterizeTime({ fps: 12 })`.** Motion on twos reads as drawn and
+  deliberate; smooth motion reads as machine. Put the drawn layers under it and the camera or the type above, and the
+  film reads as hand-made inside a modern frame.
 - **Tip, turn and lay type on a surface with a corner pin: `comp.warp({ from, to })`.** Four keyed corners put a card
   on a table, swing a poster into place, or set a line on a wall in perspective; the pinned layers stay vectors, so the
   type stays sharp.

@@ -155,20 +155,22 @@ public abstract class MotionLayerList
 
     /// <summary>
     /// A stroked spline whose width can vary along it:
-    /// <c>{ points | path, loop?, origin?, width?, color, sharpCusps?, roundTips?, amount?, blend?, desc? }</c>.
+    /// <c>{ points | path, loop?, origin?, width?, color, sharpCusps?, roundTips?, trimStart?, trimEnd?, trimOffset?, amount?, blend?, desc? }</c>.
     /// <c>path</c> takes SVG path data in place of <c>points</c>, a group of outlines when it has several subpaths.
+    /// <c>trimStart</c>, <c>trimEnd</c> and <c>trimOffset</c> show only part of it, as fractions of its length: a write-on
+    /// keys <c>trimEnd</c> from 0 to 1.
     /// </summary>
     public MotionLayerList Outline(object? options)
     {
         var o = new MotionOptions(options, "outline",
-            "points", "path", "loop", "origin", "width", "color", "sharpCusps", "roundTips", "amount", "blend", "desc");
+            "points", "path", "loop", "origin", "width", "color", "sharpCusps", "roundTips", "trimStart", "trimEnd", "trimOffset", "amount", "blend", "desc");
         if (FromPath(o, fill: false) is not { } contours)
         {
             layers.Add(new MotionLayer.OutlineLayer(o));
             return this;
         }
 
-        string[] stroke = ["origin", "width", "color", "sharpCusps", "roundTips"];
+        string[] stroke = ["origin", "width", "color", "sharpCusps", "roundTips", "trimStart", "trimEnd", "trimOffset"];
         if (contours.Count == 1) return Outline(Contour(o, contours[0], [.. stroke, "amount", "blend", "desc"]));
 
         var group = Group(o.Subset("amount", "blend", "desc"));
@@ -398,6 +400,78 @@ public abstract class MotionLayerList
     }
 
     /// <summary>
+    /// Steps time for everything below it in this stack: <c>{ fps, desc? }</c>. Those layers see <c>floor(t·fps)/fps</c>, so
+    /// at 12 on a 24 fps film they move on twos, the stepped look of hand animation; <c>fps</c> keys.
+    /// </summary>
+    /// <remarks>Synfig's stroboscope layer, After Effects' Posterize Time. It stops at its own group.</remarks>
+    public MotionLayerList PosterizeTime(object? options)
+    {
+        var o = new MotionOptions(options, "posterizeTime", "fps", "desc");
+        if (!o.Has("fps")) throw new ArgumentException("posterizeTime takes fps: the steps a second the layers below it move in, 12 for twos on a 24 fps film.");
+        layers.Add(new MotionPosterizeLayer(o));
+        return this;
+    }
+
+    /// <summary>
+    /// A wipe of everything below it in this stack, hidden as <c>completion</c> runs 0 → 1:
+    /// <c>{ type, completion, feather?, angle?, startAngle?, center?, sweep?, points?, innerRadius?, rotation?, invert?, width?, amount?, desc? }</c>.
+    /// <c>type</c> is <c>'linear'</c> (<c>angle</c>, 90 left to right), <c>'radial'</c> (<c>startAngle</c> clockwise from up,
+    /// <c>center</c>, <c>sweep</c> clockwise, counterclockwise or both), <c>'iris'</c> (<c>center</c>, a circle or <c>points</c>
+    /// with <c>innerRadius</c> and <c>rotation</c>, <c>invert</c> to close down instead) or <c>'blinds'</c> (<c>angle</c>,
+    /// <c>width</c>). A reveal keys completion 1 → 0. It stops at its own group.
+    /// </summary>
+    /// <remarks>EffectCraft's wipes, written to .sif as Synfig layers that erase (alpha over).</remarks>
+    public MotionLayerList Wipe(object? options)
+    {
+        var given = JsInterop.AsDict(options) ?? throw new ArgumentException("wipe takes an options object: { type, completion, ... }.");
+        if (given.Contains("blend")) throw new ArgumentException("wipe has no 'blend': it erases what is below it, Synfig's alpha over.");
+        var withBlend = new Hashtable();
+        foreach (DictionaryEntry e in given) withBlend[e.Key] = e.Value;
+        withBlend["blend"] = "alphaOver";
+        var o = new MotionOptions(withBlend, "wipe", "type", "completion", "feather", "angle", "startAngle", "center", "sweep",
+            "points", "innerRadius", "rotation", "invert", "width", "amount", "blend", "desc");
+        layers.Add(new MotionWipeLayer(o, this));
+        return this;
+    }
+
+    /// <summary>
+    /// A colour correction of everything below it in this stack: <c>{ hue?, brightness?, contrast?, exposure?, saturation?,
+    /// gamma?, desc? }</c>, each keyable. <c>hue</c> turns hues by degrees, <c>exposure</c> is in stops (× eˣ),
+    /// <c>brightness</c> adds, <c>contrast</c> scales about mid-grey, <c>saturation</c> scales towards each colour's own
+    /// brightest channel, <c>gamma</c> bends the midtones. At the defaults (0, 0, 1, 0, 1, 1) it changes nothing.
+    /// </summary>
+    /// <remarks>Synfig's colour correct layer. It stops at its own group: grade a whole film at the top, or one layer in a group.</remarks>
+    public MotionLayerList ColorCorrect(object? options = null)
+    {
+        var o = new MotionOptions(options, "colorCorrect", "hue", "brightness", "contrast", "exposure", "saturation", "gamma", "desc");
+        layers.Add(new MotionColorCorrectLayer(o));
+        return this;
+    }
+
+    /// <summary>
+    /// The time <paramref name="layer"/> sees when its stack sees <paramref name="time"/>: stepped by every posterize above it.
+    /// </summary>
+    internal double TimeFor(MotionLayer layer, double time)
+    {
+        for (var i = layers.Count - 1; i >= 0 && !ReferenceEquals(layers[i], layer); i--)
+            if (layers[i] is MotionPosterizeLayer p) time = p.Map(time);
+        return time;
+    }
+
+    /// <summary>Each layer's time when the stack sees <paramref name="time"/>; the identity with no posterize here.</summary>
+    private Func<MotionLayer, double> Times(double time)
+    {
+        if (!layers.Any(l => l is MotionPosterizeLayer)) return _ => time;
+        var at = new Dictionary<MotionLayer, double>(ReferenceEqualityComparer.Instance);
+        for (var i = layers.Count - 1; i >= 0; i--)
+        {
+            at[layers[i]] = time;
+            if (layers[i] is MotionPosterizeLayer p) time = p.Map(time);
+        }
+        return l => at[l];
+    }
+
+    /// <summary>
     /// A shadow of everything below it in this stack: <c>{ offset?, size?, type?, color?, invert?, amount?, blend?, desc? }</c>.
     /// The stack's shape in <c>color</c> (black), moved by <c>offset</c> ([6, 6]) and blurred by <c>size</c> (6, a number or
     /// <c>[x, y]</c>, keyable, the blur's kinds), blended <c>behind</c> the stack at <c>amount</c> 0.75 unless told otherwise.
@@ -444,9 +518,10 @@ public abstract class MotionLayerList
     {
         if (this is not MotionGroup g || g.Parent is null) return (MotionSpace.Root, rootTime, rootTime, true);
         var (ps, pt, pOwn, pv) = g.Parent.SpaceAt(rootTime);
-        var (s, t) = g.Layer.Enter(ps, Root?.CameraAt(rootTime), pt);
+        var own = g.Parent.TimeFor(g.Layer, pt);
+        var (s, t) = g.Layer.Enter(ps, Root?.CameraAt(rootTime), own);
         var shown = g.Parent is not MotionGroup pg || pg.Layer.Shows(pOwn, g.Layer);
-        return (s ?? ps, t, pt, pv && shown && s is not null);
+        return (s ?? ps, t, own, pv && shown && s is not null);
     }
 
     /// <summary>Whether a skeleton deformation sits here or in any group below.</summary>
@@ -457,7 +532,10 @@ public abstract class MotionLayerList
     /// The layers in drawing order: each run of consecutive 3D groups sorted far to near by its anchor's camera depth, as
     /// After Effects sorts a run of 3D layers; ties, and everything 2D, keep the stack's order.
     /// </summary>
-    internal List<MotionLayer> Ordered(MotionSpace space, MotionCameraFrame? camera, double time)
+    internal List<MotionLayer> Ordered(MotionSpace space, MotionCameraFrame? camera, double time) =>
+        Ordered(space, camera, Times(time));
+
+    private List<MotionLayer> Ordered(MotionSpace space, MotionCameraFrame? camera, Func<MotionLayer, double> at)
     {
         if (camera is null || !layers.Any(l => l is MotionLayer.GroupLayer { Is3D: true })) return layers;
         var result = new List<MotionLayer>();
@@ -469,7 +547,7 @@ public abstract class MotionLayerList
                 run.Add(g);
                 continue;
             }
-            result.AddRange(run.Select((r, i) => (r, i, d: r.AnchorDepth(space, camera, time)))
+            result.AddRange(run.Select((r, i) => (r, i, d: r.AnchorDepth(space, camera, at(r))))
                 .OrderByDescending(x => x.d).ThenBy(x => x.i).Select(x => (MotionLayer)x.r));
             run.Clear();
             if (layer is not null) result.Add(layer);
@@ -497,11 +575,12 @@ public abstract class MotionLayerList
         // place: drawing it apart and back costs a frame-sized surface for no change.
         var canvas = surface.SkCanvas;
         var frame = Tangent(canvas.TotalMatrix, surface.Width / 2f, surface.Height / 2f);
-        var ordered = Root?.Frame is { } camera ? Ordered(Root.Space, camera, time) : layers;
-        var active = layers.OfType<IMotionStackFilter>().Where(f => !f.IsIdle(frame, time)).ToHashSet();
+        var at = Times(time);
+        var ordered = Root?.Frame is { } camera ? Ordered(Root.Space, camera, at) : layers;
+        var active = layers.OfType<IMotionStackFilter>().Where(f => !f.IsIdle(frame, at((MotionLayer)f))).ToHashSet();
         if (active.Count == 0)
         {
-            foreach (var layer in ordered.Where(l => l is not IMotionStackFilter)) layer.Render(surface, time);
+            foreach (var layer in ordered.Where(l => l is not IMotionStackFilter)) layer.Render(surface, at(layer));
             return;
         }
 
@@ -509,7 +588,7 @@ public abstract class MotionLayerList
         // surface of its own, in device pixels under the same transform, and each filter replaces that surface with
         // its result.
         // Padded by the widest filter's margin, so a blur near the frame's edge reads what lies beyond it.
-        var (mx, my) = active.Select(f => f.Margin(frame, time))
+        var (mx, my) = active.Select(f => f.Margin(frame, at((MotionLayer)f)))
             .Aggregate((X: 0, Y: 0), (a, b) => (Math.Max(a.X, b.X), Math.Max(a.Y, b.Y)));
         var shift = SKMatrix.CreateTranslation(mx, my);
         var matrix = SKMatrix.Concat(shift, canvas.TotalMatrix);
@@ -521,12 +600,12 @@ public abstract class MotionLayerList
             {
                 if (layer is not IMotionStackFilter filter)
                 {
-                    layer.Render(stack, time);
+                    layer.Render(stack, at(layer));
                     continue;
                 }
                 if (!active.Contains(filter)) continue;
 
-                var filtered = filter.Apply(stack, filterMatrix, time);
+                var filtered = filter.Apply(stack, filterMatrix, at(layer));
                 stack.Dispose();
                 stack = filtered;
                 stack.SkCanvas.SetMatrix(matrix);
@@ -1059,6 +1138,15 @@ internal abstract class MotionLayer
         }
 
         var canvas = surface.SkCanvas;
+        if (Blend.Native is { } mode)
+        {
+            using var native = new SKPaint { BlendMode = mode, ColorF = new SKColorF(1, 1, 1, (float)amount) };
+            canvas.SaveLayer(native);
+            Draw(surface, time, 1);
+            canvas.Restore();
+            return;
+        }
+
         using var blender = Blend.Blender(amount);
         using var paint = new SKPaint { Blender = blender };
         canvas.SaveLayer(paint);
@@ -1538,14 +1626,85 @@ internal abstract class MotionLayer
             width = o.Node("width", MotionType.Real, 1d);
             sharpCusps = o.Bool("sharpCusps", true);
             roundTips = o.Bool("roundTips", true);
+            trimStart = o.Node("trimStart", MotionType.Real, 0d);
+            trimEnd = o.Node("trimEnd", MotionType.Real, 1d);
+            trimOffset = o.Node("trimOffset", MotionType.Real, 0d);
+            trimmed = o.Has("trimStart") || o.Has("trimEnd") || o.Has("trimOffset");
         }
 
-        private readonly MotionNode width;
-        private readonly bool sharpCusps, roundTips;
+        private readonly MotionNode width, trimStart, trimEnd, trimOffset;
+        private readonly bool sharpCusps, roundTips, trimmed;
 
-        public override IEnumerable<MotionNode> Nodes() => base.Nodes().Append(width);
+        public override IEnumerable<MotionNode> Nodes() => base.Nodes().Append(width).Append(trimStart).Append(trimEnd).Append(trimOffset);
 
-        public override XElement ToSif(SifWriter sif) => Element("outline", "0.3", sif,
+        /// <summary>
+        /// The visible spans in arc length, and the length: one span, or two where the trim runs past the end and wraps to
+        /// the start; none when <c>trimEnd</c> is at or before <c>trimStart</c>.
+        /// </summary>
+        private (double Length, (double A, double B)[] Spans) Trim(SKPath path, double time)
+        {
+            using var measure = new SKPathMeasure(path, false);
+            double length = measure.Length;
+            if (!trimmed) return (length, [(0, length)]);
+            var s = Math.Clamp(trimStart.Evaluate(time)[0], 0, 1);
+            var e = Math.Clamp(trimEnd.Evaluate(time)[0], 0, 1);
+            if (e - s <= 1e-9 || length <= 0) return (length, []);
+            if (e - s >= 1 - 1e-9) return (length, [(0, length)]);
+            var a = (((s + trimOffset.Evaluate(time)[0]) % 1) + 1) % 1 * length;
+            var visible = (e - s) * length;
+            return a + visible <= length ? (length, [(a, a + visible)]) : (length, [(a, length), (0, a + visible - length)]);
+        }
+
+        /// <summary>
+        /// A trimmed outline as Synfig can hold it: its advanced outline with one dash, whose gap is the rest of the length so
+        /// the pattern repeats once per length — the visible part lands where the trim puts it and wraps past the end as the
+        /// trim does. The length changes as the points move, so the dash is sampled at the frame rate and held where still;
+        /// a frame showing nothing takes the amount to 0, since a dash of no length still draws its round tips.
+        /// </summary>
+        private XElement TrimmedToSif(SifWriter sif)
+        {
+            var fps = sif.Fps;
+            var count = (int)Math.Floor(sif.Duration * fps + 1e-9) + 1;
+            var times = Enumerable.Range(0, count).Select(f => f / fps).ToArray();
+            var (offsets, lengths, phases, amounts) = (new double[count][], new double[count][], new double[count][], new double[count][]);
+            for (var f = 0; f < count; f++)
+            {
+                using var path = Path(times[f], out _);
+                var (length, spans) = Trim(path, times[f]);
+                var visible = spans.Sum(x => x.B - x.A);
+                var gap = Math.Max(0, length - visible);
+                var start = spans.Length == 0 ? 0 : spans[0].A;
+                var q = start - gap;
+                var phase = length > 0 ? q - length * Math.Ceiling(q / length) : 0;
+                (offsets[f], lengths[f], phases[f]) = ([gap], [visible], [phase]);
+                amounts[f] = [spans.Length == 0 ? 0 : Math.Clamp(Amount.Evaluate(times[f])[0], 0, 1)];
+            }
+
+            var tip = new XElement("integer", new XAttribute("value", roundTips ? 1 : 4));
+            var element = Element("advanced_outline", "0.2", sif,
+                ShapeParams(sif),
+                sif.Param("width", width),
+                SifWriter.Param("expand", new XElement("real", new XAttribute("value", "0"))),
+                SifWriter.Param("start_tip", new XElement(tip)),
+                SifWriter.Param("end_tip", new XElement(tip)),
+                SifWriter.Param("cusp_type", new XElement("integer", new XAttribute("value", sharpCusps ? 0 : 1))),
+                SifWriter.Param("smoothness", new XElement("real", new XAttribute("value", "0"))),
+                SifWriter.Param("homogeneous", SifWriter.Bool(true)),
+                SifWriter.Param("wplist", new XElement("wplist", new XAttribute("type", "width_point"), new XAttribute("loop", "false"))),
+                SifWriter.Param("dash_enabled", SifWriter.Bool(true)),
+                SifWriter.Param("dilist", new XElement("dilist", new XAttribute("type", "dash_item"), new XAttribute("loop", "false"),
+                    new XElement("entry", new XElement("composite", new XAttribute("type", "dash_item"),
+                        sif.Link("offset", MotionTextLayer.Keys(MotionType.Real, times, offsets)),
+                        sif.Link("length", MotionTextLayer.Keys(MotionType.Real, times, lengths)),
+                        new XElement("side_before", new XElement(tip)),
+                        new XElement("side_after", new XElement(tip)))))),
+                sif.Param("dash_offset", MotionTextLayer.Keys(MotionType.Real, times, phases)));
+            element.Elements("param").First(e => (string?)e.Attribute("name") == "amount")
+                .ReplaceWith(sif.Param("amount", MotionTextLayer.Keys(MotionType.Real, times, amounts)));
+            return element;
+        }
+
+        public override XElement ToSif(SifWriter sif) => trimmed ? TrimmedToSif(sif) : Element("outline", "0.3", sif,
             ShapeParams(sif),
             sif.Param("width", width),
             SifWriter.Param("expand", new XElement("real", new XAttribute("value", "0"))),
@@ -1566,6 +1725,33 @@ internal abstract class MotionLayer
                 var s = States(map.Local(t));
                 return s.All(p => Math.Abs(p.Width - s[0].Width) < 1e-9);
             });
+
+            if (trimmed && !even)
+                throw new InvalidOperationException($"The outline{(Desc is null ? "" : $" '{Desc}'")} tapers and is trimmed, which SVG cannot draw: "
+                    + "SVG trims a stroke by dashing it, and a taper is drawn as a filled shape. Capture the composition as frames, or write a .sif.");
+
+            if (trimmed)
+            {
+                // The same dash Synfig takes: the visible part, then the rest of the length, starting where the trim starts.
+                svg.Attribute(path, "stroke-dasharray", t =>
+                {
+                    using var p = Path(map.Local(t), out _);
+                    var (length, spans) = Trim(p, map.Local(t));
+                    var visible = spans.Sum(x => x.B - x.A);
+                    return $"{SvgAnimationWriter.N(visible)} {SvgAnimationWriter.N(Math.Max(0, length - visible) + 1e-3)}";
+                });
+                svg.Attribute(path, "stroke-dashoffset", t =>
+                {
+                    using var p = Path(map.Local(t), out _);
+                    var (_, spans) = Trim(p, map.Local(t));
+                    return SvgAnimationWriter.N(spans.Length == 0 ? 0 : -spans[0].A);
+                });
+                svg.Attribute(path, "visibility", t =>
+                {
+                    using var p = Path(map.Local(t), out _);
+                    return Trim(p, map.Local(t)).Spans.Length == 0 ? "hidden" : "visible";
+                });
+            }
 
             if (even)
             {
@@ -1654,6 +1840,9 @@ internal abstract class MotionLayer
 
             var w = width.Evaluate(time)[0];
             using var paint = Paint(Color.Evaluate(time), amount);
+            var (length, spans) = Trim(path, time);
+            if (spans.Length == 0) return;
+            var whole = spans.Length == 1 && spans[0].A <= 1e-9 && spans[0].B >= length - 1e-9;
 
             if (states.All(s => Math.Abs(s.Width - states[0].Width) < 1e-9))
             {
@@ -1661,12 +1850,106 @@ internal abstract class MotionLayer
                 paint.StrokeWidth = (float)Math.Abs(w * states[0].Width);
                 paint.StrokeCap = roundTips ? SKStrokeCap.Round : SKStrokeCap.Butt;
                 paint.StrokeJoin = sharpCusps ? SKStrokeJoin.Miter : SKStrokeJoin.Round;
-                canvas.DrawPath(path, paint);
+                if (whole)
+                {
+                    canvas.DrawPath(path, paint);
+                    return;
+                }
+
+                // The visible part, in one piece where a looped outline's trim runs on round its seam. Each span is taken into a
+                // path of its own: SkiaSharp's GetSegment replaces its destination rather than appending to it, as Skia's does.
+                using var measure = new SKPathMeasure(path, false);
+                using var part = new SKPath();
+                for (var i = 0; i < spans.Length; i++)
+                {
+                    using var piece = new SKPath();
+                    measure.GetSegment((float)spans[i].A, (float)spans[i].B, piece, true);
+                    part.AddPath(piece, i > 0 && Loop ? SKPathAddMode.Extend : SKPathAddMode.Append);
+                }
+                canvas.DrawPath(part, paint);
                 return;
             }
 
-            using var shape = Tapered(states, w);
+            using var shape = whole ? Tapered(states, w) : TaperedSpans(states, w, spans);
             canvas.DrawPath(shape, paint);
+        }
+
+        /// <summary>
+        /// The tapered outline over the visible spans only: the ribbon sampled along the whole outline as <see cref="Tapered"/>
+        /// samples it, kept between each span's ends, with tips at those ends and round joins at the points inside.
+        /// </summary>
+        private SKPath TaperedSpans(MotionSplinePoint.State[] s, double width, (double A, double B)[] spans)
+        {
+            const int samples = 32;
+            var line = new List<(double D, SKPoint P, SKPoint N, float Half)>();
+            var joints = new List<(double D, MotionSplinePoint.State Point)>();
+            var count = Loop ? s.Length : s.Length - 1;
+            double at = 0;
+            for (var i = 0; i < count; i++)
+            {
+                var (a, b) = (s[i], s[(i + 1) % s.Length]);
+                using var seg = new SKPath();
+                seg.MoveTo(a.P);
+                Segment(seg, a, b);
+                using var measure = new SKPathMeasure(seg);
+                var length = measure.Length;
+                joints.Add((at, a));
+                for (var k = i == 0 ? 0 : 1; k <= samples; k++)
+                {
+                    var d = length * k / samples;
+                    if (!measure.GetPositionAndTangent(d, out var pos, out var tan)) continue;
+                    var half = (float)(Math.Abs(width) * (a.Width + (b.Width - a.Width) * k / samples) / 2);
+                    line.Add((at + d, pos, new SKPoint(-tan.Y, tan.X), half));
+                }
+                at += length;
+            }
+
+            var result = new SKPath();
+            foreach (var (from, to) in spans)
+            {
+                var kept = new List<(SKPoint P, SKPoint N, float Half)> { Sample(from) };
+                kept.AddRange(line.Where(x => x.D > from && x.D < to).Select(x => (x.P, x.N, x.Half)));
+                kept.Add(Sample(to));
+
+                using var body = new SKPath();
+                body.MoveTo(kept[0].P + Scale(kept[0].N, kept[0].Half));
+                foreach (var k in kept.Skip(1)) body.LineTo(k.P + Scale(k.N, k.Half));
+                for (var k = kept.Count - 1; k >= 0; k--) body.LineTo(kept[k].P - Scale(kept[k].N, kept[k].Half));
+                body.Close();
+                using var simple = body.Simplify() ?? new SKPath(body);
+                Union(result, simple);
+
+                // Tips at the span's ends; round joins at the points it passes.
+                if (roundTips) { Disc(result, kept[0].P, kept[0].Half); Disc(result, kept[^1].P, kept[^1].Half); }
+                foreach (var (d, point) in joints.Where(j => j.D > from && j.D < to))
+                    Disc(result, point.P, (float)(Math.Abs(width) * point.Width / 2));
+            }
+            return result;
+
+            (SKPoint P, SKPoint N, float Half) Sample(double d)
+            {
+                var i = line.FindIndex(x => x.D >= d);
+                if (i <= 0) return (line[Math.Max(0, i)].P, line[Math.Max(0, i)].N, line[Math.Max(0, i)].Half);
+                var (p, q) = (line[i - 1], line[i]);
+                var f = (float)((d - p.D) / Math.Max(1e-12, q.D - p.D));
+                return (p.P + Scale(q.P - p.P, f), q.N, p.Half + (q.Half - p.Half) * f);
+            }
+
+            static SKPoint Scale(SKPoint v, float k) => new(v.X * k, v.Y * k);
+
+            static void Union(SKPath into, SKPath add)
+            {
+                using var merged = into.Op(add, SKPathOp.Union);
+                if (merged is not null) { into.Reset(); into.AddPath(merged); }
+            }
+
+            static void Disc(SKPath into, SKPoint c, float r)
+            {
+                if (r <= 0) return;
+                using var disc = new SKPath();
+                disc.AddCircle(c.X, c.Y, r);
+                Union(into, disc);
+            }
         }
 
         /// <summary>
