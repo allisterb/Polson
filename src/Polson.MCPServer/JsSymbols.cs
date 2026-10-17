@@ -183,6 +183,8 @@ public static class JsSurface
         new("Motion.nodes", typeof(MotionNodeFactory), "Motion", false),
         new("comp", [typeof(MotionComposition), typeof(MotionLayerList), typeof(MotionGroup)], "Motion", true),
         new("node", [typeof(MotionNode), typeof(MotionAnimated)], "Motion", true),
+        // What comp.text(...) returns: where the letters are, for a title-safe check or a thing placed on a word.
+        new("text", typeof(MotionText), "Motion", true),
     ];
 
     /// <summary>

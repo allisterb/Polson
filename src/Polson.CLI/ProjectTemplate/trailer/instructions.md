@@ -116,10 +116,11 @@ What the model gives you for a trailer, in `polson://sdk/core/Motion` (*Layers*,
   from below, turn, fade, take a colour — and a range selector's `offset`, keyed from −100 to 100 with
   `shape: 'rampUp'`, hands it from letter to letter. That is the whole of a cascade. Base it on `words` to
   land a word at a time. The family must be installed, and a weight is not part of its name.
-- **Focus: `group.blur({ type: 'gaussian', size })`** with `size` keyed. A focus pull directs the eye where
-  a cut cannot. It blurs only what is below it in its own group. **Mind its cost**: the Gaussian takes 86 ms
-  a frame at size 6 and 255 ms at size 20, so keep it to short passages; a blur held across many seconds
-  wants `type: 'fastGaussian'` (about 55 ms at any size, but a small bright shape blurs square).
+- **Focus: `group.blur({ type, size })`** with `size` keyed. A focus pull directs the eye where a cut
+  cannot. It blurs only what is below it in its own group. **Mind its cost**, which grows with the scene:
+  on trailer2's real frame the Gaussian took 330 ms and `'fastGaussian'` 95 ms, against 9 ms with no blur.
+  So prefer `'fastGaussian'` for anything longer than a moment (a small bright shape blurs square), and
+  **key `size` or `amount` to 0 when the pull is done** — a blur doing nothing is then free.
 - **Reuse and stagger: a group's `timeOffset`.** Make a passage once and play it later.
 - **Cuts: `comp.switch({ active: [[0, 'open'], [2.5, 'record']] })`**, each child named with `desc`.
 - **Wipes and reveals: a shape with `blend: 'alphaOver'`** erases what is below it in its group; a
@@ -155,13 +156,25 @@ director and no record. So:
 
 **The sheet is how you see the film.** Draw a cell every half second (thirty cells for fifteen
 seconds) onto one sheet, as in stage 3, and write it as `artifacts/05_sheet.png`. Read it in order.
-Then record each of these with `Stage.check`:
+
+**Run checks that scan the whole film at a reduced scale.** Every frame at 1280 × 720 inside one script
+runs past the time limit: trailer2's full-size flash scan of 361 frames did. The same scan at a quarter
+size takes a few seconds:
+
+```javascript
+const small = t => { const c = createCanvas(320, 180); const x = c.getContext('2d'); x.scale(0.25, 0.25); comp.draw(x, t); return c.toBitmap(); };
+```
+
+`comp.saveVideo` itself took 10 s on one run and 19 s on another for the same film, so budget for the
+slow figure. Then record each of these with `Stage.check`:
 
 1. **Reading time.** Every line of text holds still long enough to read: as a working rule, about
    three words a second plus half a second to find the line, and the title at least two seconds still.
    This is a rule of thumb, not a sourced figure; say so if you cite it.
 2. **Title safe.** Text stays inside the central 90% of the frame — the broadcast title-safe
-   convention — so a cropped player does not cut it.
+   convention — so a cropped player does not cut it. Keep each text's handle (`const title =
+   comp.text(...)`) and read `title.boundsAt(t)` across the film: its ink as drawn, animators applied,
+   with no rendering (the SDK reference's *Type* section has the loop).
 3. **Flashes.** Nothing flashes more than three times in any one second (WCAG 2.3.1, *Three Flashes or
    Below Threshold*): a strobe can trigger seizures, and a trailer must not.
 4. **Contrast.** Text against its ground at 4.5 : 1 or better (WCAG, as for the poster); 3 : 1 for the

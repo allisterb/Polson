@@ -76,6 +76,9 @@ internal sealed class MotionDeformationLayer : MotionLayer, IMotionStackFilter
     protected override void Draw(SkiaCanvas surface, double time, double amount) =>
         throw new InvalidOperationException("A skeleton deformation is applied by its stack, to what is below it.");
 
+    /// <summary>A deformation at no amount leaves the stack as it is.</summary>
+    public bool IsIdle(SKMatrix matrix, double time) => AmountAt(time) <= 0;
+
     /// <summary>
     /// Bends <paramref name="below"/> — the stack so far, in device pixels, drawn under <paramref name="matrix"/> —
     /// and returns the result in its place.

@@ -322,7 +322,10 @@ is Synfig's, and the craft follows from it:
   landed. Key it the other way to send them out. That keeps the timing in one curve the eye reads as a single gesture; per-letter keys drift apart
   and read as noise. Ease the selector (`easeLow`) rather than the key, so each letter settles. Base it on `words` for
   a line that should land a word at a time, and let the title hold still once it lands: the read happens after the
-  motion stops, so give it at least as long as the arrival took.
+  motion stops, so give it at least as long as the arrival took. Keep the text's handle —
+  `const title = comp.text(...)` — and check it rather than guessing: `title.boundsAt(t)` is its ink as drawn,
+  animators and all, which is the title-safe check, and `title.lettersAt(t)` gives each letter's box for placing a
+  thing on a word.
 - **Pull focus rather than cut: `group.blur({ type: 'gaussian', size })` with `size` keyed.** A blur that eases from
   soft to sharp directs the eye the way a camera's focus does — to the title as it resolves, to the second subject as
   the first goes soft — and a cut has no way to say "look here next". It blurs only what is below it in its own group,

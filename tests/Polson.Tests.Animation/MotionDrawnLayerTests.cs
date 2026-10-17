@@ -121,7 +121,9 @@ public class MotionDrawnLayerTests : TestsRuntime
     [Fact]
     public void AMissingFunctionIsRefused()
     {
-        var e = Assert.Throws<ArgumentException>(() => Composition(new MotionToolkit()).Drawn(null));
+        var e = Assert.Throws<ArgumentException>(() => Composition(new MotionToolkit()).Drawn((Action<CanvasRenderingContext2D, object?, double>?)null));
+        Assert.Contains("takes a function first", e.Message);
+        e = Assert.Throws<ArgumentException>(() => Composition(new MotionToolkit()).Drawn(new System.Dynamic.ExpandoObject()));
         Assert.Contains("takes a function first", e.Message);
     }
 

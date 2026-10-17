@@ -204,7 +204,12 @@ public abstract class MotionLayerList
     /// Catches <c>drawn({ ... })</c> with no function, which would otherwise fail with the binder's
     /// generic "no public methods" message instead of saying what is missing.
     /// </summary>
-    public MotionLayerList Drawn(object? options) =>
+    /// <remarks>
+    /// Typed as the object literal Jint passes, not <c>object</c>: as <c>object</c> it also caught <c>drawn(fn)</c> —
+    /// a lone function arrives as a <c>Func</c>, which an <c>object</c> takes, and one argument matched this overload
+    /// sooner than the one whose options are optional — so the documented short form threw "takes a function first".
+    /// </remarks>
+    public MotionLayerList Drawn(System.Dynamic.ExpandoObject options) =>
         throw new ArgumentException("drawn(draw, options?) takes a function first: comp.drawn((ctx, v, t) => { ... }, { values }).");
 
     /// <summary>
@@ -229,14 +234,16 @@ public abstract class MotionLayerList
     /// <c>{ text, family, weight?, style?, size?, origin?, orient?, color?, compress?, vcompress?, kerning?, invert?, animators?, amount?, blend?, desc? }</c>.
     /// <c>size</c> is the font's em in units; <c>orient</c> aligns the block on <c>origin</c>, <c>[0, 0]</c> its top left and
     /// the default <c>[0.5, 0.5]</c> its centre. <c>animators</c> move, scale, turn, fade, recolour, track and blur letters,
-    /// words or lines by how far a selector picks them; see the SDK reference.
+    /// words or lines by how far a selector picks them; see the SDK reference. Returns the text, which can report where its
+    /// letters are at any time.
     /// </summary>
-    public MotionLayerList Text(object? options)
+    public MotionText Text(object? options)
     {
         var o = new MotionOptions(options, "text", "text", "family", "weight", "style", "size", "origin", "orient", "color",
             "compress", "vcompress", "kerning", "invert", "animators", "amount", "blend", "desc");
-        layers.Add(new MotionTextLayer(o, Root?.YDown ?? true, Root));
-        return this;
+        var layer = new MotionTextLayer(o, Root?.YDown ?? true, Root);
+        layers.Add(layer);
+        return new MotionText(layer);
     }
 
     /// <summary>
@@ -287,9 +294,14 @@ public abstract class MotionLayerList
             return;
         }
 
-        if (!layers.Any(l => l is IMotionStackFilter))
+        // A filter that does nothing at this time is passed over, and a stack whose filters all do nothing is drawn in
+        // place: drawing it apart and back costs a frame-sized surface for no change.
+        var canvas = surface.SkCanvas;
+        var frame = canvas.TotalMatrix;
+        var active = layers.OfType<IMotionStackFilter>().Where(f => !f.IsIdle(frame, time)).ToHashSet();
+        if (active.Count == 0)
         {
-            foreach (var layer in layers) layer.Render(surface, time);
+            foreach (var layer in layers.Where(l => l is not IMotionStackFilter)) layer.Render(surface, time);
             return;
         }
 
@@ -297,9 +309,7 @@ public abstract class MotionLayerList
         // surface of its own, in device pixels under the same transform, and each filter replaces that surface with
         // its result.
         // Padded by the widest filter's margin, so a blur near the frame's edge reads what lies beyond it.
-        var canvas = surface.SkCanvas;
-        var frame = canvas.TotalMatrix;
-        var (mx, my) = layers.OfType<IMotionStackFilter>().Select(f => f.Margin(frame, time))
+        var (mx, my) = active.Select(f => f.Margin(frame, time))
             .Aggregate((X: 0, Y: 0), (a, b) => (Math.Max(a.X, b.X), Math.Max(a.Y, b.Y)));
         var matrix = SKMatrix.Concat(SKMatrix.CreateTranslation(mx, my), frame);
         var stack = Fresh(surface, matrix, mx, my);
@@ -312,6 +322,7 @@ public abstract class MotionLayerList
                     layer.Render(stack, time);
                     continue;
                 }
+                if (!active.Contains(filter)) continue;
 
                 var filtered = filter.Apply(stack, matrix, time);
                 stack.Dispose();
@@ -708,6 +719,12 @@ internal interface IMotionStackFilter
 
     /// <summary>How far beyond the frame, in device pixels, the stack must be drawn for this filter to read it.</summary>
     (int X, int Y) Margin(SKMatrix matrix, double time) => (0, 0);
+
+    /// <summary>
+    /// Whether the filter changes nothing at this time — its amount is 0, or a blur's size is — so the stack need not be
+    /// drawn apart for it. trailer2's blur, keyed off after its focus pull, still cost 12 ms a frame for the rest of the film.
+    /// </summary>
+    bool IsIdle(SKMatrix matrix, double time) => false;
 }
 
 /// <summary>One layer of a composition, its parameters held as nodes.</summary>

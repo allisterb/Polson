@@ -147,6 +147,31 @@ public class MotionBlurTests(ITestOutputHelper output) : TestsRuntime
         Assert.Contains("<composite type=\"vector\"", comp.ToSif());
     }
 
+    /// <summary>
+    /// A blur switched off — amount 0, or size 0 — is passed over and its stack drawn in place, so it draws exactly what no
+    /// blur draws. trailer2's blur, keyed off after its focus pull, cost 12 ms a frame for the rest of the film.
+    /// </summary>
+    [Theory]
+    [InlineData(0d, 8d)]
+    [InlineData(1d, 0d)]
+    public void AnIdleBlurDrawsExactlyWhatNoBlurDraws(double amount, double size)
+    {
+        MotionComposition Scene(bool withBlur)
+        {
+            var comp = new MotionToolkit().Composition(Opts(("width", 80d), ("height", 40d)));
+            comp.Fill(Opts(("color", "#f2efe8")));
+            var g = comp.Group(Opts(("scale", new[] { 0.85, 0.85 })));
+            g.Circle(Opts(("origin", new[] { 30d, 20d }), ("radius", 12d), ("color", "#1d3557")));
+            g.Rectangle(Opts(("point1", new[] { 50d, 5d }), ("point2", new[] { 75d, 35d }), ("color", "#e63946b0")));
+            if (withBlur) g.Blur(Opts(("amount", amount), ("size", size)));
+            return comp;
+        }
+
+        using var idle = Scene(true).Render(0);
+        using var none = Scene(false).Render(0);
+        Assert.Equal(none.SkBitmap.Bytes, idle.SkBitmap.Bytes);
+    }
+
     [Fact]
     public void ToSifWritesSynfigsBlurLayer()
     {
