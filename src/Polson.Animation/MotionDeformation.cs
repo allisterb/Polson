@@ -26,7 +26,7 @@ using SkiaSharp;
 /// The result replaces the stack below at full <c>amount</c> (Synfig's straight blend) and fades to it at less.
 /// </para>
 /// </remarks>
-internal sealed class MotionDeformationLayer : MotionLayer
+internal sealed class MotionDeformationLayer : MotionLayer, IMotionStackFilter
 {
     #region Constructors
     public MotionDeformationLayer(MotionOptions o, IReadOnlyList<MotionBone> all) : base(o)

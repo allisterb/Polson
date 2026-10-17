@@ -5281,6 +5281,19 @@ Each returns the stack it was added to, except `group`, which returns the group 
 - `comp.group({ origin?, offset?, angle?, skewAngle?, scale?, amount?, blend?, timeOffset?, timeDilation?, desc? })` → a group with the same layer methods. Its transform is applied about `origin` and then moved to `offset`; its children see time as `t × timeDilation + timeOffset`, which is how one passage is reused later or faster.
 - `comp.switch({ active, ...the group's options })` → a group that **shows one of its layers at a time**, chosen by the layer's `desc`. `active` is a name, or held keys `[{ time, value: name }, ...]` or `[[time, name], ...]`; names do not blend, so each key holds until the next, and the name changes on the key's time. `''` shows nothing. Where two layers share a name the topmost (last added) shows. A name no layer has is **refused when the switch first draws, listing the names it has**. The keys are read at the switch's own time, not its children's dilated clock. For a mouth chart, a hand's poses, or a feature drawn in detail for the close-up and plainly for the wide shot: draw each once, name it, key which shows, and drive them all from the same nodes so the performance carries across the change. Synfig's switch layer, written to `.sif` as one (every frame agrees with `synfig`, including frames exactly on a key); in SVG each layer's `display` is animated, so a switch whose layers blend other than by compositing is refused there.
 
+- `comp.blur({ size?, type?, amount?, desc? })` — **blurs everything below it in its stack**, Synfig's blur layer. `size` is in units, a number for both axes or `[x, y]`, default `0.1`, and keyable: a focus pull, a title that blurs in, a soft dissolve are a keyed `size`. `type` is `'fastGaussian'` (default), `'gaussian'`, `'box'` or `'cross'`; `'disc'` is not ported yet and is refused. Like Synfig's it **stops at its own group**, so put it in a group with what it should soften, and it reads what lies beyond the frame's edge, so a blurred full-frame fill stays full to the corner. It replaces the stack at full `amount` and fades back to the sharp one as `amount` falls; it takes no `blend`.
+
+  ```javascript
+  const n = Motion.nodes;
+  const title = comp.group();
+  title.rectangle({ point1: [40, 100], point2: [440, 170], color: '#f2c14e' });
+  // Racks into focus over the first 0.8 s: 0.6 units of blur down to none.
+  title.blur({ type: 'gaussian', size: n.animated('vector', [
+      { time: 0, value: [0.6, 0.6], ease: 'halt' }, { time: 0.8, value: [0, 0], ease: 'halt' }]) });
+  ```
+
+  Checked against `synfig` 1.5.5 for every ported type with `size` keyed: within 2 levels in 255 on 98–100% of pixels, the rest along the shapes' own antialiased edges. Past a reach of 32 px Synfig's Gaussian switches to an FFT and this to Skia's Gaussian of the same width, which agree to within 24 levels everywhere.
+
 **A spline point** is `{ point, t1?, t2?, width? }`, or a bare `[x, y]` for a corner. Tangents are Synfig's: the curve leaves a point toward `point + t2 / 3` and reaches the next toward `next − t1 / 3`. `t2` defaults to `t1`, which keeps the point smooth. Any of the four can be a node, so the shape itself animates.
 
 `amount` is opacity, 0 to 1. **`invert`** fills everything but the shape, which is mostly useful as an eraser (below).
@@ -5763,6 +5776,7 @@ comp.render(2);                            // and a still of the last frame, to 
 - **A path keeps the same commands at every frame**, a cubic for every segment, so one frame's `d` interpolates into the next.
 - **A tapered outline** is written as a filled polygon with a fixed number of vertices; an even one is a stroke.
 - **A drawn layer is refused by name**, as `.sif` refuses it: SMIL cannot run a script. Capture it as frames instead.
+- **A blur** wraps everything below it in an SVG `<feGaussianBlur>`, its deviation tracked from `size`. Only `'gaussian'` and `'fastGaussian'` (written as a Gaussian of the same width) at a full `amount`; a box or cross blur, or a partial `amount`, is refused by name.
 - **An image** is inlined as a PNG data URI under a translate and a scale, exact wherever one of its corners holds still.
 - **Blends**: `behind` is written by reordering, `alphaOver` (and so every cutout) as an SVG `<mask>`, and `multiply`, `screen`, `overlay`, `hardLight`, `brighten`, `darken` and `difference` as CSS `mix-blend-mode`, which agrees with Synfig's only over an opaque backdrop — the header comment counts those. `onto`, `add`, `subtract` and `divide` have no SVG form and are refused by name.
 

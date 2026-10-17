@@ -225,6 +225,22 @@ public abstract class MotionLayerList
     }
 
     /// <summary>
+    /// A blur of everything below it in this stack: <c>{ size?, type?, amount?, desc? }</c>. <c>size</c> is in units, a
+    /// number for both axes or <c>[x, y]</c>, and keyable — a focus pull is a keyed size. <c>type</c> is
+    /// <c>'fastGaussian'</c> (the default), <c>'gaussian'</c>, <c>'box'</c> or <c>'cross'</c>.
+    /// </summary>
+    /// <remarks>
+    /// Synfig's blur layer. Like Synfig's it stops at its own group: put it in a group with what it should blur.
+    /// It replaces the stack below at full <c>amount</c> and fades back to the sharp stack as <c>amount</c> falls.
+    /// </remarks>
+    public MotionLayerList Blur(object? options = null)
+    {
+        var o = new MotionOptions(options, "blur", "size", "type", "amount", "desc");
+        layers.Add(new MotionBlurLayer(o));
+        return this;
+    }
+
+    /// <summary>
     /// Rigs one drawing to bend: bones from its landmarks, and the drawing in a group with a skeleton deformation
     /// over it. <c>landmarks</c> is <c>Character.detect(image)</c> or <c>{ leftShoulder: [x, y], ... }</c>.
     /// <c>options</c>: <c>{ tl?, br?, poses?, turns?, move?, prefix?, subdivisions?, desc? }</c>.
@@ -253,36 +269,41 @@ public abstract class MotionLayerList
             return;
         }
 
-        if (!layers.Any(l => l is MotionDeformationLayer))
+        if (!layers.Any(l => l is IMotionStackFilter))
         {
             foreach (var layer in layers) layer.Render(surface, time);
             return;
         }
 
-        // A deformation bends what is below it in the stack, so the stack is drawn on a surface of its own,
-        // in device pixels under the same transform, and each deformation replaces that surface with its result.
+        // A stack filter (a deformation, a blur) works on what is below it in the stack, so the stack is drawn on a
+        // surface of its own, in device pixels under the same transform, and each filter replaces that surface with
+        // its result.
+        // Padded by the widest filter's margin, so a blur near the frame's edge reads what lies beyond it.
         var canvas = surface.SkCanvas;
-        var matrix = canvas.TotalMatrix;
-        var stack = Fresh(surface, matrix);
+        var frame = canvas.TotalMatrix;
+        var (mx, my) = layers.OfType<IMotionStackFilter>().Select(f => f.Margin(frame, time))
+            .Aggregate((X: 0, Y: 0), (a, b) => (Math.Max(a.X, b.X), Math.Max(a.Y, b.Y)));
+        var matrix = SKMatrix.Concat(SKMatrix.CreateTranslation(mx, my), frame);
+        var stack = Fresh(surface, matrix, mx, my);
         try
         {
             foreach (var layer in layers)
             {
-                if (layer is not MotionDeformationLayer deformation)
+                if (layer is not IMotionStackFilter filter)
                 {
                     layer.Render(stack, time);
                     continue;
                 }
 
-                var bent = deformation.Apply(stack, matrix, time);
+                var filtered = filter.Apply(stack, matrix, time);
                 stack.Dispose();
-                stack = bent;
+                stack = filtered;
                 stack.SkCanvas.SetMatrix(matrix);
             }
 
             canvas.Save();
             canvas.ResetMatrix();
-            canvas.DrawBitmap(stack.SkBitmap, 0, 0);
+            canvas.DrawBitmap(stack.SkBitmap, -mx, -my);
             canvas.Restore();
         }
         finally
@@ -290,9 +311,9 @@ public abstract class MotionLayerList
             stack.Dispose();
         }
 
-        static SkiaCanvas Fresh(SkiaCanvas like, SKMatrix matrix)
+        static SkiaCanvas Fresh(SkiaCanvas like, SKMatrix matrix, int mx, int my)
         {
-            var c = new SkiaCanvas(like.Width, like.Height, like.SkBitmap.ColorType);
+            var c = new SkiaCanvas(like.Width + 2 * mx, like.Height + 2 * my, like.SkBitmap.ColorType);
             c.SkCanvas.Clear(SKColors.Transparent);
             c.SkCanvas.SetMatrix(matrix);
             return c;
@@ -636,6 +657,23 @@ public sealed class MotionComposition : MotionLayerList
         return new SKMatrix((float)sx, 0, (float)(-view[0] * sx), 0, (float)sy, (float)(-view[1] * sy), 0, 0, 1);
     }
     #endregion
+}
+
+/// <summary>
+/// A layer that works on what is below it in its stack — Synfig's <c>Layer_CompositeFork</c> family: the skeleton
+/// deformation, the blur. Its stack draws everything before it onto a surface of its own and hands it over.
+/// </summary>
+/// <remarks>Like Synfig's, it stops at its own group: a group's stack is all it is given.</remarks>
+internal interface IMotionStackFilter
+{
+    /// <summary>
+    /// Takes <paramref name="below"/> — the stack so far, in device pixels, drawn under <paramref name="matrix"/> — and
+    /// returns a new surface to replace it. The caller disposes <paramref name="below"/>.
+    /// </summary>
+    SkiaCanvas Apply(SkiaCanvas below, SKMatrix matrix, double time);
+
+    /// <summary>How far beyond the frame, in device pixels, the stack must be drawn for this filter to read it.</summary>
+    (int X, int Y) Margin(SKMatrix matrix, double time) => (0, 0);
 }
 
 /// <summary>One layer of a composition, its parameters held as nodes.</summary>
