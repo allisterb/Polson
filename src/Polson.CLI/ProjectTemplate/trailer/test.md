@@ -7,9 +7,15 @@ Reach for `polson://sdk/core/Motion` (*Layers*, *Type*, *Nodes*, *Video with sou
 
 Answer these in `findings.md`:
 
-- **The audience in the motion.** Name the pace and the grade you chose, and the profile references each
-  rests on (result id and item). Would the film have moved the same for the other audience of the same
-  poster? If the profile had nothing to say about a motion choice, which one, and what did you rest it on?
+- **The audience in the motion.** Quote `pace()`'s counts and the titles behind them, and the grade's
+  references (result id and item). If you compared with another audience, quote `comparePace`'s summary.
+  Did the evidence give the two films a reason to move differently, and did yours follow it — or did it show
+  no measurable difference, and where did you put the difference instead? If the profile had nothing to say
+  about a motion choice, which one, and what did you rest it on?
+- **More than one audience** (when the brief named several). Did you fetch every profile and compare them
+  before planning either film? Was the second film's motion drafted from its own evidence before you looked back
+  at the first? Name what the pair shares and what differs, and whether the films' measured holds differ in the
+  direction `comparePace` gave — or why they did not need to.
 - **Text animators.** Did the *Type* section give you what you needed to build a cascade? Quote the
   animator you used for the title, and say whether it did what you expected the first time. Name any
   property or selector option you wanted and did not find.

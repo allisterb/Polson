@@ -60,8 +60,13 @@ def main() -> int:
         print("  WARNING: bound beyond localhost. A reachable studio is an open cost surface,\n"
               "  and anything typed into it reaches an agent that holds tools.\n", file=sys.stderr)
 
+    print("  Ctrl-C to stop.\n")
+    # A backstop on shutdown: uvicorn's graceful shutdown waits for open connections, and says so only at info, below
+    # the warning level set here. Measured 2026-10-17 it is not what hung a Ctrl-C: with a run page's event stream
+    # open, the studio stopped within 0.2 s with no limit (sse-starlette closes its streams on shutdown itself), and the
+    # observer's transcript sync takes 0.03 s a pass. Two seconds, then whatever is still open is cut.
     uvicorn.run(create_app(root, observe_only=args.observe_only),
-                host=args.host, port=args.port, log_level="warning")
+                host=args.host, port=args.port, log_level="warning", timeout_graceful_shutdown=2)
     return 0
 
 

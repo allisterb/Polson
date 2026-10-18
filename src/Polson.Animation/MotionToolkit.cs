@@ -345,6 +345,16 @@ public class MotionToolkit : IDisposable
     /// <c>audio</c> is a path, a line of speech timed by a recording, <c>{ path, start }</c>, or a list of these, mixed.
     /// Video has no alpha, so frames are drawn over <c>background</c>, white by default. Needs <c>ffmpeg</c>.
     /// </remarks>
+    /// <summary>
+    /// Joins finished videos end to end into one, without re-encoding: <c>parts</c> is a list of paths in order, written
+    /// by <c>saveVideo</c> with one composition and the same options (<c>comp.saveVideo(part, { from, to })</c> encodes a
+    /// span). <c>options</c>: <c>{ audio?, start? }</c> — sound for the whole film, as <c>saveVideo</c> takes it, from the
+    /// composition time <c>start</c> (0), in place of any the parts carry. Returns what <c>saveVideo</c> returns, with
+    /// <c>parts</c>.
+    /// </summary>
+    public Dictionary<string, object?> JoinVideos(object? parts, string filePath, object? options = null) =>
+        MotionVideo.Join(parts, filePath, new MotionOptions(options, "Motion.joinVideos", "audio", "start"), projectRoot, this);
+
     public Dictionary<string, object?> SaveVideo(string filePath, object? options = null)
     {
         var o = new MotionOptions(options, "Motion.saveVideo", "fps", "quality", "background", "audio");

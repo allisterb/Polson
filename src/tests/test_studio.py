@@ -1794,6 +1794,38 @@ class DeliverableRouteTests(unittest.TestCase):
 
         self.assertEqual(self._picture()["state"], "halted")
 
+    def test_a_final_per_audience_is_a_piece_per_audience(self):
+        """A brief for two audiences delivers two pieces — `final_a`, `final_b` — and the page shows both.
+
+        With one row, a run made for two cities read as one film. The drafts and comps beside them are not pieces.
+        """
+        for name in ("artifacts/04_comp_a.png", "artifacts/final_a.mp4", "artifacts/final_b.mp4", "artifacts/final_b.webp"):
+            self._made(name)
+        self._render_events(
+            {"type": "render", "ts": "2026-10-17T10:00:00Z", "artifact": "artifacts/04_comp_a.png", "format": "png"},
+            {"type": "render", "ts": "2026-10-17T10:05:00Z", "artifact": "artifacts/final_a.mp4", "format": "mp4",
+             "motion": "video", "durationMs": 15000},
+            {"type": "render", "ts": "2026-10-17T10:09:00Z", "artifact": "artifacts/final_b.mp4", "format": "mp4",
+             "motion": "video", "durationMs": 15000},
+            {"type": "render", "ts": "2026-10-17T10:09:00Z", "artifact": "artifacts/final_b.webp", "format": "webp"})
+
+        body = self.client.get("/runs/acme-1/deliverables").json()["deliverables"]
+        pieces = [d for d in body if d["kind"] == "render"]
+
+        self.assertEqual([p["name"] for p in pieces], ["final_a", "final_b"])
+        self.assertEqual([f["path"] for f in pieces[0]["formats"]], ["artifacts/final_a.mp4"])
+        self.assertEqual([f["format"] for f in pieces[1]["formats"]], ["mp4", "webp"])
+        self.assertIn("audience B", pieces[1]["what"])
+
+    def test_a_single_piece_is_still_one_row(self):
+        """Without per-audience finals, nothing changes: the last render of each format, as one row."""
+        self._made("output.mp4")
+        self._render_events({"type": "render", "ts": "2026-10-17T10:00:00Z", "artifact": "output.mp4",
+                             "format": "mp4", "motion": "video"})
+
+        body = self.client.get("/runs/acme-1/deliverables").json()["deliverables"]
+        self.assertEqual(len([d for d in body if d["kind"] == "render"]), 1)
+
     def _picture(self):
         body = self.client.get("/runs/acme-1/deliverables").json()["deliverables"]
         return next((d for d in body if d["kind"] == "render"), None)
