@@ -40,7 +40,7 @@ import httpx
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from newproject import DOCUMENT_SUFFIXES, VALID_APP_NAME, GenerateError, create
+from newproject import DOCUMENT_SUFFIXES, PROJECTS_DIR, VALID_APP_NAME, GenerateError, create
 
 _logger = logging.getLogger("polson.intake")
 
@@ -488,6 +488,172 @@ def _too_many() -> str | None:
     return None
 
 
+class Refused(Exception):
+    """Why a commission was not made, and the HTTP status that says so.
+
+    Raised by `check`, `commission` and `free_name`. `/projects` turns it into an `HTTPException`; the
+    studio's composer reads `status` and the message off it and shows them on its own form — which is
+    why it is a plain exception carrying a status rather than FastAPI's, so the studio needs no import
+    from this package to read one.
+    """
+
+    def __init__(self, status: int, message: str) -> None:
+        super().__init__(message)
+        self.status = status
+
+
+def check(name: str, workflow: str, kind: str, brief: str, deadline: str = "",
+          start: bool = True) -> int | None:
+    """Every refusal a commission can meet before anything is staged or written. Returns its minutes.
+
+    **One path for both forms.** `/projects` and the studio's composer both commission through here, so
+    the name rule, the archive guard, the offered workflows and types, the deadline ceiling and the
+    spend brake cannot drift apart — a second copy is how a form ends up accepting what the host will
+    then refuse at run time.
+    """
+    if not VALID_APP_NAME.match(name) or len(name) > MAX_NAME:
+        raise Refused(400,
+            f"{name!r} cannot be a project name — start with a letter, then letters, digits or "
+            f"underscores, up to {MAX_NAME} characters. No dashes: the name becomes an ADK app "
+            "name, which must be a Python identifier.")
+
+    # **A name free on this container is not necessarily a name free in the archive.**
+    # The CLI refuses a non-empty project directory, which covers a collision with a project
+    # still on disk. It cannot see the archive — and after a restart that is where every earlier
+    # project lives. `mirror` keys its prefix on the project's directory name, so a second run
+    # under an archived name sweeps into the first one's prefix and overwrites its event logs,
+    # its brief and any artifact sharing a filename: the two runs interleave and neither is
+    # readable afterwards. Easy to reach by accident, because the starters offer fixed names.
+    if name in archived_names():
+        raise Refused(409, (
+            f"There is already an archived project called {name!r}, and a new run under that "
+            f"name would be written over it. Choose another name — or open the archived one "
+            f"from the studio, where its renders, scripts and documents are kept."))
+
+    if workflow not in WORKFLOWS:
+        raise Refused(400, f"{workflow!r} is not offered here. Choose: {', '.join(WORKFLOWS)}.")
+
+    # Checked against *this* workflow's list rather than the union: every type here happens to be
+    # offered by both, but a type the chosen workflow lacks would reach the generator as a
+    # `--type` naming a `type.<name>.md` that is not in its template, and the agent would be sent
+    # a direction nothing describes.
+    if kind and kind not in WORKFLOWS[workflow]:
+        offered = ", ".join(WORKFLOWS[workflow]) or "none"
+        raise Refused(400, f"The {workflow} workflow does not offer a type {kind!r}. It offers: {offered}.")
+
+    if not brief.strip():
+        raise Refused(400, "A brief is required — say what you want made.")
+
+    # **Checked here, not by the input's own min/max.** Those are a convenience for a browser;
+    # this endpoint is reachable without one, and the ceiling is what keeps a run being halted
+    # cleanly by the breaker rather than killed mid-flight by the platform.
+    minutes = DEADLINES.get(workflow)
+    if (asked := deadline.strip()):
+        try:
+            minutes = int(asked)
+        except ValueError:
+            raise Refused(400, f"{asked!r} is not a number of minutes.") from None
+        if not MIN_DEADLINE_MINUTES <= minutes <= MAX_DEADLINE_MINUTES:
+            raise Refused(400, (
+                f"A commission here runs between {MIN_DEADLINE_MINUTES} and "
+                f"{MAX_DEADLINE_MINUTES} minutes. The ceiling is not arbitrary: this host ends a "
+                f"request at {REQUEST_TIMEOUT_SECONDS / 60:.0f} minutes, and the agent needs the "
+                f"rest of that to be stopped in an orderly way rather than cut off mid-drawing."))
+
+    # Before the upload is staged and before the project is written, so a refused commission
+    # leaves nothing behind and costs nothing. 429 rather than 400: the request is fine, the
+    # host is not willing right now, and a client should read it as "later" rather than "wrong".
+    if start and (full := _too_many()):
+        raise Refused(429, full)
+    return minutes
+
+
+async def commission(app: FastAPI, name: str, workflow: str, brief: str, kind: str = "",
+                     deadline: str = "", documents: list[Path] | tuple[Path, ...] = (),
+                     start: bool = True) -> str | None:
+    """Makes the project and, with `start`, sets the agent working on it. Raises `Refused`.
+
+    Returns the studio's page for the run when one was started and a studio is mounted to watch it,
+    else None. `documents` are files already staged and checked by the caller; `create` copies them
+    into the project's `documents/`, and is the only thing that writes into it.
+    """
+    minutes = check(name, workflow, kind, brief, deadline, start)
+    try:
+        create(name, workflow=workflow, prompt=brief, type_=kind or None, deadline=minutes,
+               documents=[str(p) for p in documents] or None)
+    except GenerateError as exc:
+        raise Refused(400, str(exc)) from exc
+
+    if not start:
+        return None
+
+    # **Creating a project is not starting one, and that gap is what this closes.** The form used
+    # to end at a redirect into ADK's console, where the visitor had to know to type a message
+    # before anything happened. Two directors in a row read the empty studio as a failure — which
+    # it was, of the flow rather than of the run.
+    #
+    # Fired as a task rather than awaited: a run takes minutes and the response has to come back
+    # now. Nothing reads its result, so a failure is logged rather than raised.
+    # Recorded at the moment of starting rather than of asking, so a commission refused above or
+    # one that never reached here does not consume the day's allowance.
+    _started.append(time.time())
+
+    run = asyncio.create_task(launch(app, name))
+    _running.add(run)
+    run.add_done_callback(_running.discard)
+    run.add_done_callback(lambda t: t.cancelled() or t.exception() is None
+                          or _logger.error("intake: %s failed to run: %r", name, t.exception()))
+
+    # Registered after the start, so the record is watched from this run's first event.
+    return await observe(app, name)
+
+
+def free_name(title: str) -> str:
+    """An app name for a commission titled `title`, free here and in the archive. Raises `Refused`.
+
+    `Harbour festival trailer` becomes `harbour_festival_trailer`, then `_2`, `_3`… The studio's own
+    ids are slugs with dashes, which an ADK app name cannot carry, so a commission made through the
+    composer is named here rather than by it.
+    """
+    base = re.sub(r"[^a-z0-9]+", "_", title.lower()).strip("_")[:MAX_NAME - 3].strip("_")
+    if not base[:1].isalpha():
+        base = f"request_{base}".strip("_")[:MAX_NAME - 3].strip("_")
+
+    taken = set(archived_names())
+    for n in range(1, 100):
+        name = base if n == 1 else f"{base}_{n}"
+        if name not in taken and not (Path(PROJECTS_DIR) / name).exists():
+            return name
+    raise Refused(409, "There are too many commissions with that title; choose another.")
+
+
+class Commissioner:
+    """What the mounted studio's composer is given in place of a driver: this host's way to make a run.
+
+    The studio offers what `types` says, names a request with `free_name`, and starts it with
+    `commission` — the same checks, caps and launch as `/projects`. It never imports this package; it
+    is handed one of these by `main.py`, and a studio without one stays a window onto the record.
+    """
+
+    def __init__(self, app: FastAPI) -> None:
+        self.app = app
+
+    def types(self, workflow: str) -> tuple[str, ...] | None:
+        """The types this host offers for `workflow`, or None when it does not offer the workflow."""
+        return WORKFLOWS.get(workflow)
+
+    def free_name(self, title: str) -> str:
+        return free_name(title)
+
+    async def commission(self, name: str, workflow: str, kind: str, brief: str,
+                         documents: list[Path]) -> str | None:
+        return await commission(self.app, name, workflow, brief, kind, documents=documents, start=True)
+
+
+#: `POST /requests` — the studio's composer, which commissions through `Commissioner` and so meets
+#: every check `/projects` makes.
+REQUESTS = re.compile(r"^/requests$")
+
 #: `POST /runs/<id>/say` — the director interrupting a run that is already going.
 SAY = re.compile(r"^/runs/[^/]+/say$")
 
@@ -512,7 +678,11 @@ def observing_only(method: str, path: str, root_path: str = "") -> bool:
     question the *host* asked, and with no host that could ask one, `ObservedRun.answer` returned
     False and refusing here merely saved the request a second refusal. Now the host is this process.
 
-    Creating a project and starting a run still need a driver, and are still refused.
+    **And one creation: the studio's composer, `POST /requests`.** It is allowed because it does not
+    drive anything itself: on this runtime it commissions through `Commissioner`, which is `/projects`
+    under another form, with the same checks, caps and launch. Starting or continuing a request from its
+    page (`/requests/<name>/start`) and the studio's own `POST /projects` and `POST /runs` still need a
+    driver, and are still refused.
 
     **The subtlety is the path.** Middleware on a mounted app sees the *whole* path with `root_path`
     beside it — `/studio/observe`, not `/observe`; only route matching strips the prefix afterwards.
@@ -526,7 +696,8 @@ def observing_only(method: str, path: str, root_path: str = "") -> bool:
         path = path[len(root_path):]
 
     path = path.rstrip("/")
-    return path == "/observe" or bool(SAY.match(path)) or bool(ANSWER.match(path))
+    return (path == "/observe" or bool(SAY.match(path)) or bool(ANSWER.match(path))
+            or bool(REQUESTS.match(path)))
 
 
 async def launch(app: FastAPI, name: str, message: str = OPENING) -> None:
@@ -779,107 +950,36 @@ def mount(app: FastAPI) -> None:
         start: str = Form(""),
     ):
         """Creates a project, stages the upload into its `documents/`, opens the console on it."""
-        name = name.strip()
-        if not VALID_APP_NAME.match(name) or len(name) > MAX_NAME:
-            raise HTTPException(400,
-                f"{name!r} cannot be a project name — start with a letter, then letters, digits or "
-                f"underscores, up to {MAX_NAME} characters. No dashes: the name becomes an ADK app "
-                "name, which must be a Python identifier.")
+        name, kind = name.strip(), kind.strip()
 
-        # **A name free on this container is not necessarily a name free in the archive.**
-        # The CLI refuses a non-empty project directory, which covers a collision with a project
-        # still on disk. It cannot see the archive — and after a restart that is where every earlier
-        # project lives. `mirror` keys its prefix on the project's directory name, so a second run
-        # under an archived name sweeps into the first one's prefix and overwrites its event logs,
-        # its brief and any artifact sharing a filename: the two runs interleave and neither is
-        # readable afterwards. Easy to reach by accident, because the starters offer fixed names.
-        if name in archived_names():
-            raise HTTPException(409, (
-                f"There is already an archived project called {name!r}, and a new run under that "
-                f"name would be written over it. Choose another name — or open the archived one "
-                f"from the studio, where its renders, scripts and documents are kept."))
-
-        if workflow not in WORKFLOWS:
-            raise HTTPException(400, f"{workflow!r} is not offered here. Choose: {', '.join(WORKFLOWS)}.")
-
-        # Checked against *this* workflow's list rather than the union: every type here happens to be
-        # offered by both, but a type the chosen workflow lacks would reach the generator as a
-        # `--type` naming a `type.<name>.md` that is not in its template, and the agent would be sent
-        # a direction nothing describes.
-        kind = kind.strip()
-        if kind and kind not in WORKFLOWS[workflow]:
-            offered = ", ".join(WORKFLOWS[workflow]) or "none"
-            raise HTTPException(400,
-                f"The {workflow} workflow does not offer a type {kind!r}. It offers: {offered}.")
-
-        if not brief.strip():
-            raise HTTPException(400, "A brief is required — say what you want made.")
-
-        # **Checked here, not by the input's own min/max.** Those are a convenience for a browser;
-        # this endpoint is reachable without one, and the ceiling is what keeps a run being halted
-        # cleanly by the breaker rather than killed mid-flight by the platform.
-        minutes = DEADLINES.get(workflow)
-        if (asked := deadline.strip()):
-            try:
-                minutes = int(asked)
-            except ValueError:
-                raise HTTPException(400, f"{asked!r} is not a number of minutes.") from None
-            if not MIN_DEADLINE_MINUTES <= minutes <= MAX_DEADLINE_MINUTES:
-                raise HTTPException(400, (
-                    f"A commission here runs between {MIN_DEADLINE_MINUTES} and "
-                    f"{MAX_DEADLINE_MINUTES} minutes. The ceiling is not arbitrary: this host ends a "
-                    f"request at {REQUEST_TIMEOUT_SECONDS / 60:.0f} minutes, and the agent needs the "
-                    f"rest of that to be stopped in an orderly way rather than cut off mid-drawing."))
-
-        # Before the upload is staged and before the project is written, so a refused commission
-        # leaves nothing behind and costs nothing. 429 rather than 400: the request is fine, the
-        # host is not willing right now, and a client should read it as "later" rather than "wrong".
-        if start and (full := _too_many()):
-            raise HTTPException(429, full)
+        # Checked before the upload is staged, so a refused commission costs nothing; `commission`
+        # checks again, which is cheap and keeps it safe to call without this.
+        try:
+            check(name, workflow, kind, brief, deadline, bool(start))
+        except Refused as exc:
+            raise HTTPException(exc.status, str(exc)) from exc
 
         # Staged into a scratch directory *before* the project exists, so a refused upload leaves
         # nothing behind and no half-made project. Its own directory rather than the shared temp
         # folder, so the file can keep its real name without colliding with a concurrent upload of
         # the same name. `create` copies it in and is the only thing that writes into the project.
         scratch: Path | None = None
-        staged: Path | None = None
         try:
+            staged: list[Path] = []
             if document is not None and document.filename:
                 scratch = Path(tempfile.mkdtemp(prefix="polson-intake-"))
-                staged = await stage_upload(document, scratch)
+                staged.append(await stage_upload(document, scratch))
 
-            create(name, workflow=workflow, prompt=brief, type_=kind or None,
-                   deadline=minutes,
-                   documents=[str(staged)] if staged else None)
-        except GenerateError as exc:
-            raise HTTPException(400, str(exc)) from exc
+            watching = await commission(request_app, name, workflow, brief, kind, deadline,
+                                        documents=staged, start=bool(start))
+        except Refused as exc:
+            raise HTTPException(exc.status, str(exc)) from exc
         finally:
             if scratch is not None:
                 shutil.rmtree(scratch, ignore_errors=True)
 
         # The app appears without a restart — `list_agents` re-reads the directory on every call,
-        # which `newproject` relies on too.
-        if not start:
-            return RedirectResponse(f"/dev-ui/?app={name}", status_code=303)
-
-        # **Creating a project is not starting one, and that gap is what this closes.** The form used
-        # to end at a redirect into ADK's console, where the visitor had to know to type a message
-        # before anything happened. Two directors in a row read the empty studio as a failure — which
-        # it was, of the flow rather than of the run.
-        #
-        # Fired as a task rather than awaited: a run takes minutes and the response has to come back
-        # now. Nothing reads its result, so a failure is logged rather than raised.
-        # Recorded at the moment of starting rather than of asking, so a commission refused above or
-        # one that never reached here does not consume the day's allowance.
-        _started.append(time.time())
-
-        run = asyncio.create_task(launch(request_app, name))
-        _running.add(run)
-        run.add_done_callback(_running.discard)
-        run.add_done_callback(lambda t: t.cancelled() or t.exception() is None
-                              or _logger.error("intake: %s failed to run: %r", name, t.exception()))
-
-        # Straight to the record, which is the thing worth looking at while it works. Falls back to
-        # the console when there is no studio mounted, so this never strands a visitor.
-        watching = await observe(request_app, name)
+        # which `newproject` relies on too. Started, it goes straight to the record, which is the
+        # thing worth looking at while it works; the console is the fallback when there is no studio
+        # mounted, so this never strands a visitor.
         return RedirectResponse(watching or f"/dev-ui/?app={name}", status_code=303)

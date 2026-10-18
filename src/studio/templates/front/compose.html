@@ -11,15 +11,16 @@
   <input type="hidden" name="card" value="{{ card.slug }}">
   <header class="ps-rbar fr-sticky">
     {% if refused %}<p class="fr-notice is-failed" role="alert">{{ refused }}</p>{% endif %}
-    {% if observe_only %}<p class="fr-notice">This studio can watch requests but not make them.{% if create_at %} <a class="fr-link" href="{{ create_at }}">Make one on the create page</a>.{% endif %}</p>{% endif %}
+    {% if not can_make %}<p class="fr-notice">This studio can watch requests but not make them.{% if create_at %} <a class="fr-link" href="{{ create_at }}">Make one on the create page</a>.{% endif %}</p>
+    {% elif not offered %}<p class="fr-notice">This studio does not make {{ card.title|lower }} requests yet. <a class="fr-link" href="{{ base }}/workflows">Choose another workflow</a>.</p>{% endif %}
     <div class="ps-rbar-top">
       <input class="ps-rbar-title" name="title" aria-label="Request title" required maxlength="80"
              placeholder="Name this request" value="{{ form.title or '' }}">
       {{ m.pill('draft') }}
       <div class="ps-rbar-actions">
-        <button type="submit" class="ps-btn ps-btn-secondary" name="action" value="save" {{ 'disabled' if observe_only }}>Save as draft</button>
-        <button type="submit" class="ps-btn ps-btn-primary" name="action" value="start" {{ 'disabled' if observe_only }}
-                {% if active %}title="The studio is making another request; this one will be saved as a draft."{% endif %}>Start in the studio</button>
+        {% if drafts %}<button type="submit" class="ps-btn ps-btn-secondary" name="action" value="save">Save as draft</button>{% endif %}
+        <button type="submit" class="ps-btn ps-btn-primary" name="action" value="start" {{ 'disabled' if not can_make or not offered }}
+                {% if active and drafts %}title="The studio is making another request; this one will be saved as a draft."{% endif %}>Start in the studio</button>
       </div>
     </div>
 
@@ -61,7 +62,7 @@
           <div class="ps-ogrid-tiles" style="--cols: 1">
             {% for r in card.routes %}
             <label class="ps-otile fr-plain" data-label="{{ r.label }}">
-              <input class="fr-vh" type="radio" name="route" value="{{ loop.index0 }}" {{ 'checked' if loop.index0 == route }}>
+              <input class="fr-vh" type="radio" name="route" value="{{ loop.index0 }}" {{ 'checked' if loop.index0 == route }} {{ 'disabled' if offered and loop.index0 not in offered }}>
               <span class="ps-otile-check" aria-hidden="true">{{ m.icon('check', 14) }}</span>
               <span class="ps-otile-text"><span class="ps-otile-label">{{ r.label }}</span>{% if r.detail %}<span class="ps-otile-detail" style="font-family: var(--font-sans)">{{ r.detail }}</span>{% endif %}</span>
             </label>

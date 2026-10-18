@@ -212,7 +212,8 @@ def console_app(apps: Path | None, project: str) -> str | None:
 
 def create_app(root: Path | None = None, registry: Registry | None = None,
                observe_only: bool = False, create_at: str | None = None,
-               console_at: str | None = None, console_apps: Path | None = None) -> FastAPI:
+               console_at: str | None = None, console_apps: Path | None = None,
+               commissioner: Any = None) -> FastAPI:
     """Builds the app. Takes its collaborators so a test can supply its own.
 
     `observe_only` is for a host that can read a record but not drive one — the ADK runtime, whose
@@ -232,12 +233,18 @@ def create_app(root: Path | None = None, registry: Registry | None = None,
     recovered project — which is most of what a visitor opens — has a run page and no app behind it.
     Linking to `?app=<name>` regardless would send exactly those visitors to a console opening an app
     that is not there. Only the directory knows, so the directory is asked.
+
+    `commissioner` is how an `observe_only` host makes work after all: the ADK runtime passes one
+    (`adk_agent.intake.Commissioner`), and the client composer then commissions through it instead of
+    refusing. It offers `types(workflow)`, `free_name(title)` and `async commission(...)`, and refuses with
+    an exception carrying `status`. Passed in rather than imported, so this package never imports the ADK.
     """
     app = FastAPI(title="Polson Studio", docs_url=None, redoc_url=None)
     app.state.root = Path(root or DEFAULT_ROOT).resolve()
     app.state.registry = registry or Registry()
     app.state.observe_only = observe_only
     app.state.create_at = create_at
+    app.state.commissioner = commissioner
     app.state.console_at = console_at
     app.state.console_apps = Path(console_apps).resolve() if console_apps else None
 

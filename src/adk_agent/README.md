@@ -347,8 +347,11 @@ python-adk/Scripts/python.exe src/adk_agent/newproject.py bookbindery --workflow
 > POLSON_BUDGET_TOKENS=2000000 python-adk/Scripts/python.exe -m uvicorn main:app --app-dir src/adk_agent
 > ```
 >
-> The cap counts **raw** input on purpose. On that run 61% was cached and billed at about a tenth, so
-> the bill was well under the number that halted it — it is a runaway alarm, not a budget in money.
+> **The cap now counts cache-adjusted input, not raw.** It counted raw when the figures above were measured,
+> and that stopped well-cached runs as though they had spent several times what they had (kubrick1 halted at
+> 2.0M raw, about 300k cache-adjusted). `studio._billable` weights cached tokens at what they bill, and
+> `budget_status` reports both figures. Measured 2026-10-18 on `harbour_at_dawn`: 3.30M raw input, 2.48M of it
+> cached, about 1.07M against the cap, so a 2M cap did not trip. It is still a runaway alarm, not a budget in money.
 
 **4. Serve.** Through `main.py`, which is what the container will run, so local and deployed behave
 the same:

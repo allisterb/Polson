@@ -898,6 +898,101 @@ class CapEnforcementTests(unittest.TestCase):
         self.assertIn("brief is required", answer.text)
 
 
+class ComposerBoundaryTests(unittest.TestCase):
+    """The studio's composer may create through the mounted studio, and nothing else that drives may.
+
+    `POST /requests` commissions through `Commissioner`, which is `/projects` under another form, so it
+    meets every check this module makes. Starting or continuing a request from its page needs a driver.
+    """
+
+    def test_composing_a_request_is_allowed(self):
+        self.assertTrue(intake.observing_only("POST", "/studio/requests", "/studio"))
+        self.assertTrue(intake.observing_only("POST", "/studio/requests/", "/studio"))
+
+    def test_starting_or_continuing_a_request_is_still_refused(self):
+        for attempt in ("/studio/requests/lighthouse/start", "/studio/requests/lighthouse",
+                        "/studio/requests/../projects", "/studio/requestsx"):
+            self.assertFalse(intake.observing_only("POST", attempt, "/studio"), attempt)
+
+
+class FreeNameTests(unittest.TestCase):
+    """A composer title becomes an ADK app name that is free here and in the archive."""
+
+    def setUp(self) -> None:
+        self.projects = Path(tempfile.mkdtemp(prefix="polson-free-name-"))
+        self.patches = [mock.patch.object(intake, "PROJECTS_DIR", self.projects),
+                        mock.patch.object(intake, "archived_names", return_value=[])]
+        for p in self.patches:
+            p.start()
+
+    def tearDown(self) -> None:
+        for p in self.patches:
+            p.stop()
+
+    def test_a_title_becomes_an_identifier(self):
+        for title, name in (("Harbour festival trailer", "harbour_festival_trailer"),
+                            ("Lighthouse-sketch!", "lighthouse_sketch"), ("2025 box office", "request_2025_box_office"),
+                            ("", "request"), ("   ---   ", "request")):
+            got = intake.free_name(title)
+            self.assertEqual(got, name, title)
+            self.assertTrue(newproject.VALID_APP_NAME.match(got) and len(got) <= intake.MAX_NAME, got)
+
+    def test_a_long_title_stays_within_the_limit_with_room_for_a_suffix(self):
+        got = intake.free_name("a very long title " * 10)
+        self.assertLessEqual(len(got) + 3, intake.MAX_NAME)
+
+    def test_a_name_on_disk_or_in_the_archive_is_skipped(self):
+        (self.projects / "lighthouse").mkdir()
+        self.assertEqual(intake.free_name("Lighthouse"), "lighthouse_2")
+        with mock.patch.object(intake, "archived_names", return_value=["lighthouse_2"]):
+            self.assertEqual(intake.free_name("Lighthouse"), "lighthouse_3")
+
+
+class CommissionTests(unittest.IsolatedAsyncioTestCase):
+    """`commission` is `/projects` without the form: the same checks, then the same create and launch."""
+
+    async def test_an_offered_commission_is_created_with_its_documents(self):
+        doc = Path(tempfile.mkdtemp(prefix="polson-commission-")) / "notes.txt"
+        doc.write_text("lantern room first")
+        with mock.patch.object(intake, "archived_names", return_value=[]), \
+             mock.patch.object(intake, "create") as create:
+            where = await intake.commission(None, "lighthouse", "drawing", "A lighthouse.", "review",
+                                            documents=[doc], start=False)
+        self.assertIsNone(where, "nothing is watched when nothing was started")
+        create.assert_called_once_with("lighthouse", workflow="drawing", prompt="A lighthouse.", type_="review",
+                                       deadline=intake.DEADLINES["drawing"], documents=[str(doc)])
+
+    async def test_what_the_form_refuses_commission_refuses_before_creating_anything(self):
+        cases = (("lighthouse", "poster", "film", "x", 400, "not offered here"),
+                 ("light-house", "drawing", "", "x", 400, "cannot be a project name"),
+                 ("lighthouse", "drawing", "seed", "x", 400, "does not offer a type"),
+                 ("lighthouse", "drawing", "", "  ", 400, "brief is required"))
+        for name, workflow, kind, brief, status, words in cases:
+            with self.subTest(workflow=workflow, kind=kind), \
+                 mock.patch.object(intake, "archived_names", return_value=[]), \
+                 mock.patch.object(intake, "create") as create:
+                with self.assertRaises(intake.Refused) as caught:
+                    await intake.commission(None, name, workflow, brief, kind, start=False)
+                self.assertEqual(caught.exception.status, status)
+                self.assertIn(words, str(caught.exception))
+                create.assert_not_called()
+
+    async def test_the_spend_brake_refuses_a_start_with_429(self):
+        with mock.patch.object(intake, "archived_names", return_value=[]), \
+             mock.patch.object(intake, "_too_many", return_value="the limit for this host"), \
+             mock.patch.object(intake, "create") as create:
+            with self.assertRaises(intake.Refused) as caught:
+                await intake.commission(None, "lighthouse", "drawing", "A lighthouse.", "review")
+        self.assertEqual(caught.exception.status, 429)
+        create.assert_not_called()
+
+    def test_the_commissioner_offers_what_the_form_offers(self):
+        commissioner = intake.Commissioner(None)
+        for workflow, types in intake.WORKFLOWS.items():
+            self.assertEqual(commissioner.types(workflow), types)
+        self.assertIsNone(commissioner.types("poster"))
+
+
 if __name__ == "__main__":
     unittest.main()
 
