@@ -21,7 +21,7 @@ proceed as though the director had chosen it.
 | Parameter | Value |
 | :--- | :--- |
 | What it announces | |
-| Who it is for | |
+| Who it is for (one audience, or each of several: A, B…) | |
 | What carries over from a poster or other source in `documents/` | |
 | Length in seconds | |
 | The title, and anything else that must be read | |

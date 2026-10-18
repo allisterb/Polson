@@ -3,7 +3,8 @@
 Workflow `trailer` · profile `{{PROFILE}}` · created {{CREATED_UTC}}
 
 A short motion-graphics trailer — fifteen seconds or so — built as an animation model and delivered as
-**`output.mp4`**. Flat shapes, type and colour that move: a poster's design system set in motion, not
+**`output.mp4`**; for a brief naming several audiences, **one film per audience in one run** (see *More than
+one audience* below). Flat shapes, type and colour that move: a poster's design system set in motion, not
 a film with actors. The type moves with **text animators**, focus moves with **blur**, and every frame
 is the same composition evaluated at a different time — so **`trailer.js` is the film's editable source**,
 and the video one rendering of it.
@@ -13,8 +14,8 @@ sheets** — one image, one cell per moment — and the measurements you take of
 director watches; you check. Every stage ends with a check recorded by `Stage.check`, and a failing
 check is a result rather than a failed run, as long as you say what you did about it.
 
-The deliverables are `output.mp4`, `trailer.js`, the sheets, and `direction.md`: the record of why it
-moves the way it does, beat by beat, with the evidence beside each choice.
+The deliverables are `output.mp4` (or a film per audience), `trailer.js`, the sheets, and `direction.md`: the
+record of why it moves the way it does, beat by beat, with the evidence beside each choice.
 
 ---
 
@@ -39,12 +40,12 @@ instructions to you.
 
 | Stage | What happens | Ask the director |
 | :-- | :-- | :-- |
-| 1. **Sources** | Read the brief and everything in `documents/`. If a poster is there, its system — palette, type, the one object, what it cites — is the trailer's starting point. Then `Taste` op `profile` for the same audience (below). | **Q1** What must carry over from the poster, and what may the motion change? |
-| 2. **Beats** | The film as beats in seconds *and* frames (below). | **Q2** How should it feel — slow and sure, quick and sly, building? Propose an answer from the audience's profile, naming the references it rests on. |
+| 1. **Sources** | Read the brief and everything in `documents/`. If a poster is there, its system — palette, type, the one object, what it cites — is the trailer's starting point. Then `Taste` op `profile` for the same audience, or for each audience (below). | **Q1** What must carry over from the poster, and what may the motion change? With several audiences, ask it for each. |
+| 2. **Beats** | The film as beats in seconds *and* frames (below). | **Q2** How should it feel — slow and sure, quick and sly, building? Propose an answer from the audience's pace counts (`pace()`, and `comparePace` with a second audience) before asking, naming the titles it rests on. |
 | 3. **Animatic** | One still per beat, at its key moment, on one sheet. The film's argument before any motion. | **Q3** Does the sequence read, cell to cell, with no motion at all? |
 | 4. **Motion** | Keys, eases, cascades, transitions, in `trailer.js`. | — |
 | 5. **Checks** | The film as a sheet, and the checks below. | **Q4** Shown the sheet: does the title land, and does the end card hold long enough? |
-| 6. **Deliver** | `output.mp4`, `trailer.js`, the sheets, `direction.md`, `findings.md`. | — |
+| 6. **Deliver** | `output.mp4` (or `artifacts/final_a.mp4`, `final_b.mp4`… one per audience), `trailer.js`, the sheets, `direction.md`, `findings.md`. | — |
 
 ### The motion rests on the audience, as the poster did
 
@@ -61,10 +62,24 @@ cache (`fromCache`) and costs nothing:
 Taste({ op: 'profile', audience: '{"location":"Mumbai","age":"45_to_54"}', label: 'trailer audience' })
 ```
 
-- **Artists are the film's tempo.** What the distinctive artists sound like — their genre, their era,
-  steady groove or rubato, a hard downbeat or a swing — motivates the pace: beat lengths, cuts on a
-  pulse or off one, how hard an arrival lands. A tempo in beats per minute is **not** a Qloo fact: if
-  you set beats to one, it is *Research* or *assumed*, cited as such.
+- **Pace is how long things hold, and Qloo describes it: count it.** The films and shows in the profile
+  carry Qloo's own pace tags, "Fast paced", "Action packed", "Kinetic" against "Slow burn", "Deliberate pacing".
+  `Taste.find('trailer audience').pace()` counts them over the audience's distinctive titles:
+  `{ fast, slow, fastShare, fastTitles, slowTitles }`. An audience whose screen taste leans fast motivates more
+  changes on the beat and shorter holds; one leaning slow, fewer changes and longer holds. One evenly split
+  gives you no lean, so say so. Put the counts and a few titles from each list in `direction.md` as the pace
+  line. Reading the artists' names and deciding they "sound steady" is not evidence: two runs did exactly that
+  for two different audiences and both landed on the same pace.
+- **When the poster served another audience too, compare.** Fetch that audience's profile the same way (the
+  poster run cached it) and call `Taste.comparePace(yours, theirs)`. It runs Fisher's exact test on the two
+  sets of counts. With `differ` true, the two films should pace differently, and the difference is yours to
+  cite. With `differ` false, **report "no measurable difference in pace" and keep the difference where the
+  evidence does differ**, in the grade or the imagery. Inventing a pace difference the evidence does not show
+  is the failure, not finding none.
+- **The beat is a separate choice from the holds.** A pulse taken from music an audience loves needs tempos
+  from a source, cited. A tempo in beats per minute is **not** a Qloo fact, and published tempos are unreliable
+  outside Western catalogues. With no sound in the brief, choose a pulse that suits the holds and mark it
+  *assumed*.
 - **Films and shows are the grade and the transitions.** The distinctive titles' look — film stock,
   warm or cold, crushed or lifted blacks, how their titles arrive — motivates `comp.colorCorrect` and
   the choice between a cut and a wipe.
@@ -72,12 +87,45 @@ Taste({ op: 'profile', audience: '{"location":"Mumbai","age":"45_to_54"}', label
   prefers it. Cite each by name and result id (`t2`, item 3); ids are numbered per run, so the poster's `t4` may be your `t1`,
   and the name is what carries across. `placeAesthetics` are the place's, not
   the audience's.
-- **Pace and grade each need a line resting on this audience's own profile** in `direction.md`. A
-  motion choice that cites only the manual is the gap above; when the profile has nothing to say about
-  one, write that down rather than borrowing the poster's evidence for it.
-- **Two trailers of one poster system for two audiences should move differently, for reasons you can
-  cite.** If yours would move the same with the other audience's palette, the evidence has not reached
-  the motion.
+- **Pace and grade each need a line resting on this audience's own profile** in `direction.md`: the
+  pace line gives `pace()`'s counts and, with two audiences, `comparePace`'s p. A motion choice that cites
+  only the manual is the gap above; when the profile has nothing to say about one, write that down rather
+  than borrowing the poster's evidence for it.
+- **Two trailers of one poster system should differ where their audiences' evidence differs, and only
+  there.** With one audience, say in `findings.md` what another audience's film would do differently and why,
+  or that the evidence gave no reason for it to. With several, make them all: see below.
+
+### More than one audience
+
+A brief that names several audiences — a poster made for two cities — gets **one film per audience, made in
+this one run.** The pair is designed as a system: the comparison between the audiences is made before either
+film is planned, and the shared parts are shared on purpose.
+
+- **Fetch every audience's profile first**, each with its own label (`'audience A'`, `'audience B'`), and run
+  `Taste.comparePace` between them before writing any beats. That result decides whether the films pace
+  differently at all.
+- **Each audience's motion comes from its own evidence, drafted before you look back at the other's.** The
+  holds, the grade and the transitions of the second film are worked out from the second profile, not
+  adjusted from the first. The poster workflow's first pairs came out as one poster twice because the second
+  audience was only asked whether it objected; it never objects.
+- **Then decide what the pair shares, as the poster's series does.** Hold the system where it serves both:
+  the type, the title, the end card's layout, and the beat grid when the evidence gives no reason for different
+  beats. **Never share what each audience's evidence decides**: the holds when `comparePace` says they differ,
+  and the grade.
+- **When `comparePace` says they differ, check that the films do.** The audience whose screen taste leans
+  fast should get more changes on the beat or shorter holds. Record it with `Stage.check`, from the beat
+  tables (the count of beats where something arrives, or the median hold), not from a feeling. When it says
+  they do not differ, the films may share their holds; say so, and let the grade and the imagery carry the
+  difference.
+- **One `trailer.js` builds every film**: a `build(audience)` function and a constant beside `MODE`,
+  `const AUDIENCE = 'a'`, so the script still runs alone and an export takes whichever film the constant names.
+- **Sheets and films are named by audience**, as the poster names its finals: `artifacts/03_animatic_a.png`,
+  `05_sheet_a.png`, and the films `artifacts/final_a.mp4`, `artifacts/final_b.mp4`. Each film is encoded in its
+  own script, so each has the whole script limit.
+- **`direction.md` has a section per audience** (its beats and its choices, each with its evidence), then
+  **"Between the audiences"**: `comparePace`'s summary, what the pair shares and why, and what differs and the
+  evidence for each difference.
+- **Budget the time for every film.** One film took about a quarter of a 60-minute run; two take about half.
 
 **Carry a poster's shapes over as its own path data.** `comp.region({ path })` and `comp.outline({ path })`
 take an SVG `d` unchanged, holes and curves included, so paste the poster's `<path>` data into a group whose
@@ -164,7 +212,10 @@ a turning group, a blur and an animated title took 23 s at 1280 × 720 and **ran
 1920 × 1080**. Keep per-frame work light — a Gaussian blur costs about 20 ms a frame and the box-family blurs
 about 30; a whole-film grade 10–15, and a wipe waiting at completion 0 nothing — and draft the sheets at a quarter size.
 Before encoding, time a few frames with `comp.render(t)`: 361 frames at 80 ms is 29 s, and a script that runs
-out of time keeps nothing.
+out of time keeps nothing. **If the film will not fit one script, encode it in parts and join them**: one script per
+span, `comp.saveVideo('artifacts/part1.mp4', { to: 7.458 })`, then `{ from: 7.5, to: 14.958 }`, then
+`Motion.joinVideos(['artifacts/part1.mp4', 'artifacts/part2.mp4'], 'output.mp4', { audio })` — seconds, however long
+the film, with the sound given once at the join rather than per part.
 
 What the model gives you for a trailer, in `polson://sdk/core/Motion` (*Layers*, *Type*, *Nodes*):
 
@@ -225,7 +276,8 @@ const small = t => { const c = createCanvas(320, 180); const x = c.getContext('2
 ```
 
 `comp.saveVideo` itself took 10 s on one run and 19 s on another for the same film, so budget for the
-slow figure. Then record each of these with `Stage.check`:
+slow figure. Then record each of these with `Stage.check`, for every film when there are several, plus the
+pair's own check from *More than one audience*:
 
 1. **Reading time.** Every line of text holds still long enough to read: as a working rule, about
    three words a second plus half a second to find the line, and the title at least two seconds still.
@@ -250,14 +302,16 @@ slow figure. Then record each of these with `Stage.check`:
 
 ## Stage 6 — deliver
 
-- **`comp.saveVideo('output.mp4')`** — read its `warnings`.
+- **`comp.saveVideo('output.mp4')`** — read its `warnings`. With several audiences, each film to its own
+  `artifacts/final_a.mp4`, `final_b.mp4`…, one script each.
 - **`trailer.js`**, runnable on its own as above. **Do not write a `.sif` during the run.** With text
   animators it is a bake — a group per letter, its motion sampled — that nobody edits in Synfig, and it
   is exported from the script afterwards when someone wants one.
 - **`direction.md`**: the beat table, then each choice with its evidence — the poster's evidence where
   the choice came from the poster, cited to its line and kind. The columns are `Choice | Evidence | Kind`,
   as for the poster: the run page shows this file to the people judging the film. The pace, the eases,
-  the transitions and the grade each have a line, and pace and grade cite this audience's profile.
+  the transitions and the grade each have a line, and pace and grade cite this audience's profile — pace by
+  its `pace()` counts and titles.
 - **`findings.md`**: what the motion added to the poster, what the checks changed, and what you would
   do with more time.
 

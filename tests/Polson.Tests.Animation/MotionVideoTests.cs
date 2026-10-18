@@ -202,6 +202,99 @@ public class MotionVideoTests : TestsRuntime, IDisposable
         Assert.InRange(Onset(Samples(Path.Combine(root, "late.mp4"))), 0.08, 0.13);
     }
 
+    /// <summary>A two-second film whose colour runs red to blue, so every frame is its own.</summary>
+    private MotionComposition Ramp(MotionToolkit motion, int size = 32)
+    {
+        var comp = motion.Composition(Opts(("width", (double)size), ("height", (double)size), ("fps", 25d), ("duration", 2d)));
+        comp.Fill(Opts(("color", motion.Nodes.Animated("color", new object[]
+            { Opts(("time", 0d), ("value", "#ff0000")), Opts(("time", 2d), ("value", "#0000ff")) }))));
+        return comp;
+    }
+
+    /// <summary>
+    /// A film encoded a span at a time and joined is the film encoded whole: the same frames, in order, at the same length.
+    /// This is how a film too long to encode inside one script's time limit is made.
+    /// </summary>
+    [Fact]
+    public void TestPartsJoinIntoTheWholeFilm()
+    {
+        if (!FFmpeg.Available) return;
+        var motion = new MotionToolkit(root);
+        var comp = Ramp(motion);
+        comp.SaveVideo("whole.mp4", Opts(("to", 1.96)));
+        comp.SaveVideo("part1.mp4", Opts(("to", 0.96)));
+        comp.SaveVideo("part2.mp4", Opts(("from", 1d), ("to", 1.96)));
+
+        var result = motion.JoinVideos(new List<object?> { "part1.mp4", "part2.mp4" }, "joined.mp4");
+
+        Assert.Equal(2, result["parts"]);
+        Assert.Equal(50, result["frames"]);
+        Assert.Empty((List<object?>)result["warnings"]!);
+        Assert.False(File.Exists(Path.Combine(root, "joined.mp4.parts.txt")), "the list ffmpeg read was left behind");
+        var (whole, n) = Frames(Path.Combine(root, "whole.mp4"), 32, 32);
+        var (joined, m) = Frames(Path.Combine(root, "joined.mp4"), 32, 32);
+        Assert.Equal(50, n);
+        Assert.Equal(n, m);
+        for (var f = 0; f < n; f++)
+        {
+            var (a, b) = (Pixel(whole, f, 32, 32, 16, 16), Pixel(joined, f, 32, 32, 16, 16));
+            Near(b, a.R, a.G, a.B);
+        }
+    }
+
+    /// <summary>
+    /// Sound given at the join lands on the whole film from its <c>start</c>, across the seam; parts with sound of their own
+    /// have it replaced, and the result says so.
+    /// </summary>
+    [Fact]
+    public void TestSoundGivenAtTheJoinPlaysOverTheWholeFilm()
+    {
+        if (!FFmpeg.Available) return;
+        Wav("line.wav", 0.5, 0.8);
+        var motion = new MotionToolkit(root);
+        var comp = Ramp(motion);
+        comp.SaveVideo("a.mp4", Opts(("to", 0.96)));
+        comp.SaveVideo("b.mp4", Opts(("from", 1d), ("to", 1.96)));
+
+        var result = motion.JoinVideos(new List<object?> { "a.mp4", "b.mp4" }, "talk.mp4", Opts(("audio", Opts(("path", "line.wav"), ("start", 0.6)))));
+
+        var samples = Samples(Path.Combine(root, "talk.mp4"));
+        Assert.InRange(Onset(samples), 1.08, 1.13);                     // the tone crosses the seam at 1 s unbroken
+        Assert.InRange(samples.Length / 16000d, 1.97, 2.03);
+        Assert.Empty((List<object?>)result["warnings"]!);
+
+        comp.SaveVideo("c.mp4", Opts(("to", 0.96), ("audio", "line.wav")));
+        comp.SaveVideo("d.mp4", Opts(("from", 1d), ("to", 1.96), ("audio", Opts(("path", "line.wav"), ("start", 1d)))));
+        var replaced = motion.JoinVideos(new List<object?> { "c.mp4", "d.mp4" }, "again.mp4", Opts(("audio", "line.wav")));
+        Assert.Contains((List<object?>)replaced["warnings"]!, w => ((string)w!).Contains("replaced"));
+    }
+
+    /// <summary>What cannot be joined as it is, is refused by name: parts that differ, some with sound and some without, a
+    /// file that is not what its name says, the output among the parts, and something that is not a list.</summary>
+    [Fact]
+    public void TestPartsThatCannotJoinAreRefusedByName()
+    {
+        if (!FFmpeg.Available) return;
+        Wav("line.wav", 0.1, 0.2);
+        var motion = new MotionToolkit(root);
+        Ramp(motion).SaveVideo("small.mp4", Opts(("to", 0.96)));
+        Ramp(motion, 48).SaveVideo("large.mp4", Opts(("to", 0.96)));
+        Ramp(motion).SaveVideo("loud.mp4", Opts(("to", 0.96), ("audio", "line.wav")));
+        File.WriteAllText(Path.Combine(root, "fake.mp4"), "not a video at all");
+
+        var size = Assert.Throws<ArgumentException>(() => motion.JoinVideos(new List<object?> { "small.mp4", "large.mp4" }, "x.mp4"));
+        Assert.Contains("'large.mp4' is h264 48x48", size.Message);
+        var sound = Assert.Throws<ArgumentException>(() => motion.JoinVideos(new List<object?> { "small.mp4", "loud.mp4" }, "x.mp4"));
+        Assert.Contains("some parts have sound", sound.Message);
+        var fake = Assert.Throws<ArgumentException>(() => motion.JoinVideos(new List<object?> { "small.mp4", "fake.mp4" }, "x.mp4"));
+        Assert.Contains("does not begin like", fake.Message);
+        var self = Assert.Throws<ArgumentException>(() => motion.JoinVideos(new List<object?> { "small.mp4" }, "small.mp4"));
+        Assert.Contains("a new path", self.Message);
+        Assert.Throws<ArgumentException>(() => motion.JoinVideos("small.mp4", "x.mp4"));
+        Assert.ThrowsAny<Exception>(() => motion.JoinVideos(new List<object?> { "../outside.mp4" }, "x.mp4"));
+        Assert.False(File.Exists(Path.Combine(root, "x.mp4")));
+    }
+
     /// <summary>Frames captured from a composition carry their rate and start, so the sound needs neither repeated.</summary>
     [Fact]
     public void TestCapturedFramesSayTheirOwnRateAndStart()

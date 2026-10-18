@@ -90,6 +90,13 @@ public sealed class TasteResult
         $"Qloo Insights API, {Request} ({(FromCache ? "cached, retrieved " + CachedUtc : "retrieved " + RetrievedUtc)}"
         + (RequestId is null ? ")" : $", request {RequestId})");
 
+    /// <summary>
+    /// How the films and shows in this answer pace themselves, in Qloo's own tags — for a <c>profile</c>, the audience's
+    /// distinctive ones: <c>{ fast, slow, both, untagged, n, fastShare, fastTitles, slowTitles, vocabulary }</c>. See
+    /// <see cref="TastePace"/>.
+    /// </summary>
+    public Dictionary<string, object?> Pace() => TastePace.Count(Entities);
+
     public override string ToString() => $"{Id} [{Op}] {Label} ({(Ok ? "ok" : "failed")})";
 
     #endregion
@@ -181,6 +188,19 @@ public sealed class TasteToolkit
         string.IsNullOrWhiteSpace(text)
             ? null
             : registry.All.LastOrDefault(r => r.Label.Contains(text, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Two answers' pace side by side — two audiences' profiles — with Fisher's exact test on their fast and slow counts:
+    /// <c>{ a, b, p, differ, summary }</c>. "No measurable difference" is an answer to report, not a reason to invent one.
+    /// </summary>
+    public Dictionary<string, object?> ComparePace(TasteResult a, TasteResult b)
+    {
+        ArgumentNullException.ThrowIfNull(a);
+        ArgumentNullException.ThrowIfNull(b);
+        return TastePace.Compare(a.Pace(), b.Pace(), Named(a), Named(b));
+
+        static string Named(TasteResult r) => string.IsNullOrWhiteSpace(r.Label) ? r.Id : $"{r.Id} ({r.Label})";
+    }
     #endregion
 
     #region Fields

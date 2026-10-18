@@ -97,8 +97,9 @@ public class ManualCoverageTests : TestsRuntime
         // 53 on arrival (2026-10-15; 54 before `profile` landed), said plainly rather than padded: every member is in the SDK reference,
         // but no manual names the surface yet. The poster workflow's manual on designing for an audience is the
         // passage that will — written from the verified sources in docs/internal/qloo-taste-grounded-design.md
-        // §4.7 — and this floor goes up with it.
-        ["Taste"] = 53,
+        // §4.7 — and this floor goes up with it. Raised to 55 on 2026-10-17, when Manual 25 began naming the surface
+        // (pace from the audience: `pace()`, `comparePace`, `find`, `results`).
+        ["Taste"] = 55,
 
         // Documented as it was built, like Chart and Research, so it starts at the top rather than
         // being brought up to it. No manual yet — the SDK reference is its only prose, which is why

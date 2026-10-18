@@ -166,6 +166,119 @@ public static class FFmpeg
         return new(count, w, h, new FileInfo(output).Length);
     }
 
+    /// <summary>
+    /// What a finished video is, read by ffmpeg from the file's own headers: its codec, size, frame rate, length and
+    /// whether it has sound. Only a file that begins like its container is opened, and with that container's demuxer.
+    /// </summary>
+    internal static VideoInfo Probe(string fullPath, string given, VideoFormat format, string who)
+    {
+        if (Executable is not { } exe)
+            throw new InvalidOperationException($"{who} needs the 'ffmpeg' program and none was found: {Install}.");
+        var head = new byte[12];
+        int read;
+        using (var f = File.OpenRead(fullPath)) read = f.Read(head, 0, head.Length);
+        var begins = format == VideoFormat.Mp4
+            ? read >= 8 && Encoding.ASCII.GetString(head, 4, 4) == "ftyp"
+            : read >= 4 && head[0] == 0x1A && head[1] == 0x45 && head[2] == 0xDF && head[3] == 0xA3;
+        if (!begins)
+            throw new ArgumentException($"{who}: '{given}' does not begin like a {(format == VideoFormat.Mp4 ? ".mp4" : ".webm")}, so it was not read.");
+
+        // With no output ffmpeg describes its input on stderr and exits non-zero; the description is what is wanted.
+        var info = Info(exe, "-hide_banner", "-nostdin", "-protocol_whitelist", "file",
+            "-f", format == VideoFormat.Mp4 ? "mov" : "matroska", "-i", "file:" + fullPath);
+        using var process = Process.Start(info) ?? throw new InvalidOperationException($"{who}: ffmpeg would not start.");
+        process.StandardInput.Close();
+        var stderr = process.StandardError.ReadToEndAsync();
+        _ = process.StandardOutput.ReadToEndAsync();
+        if (!process.WaitForExit(60_000))
+        {
+            Kill(process);
+            throw new TimeoutException($"{who}: reading '{given}' took longer than 60 s.");
+        }
+        var text = stderr.Result;
+        var video = System.Text.RegularExpressions.Regex.Match(text, @"Stream #0:\d+.*?: Video: (\w+).*?, (\d+)x(\d+).*?, ([\d.]+) fps");
+        var duration = System.Text.RegularExpressions.Regex.Match(text, @"Duration: (\d+):(\d+):(\d+(?:\.\d+)?)");
+        if (!video.Success || !duration.Success)
+            throw new ArgumentException($"{who}: '{given}' could not be read as a video. {Trim(text)}");
+        double D(string s) => double.Parse(s, CultureInfo.InvariantCulture);
+        return new(video.Groups[1].Value, int.Parse(video.Groups[2].Value, CultureInfo.InvariantCulture),
+            int.Parse(video.Groups[3].Value, CultureInfo.InvariantCulture), D(video.Groups[4].Value),
+            D(duration.Groups[1].Value) * 3600 + D(duration.Groups[2].Value) * 60 + D(duration.Groups[3].Value),
+            System.Text.RegularExpressions.Regex.IsMatch(text, @"Stream #0:\d+.*?: Audio: "));
+    }
+
+    /// <summary>
+    /// Joins <paramref name="parts"/>, end to end and in order, into <paramref name="output"/> without re-encoding them,
+    /// and with <paramref name="tracks"/> mixes sound over the whole in place of any the parts had.
+    /// </summary>
+    /// <remarks>
+    /// ffmpeg's concat demuxer reads a list naming the parts; the list is written here, from paths already resolved inside
+    /// the project, and only the <c>file</c> protocol is allowed, so nothing a script gives can make it read another file.
+    /// The parts must share a codec, size and frame rate — <see cref="Probe"/> checks first — because stream copy joins the
+    /// streams as they are. Written beside the output and moved into place only when ffmpeg succeeds.
+    /// </remarks>
+    internal static long Join(IReadOnlyList<string> parts, string output, VideoFormat format, IReadOnlyList<AudioTrack> tracks,
+        double seconds, string who)
+    {
+        if (Executable is not { } exe)
+            throw new InvalidOperationException($"{who} needs the 'ffmpeg' program and none was found: {Install}.");
+        string N(double x) => x.ToString("0.######", CultureInfo.InvariantCulture);
+        var partial = output + ".part";
+        var list = output + ".parts.txt";
+        // ffconcat: one file a line, single-quoted; a quote inside a path closes, escapes and reopens.
+        File.WriteAllText(list, "ffconcat version 1.0\n" + string.Concat(parts.Select(p =>
+            $"file '{p.Replace('\\', '/').Replace("'", "'\\''")}'\n")), new UTF8Encoding(false));
+
+        var args = new List<string> { "-hide_banner", "-nostdin", "-loglevel", "error", "-y",
+            "-protocol_whitelist", "file", "-f", "concat", "-safe", "0", "-i", "file:" + list };
+        foreach (var t in tracks)
+        {
+            args.AddRange(["-protocol_whitelist", "file"]);
+            if (t.Offset < 0) args.AddRange(["-ss", N(-t.Offset)]);
+            args.AddRange(["-f", t.Demuxer, "-i", "file:" + t.FullPath]);
+        }
+        if (tracks.Count == 0) args.AddRange(["-map", "0", "-c", "copy"]);
+        else
+        {
+            var graph = new StringBuilder();
+            for (var i = 0; i < tracks.Count; i++)
+            {
+                var delay = Math.Max(0, (long)Math.Round(tracks[i].Offset * 1000));
+                graph.Append($"[{i + 1}:a]aresample=48000,adelay=delays={delay}:all=1[a{i}];");
+            }
+            graph.Append(string.Concat(tracks.Select((_, i) => $"[a{i}]")));
+            if (tracks.Count > 1) graph.Append($"amix=inputs={tracks.Count}:duration=longest:dropout_transition=0:normalize=0,");
+            graph.Append("apad[a]");
+            args.AddRange(["-filter_complex", graph.ToString(), "-map", "0:v", "-map", "[a]", "-c:v", "copy"]);
+            args.AddRange(format == VideoFormat.Mp4 ? ["-c:a", "aac", "-b:a", "192k"] : ["-c:a", "libopus", "-b:a", "128k"]);
+            args.AddRange(["-t", N(seconds)]);
+        }
+        if (format == VideoFormat.Mp4) args.AddRange(["-movflags", "+faststart"]);
+        args.AddRange(["-f", format == VideoFormat.Mp4 ? "mp4" : "webm", "file:" + partial]);
+
+        try
+        {
+            using var process = Process.Start(Info(exe, [.. args])) ?? throw new InvalidOperationException($"{who}: ffmpeg would not start.");
+            process.StandardInput.Close();
+            var stderr = process.StandardError.ReadToEndAsync();
+            _ = process.StandardOutput.ReadToEndAsync();
+            if (!process.WaitForExit(FinishMs))
+            {
+                Kill(process);
+                throw new TimeoutException($"{who}: ffmpeg did not finish joining within {FinishMs / 1000} s.");
+            }
+            if (process.ExitCode != 0)
+                throw new InvalidOperationException($"{who}: ffmpeg failed to join the parts (exit {process.ExitCode}). {Trim(stderr.Result)}");
+            File.Move(partial, output, overwrite: true);
+            return new FileInfo(output).Length;
+        }
+        finally
+        {
+            File.Delete(list);
+            File.Delete(partial);
+        }
+    }
+
     /// <summary>The command line, every piece of it from typed values.</summary>
     static IEnumerable<string> Arguments(int w, int h, double fps, int frameCount, string output, VideoFormat format,
         int quality, IReadOnlyList<AudioTrack> tracks)
@@ -415,5 +528,8 @@ public static class FFmpeg
 
     /// <summary>What was written: frames, the encoded size (padded to even), and bytes.</summary>
     internal sealed record Encoded(int Frames, int Width, int Height, long Bytes);
+
+    /// <summary>A finished video as ffmpeg reads it: codec, size, frames a second, length in seconds, and whether it has sound.</summary>
+    internal sealed record VideoInfo(string Codec, int Width, int Height, double Fps, double Seconds, bool HasAudio);
     #endregion
 }

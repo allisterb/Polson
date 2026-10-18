@@ -24,6 +24,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any, AsyncIterator
 
@@ -545,9 +546,7 @@ def create_app(root: Path | None = None, registry: Registry | None = None,
 
         # The picture first, because it is the work. Everything under it is what the studio *says*
         # about the work, which is worth less to a reader who has not yet seen it.
-        picture = final_render(run)
-        if picture:
-            written.append(picture)
+        written.extend(final_renders(run))
 
         for name, what in DELIVERABLES:
             try:
@@ -705,8 +704,38 @@ def recorded_render(run: Run, path: Path) -> bool:
 FORMAT_ORDER = ("mp4", "webm", "webp", "png", "jpeg", "jpg", "svg", "pdf")
 
 
-def final_render(run: Run) -> dict[str, Any] | None:
-    """The finished piece: the last render of each format this run produced, as **one** entry.
+#: A finished piece per audience, as the poster and trailer workflows name them when a brief names several:
+#: `final_a`, `final_b`… The letter is the audience's, as in the brief.
+AUDIENCE_FINAL = re.compile(r"final_([a-z])")
+
+
+def final_renders(run: Run) -> list[dict[str, Any]]:
+    """The finished pieces: one, or one per audience.
+
+    **One per audience when the run delivered a final per audience** (`final_a`, `final_b`…), in letter order,
+    and nothing else — a two-audience poster or trailer pair is two pieces, and with only the last shown the run
+    page told a judge that a run made for two cities made one film. Otherwise the single piece `final_render`
+    describes.
+    """
+    # Scoped to this run as `final_render` is: a previous run's finals in the same project must not hide this run's piece.
+    letters = sorted({m.group(1) for e in read_events(run.project.server_events)
+                      if e.get("type") == "render" and not (run.since and (e.get("ts") or "") < run.since)
+                      and (e.get("motion") or "").lower() != "sheet"
+                      and (m := AUDIENCE_FINAL.fullmatch(Path(e.get("artifact") or "").stem))})
+    if not letters:
+        return [piece] if (piece := final_render(run)) else []
+    pieces = []
+    for letter in letters:
+        piece = final_render(run, only=lambda artifact, l=letter: Path(artifact).stem == f"final_{l}")
+        if piece:
+            piece["what"] = f"the finished piece for audience {letter.upper()}"
+            pieces.append(piece)
+    return pieces
+
+
+def final_render(run: Run, only=None) -> dict[str, Any] | None:
+    """The finished piece: the last render of each format this run produced, as **one** entry. `only`, when
+    given, keeps the renders whose artifact it accepts — one audience's final.
 
     **Read from the run record rather than from a filename, because the filename is not knowable.**
     Three of the eight workflows prescribe no name for the final image at all — `vector_infographic`
@@ -739,7 +768,7 @@ def final_render(run: Run) -> dict[str, Any] | None:
         if motion == "sheet":
             continue
         fmt, artifact = (event.get("format") or "").lower(), event.get("artifact")
-        if fmt and artifact:
+        if fmt and artifact and (only is None or only(artifact)):
             moving = motion in ("animation", "svg", "video")
             held = latest.get(fmt)
             if held is None or moving or not held[0]:

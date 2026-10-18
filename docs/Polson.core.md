@@ -5039,6 +5039,7 @@ ctx.fillText(p.cite(), 24, H - 18);                     // "Qloo Insights API, /
 - `Taste.latest` → `TasteResult?` — The most recent, or **`null`**.
 - `Taste.get(id: string)` → `TasteResult?` — By the id the tool returned (`'t3'`), or null.
 - `Taste.find(text: string)` → `TasteResult?` — The latest answer whose label contains the text, case-insensitively — finding evidence by what it was *for*.
+- `Taste.comparePace(a: TasteResult, b: TasteResult)` → `{ a, b, p, differ, summary }` — two answers' `pace()` side by side, normally two audiences' profiles, with **Fisher's exact test** on their fast and slow counts. `differ` is p < 0.05. Small counts make a real difference hard to show, so **"no measurable difference" is an answer to report**, not a reason to invent one. `summary` is a sentence to quote.
 - `Taste.budget` → `QlooBudget` — What remains of this session's allowance, and the key's month.
 
 ## `TasteResult`
@@ -5062,6 +5063,17 @@ ctx.fillText(p.cite(), 24, H - 18);                     // "Qloo Insights API, /
 - `tasteResult.comparison` → `object?` — For `compare`: Qloo's result as sent.
 - `tasteResult.profile` → `object?` — For `profile`: `{ audience, locality, floor, domains, placeAesthetics, requests }`. Each domain is `{ type, distinctive, shared, audienceRequest, baselineRequest }`. **`distinctive`** is what this audience loves that its place's baseline does not list, each entity carrying its `audienceRank` — the evidence a direction cites. `shared` is popular there regardless of who. `placeAesthetics.tags` are **the place's**: Qloo does not vary tags by age, so they are never evidence about the audience. For a profile, `entities` holds every distinctive entity across the domains and `tags` the place's aesthetics.
 - `tasteResult.cite()` → `string` — A caption-ready source line: the request and when it was retrieved.
+- `tasteResult.pace()` → `{ fast, slow, both, untagged, n, fastShare, fastTitles, slowTitles, vocabulary }` — **how the films and shows in the answer pace themselves, by Qloo's own tags**. For a `profile`, these are the audience's distinctive titles. Fast is "Fast paced", "Action packed", "Kinetic", "Frenetic"; slow is "Slow burn", "Deliberate pacing", "Meditative pacing" (`vocabulary` lists them all). A title counts as fast or slow when it carries one kind only. `fastShare` is fast ÷ (fast + slow), or null when neither occurs. Artists are not counted: Qloo has no song-level data, and artist tags describe a whole career. Qloo *describes* pace and does not measure cutting, so cite a lean as motivating a choice, with the titles.
+
+```javascript
+// The Taste tool has already answered op 'profile' for two audiences of one poster.
+const tokyo = Taste.find('tokyo audience'), mumbai = Taste.find('mumbai audience');
+if (tokyo && mumbai) {
+    const p = tokyo.pace();
+    log(`Tokyo: ${p.fast} fast, ${p.slow} slow — e.g. ${p.slowTitles.slice(0, 3).join(', ')}`);
+    log(Taste.comparePace(tokyo, mumbai).summary);   // "…; Fisher's exact p = …, a measurable difference." or "no measurable difference"
+}
+```
 
 ## `QlooBudget`
 
@@ -5100,6 +5112,22 @@ ctx.fillText(p.cite(), 24, H - 18);                     // "Qloo Insights API, /
 
 > [!TIP]
 > **You cannot watch the video**, any more than an animated WebP: check the motion on a `Motion.sheet`, the timing of a line on `speech.words`, and treat the video as the deliverable rather than the thing you inspect.
+
+### A film longer than one script — `Motion.joinVideos(parts, filePath, options?)`
+
+**A script has a time limit, and encoding a film takes time in proportion to its frames**: at about 40 ms a frame, one script holds roughly 30 s of 720p film. A longer one is encoded a span at a time — `comp.saveVideo(part, { from, to })`, one script each, every part well inside the limit — and joined:
+
+- `Motion.joinVideos(parts: string[], filePath: string, options?)` → what `saveVideo` returns, with `parts` — the parts end to end, in order, **without re-encoding them**, so it takes seconds however long the film. Parts must come from one composition with the same `saveVideo` options: the same codec, size and frame rate are checked first, and a part that differs is refused by name. `options`: `{ audio?, start? }` — sound for the whole film, as `saveVideo` takes it, measured from the composition time `start` (0), in place of any sound the parts carry. **Encode the parts silent and give the sound here**: sound added part by part can click at the seams, and parts some with sound and some without are refused.
+- Spans end on the frame before the next begins: at 24 fps, `{ to: 14.958 }` then `{ from: 15, to: 29.958 }` — `to` is the last frame's time, not the next one's.
+
+```javascript
+const comp = Motion.composition({ width: 64, height: 36, fps: 24, duration: 2 });
+comp.fill({ color: Motion.nodes.animated('color', [{ time: 0, value: '#e63946' }, { time: 2, value: '#1d3557' }]) });
+comp.saveVideo('artifacts/part1.mp4', { to: 0.958 });            // script one
+comp.saveVideo('artifacts/part2.mp4', { from: 1, to: 1.958 });   // script two (here in one, for the example)
+const film = Motion.joinVideos(['artifacts/part1.mp4', 'artifacts/part2.mp4'], 'artifacts/joined.mp4');
+log(`${film.frames} frames, ${film.durationMs} ms, warnings: ${film.warnings.length}`);
+```
 
 ## The Score — `Motion.timeline()`
 
