@@ -108,8 +108,8 @@ public partial class JsDrawingEngine : Runtime
     
     #region Methods
     /// <summary>Synchronous entry point, for callers with no async context.</summary>
-    public DrawingExecutionResult Execute(string jsScript, int defaultWidth = 800, int defaultHeight = 600, SessionContext? session = null, string format = "webp", int quality = 85, string? executionId = null, bool render = true, string? scriptPath = null) =>
-        ExecuteAsync(jsScript, defaultWidth, defaultHeight, session, format, quality, default, executionId, render, scriptPath).GetAwaiter().GetResult();
+    public DrawingExecutionResult Execute(string jsScript, int defaultWidth = 800, int defaultHeight = 600, SessionContext? session = null, string format = "webp", int quality = 85, string? executionId = null, bool render = true, string? scriptPath = null, string? argsJson = null) =>
+        ExecuteAsync(jsScript, defaultWidth, defaultHeight, session, format, quality, default, executionId, render, scriptPath, argsJson).GetAwaiter().GetResult();
 
     /// <summary>
     /// Rasterises a returned paper at <b>its own</b> size, falling back to the default viewport only
@@ -152,7 +152,7 @@ public partial class JsDrawingEngine : Runtime
     /// what it wants rendered. Scripts with no `await` are executed unwrapped and keep exactly their
     /// previous semantics, including a bare trailing `paper;`.
     /// </remarks>
-    public async Task<DrawingExecutionResult> ExecuteAsync(string jsScript, int defaultWidth = 800, int defaultHeight = 600, SessionContext? session = null, string format = "webp", int quality = 85, CancellationToken ct = default, string? executionId = null, bool render = true, string? scriptPath = null)
+    public async Task<DrawingExecutionResult> ExecuteAsync(string jsScript, int defaultWidth = 800, int defaultHeight = 600, SessionContext? session = null, string format = "webp", int quality = 85, CancellationToken ct = default, string? executionId = null, bool render = true, string? scriptPath = null, string? argsJson = null)
     {
         ArgumentNullException.ThrowIfNull(jsScript);
 
@@ -361,6 +361,11 @@ public partial class JsDrawingEngine : Runtime
             liveSession = SessionBridge.Open(engine, session?.Storage ?? new Dictionary<string, object?>());
             sessionEngine = engine;
             engine.SetValue("Session", liveSession);
+
+            // The call's `args`, already checked to be a JSON object by the tool. Parsed by Jint's own
+            // JSON parser rather than handed over as a CLR object, so ARGS is a plain JS object with
+            // nothing behind it that reaches .NET — and `{}` when none were given, so `ARGS.x ?? d` works.
+            engine.SetValue("ARGS", new Jint.Native.Json.JsonParser(engine).Parse(argsJson ?? "{}"));
 
             engine.SetValue("Stage", new StageApi(session, Events, executionId, result));
 

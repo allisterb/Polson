@@ -132,6 +132,30 @@ public class MotionJsBindingTests : TestsRuntime
         Assert.True(frame.GetPixel(35, 35).Red > 0x80, "the grade did not brighten the square");
     }
 
+    /// <summary>A linear wipe's <c>over</c> from a script, as an array and as the <c>{ x, y, width, height }</c> boundsAt gives.</summary>
+    [Fact]
+    public void AWipeOverABoxBindsFromAScript()
+    {
+        var result = Execute("""
+            comp.fill({ color: '#ffffff' });
+            const top = comp.group();
+            top.rectangle({ point1: [0, 0], point2: [40, 20], color: '#ff0000' });
+            top.wipe({ type: 'linear', over: [20, 0, 40, 20], completion: 0.5 });
+            const bottom = comp.group();
+            bottom.rectangle({ point1: [0, 20], point2: [40, 40], color: '#ff0000' });
+            bottom.wipe({ type: 'linear', over: { x: 20, y: 20, width: 20, height: 20 }, completion: 0.5 });
+            """);
+
+        Assert.True(result.Success, result.Error);
+        using var frame = SKBitmap.Decode(result.ImageBytes);
+        foreach (var y in new[] { 10, 30 })
+        {
+            Assert.Equal(SKColors.Red, frame.GetPixel(10, y));          // before the box: untouched
+            Assert.Equal(SKColors.White, frame.GetPixel(25, y));        // the box's first half: wiped
+            Assert.Equal(SKColors.Red, frame.GetPixel(35, y));
+        }
+    }
+
     /// <summary>
     /// trailer4's asks from a script: a plane that keeps its size at depth, a rounded rectangle, when a text settles, and a
     /// grade applied to one colour that <c>Motion.contrast</c> reads straight back.

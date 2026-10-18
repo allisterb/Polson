@@ -148,6 +148,24 @@ public sealed class TasteRegistry
     {
         lock (results) return results.FirstOrDefault(r => string.Equals(r.Id, id, StringComparison.OrdinalIgnoreCase));
     }
+
+    /// <summary>
+    /// The Qloo type of an entity this session has seen — in any answer's entities, or a profile's shared lists —
+    /// or null.
+    /// </summary>
+    public string? TypeOf(string entityId) =>
+        All.SelectMany(r => r.Entities.Concat(SharedOf(r)))
+            .OfType<Dictionary<string, object?>>()
+            .Where(e => string.Equals(e.GetValueOrDefault("id") as string, entityId, StringComparison.OrdinalIgnoreCase))
+            .Select(e => e.GetValueOrDefault("type") as string)
+            .FirstOrDefault(t => t is not null);
+    #endregion
+
+    #region Private methods
+    private static IEnumerable<object?> SharedOf(TasteResult r) =>
+        r.Profile?.GetValueOrDefault("domains") is object?[] domains
+            ? domains.OfType<Dictionary<string, object?>>().SelectMany(d => d.GetValueOrDefault("shared") as object?[] ?? [])
+            : [];
     #endregion
 
     #region Fields

@@ -56,8 +56,11 @@ public partial class DrawingMcpTools
         "sound like. `placeAesthetics` are the PLACE's: Qloo does not vary tags by age, so never present them as this " +
         "audience's. About 7 requests; a second audience in the same place reuses the cached baseline.\n" +
         "- 'describe': the tags a set of entities share, from `entities` (ids). Give `type` as tag kinds — " +
-        "'aesthetic,motif', 'theme', 'archetype' — or get an overview across every kind, dishes and venues included. " +
-        "WEAK EVIDENCE: measured, two halves of one audience's titles shared none of their tags, so with a dozen titles " +
+        "'style', 'theme,archetype', 'plot' — or 'film' for all the kinds that describe a film. With no `type`, " +
+        "entities this session knows are films or shows get 'film', said in `note`: UNFILTERED, Qloo's top tags over six " +
+        "films were a credit card, a hotel rating and 'Identifies as women-owned' — tags from every domain, places and " +
+        "brands included. 'all' asks for that overview anyway. 'aesthetic' and 'motif' are on no film: " +
+        "asked for over films they return fashion words. WEAK EVIDENCE: measured, two halves of one audience's titles shared none of their tags, so with a dozen titles " +
         "the tags follow which titles you picked. Use it to explore, never as the basis of a direction.\n" +
         "- 'demographics': who an entity appeals to, by age band and gender, from `entities`. Use it to check a " +
         "reference really skews to your audience before you borrow from it.\n" +
@@ -78,7 +81,7 @@ public partial class DrawingMcpTools
         [Description("'profile', 'resolve', 'insights', 'describe', 'demographics', 'compare', 'audiences' or 'status'.")] string op,
         [Description("resolve: the name or words to look up.")] string? name = null,
         [Description("resolve: 'entity' (default), 'tag' or 'audience'.")] string? kind = null,
-        [Description("insights and compare: the result type — artist, movie, tv_show, brand, book, podcast, video_game, place, destination, person, or a full urn. resolve: narrows an entity search, or for kind 'tag' the tag kind. describe: tag kinds to keep, comma-separated, e.g. 'aesthetic,motif'. audiences: the audience type, e.g. 'communities'.")] string? type = null,
+        [Description("insights and compare: the result type — artist, movie, tv_show, brand, book, podcast, video_game, place, destination, person, or a full urn. resolve: narrows an entity search, or for kind 'tag' the tag kind. describe: tag kinds to keep, comma-separated, e.g. 'style,theme'; 'film' for the kinds that describe a film; 'all' for every kind, places and brands included. audiences: the audience type, e.g. 'communities'.")] string? type = null,
         [Description("insights: the audience, as JSON: {\"location\":\"Mexico City\",\"age\":\"55_and_older\",\"gender\":\"female\",\"audiences\":[\"<audience id>\"]}. location is a place name, or a locality id from resolve (type 'locality'). Age bands: 24_and_younger, 25_to_29, 30_to_34, 35_to_44, 45_to_54, 55_and_older. location is required with age or gender.")] string? audience = null,
         [Description("insights: further Qloo Insights parameters as a JSON object, e.g. {\"filter.popularity.min\":0.5,\"signal.interests.entities\":[\"<id>\"],\"feature.explainability\":true}. Checked before sending.")] string? query = null,
         [Description("describe, demographics, compare: Qloo entity ids, comma-separated, from 'resolve' or an earlier answer.")] string? entities = null,
@@ -111,7 +114,7 @@ public partial class DrawingMcpTools
         if (op == "profile") return await TasteProfile(session, client, label, audience, type, query, take, cancellationToken);
 
         var count = Math.Clamp(take ?? (op == "describe" ? 25 : 10), 1, MaxTasteResults);
-        var (call, refusal) = TastePlan(client, op, name, kind, type, audience, query, entities, versus, count, cancellationToken);
+        var (call, refusal, note) = TastePlan(client, op, name, kind, type, audience, query, entities, versus, count, cancellationToken, registry);
 
         if (refusal is not null || call is null)
         {
@@ -141,7 +144,9 @@ public partial class DrawingMcpTools
             ["monthlyRemaining"] = registry.Budget.MonthlyRemaining,
         });
 
-        return TasteReply(op, result, response, registry.Budget, Trimmed(name), count);
+        var reply = TasteReply(op, result, response, registry.Budget, Trimmed(name), count);
+        if (note is not null) reply["note"] = note;
+        return reply;
     });
     #endregion
 
@@ -316,10 +321,39 @@ public partial class DrawingMcpTools
     }
 
     /// <summary>
-    /// The Qloo call one operation makes, or why it cannot be made. Deciding is separate from calling so every
-    /// refusal is found before anything is sent.
+    /// The Qloo call one operation makes, or why it cannot be made, and a note for the reply when the tool chose
+    /// something the caller did not ask for. Deciding is separate from calling so every refusal is found before
+    /// anything is sent. <paramref name="registry"/> says which entities this session knows to be films.
     /// </summary>
-    internal static (Func<Task<QlooResponse>>? Call, string? Refusal) TastePlan(
+    internal static (Func<Task<QlooResponse>>? Call, string? Refusal, string? Note) TastePlan(
+        QlooClient client, string op, string? name, string? kind, string? type, string? audience, string? query,
+        string? entities, string? versus, int count, CancellationToken ct, TasteRegistry? registry = null)
+    {
+        if (op == "describe") return TasteDescribePlan(client, type, entities, count, ct, registry);
+        var (call, refusal) = TasteCall(client, op, name, kind, type, audience, query, entities, versus, count, ct);
+        return (call, refusal, null);
+    }
+
+    /// <summary>
+    /// <c>describe</c>: the tags a set of entities share. Without kinds, a set of films asks for the kinds that
+    /// describe a film (<see cref="TasteDescribe"/>); anything else gets the overview, capped per kind, since over
+    /// any entities Qloo returns tags from every domain and uncapped the commonest kind would crowd out the rest.
+    /// </summary>
+    private static (Func<Task<QlooResponse>>? Call, string? Refusal, string? Note) TasteDescribePlan(
+        QlooClient client, string? type, string? entities, int count, CancellationToken ct, TasteRegistry? registry)
+    {
+        if (TasteIds(entities) is not { Length: > 0 } described) return (null, "describe needs entities: Qloo ids, comma-separated.", null);
+        var (kinds, note) = TasteDescribe.Kinds(type, TasteTagTypes(type), [.. described.Select(id => registry?.TypeOf(id))]);
+
+        var q = new QlooQuery { ["filter.type"] = "urn:tag", ["signal.interests.entities"] = described, ["take"] = count };
+        if (kinds.Length > 0) q["filter.tag.types"] = kinds;
+        // Kinds the caller named are taken as asked. The overview and the film kinds share the take, capped per kind:
+        // measured, the six film kinds came back 6, 6, 6, 4, 2 and 1 of 25 (2026-10-18).
+        if (kinds.Length == 0 || kinds.SequenceEqual(TasteDescribe.FilmKinds)) { q["diversify.by"] = "subtype"; q["diversify.take"] = Math.Max(3, count / 4); }
+        return (async () => await client.Insights(q, ct), null, note);
+    }
+
+    private static (Func<Task<QlooResponse>>? Call, string? Refusal) TasteCall(
         QlooClient client, string op, string? name, string? kind, string? type, string? audience, string? query,
         string? entities, string? versus, int count, CancellationToken ct)
     {
@@ -343,19 +377,6 @@ public partial class DrawingMcpTools
                 if (TasteType(type) is not string resultType) return (null, $"insights needs a type: {TasteTypeList}.");
                 var (built, problem) = TasteQuery(resultType, audience, query, count);
                 return built is null ? (null, problem) : (async () => await client.Insights(built, ct), null);
-            }
-
-            case "describe":
-            {
-                if (TasteIds(entities) is not { Length: > 0 } described) return (null, "describe needs entities: Qloo ids, comma-separated.");
-                var q = new QlooQuery { ["filter.type"] = "urn:tag", ["signal.interests.entities"] = described, ["take"] = count };
-
-                // Asked for kinds of tag: only those. Not asked: an overview, capped per kind — over films Qloo
-                // returns tags from every domain, dishes and place categories included, and uncapped the
-                // commonest kind would crowd out the rest.
-                if (TasteTagTypes(type) is { Length: > 0 } kinds) q["filter.tag.types"] = kinds;
-                else { q["diversify.by"] = "subtype"; q["diversify.take"] = Math.Max(3, count / 4); }
-                return (async () => await client.Insights(q, ct), null);
             }
 
             case "demographics":

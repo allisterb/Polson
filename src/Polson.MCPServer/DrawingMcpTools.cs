@@ -262,6 +262,51 @@ public partial class DrawingMcpTools
         return text;
     }
 
+    /// <summary>The largest <c>args</c> accepted, in characters.</summary>
+    internal const int MaxScriptArgsLength = 16 * 1024;
+
+    /// <summary>
+    /// The call's <c>args</c> as a JSON object, or null when none were given.
+    /// </summary>
+    /// <remarks>
+    /// <c>args</c> exists so one file can run as several variants. trailer5 ran one <c>trailer.js</c>
+    /// about twenty times and switched audience, mode and part with a <c>sed</c> edit to a constant
+    /// before each run, which left the <c>scripts/</c> snapshots as the only record of which variant
+    /// ran. JSON only — scalars, arrays, objects — so the script gets data, never anything that reaches
+    /// .NET; and the size is capped because it is recorded on every <c>script.start</c>.
+    /// <para>
+    /// Taken as a JSON <i>string</i>, as <c>Taste</c>'s <c>audience</c> and <c>query</c> are, rather than
+    /// an object parameter: an object schema with no declared properties is one some hosts refuse.
+    /// </para>
+    /// </remarks>
+    internal static JsonObject? ParseScriptArgs(string? args)
+    {
+        if (string.IsNullOrWhiteSpace(args)) return null;
+
+        if (args.Length > MaxScriptArgsLength)
+        {
+            throw new ArgumentException(
+                $"'args' is {args.Length:N0} characters; the limit is {MaxScriptArgsLength:N0}. It is for choosing a "
+              + "variant — an audience, a mode, a part — not for carrying data; put data in a project file and pass its path.");
+        }
+
+        JsonNode? node;
+        try
+        {
+            node = JsonNode.Parse(args, documentOptions: new JsonDocumentOptions { MaxDepth = 16, AllowDuplicateProperties = false });
+        }
+        catch (JsonException ex)
+        {
+            throw new ArgumentException(
+                $"'args' is not valid JSON ({ex.Message}). Keys and strings take double quotes, as in "
+              + "{\"audience\":\"b\",\"part\":2}; functions, undefined and comments are not JSON.");
+        }
+
+        return node as JsonObject ?? throw new ArgumentException(
+            $"'args' must be a JSON object, e.g. {{\"audience\":\"b\",\"part\":2}}, so the script reads ARGS.audience — "
+          + $"got a JSON {node?.GetValueKind().ToString().ToLowerInvariant() ?? "null"}.");
+    }
+
     /// <summary>
     /// Hrefs in the saved SVG that a viewer will not resolve — everything but a <c>data:</c> URI.
     /// </summary>
@@ -726,11 +771,13 @@ public partial class DrawingMcpTools
         [Description("The trimmed page size for outPdf: 'A0'-'A6', 'B0'-'B3', 'letter', 'legal', 'tabloid' (named sizes follow the paper's orientation), or width x height with a unit, e.g. '420x594mm', '18x24in'. The paper must be in the same proportions.")] string? pdfSize = null,
         [Description("Bleed added outside the trim on every side for outPdf, with a unit: '3mm' (default; usual in Europe), '0.125in' (usual in the US), or '0' for none. Ask the print shop.")] string? pdfBleed = null,
         [Description("How far inside the trim text must stay for outPdf, with a unit: '5mm' by default, '0' to skip. Text closer than this, or past the trim, is warned about by what it says.")] string? pdfSafeMargin = null,
+        [Description("Optional arguments for the script, as a JSON object string, e.g. '{\"audience\":\"b\",\"part\":2}'. The script reads them as the global ARGS — ARGS is {} when none are given, so write `const AUDIENCE = ARGS.audience ?? 'a'`. Use it to run one scriptFile as several variants instead of editing a constant before each run; the args are recorded with the execution. JSON values only, at most 16 KB.")] string? args = null,
         RequestContext<CallToolRequestParams>? context = null,
         IProgress<ProgressNotificationValue>? progress = null,
         CancellationToken cancellationToken = default)
     {
         script = ReadScriptSource(script, scriptFile);
+        var scriptArgs = ParseScriptArgs(args);
 
         // Refused rather than resolved, as script/scriptFile is: one of the two was meant, and
         // guessing would either write an empty file or silently pay the cost the caller declined.
@@ -775,6 +822,10 @@ public partial class DrawingMcpTools
             // a file source is the one case where the same path can run repeatedly with different
             // contents, and `scripts/` alone cannot say which file a given execution came from.
             ["source"] = string.IsNullOrWhiteSpace(scriptFile) ? null : scriptFile,
+
+            // Which variant of the source ran. `scripts/` holds the same text for every variant of a
+            // file run with different args, so without this the record cannot tell them apart.
+            ["args"] = scriptArgs,
         });
 
         // What the script looks at, not just what it draws. The scope is opened here rather than
@@ -853,7 +904,7 @@ public partial class DrawingMcpTools
                 }
             }
 
-            var runTask = Task.Run(() => Engine.Execute(script, width ?? 800, height ?? 600, session, fmt, q, executionId, render ?? true, scriptPath), cancellationToken);
+            var runTask = Task.Run(() => Engine.Execute(script, width ?? 800, height ?? 600, session, fmt, q, executionId, render ?? true, scriptPath, scriptArgs?.ToJsonString()), cancellationToken);
             var result = await RunWithHeartbeatAsync(runTask, progress, HeartbeatInterval, cancellationToken);
 
             // outFile names a file the caller will open next. A script that rendered nothing used to
@@ -1158,12 +1209,13 @@ public partial class DrawingMcpTools
         string? outFile = null,
         string? outSvg = null,
         bool? includeBytes = null,
-        string? scriptFile = null)
+        string? scriptFile = null,
+        string? args = null)
         // Named rather than positional: this forwards a parameter list that grows, and passing them
         // by position meant adding one in the middle silently rebound every argument after it.
         => ExecuteScript(script: script, scriptFile: scriptFile, width: width, height: height,
                          format: format, quality: quality, outFile: outFile, outSvg: outSvg,
-                         includeBytes: includeBytes);
+                         includeBytes: includeBytes, args: args);
 
     [McpServerTool(Name = "Research")]
     [Description("Commissions sourced factual data from the web and returns it as JSON, with a citation and a " +
