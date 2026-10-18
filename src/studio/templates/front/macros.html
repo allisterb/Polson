@@ -1,0 +1,75 @@
+{#- Shared pieces of the user-facing pages: the design system's icons, status pills and requests table,
+    rendered server-side with the same classes the system's React components use. -#}
+
+
+
+
+{% macro icon(name, size=20, label='') -%}
+{%- set ICONS = {
+  'plus': [['p', 'M12 5v14M5 12h14']],
+  'home': [['p', 'M4 11l8-7 8 7M6 9.5V20h12V9.5']],
+  'requests': [['p', 'M4 7h16M4 12h16M4 17h10']],
+  'settings': [['p', 'M4 7h10M18 7h2M4 17h4M12 17h8'], ['c', 16, 7, 2], ['c', 10, 17, 2]],
+  'film': [['r', 3, 5, 18, 14, 2], ['p', 'M3 9h18M3 15h18M8 5v4M16 5v4M8 15v4M16 15v4']],
+  'motion': [['p', 'M3 15c3-8 6-8 9 0s6 8 9 0']],
+  'image': [['r', 3, 5, 18, 14, 2], ['c', 9, 10, 1.6], ['p', 'M21 16l-5-5-9 8']],
+  'layout': [['r', 4, 4, 7, 7, 1.5], ['r', 13, 4, 7, 7, 1.5], ['r', 4, 13, 7, 7, 1.5], ['r', 13, 13, 7, 7, 1.5]],
+  'document': [['p', 'M7 3h7l4 4v14H7zM14 3v4h4M10 12h5M10 16h5']],
+  'pen': [['p', 'M4 20l4-1 11-11-3-3L5 16zM14 7l3 3']],
+  'download': [['p', 'M12 4v11M7 10l5 5 5-5M5 20h14']],
+  'upload': [['p', 'M12 20V9M7 14l5-5 5 5M5 4h14']],
+  'check': [['p', 'M5 12.5l4.5 4.5L19 7']],
+  'chevron-down': [['p', 'M6 9l6 6 6-6']],
+  'close': [['p', 'M6 6l12 12M18 6L6 18']],
+  'arrow-left': [['p', 'M19 12H5M11 6l-6 6 6 6']],
+} -%}
+<svg class="ps-icon" width="{{ size }}" height="{{ size }}" viewBox="0 0 24 24" {% if label %}role="img" aria-label="{{ label }}"{% else %}aria-hidden="true"{% endif %}>
+{%- for s in ICONS.get(name, ICONS['layout']) -%}
+{%- if s[0] == 'c' %}<circle cx="{{ s[1] }}" cy="{{ s[2] }}" r="{{ s[3] }}"/>
+{%- elif s[0] == 'r' %}<rect x="{{ s[1] }}" y="{{ s[2] }}" width="{{ s[3] }}" height="{{ s[4] }}" rx="{{ s[5] }}"/>
+{%- else %}<path d="{{ s[1] }}"/>{% endif -%}
+{%- endfor -%}
+</svg>
+{%- endmacro %}
+
+{% macro pill(status, id='') -%}
+{%- set STATUS = {'draft': 'Draft', 'queued': 'Queued', 'running': 'In the studio', 'needs-you': 'Needs you',
+                  'delivered': 'Delivered', 'stopped': 'Stopped'} -%}
+<span class="ps-pill ps-pill-{{ status }}"{% if id %} id="{{ id }}"{% endif %}>{{ STATUS.get(status, status) }}</span>
+{%- endmacro %}
+
+{% macro kind_icon(kind, size=20, label='') -%}
+{%- set KIND_ICON = {'video': 'film', 'motion': 'motion', 'image': 'image', 'document': 'document'} -%}
+{{ icon(KIND_ICON.get(kind, 'image'), size, label) }}{%- endmacro %}
+
+{% macro requests_table(rows, base) -%}
+<table class="ps-table">
+  <thead><tr><th scope="col">Request</th><th scope="col">Workflow</th><th scope="col">Status</th><th scope="col">Updated</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr class="ps-tr" onclick="location.href=this.querySelector('a').href">
+      <td><div class="ps-trow-title">
+        <span class="ps-tthumb">{% if r.thumb %}<img src="{{ base }}/requests/{{ r.id }}/thumb" alt="" loading="lazy">{% else %}{{ kind_icon(r.kind, 18) }}{% endif %}</span>
+        <span><a class="ps-tlink" href="{{ base }}/requests/{{ r.id }}">{{ r.title }}</a>{% if r.title != r.id %}<span class="ps-tid">{{ r.id }}</span>{% endif %}</span>
+      </div></td>
+      <td class="ps-tmuted">{{ r.workflow }}</td>
+      <td>{{ pill(r.status) }}</td>
+      <td class="ps-tmono">{{ r.updated_label }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{%- endmacro %}
+
+{% macro workflow_card(card, base) -%}
+<a class="ps-wcard" href="{{ base }}/compose/{{ card.slug }}">
+  <span class="ps-wcard-media">
+    {%- if card.image %}<img src="{{ base }}/static/gallery/{{ card.image }}" alt="{{ card.alt }}" loading="lazy">
+    {%- else %}<span class="ps-wcard-empty">{{ kind_icon(card.kind, 40) }}</span>{% endif -%}
+  </span>
+  <span class="ps-wcard-cap">
+    <span class="ps-wcard-text"><span class="ps-wcard-title">{{ card.title }}</span><span class="ps-wcard-meta">{{ card.meta }}</span></span>
+    {{ kind_icon(card.kind, 20, card.kind) }}
+  </span>
+</a>
+{%- endmacro %}

@@ -1,0 +1,24 @@
+{#- What the studio learned from the audiences: profile counts, comparePace's summary and the titles each pace
+    rests on, all in the run's own words (studio.direction.learned). Never a Qloo request or response. -#}
+{% if learned and (learned.profiles or learned.compare or learned.audiences) %}
+<section class="fr-card fr-learned" data-learned>
+  <p class="fr-eyebrow" style="margin:0">What the studio learned</p>
+  {% if learned.profiles %}
+  <p class="fr-small" style="margin:0">Taste profiles of
+    {% for p in learned.profiles %}{{ p.label }}{% if p.distinctive %} ({{ p.distinctive }} distinctive titles){% endif %}{{ ', ' if not loop.last and loop.revindex > 2 else (' and ' if not loop.last else '') }}{% endfor %}.</p>
+  {% endif %}
+  {% if learned.compare %}
+  <div>
+    <p class="ps-label" style="margin:0 0 var(--space-1)">Between the audiences</p>
+    <p class="fr-quote">{{ learned.compare }}</p>
+  </div>
+  {% endif %}
+  {% for a in learned.audiences %}
+  <div>
+    <p class="ps-label" style="margin:0">{{ a.title }}</p>
+    {% if a.fast %}<p class="fr-titles">Fast-paced favourites: {% for t in a.fast %}<em>{{ t }}</em>{{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}
+    {% if a.slow %}<p class="fr-titles">Slow-paced favourites: {% for t in a.slow %}<em>{{ t }}</em>{{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}
+  </div>
+  {% endfor %}
+</section>
+{% else %}<div data-learned hidden></div>{% endif %}

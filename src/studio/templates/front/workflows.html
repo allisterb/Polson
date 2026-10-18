@@ -1,0 +1,8 @@
+{% extends "front/base.html" %}
+{% import "front/macros.html" as m %}
+{% block title %}Choose a workflow · Polson Studio{% endblock %}
+{% block content %}
+<h1 class="fr-title">Choose a workflow</h1>
+<p class="fr-sub">Each one is a way the studio works, shown with something it has made that way. You choose sizes, formats and files next.</p>
+<div class="fr-cards fr-section">{% for c in cards %}{{ m.workflow_card(c, base) }}{% endfor %}</div>
+{% endblock %}

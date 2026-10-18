@@ -155,6 +155,80 @@ def queries(events: Iterable[dict[str, Any]], since: str | None = None) -> dict[
     return found
 
 
+#: `**comparePace (t1 vs t2):** *"…"*` — the summary is whatever sits in the quotes after the call's name.
+_COMPARE = re.compile(r"comparePace[^\n]*?[\"“](.+?)[\"”]", re.S)
+
+#: `t1 (audience A)` in a summary, which a client reads better as `Audience A`.
+_HANDLE = re.compile(r"\bt\d{1,3}\s*\((audience\s+[A-Z])\)", re.I)
+
+#: An italic title in a cell: `*The Farewell*`, never `**bold**`.
+_ITALIC = re.compile(r"(?<!\*)\*([^*\n]{1,80})\*(?!\*)")
+
+
+def learned(text: str, events: Iterable[dict[str, Any]], since: str | None = None) -> dict[str, Any]:
+    """What a run learned from its audiences, in the run's own words, for a client-facing page.
+
+    Three things and nothing else: the profiles fetched (label and how many distinctive titles each had), the
+    `comparePace` summary from "Between the audiences", and the titles each audience's pace rests on from its
+    **Pace** row. **Never a Qloo request or response** — the hackathon's rule — which is why the profiles come
+    from counts on `taste.query` events rather than from what they returned, and titles only as the agent wrote
+    them into `direction.md`.
+    """
+    text = text[:MAX_DIRECTION]
+    profiles = [{"label": e.get("label") or e.get("id") or "", "distinctive": e.get("distinctive")}
+                for e in events
+                if e.get("type") == "taste.query" and e.get("op") == "profile"
+                and not (since and (e.get("ts") or "") < since)]
+
+    compare = ""
+    section = _section(text, "between the audiences")
+    if section and (m := _COMPARE.search(section)):
+        compare = _HANDLE.sub(lambda h: h.group(1)[0].upper() + h.group(1)[1:], " ".join(m.group(1).split()))
+
+    audiences, heading = [], ""
+    for line in text.splitlines():
+        if (h := _HEADING.match(line)) and len(h.group(1)) == 2:
+            heading = h.group(2).strip("*_ ")
+            continue
+        if not line.lstrip().startswith("|"):
+            continue
+        row = cells(line)
+        if len(row) < 2 or not row[0].strip("*_ ").lower().startswith("pace"):
+            continue
+        evidence = row[1]
+        fast = _titles_after(evidence, "fast titles")
+        slow = _titles_after(evidence, "slow titles")
+        if fast or slow:
+            audiences.append({"title": heading, "fast": fast, "slow": slow})
+
+    return {"profiles": profiles, "compare": compare, "audiences": audiences}
+
+
+def _section(text: str, name: str) -> str:
+    """The body under the first `##`–`####` heading containing `name`, up to the next heading of any level."""
+    out, inside = [], False
+    for line in text.splitlines():
+        if _HEADING.match(line) or line.startswith("# "):
+            if inside:
+                break
+            inside = name in line.lower()
+            continue
+        if inside:
+            out.append(line)
+    return "\n".join(out)
+
+
+def _titles_after(cell: str, label: str) -> list[str]:
+    """The italic titles in the sentence that `label` begins: 'Fast titles: *A*, *B*.' gives [A, B]."""
+    low = cell.lower()
+    at = low.find(label)
+    if at < 0:
+        return []
+    rest = cell[at + len(label):]
+    end = re.search(r"\*\.\s|\.\s+[A-Z]", rest)
+    return _ITALIC.findall(rest[:end.start() + 1] if end else rest)[:8]
+
+
 def explain(text: str, events: Iterable[dict[str, Any]], since: str | None = None) -> dict[str, Any]:
     """The panel's whole payload: sections, the queries their rows cite, and whether the file was cut short."""
     truncated = len(text) > MAX_DIRECTION

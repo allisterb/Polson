@@ -1,0 +1,17 @@
+{% extends "front/base.html" %}
+{% import "front/macros.html" as m %}
+{% block title %}Requests · Polson Studio{% endblock %}
+{% block content %}
+<h1 class="fr-title">Requests</h1>
+<div class="ps-tabs fr-section" role="tablist">
+  {% for key, label in [('active', 'Active'), ('drafts', 'Drafts'), ('done', 'Finished')] %}
+    <a class="ps-tab" role="tab" href="{{ base }}/requests?view={{ key }}" aria-selected="{{ 'true' if view == key else 'false' }}" style="text-decoration:none">{{ label }}<span class="ps-tab-count">{{ counts[key] }}</span></a>
+  {% endfor %}
+</div>
+<div style="margin-top: var(--space-6)">
+  {% if rows %}{{ m.requests_table(rows, base) }}
+  {% elif view == 'active' %}<p class="fr-empty">Nothing is in the studio. <a class="fr-link" href="{{ base }}/workflows">Start a request</a>.</p>
+  {% elif view == 'drafts' %}<p class="fr-empty">No drafts.</p>
+  {% else %}<p class="fr-empty">Nothing finished yet.</p>{% endif %}
+</div>
+{% endblock %}
