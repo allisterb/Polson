@@ -44,6 +44,7 @@ from orchestrator.events import read_events
 
 from . import archive
 from . import direction as direction_mod
+from . import front
 from . import projects
 from . import observe as observe_mod
 from .runs import DEFAULT_PROMPT, Registry, Run, StudioError
@@ -69,7 +70,7 @@ SOURCE_URL = os.environ.get("POLSON_SOURCE_URL") or "https://github.com/allister
 TEMPLATES.env.globals["source_url"] = SOURCE_URL
 
 
-def asset_version() -> str:
+def asset_version(*names: str) -> str:
     """A token that changes when the stylesheet does, for the `?v=` on its URL.
 
     **The bug this fixes wasted a reader's time before it was found.** `/static` is served by
@@ -84,16 +85,21 @@ def asset_version() -> str:
     build rather than of the file: two builds of the same stylesheet should not bust the cache, and
     the same mtime on changed content must not fail to.
     """
-    try:
-        data = (Path(__file__).parent / "static" / "studio.css").read_bytes()
-    except OSError:
-        return "0"
-    return hashlib.sha256(data).hexdigest()[:12]
+    digest = hashlib.sha256()
+    for name in names or ("studio.css",):
+        try:
+            digest.update((Path(__file__).parent / "static" / name).read_bytes())
+        except OSError:
+            return "0"
+    return digest.hexdigest()[:12]
 
 
 # Read once at import: the file does not change under a running server, and hashing it per request
 # would be a file read on every page for a value that cannot have moved.
 TEMPLATES.env.globals["asset_version"] = asset_version()
+
+# The user-facing pages load three files of their own; one token covers all of them.
+TEMPLATES.env.globals["front_version"] = asset_version("polson.css", "front.css", "front.js")
 
 #: Line numbers because the record refers to scripts by path and a reader refers to them by line.
 FORMATTER = HtmlFormatter(style="friendly", cssclass="code", linenos="table", lineanchors="L")
@@ -643,6 +649,9 @@ def create_app(root: Path | None = None, registry: Registry | None = None,
         events = read_events(run.project.server_events)
         return JSONResponse(direction_mod.explain(text, events, run.since))
     # endregion
+
+    # The same studio in a client's terms: /home, /workflows, /compose, /requests. See `studio.front`.
+    front.install(app, TEMPLATES, base, contain)
 
     return app
 

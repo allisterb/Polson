@@ -1,0 +1,46 @@
+{% extends "front/base.html" %}
+{% import "front/macros.html" as m %}
+{% block content %}
+<h1 class="fr-display">What are we making today?</h1>
+<p class="fr-sub">Choose a workflow, say what you want, and watch the studio make it. It will ask when a choice is yours.</p>
+
+<div class="fr-grid-2 fr-section">
+  <section class="fr-card">
+    <p class="fr-eyebrow">In the studio</p>
+    {% if waiting or working %}
+      <ul class="fr-list">
+        {% for r in waiting + working %}
+          <li>{{ m.pill(r.status) }}<a href="{{ base }}/requests/{{ r.id }}">{{ r.title }}</a><span class="fr-small">{{ r.workflow }}</span></li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <h2 class="fr-heading">Nothing is being made right now</h2>
+      <p class="fr-small">The studio makes one request at a time. Start one and it begins straight away.</p>
+      <p><a class="ps-btn ps-btn-secondary" href="{{ base }}/workflows">{{ m.icon('plus', 18) }}Choose a workflow</a></p>
+    {% endif %}
+  </section>
+  <section class="fr-card">
+    <p class="fr-eyebrow">Resume a draft</p>
+    {% if drafts %}
+      <ul class="fr-list">
+        {% for r in drafts %}
+          <li>{{ m.pill(r.status) }}<a href="{{ base }}/requests/{{ r.id }}">{{ r.title }}</a><span class="fr-small">{{ r.workflow }}</span></li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <h2 class="fr-heading">No drafts</h2>
+      <p class="fr-small">A request saved as a draft waits here until you start it.</p>
+    {% endif %}
+  </section>
+</div>
+
+<section class="fr-section">
+  <div class="fr-section-head"><h2 class="fr-title">Start something new</h2><a class="fr-link" href="{{ base }}/workflows">All workflows</a></div>
+  <div class="fr-cards">{% for c in cards %}{{ m.workflow_card(c, base) }}{% endfor %}</div>
+</section>
+
+<section class="fr-section">
+  <div class="fr-section-head"><h2 class="fr-title">Recent requests</h2><a class="fr-link" href="{{ base }}/requests">All requests</a></div>
+  {% if rows %}{{ m.requests_table(rows, base) }}{% else %}<p class="fr-empty">Nothing yet. Your requests will be listed here.</p>{% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,34 @@
+{% import "front/macros.html" as m %}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Polson Studio{% endblock %}</title>
+<link rel="stylesheet" href="{{ base }}/static/polson.css?v={{ front_version }}">
+<link rel="stylesheet" href="{{ base }}/static/front.css?v={{ front_version }}">
+</head>
+<body class="ps-app">
+<nav class="ps-side" aria-label="Studio">
+  <a class="ps-wordmark" href="{{ base }}/home">Polson <span>Studio</span></a>
+  <a class="ps-nav" href="{{ base }}/home" {% if nav == 'home' %}aria-current="page"{% endif %}>{{ m.icon('home') }}<span>Dashboard</span></a>
+  <a class="ps-nav" href="{{ base }}/requests" {% if nav == 'requests' %}aria-current="page"{% endif %}>{{ m.icon('requests') }}<span>Requests</span>
+    {%- if waiting_count %}<span class="ps-nav-badge" title="Waiting on you">{{ waiting_count }}</span>{% endif %}</a>
+  <a class="ps-nav" href="{{ base }}/workflows" {% if nav == 'new' %}aria-current="page"{% endif %}>{{ m.icon('layout') }}<span>Workflows</span></a>
+  <div class="ps-side-foot">
+    <a class="ps-nav" href="{{ base }}/">{{ m.icon('settings') }}<span>Developer view</span></a>
+  </div>
+</nav>
+<div class="fr-main">
+  <header class="fr-top">
+    {% block crumb %}{% endblock %}
+    <a class="ps-btn ps-btn-primary" href="{{ base }}/workflows">{{ m.icon('plus', 18) }}New request</a>
+  </header>
+  {% block body %}<main class="fr-page">{% block content %}{% endblock %}</main>{% endblock %}
+  <footer class="fr-foot">
+    <span>Polson Studio, a co-creative graphics studio.</span>
+    <span>Licensed <a href="https://www.gnu.org/licenses/agpl-3.0.html" rel="license">AGPL-3.0</a> · <a href="{{ source_url }}">source for this version</a></span>
+  </footer>
+</div>
+<script src="{{ base }}/static/front.js?v={{ front_version }}" defer></script>
+</body>
+</html>

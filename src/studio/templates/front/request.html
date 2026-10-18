@@ -1,0 +1,103 @@
+{% extends "front/base.html" %}
+{% import "front/macros.html" as m %}
+{% block title %}{{ row.title }} · Polson Studio{% endblock %}
+{% block crumb %}<span class="fr-crumb"><a class="fr-link" href="{{ base }}/requests">Requests</a> / {{ row.title }}</span>{% endblock %}
+{% block body %}
+{%- set rec = row.record -%}
+{%- set can_run = not observe_only and row.runnable -%}
+<main class="fr-page fr-wide" data-request data-base="{{ base }}" data-name="{{ row.id }}"
+      {% if run %}data-run="{{ run.id }}"{% endif %} data-status="{{ row.status }}" data-answerable="{{ '1' if answerable else '' }}">
+  <header class="ps-rbar">
+    {% if notice %}<p class="fr-notice" role="status">{{ notice }}</p>{% endif %}
+    {% if not row.runnable and not observe_only %}<p class="fr-small" style="margin:0">Made in another host, so this page shows its record but cannot continue it.</p>{% endif %}
+    <div class="ps-rbar-top">
+      <h1 class="ps-rbar-title" style="margin:0">{{ row.title }}</h1>
+      {{ m.pill(row.status, 'status-pill') }}
+      <div class="ps-rbar-actions">
+        {% if row.status == 'draft' and can_run %}
+          <form method="post" action="{{ base }}/requests/{{ row.id }}/start">
+            <button class="ps-btn ps-btn-primary" type="submit" {% if active %}disabled title="The studio is making another request."{% endif %}>Start in the studio</button>
+          </form>
+        {% endif %}
+        {% if run %}<a class="ps-btn ps-btn-quiet ps-btn-sm" href="{{ base }}/runs/{{ run.id }}">Open the full record</a>{% endif %}
+      </div>
+    </div>
+    <div class="ps-rbar-fields">
+      <span class="ps-field fr-static"><span class="ps-field-label">Workflow</span><span class="ps-field-value">{{ row.workflow }}</span></span>
+      {% for a in rec.audiences or [] %}<span class="ps-field fr-static"><span class="ps-field-label">Audience {{ a.letter }}</span><span class="ps-field-value">{{ a.place }}{% if a.ageLabel %}, {{ a.ageLabel }}{% endif %}</span></span>{% endfor %}
+      {% if rec.sizes %}<span class="ps-field fr-static"><span class="ps-field-label">Sizes</span><span class="ps-field-value">{% for s in rec.sizes %}{{ s.width }} × {{ s.height }}{{ ', ' if not loop.last }}{% endfor %}</span></span>{% endif %}
+      {% if rec.formats %}<span class="ps-field fr-static"><span class="ps-field-label">Formats</span><span class="ps-field-value">{{ rec.formats|join(', ') }}</span></span>{% endif %}
+      {% for x in rec.extras or [] %}<span class="ps-field fr-static"><span class="ps-field-label">{{ x.label }}</span><span class="ps-field-value">{{ x.value }}</span></span>{% endfor %}
+    </div>
+  </header>
+
+  <div class="fr-request">
+    <section>
+      <div class="fr-viewer" data-viewer>
+        {% if row.thumb %}
+          <img src="{{ base }}/requests/{{ row.id }}/thumb" alt="The latest render">
+        {% else %}
+          <div class="fr-viewer-empty">
+            {{ m.kind_icon(row.kind, 40) }}
+            {% if row.status == 'draft' %}<strong>Not started yet</strong><span>Start it and the studio's renders appear here as they are made.</span>
+            {% else %}<strong>Nothing rendered yet</strong><span>The first render appears here as soon as it is made.</span>{% endif %}
+          </div>
+        {% endif %}
+      </div>
+      <div class="fr-caption">
+        <span class="fr-small" data-caption>{% if row.thumb %}The latest render{% endif %}</span>
+        <div class="fr-downloads" data-downloads></div>
+      </div>
+
+      {% if can_run and row.status in ('delivered', 'stopped') %}
+      <section class="fr-change fr-card">
+        <h2 class="fr-heading">Ask for a change</h2>
+        <p class="fr-small">The studio carries on from where it stopped, keeping what it decided and why.</p>
+        <form method="post" action="{{ base }}/requests/{{ row.id }}/start">
+          <textarea name="change" required maxlength="2000" placeholder="Move the letter to her right hand in panel 3."></textarea>
+          <button class="ps-btn ps-btn-primary" type="submit" {{ 'disabled' if active }}>Send</button>
+        </form>
+      </section>
+      {% endif %}
+    </section>
+
+    <aside class="fr-side-stack">
+      <div data-questions></div>
+
+      <section class="fr-card">
+        <p class="fr-eyebrow">Progress</p>
+        <ol class="ps-run" data-timeline>
+          {% if not run %}<li class="ps-run-step is-next"><span class="ps-run-mark"></span><span class="ps-run-name">Waiting to start</span><span class="ps-run-time"></span></li>{% endif %}
+        </ol>
+        <div class="ps-meter" data-budget hidden style="margin-top: var(--space-5)">
+          <div class="ps-meter-head"><span class="ps-meter-label">Image requisitions</span><span class="ps-meter-value" data-budget-value></span></div>
+          <div class="ps-meter-track" role="meter" aria-label="Image requisitions" aria-valuemin="0"><div class="ps-meter-fill" data-budget-fill style="width:0"></div></div>
+        </div>
+      </section>
+
+      {% include "front/learned.html" %}
+
+      <section class="fr-card" data-documents hidden>
+        <p class="fr-eyebrow">What the studio wrote</p>
+        <ul class="fr-docs" data-doc-list></ul>
+      </section>
+
+      <section class="fr-card">
+        <p class="fr-eyebrow">The request</p>
+        <dl class="fr-summary">
+          <dt>Name</dt><dd>{{ row.title }}</dd>
+          <dt>Workflow</dt><dd>{{ row.workflow }}</dd>
+          {% if rec.files %}<dt>Files</dt><dd>{{ rec.files|join(', ') }}</dd>{% endif %}
+          {% if rec.created %}<dt>Made</dt><dd class="fr-spec">{{ rec.created }}</dd>{% endif %}
+        </dl>
+        {% if brief %}
+        <details class="fr-more" style="margin-top: var(--space-3)">
+          <summary>The brief, as the studio received it</summary>
+          <div class="fr-brief-text">{{ brief }}</div>
+        </details>
+        {% endif %}
+      </section>
+    </aside>
+  </div>
+</main>
+{% endblock %}

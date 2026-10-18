@@ -1,0 +1,190 @@
+{% extends "front/base.html" %}
+{% import "front/macros.html" as m %}
+{% block title %}{{ card.title }} · New request · Polson Studio{% endblock %}
+{% block crumb %}<span class="fr-crumb"><a class="fr-link" href="{{ base }}/workflows">Workflows</a> / {{ card.title }}</span>{% endblock %}
+{% block body %}
+{%- set chosen_sizes = form.sizes if form.sizes is defined and form.sizes else [sizes[0].key] -%}
+{%- set chosen_formats = form.formats if form.formats is defined and form.formats else [formats[0].ext] -%}
+{%- set extras_in = form.extras if form.extras is defined else {} -%}
+<main class="fr-page fr-wide">
+<form class="fr-compose" method="post" action="{{ base }}/requests" enctype="multipart/form-data" data-compose>
+  <input type="hidden" name="card" value="{{ card.slug }}">
+  <header class="ps-rbar fr-sticky">
+    {% if refused %}<p class="fr-notice is-failed" role="alert">{{ refused }}</p>{% endif %}
+    {% if observe_only %}<p class="fr-notice">This studio can watch requests but not make them.{% if create_at %} <a class="fr-link" href="{{ create_at }}">Make one on the create page</a>.{% endif %}</p>{% endif %}
+    <div class="ps-rbar-top">
+      <input class="ps-rbar-title" name="title" aria-label="Request title" required maxlength="80"
+             placeholder="Name this request" value="{{ form.title or '' }}">
+      {{ m.pill('draft') }}
+      <div class="ps-rbar-actions">
+        <button type="submit" class="ps-btn ps-btn-secondary" name="action" value="save" {{ 'disabled' if observe_only }}>Save as draft</button>
+        <button type="submit" class="ps-btn ps-btn-primary" name="action" value="start" {{ 'disabled' if observe_only }}
+                {% if active %}title="The studio is making another request; this one will be saved as a draft."{% endif %}>Start in the studio</button>
+      </div>
+    </div>
+
+    <div class="ps-rbar-fields">
+      <a class="ps-field" href="{{ base }}/workflows" title="Choose another workflow" style="text-decoration:none">
+        <span class="ps-field-label">Workflow</span><span class="ps-field-value">{{ card.title }}</span>{{ m.icon('chevron-down', 18) }}
+      </a>
+
+      {% if card.audiences %}
+      {%- set given = form.audiences if form.audiences is defined else [] -%}
+      <details class="fr-pop" data-audiences>
+        <summary class="ps-field"><span class="ps-field-label">Audience<span class="ps-req" aria-hidden="true"> *</span></span><span class="ps-field-value" data-summary>Who is it for?</span>{{ m.icon('chevron-down', 18) }}</summary>
+        <section class="ps-ogrid fr-panel fr-narrow" aria-label="Audience">
+          <h3 class="ps-ogrid-title">Who is it for?</h3>
+          <p class="ps-ogrid-hint">A place and an age band for each audience. With two, the studio makes one {{ 'film' if card.kind == 'video' else 'piece' }} for each and compares what they love.</p>
+          <div class="fr-audiences">
+            {% for i in range(max_audiences) %}
+            {%- set a = given[i] if i < given|length else {} -%}
+            <div class="fr-audience" data-audience>
+              <span class="fr-letter" aria-hidden="true">{{ 'ABC'[i] }}</span>
+              <input name="aud_place" maxlength="60" placeholder="{{ ['Tokyo', 'Mumbai', 'Lagos'][i] }}" aria-label="Audience {{ 'ABC'[i] }} place" value="{{ a.place or '' }}">
+              <select name="aud_age" aria-label="Audience {{ 'ABC'[i] }} age band">
+                <option value="">Any age</option>
+                {% for code, words in ages %}<option value="{{ code }}" {{ 'selected' if a.age == code }}>{{ words }}</option>{% endfor %}
+              </select>
+            </div>
+            {% endfor %}
+          </div>
+          <div class="fr-panel-foot"><button type="button" class="ps-btn ps-btn-quiet ps-btn-sm" data-add-audience hidden>{{ m.icon('plus', 16) }}Add another audience</button></div>
+        </section>
+      </details>
+      {% endif %}
+
+      {% if card.multi_route %}
+      <details class="fr-pop">
+        <summary class="ps-field"><span class="ps-field-label">Route</span><span class="ps-field-value" data-summary>{{ card.routes[route].label }}</span>{{ m.icon('chevron-down', 18) }}</summary>
+        <section class="ps-ogrid fr-panel fr-narrow" aria-label="Route">
+          <h3 class="ps-ogrid-title">Route</h3><p class="ps-ogrid-hint">Choose one</p>
+          <div class="ps-ogrid-tiles" style="--cols: 1">
+            {% for r in card.routes %}
+            <label class="ps-otile fr-plain" data-label="{{ r.label }}">
+              <input class="fr-vh" type="radio" name="route" value="{{ loop.index0 }}" {{ 'checked' if loop.index0 == route }}>
+              <span class="ps-otile-check" aria-hidden="true">{{ m.icon('check', 14) }}</span>
+              <span class="ps-otile-text"><span class="ps-otile-label">{{ r.label }}</span>{% if r.detail %}<span class="ps-otile-detail" style="font-family: var(--font-sans)">{{ r.detail }}</span>{% endif %}</span>
+            </label>
+            {% endfor %}
+          </div>
+        </section>
+      </details>
+      {% else %}<input type="hidden" name="route" value="0">{% endif %}
+
+      {% for i, opts in styles.items() if opts %}
+      <details class="fr-pop" data-route="{{ i }}" {{ 'hidden' if i != route }}>
+        <summary class="ps-field"><span class="ps-field-label">{{ card.style_label }}</span><span class="ps-field-value" data-summary>Studio's choice</span>{{ m.icon('chevron-down', 18) }}</summary>
+        <fieldset class="ps-ogrid fr-panel" style="margin:0" {{ 'disabled' if i != route }}>
+          <legend class="ps-ogrid-title" style="float:left; width:100%">{{ card.style_label }}</legend><p class="ps-ogrid-hint" style="clear:both">Choose one, or let the studio choose</p>
+          <div class="ps-ogrid-tiles" style="--cols: 3">
+            <label class="ps-otile fr-plain" data-label="Studio's choice">
+              <input class="fr-vh" type="radio" name="kind" value="" {{ 'checked' if i == route and not form.kind }}>
+              <span class="ps-otile-check" aria-hidden="true">{{ m.icon('check', 14) }}</span>
+              <span class="ps-otile-text"><span class="ps-otile-label">Let the studio choose</span></span>
+            </label>
+            {% for value, label in opts %}
+            <label class="ps-otile fr-plain" data-label="{{ label }}">
+              <input class="fr-vh" type="radio" name="kind" value="{{ value }}" {{ 'checked' if i == route and form.kind == value }}>
+              <span class="ps-otile-check" aria-hidden="true">{{ m.icon('check', 14) }}</span>
+              <span class="ps-otile-text"><span class="ps-otile-label">{{ label }}</span></span>
+            </label>
+            {% endfor %}
+          </div>
+        </fieldset>
+      </details>
+      {% endfor %}
+
+      <details class="fr-pop">
+        <summary class="ps-field"><span class="ps-field-label">Sizes<span class="ps-req" aria-hidden="true"> *</span></span><span class="ps-field-value" data-summary>Choose</span>{{ m.icon('chevron-down', 18) }}</summary>
+        <section class="ps-ogrid fr-panel" aria-label="Sizes">
+          <h3 class="ps-ogrid-title">Sizes</h3><p class="ps-ogrid-hint">Choose all that apply</p>
+          <div class="ps-ogrid-tiles">
+            {% for s in sizes %}
+            {%- set k = 44 / ([s.width, s.height]|max) -%}
+            <label class="ps-otile" data-label="{{ s.detail }}">
+              <input class="fr-vh" type="checkbox" name="sizes" value="{{ s.key }}" {{ 'checked' if s.key in chosen_sizes }}>
+              <span class="ps-otile-check" aria-hidden="true">{{ m.icon('check', 14) }}</span>
+              <span class="ps-otile-art"><span class="ps-otile-frame" style="width: {{ [8, (s.width * k)|round|int]|max }}px; height: {{ [8, (s.height * k)|round|int]|max }}px"></span></span>
+              <span class="ps-otile-text"><span class="ps-otile-label">{{ s.label }}</span><span class="ps-otile-detail">{{ s.detail }}</span></span>
+            </label>
+            {% endfor %}
+            <div class="fr-custom">
+              {{ m.icon('plus', 20) }}
+              <label for="custom_size" class="ps-otile-label">Custom size</label>
+              <input id="custom_size" name="custom_size" placeholder="2400 x 1200" value="{{ form.custom_size or '' }}" pattern="\s*\d{2,5}\s*[xX×]\s*\d{2,5}\s*" data-custom>
+              <span class="fr-spec">width × height, px</span>
+            </div>
+          </div>
+        </section>
+      </details>
+
+      <details class="fr-pop">
+        <summary class="ps-field"><span class="ps-field-label">Formats<span class="ps-req" aria-hidden="true"> *</span></span><span class="ps-field-value" data-summary>Choose</span>{{ m.icon('chevron-down', 18) }}</summary>
+        <section class="ps-ogrid fr-panel fr-narrow" aria-label="Formats">
+          <h3 class="ps-ogrid-title">Formats</h3><p class="ps-ogrid-hint">Choose all that apply</p>
+          <div class="ps-ogrid-tiles" style="--cols: {{ [formats|length, 4]|min }}">
+            {% for f in formats %}
+            <label class="ps-otile" data-label="{{ f.ext }}">
+              <input class="fr-vh" type="checkbox" name="formats" value="{{ f.ext }}" {{ 'checked' if f.ext in chosen_formats }}>
+              <span class="ps-otile-check" aria-hidden="true">{{ m.icon('check', 14) }}</span>
+              <span class="ps-otile-art"><span class="ps-otile-glyph">{{ f.ext }}</span></span>
+              <span class="ps-otile-text"><span class="ps-otile-label">{{ f.label }}</span></span>
+            </label>
+            {% endfor %}
+          </div>
+        </section>
+      </details>
+
+      {% for x in card.extras %}
+        {% if x.options %}
+        <details class="fr-pop">
+          <summary class="ps-field"><span class="ps-field-label">{{ x.label }}</span><span class="ps-field-value" data-summary>{{ extras_in.get(x.key) or x.default }}</span>{{ m.icon('chevron-down', 18) }}</summary>
+          <section class="ps-ogrid fr-panel fr-narrow" aria-label="{{ x.label }}">
+            <h3 class="ps-ogrid-title">{{ x.label }}</h3><p class="ps-ogrid-hint">Choose one</p>
+            <div class="ps-ogrid-tiles" style="--cols: {{ [x.options|length, 3]|min }}">
+              {% for o in x.options %}
+              <label class="ps-otile fr-plain" data-label="{{ o }}">
+                <input class="fr-vh" type="radio" name="x_{{ x.key }}" value="{{ o }}" {{ 'checked' if (extras_in.get(x.key) or x.default) == o }}>
+                <span class="ps-otile-check" aria-hidden="true">{{ m.icon('check', 14) }}</span>
+                <span class="ps-otile-text"><span class="ps-otile-label">{{ o }}</span></span>
+              </label>
+              {% endfor %}
+            </div>
+          </section>
+        </details>
+        {% else %}
+        <label class="ps-field fr-static">
+          <span class="ps-field-label">{{ x.label }}</span>
+          <input class="fr-inline" name="x_{{ x.key }}" maxlength="200" placeholder="{{ x.placeholder }}" value="{{ extras_in.get(x.key, '') }}">
+        </label>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </header>
+
+  <div class="fr-compose-body">
+    <section>
+      <h2 class="ps-label" style="margin:0">Files to use</h2>
+      <p class="ps-hint">References, data, logos or a brief document. Up to {{ max_files }} files, 16 MB each. Only the studio sees them.</p>
+      <div class="fr-assets" data-assets>
+        <label class="ps-asset ps-asset-upload">
+          {{ m.icon('upload', 24) }}
+          <span class="ps-asset-up-label">Add files</span>
+          <span class="ps-asset-up-hint">Images, PDF, CSV, text</span>
+          <input class="fr-vh" type="file" name="files" multiple accept="{{ accept }}" data-files>
+        </label>
+      </div>
+    </section>
+    <section class="ps-brief">
+      <label class="ps-label" for="brief">Brief<span class="ps-req" aria-hidden="true"> *</span></label>
+      <p class="ps-hint">What is it for, who will see it, and what must it not be? The studio asks when something is unclear.</p>
+      <div class="ps-brief-box">
+        <textarea id="brief" name="brief" rows="10" maxlength="6000" required data-count
+                  placeholder="Say what it is for, who will see it, and what it must not be.">{{ form.brief or '' }}</textarea>
+        <div class="ps-brief-foot"><span class="ps-brief-count" data-counter>0 / 6000</span><span class="fr-small">Sizes, formats and files are added to the brief for you.</span></div>
+      </div>
+    </section>
+  </div>
+</form>
+</main>
+{% endblock %}
