@@ -223,6 +223,10 @@ public sealed class RunEventLog : Runtime
             case double d: writer.WriteNumberValue(d); break;
             case float f: writer.WriteNumberValue(f); break;
 
+            // Ahead of the dictionary case, which a JsonObject does not match (its pairs hold
+            // JsonNode, not object) — it would fall to the enumerable case as stringified pairs.
+            case System.Text.Json.Nodes.JsonNode node: node.WriteTo(writer); break;
+
             case IReadOnlyDictionary<string, int> tally:
                 writer.WriteStartObject();
                 foreach (var (k, n) in tally) writer.WriteNumber(k, n);

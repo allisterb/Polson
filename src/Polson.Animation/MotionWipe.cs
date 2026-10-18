@@ -21,7 +21,8 @@ using SkiaSharp;
 /// <remarks>
 /// <list type="bullet">
 /// <item><b>linear</b>: an edge crossing the frame along <c>angle</c> (90: left to right), from beyond one side to beyond
-/// the other, feather included, as EffectCraft's Linear Wipe.</item>
+/// the other, feather included, as EffectCraft's Linear Wipe. With <c>over</c>, a box, it crosses the box instead and
+/// erases only inside it, so a key's duration is the time the edge takes over the shape rather than over the frame.</item>
 /// <item><b>radial</b>: a sweep about <c>center</c> from <c>startAngle</c> (clockwise from up), <c>clockwise</c>,
 /// <c>counterclockwise</c> or <c>both</c>. Unlike EffectCraft's, its edge starts half a feather before the start line and
 /// ends half a feather past the end, so it is the identity at 0 and empty at 1 with a feather, as the linear one is.</item>
@@ -43,13 +44,13 @@ internal sealed class MotionWipeLayer : MotionLayer
         type = o.Raw("type") as string ?? throw new ArgumentException("wipe's type is 'linear', 'radial', 'iris' or 'blinds'.");
         string[] allowed = type switch
         {
-            "linear" => ["angle"],
+            "linear" => ["angle", "over"],
             "radial" => ["startAngle", "center", "sweep"],
             "iris" => ["center", "points", "innerRadius", "rotation", "invert"],
             "blinds" => ["angle", "width"],
             _ => throw new ArgumentException($"wipe has no type '{type}'. It takes 'linear', 'radial', 'iris' or 'blinds'."),
         };
-        string[] all = ["angle", "startAngle", "center", "sweep", "points", "innerRadius", "rotation", "invert", "width"];
+        string[] all = ["angle", "over", "startAngle", "center", "sweep", "points", "innerRadius", "rotation", "invert", "width"];
         foreach (var key in all.Where(k => o.Has(k) && !allowed.Contains(k)))
             throw new ArgumentException($"A {type} wipe has no '{key}'. It takes completion, feather, {string.Join(", ", allowed)}, desc.");
 
@@ -68,6 +69,7 @@ internal sealed class MotionWipeLayer : MotionLayer
         inner = o.Number("innerRadius", 1);
         if (inner is <= 0 or > 1) throw new ArgumentException("wipe's innerRadius is a fraction of the outer radius, more than 0 and at most 1: it makes the polygon a star.");
         invert = o.Bool("invert", false);
+        over = o.Has("over") ? Box(o.Raw("over")) : null;
     }
     #endregion
 
@@ -80,6 +82,7 @@ internal sealed class MotionWipeLayer : MotionLayer
     private readonly int points;
     private readonly double inner;
     private readonly bool invert;
+    private readonly SKRect? over;
     #endregion
 
     #region Methods
@@ -113,15 +116,60 @@ internal sealed class MotionWipeLayer : MotionLayer
 
     // ------------------------------------------------------------------ the geometry, shared by the render and the exports
 
-    /// <summary>Linear: the direction, the edge along it, and the frame's extent across it.</summary>
+    /// <summary><c>over</c>: <c>[x0, y0, x1, y1]</c>, or <c>{ x, y, width, height }</c> as <c>text.boundsAt</c> gives it.</summary>
+    private static SKRect Box(object? value)
+    {
+        const string what = "wipe's over is a box in the stack's units: [x0, y0, x1, y1], or { x, y, width, height } as text.boundsAt(t) gives it";
+        double N(object? x, string name) => MotionTypes.Read(x, MotionType.Real, $"wipe's over {name}")[0];
+        double[] b = value switch
+        {
+            IList { Count: 4 } l => [.. l.Cast<object?>().Select((x, i) => N(x, $"[{i}]"))],
+            _ when JsInterop.AsDict(value) is { } d && new[] { "x", "y", "width", "height" }.All(d.Contains) =>
+                [N(d["x"], "x"), N(d["y"], "y"), N(d["x"], "x") + N(d["width"], "width"), N(d["y"], "y") + N(d["height"], "height")],
+            _ => throw new ArgumentException(what + "."),
+        };
+        var box = new SKRect((float)Math.Min(b[0], b[2]), (float)Math.Min(b[1], b[3]), (float)Math.Max(b[0], b[2]), (float)Math.Max(b[1], b[3]));
+        return box.Width > 0 && box.Height > 0 ? box : throw new ArgumentException(what + ", and this one has no width or no height.");
+    }
+
+    private static SKPoint[] Corners(SKRect r) => [new(r.Left, r.Top), new(r.Right, r.Top), new(r.Right, r.Bottom), new(r.Left, r.Bottom)];
+
+    /// <summary>Linear: the direction, the edge along it, and the extent across it of what it crosses — the frame, or <c>over</c>.</summary>
     private ((double X, double Y) D, double Edge, double F, double Vmin, double Vmax, double Umin) Linear(double time, SKPoint[] frame)
     {
         var d = Dir(angle.Evaluate(time)[0]);
         var f = Feather(time);
-        var u = frame.Select(p => p.X * d.X + p.Y * d.Y).ToArray();
-        var v = frame.Select(p => -p.X * d.Y + p.Y * d.X).ToArray();
+        var crossed = over is { } box ? Corners(box) : frame;
+        var u = crossed.Select(p => p.X * d.X + p.Y * d.Y).ToArray();
+        var v = crossed.Select(p => -p.X * d.Y + p.Y * d.X).ToArray();
         var edge = u.Min() - f + (u.Max() - u.Min() + 2 * f) * Done(time);
         return (d, edge, f, v.Min(), v.Max(), u.Min());
+    }
+
+    /// <summary>
+    /// A hard linear wipe's erased region: the band behind the edge, four points; or with <c>over</c> the box's part behind
+    /// it, always five (a box cut by a line has at most five corners; fewer are padded by repeating the last, none by one
+    /// corner five times), so an animated <c>d</c> or <c>bline</c> keeps its length from frame to frame.
+    /// </summary>
+    private SKPoint[] Erased(((double X, double Y) D, double Edge, double F, double Vmin, double Vmax, double Umin) l)
+    {
+        if (over is not { } box) return BandOf(l.D, l.Umin - Far, l.Edge, l.Vmin - Far, l.Vmax + Far);
+        double U(SKPoint p) => p.X * l.D.X + p.Y * l.D.Y;
+        var corners = Corners(box);
+        var kept = new List<SKPoint>();
+        for (var i = 0; i < 4; i++)
+        {
+            var (a, b) = (corners[i], corners[(i + 1) % 4]);
+            if (U(a) <= l.Edge) kept.Add(a);
+            if ((U(a) <= l.Edge) != (U(b) <= l.Edge))
+            {
+                var s = (float)((l.Edge - U(a)) / (U(b) - U(a)));
+                kept.Add(new(a.X + s * (b.X - a.X), a.Y + s * (b.Y - a.Y)));
+            }
+        }
+        if (kept.Count == 0) kept.Add(corners[0]);
+        while (kept.Count < 5) kept.Add(kept[^1]);
+        return [.. kept];
     }
 
     private static SKPoint P((double X, double Y) d, double u, double v) => new((float)(u * d.X - v * d.Y), (float)(u * d.Y + v * d.X));
@@ -224,17 +272,19 @@ internal sealed class MotionWipeLayer : MotionLayer
         {
             case "linear":
             {
-                var (d, edge, f, v0, v1, u0) = Linear(time, frame);
+                var l = Linear(time, frame);
+                var (d, edge, f) = (l.D, l.Edge, l.F);
                 if (f <= 0)
                 {
-                    using var band = Poly(BandOf(d, u0 - Far, edge, v0 - Far, v1 + Far));
+                    using var band = Poly(Erased(l));
                     canvas.DrawPath(band, ink);
                     return;
                 }
                 using var shader = SKShader.CreateLinearGradient(P(d, edge - f / 2, 0), P(d, edge + f / 2, 0),
                     [SKColors.Black, SKColors.Transparent], [0, 1], SKShaderTileMode.Clamp);
                 ink.Shader = shader;
-                canvas.DrawPaint(ink);
+                if (over is { } box) canvas.DrawRect(box, ink);
+                else canvas.DrawPaint(ink);
                 return;
             }
             case "blinds":
@@ -358,19 +408,40 @@ internal sealed class MotionWipeLayer : MotionLayer
         {
             case "linear" when Hard():
             {
-                var corners = Enumerable.Range(0, 4).Select(k => Point(i =>
-                {
-                    var (d, edge, _, v0, v1, u0) = Linear(times[i], frames[i]);
-                    return BandOf(d, u0 - Far, edge, v0 - Far, v1 + Far)[k];
-                })).ToArray();
+                var corners = Enumerable.Range(0, over is null ? 4 : 5).Select(k => Point(i => Erased(Linear(times[i], frames[i]))[k])).ToArray();
                 return Region(sif, corners, false, null);
             }
             case "linear":
-                return Element("linear_gradient", "0.1", sif,
+            {
+                object[] gradient =
+                [
                     sif.Param("p1", Point(i => { var (d, edge, f, _, _, _) = Linear(times[i], frames[i]); return P(d, edge - f / 2, 0); })),
                     sif.Param("p2", Point(i => { var (d, edge, f, _, _, _) = Linear(times[i], frames[i]); return P(d, edge + f / 2, 0); })),
                     GradientParam(times, _ => [(0f, 1f), (1f, 0f)]),
-                    SifWriter.Param("loop", SifWriter.Bool(false)), SifWriter.Param("zigzag", SifWriter.Bool(false)));
+                    SifWriter.Param("loop", SifWriter.Bool(false)), SifWriter.Param("zigzag", SifWriter.Bool(false)),
+                ];
+                if (over is not { } box) return Element("linear_gradient", "0.1", sif, gradient);
+                // Confined to the box: a group that erases, holding the gradient (composite, 0) and an inverted box erasing it outside.
+                var outside = RegionParams(sif, [.. Corners(box).Select(p => (MotionNode)new MotionConstant(MotionType.Vector, [p.X, p.Y]))], true, null);
+                return Element("group", "0.3", sif,
+                    SifWriter.Param("origin", SifWriter.Value(MotionType.Vector, [0, 0])),
+                    SifWriter.Param("transformation", new XElement("composite", new XAttribute("type", "transformation"),
+                        new XElement("offset", SifWriter.Value(MotionType.Vector, [0, 0])),
+                        new XElement("angle", SifWriter.Value(MotionType.Angle, [0])),
+                        new XElement("skew_angle", SifWriter.Value(MotionType.Angle, [0])),
+                        new XElement("scale", SifWriter.Value(MotionType.Vector, [1, 1])))),
+                    SifWriter.Param("canvas", new XElement("canvas",
+                        Inner("linear_gradient", 0, gradient),
+                        Inner("region", SifBlendMethod, outside))),
+                    SifWriter.Param("time_dilation", new XElement("real", new XAttribute("value", "1"))),
+                    SifWriter.Param("time_offset", new XElement("time", new XAttribute("value", MotionTypes.Time(0)))),
+                    SifWriter.Param("children_lock", SifWriter.Bool(false)),
+                    SifWriter.Param("outline_grow", new XElement("real", new XAttribute("value", "0"))),
+                    SifWriter.Param("z_range", SifWriter.Bool(false)),
+                    SifWriter.Param("z_range_position", new XElement("real", new XAttribute("value", "0"))),
+                    SifWriter.Param("z_range_depth", new XElement("real", new XAttribute("value", "0"))),
+                    SifWriter.Param("z_range_blur", new XElement("real", new XAttribute("value", "0"))));
+            }
             case "blinds":
                 return Element("linear_gradient", "0.1", sif,
                     SifWriter.Param("p1", SifWriter.Value(MotionType.Vector, [0, 0])),
@@ -409,7 +480,18 @@ internal sealed class MotionWipeLayer : MotionLayer
 
     /// <summary>A closed region of corner points, black, erasing.</summary>
     private XElement Region(SifWriter sif, MotionNode[] corners, bool inverted, XElement? featherParam) =>
-        Element("region", "0.1", sif,
+        Element("region", "0.1", sif, RegionParams(sif, corners, inverted, featherParam));
+
+    /// <summary>A layer inside the wipe's own group: at full amount, blended by <paramref name="blend"/>.</summary>
+    private static XElement Inner(string type, int blend, object[] content) =>
+        new("layer", new XAttribute("type", type), new XAttribute("active", "true"), new XAttribute("version", "0.1"),
+            SifWriter.Param("z_depth", new XElement("real", new XAttribute("value", "0"))),
+            SifWriter.Param("amount", new XElement("real", new XAttribute("value", "1"))),
+            SifWriter.Param("blend_method", new XElement("integer", new XAttribute("value", blend))),
+            content);
+
+    private static object[] RegionParams(SifWriter sif, MotionNode[] corners, bool inverted, XElement? featherParam) =>
+        [
             SifWriter.Param("color", SifWriter.Value(MotionType.Color, [0, 0, 0, 1])),
             SifWriter.Param("origin", SifWriter.Value(MotionType.Vector, [0, 0])),
             SifWriter.Param("invert", SifWriter.Bool(inverted)),
@@ -426,7 +508,8 @@ internal sealed class MotionWipeLayer : MotionLayer
                     new XElement("t1", SifWriter.Value(MotionType.Vector, [0, 0])),
                     new XElement("t2", SifWriter.Value(MotionType.Vector, [0, 0])),
                     new XElement("split_radius", SifWriter.Bool(true)),
-                    new XElement("split_angle", SifWriter.Bool(true))))))));
+                    new XElement("split_angle", SifWriter.Bool(true)))))))
+        ];
 
     /// <summary>A black gradient of erase stops: one value when it never changes, else a held key at every frame.</summary>
     private static XElement GradientParam(double[] times, Func<double, (float Pos, float Erase)[]> at)
@@ -459,7 +542,7 @@ internal sealed class MotionWipeLayer : MotionLayer
             var frame = Frame(stack.SpaceAt(t).Space);
             var pts = type switch
             {
-                "linear" => Linear(local, frame) is var l ? BandOf(l.D, l.Umin - Far, l.Edge, l.Vmin - Far, l.Vmax + Far) : [],
+                "linear" => Erased(Linear(local, frame)),
                 "radial" => Done(local) <= 0 ? [] : Wedge(local, Centre(local, frame)),
                 "iris" => Iris(local, frame) is var i && i.Vertices.Length > 0 ? i.Vertices : Circle(i.C, i.R),
                 _ => throw new InvalidOperationException($"A blinds wipe{(Desc is null ? "" : $" '{Desc}'")} cannot be written as animated SVG: its bands change in number. Write a .sif, or capture the composition as frames."),

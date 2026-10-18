@@ -373,7 +373,7 @@ public class MotionToolkit : IDisposable
 
     /// <summary>
     /// A looping animated WebP made from a finished video, for a page that shows images and not video:
-    /// <c>{ width?, quality?, loop? }</c>. At most 1280 wide unless <c>width</c> says otherwise, never wider than the
+    /// <c>{ width?, quality?, loop? }</c>. At most 960 wide unless <c>width</c> says otherwise, never wider than the
     /// video, and silent. Returns what was written, read back from the file.
     /// </summary>
     public Dictionary<string, object?> VideoToWebp(string video, string filePath, object? options = null) =>

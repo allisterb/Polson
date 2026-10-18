@@ -288,6 +288,9 @@ public static class JsSurface
         // an idiom because resolution here is strict, so `typeof`, `in`, `Object.hasOwn` and
         // `Reflect.has` all throw instead of answering. See `MemberIndex`.
         "has", "suggest",
+
+        // The call's `args`: plain JSON data, like Session, with no SDK members to enumerate.
+        "ARGS",
     };
     #endregion
 }

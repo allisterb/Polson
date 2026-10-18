@@ -360,11 +360,11 @@ public class MotionVideoTests : TestsRuntime, IDisposable
     }
 
     /// <summary>
-    /// A wide video is made 1280 wide unless told, the height keeping the aspect, and a narrower width is honoured. A video
+    /// A wide video is made 960 wide unless told, the height keeping the aspect, and a narrower width is honoured. A video
     /// that never changes is a still image, and says so.
     /// </summary>
     [Fact]
-    public void TestAWebpIsAtMost1280WideUnlessTold()
+    public void TestAWebpIsAtMost960WideUnlessTold()
     {
         if (!FFmpeg.Available) return;
         var motion = new MotionToolkit(root);
@@ -373,8 +373,8 @@ public class MotionVideoTests : TestsRuntime, IDisposable
         comp.SaveVideo("wide.mp4", Opts(("to", 0.04)));
 
         var wide = motion.VideoToWebp("wide.mp4", "wide.webp");
-        Assert.Equal(1280, wide["width"]);
-        Assert.Equal(80, wide["height"]);
+        Assert.Equal(960, wide["width"]);
+        Assert.Equal(60, wide["height"]);
         Assert.Contains((List<object?>)wide["warnings"]!, w => ((string)w!).Contains("still image"));
 
         var narrow = motion.VideoToWebp("wide.mp4", "narrow.webp", Opts(("width", 400d)));

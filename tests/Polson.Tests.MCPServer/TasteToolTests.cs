@@ -188,10 +188,11 @@ public class TasteToolTests : TestsRuntime, IDisposable
         Assert.Contains("Mexico", films["locality"]!["disambiguation"]!.GetValue<string>());
         var ids = string.Join(",", films["entities"]!.AsArray().Select(e => e!["id"]!.GetValue<string>()));
 
-        var shared = await tools.Taste("describe", entities: ids, type: "aesthetic,motif", take: 12, label: "what they share");
+        // No type: these are films, so only the kinds that describe one, and nothing from places or brands.
+        var shared = await tools.Taste("describe", entities: ids, take: 12, label: "what they share");
         Assert.True(shared["ok"]!.GetValue<bool>(), shared.ToJsonString());
-        Assert.All(shared["tags"]!.AsArray(), t =>
-            Assert.Contains(t!["type"]!.GetValue<string>(), new[] { "urn:tag:aesthetic_property:qloo", "urn:tag:motif:qloo" }));
+        Assert.NotNull(shared["note"]);
+        Assert.All(shared["tags"]!.AsArray(), t => Assert.Contains(t!["type"]!.GetValue<string>(), TasteDescribe.FilmKinds));
 
         var status = await tools.Taste("status");
         Assert.NotNull(status["budget"]!["monthlyRemaining"]);
@@ -230,6 +231,38 @@ public class TasteToolTests : TestsRuntime, IDisposable
         Assert.Equal(
             ["urn:tag:aesthetic_property:qloo", "urn:tag:motif:qloo", "urn:tag:genre:media"],
             DrawingMcpTools.TasteTagTypes("aesthetic, motif, urn:tag:genre:media, urn:entity:movie"));
+
+    /// <summary>
+    /// Unfiltered, Qloo's top tags over films were a credit card and a hotel rating (trailer5), so films this session
+    /// resolved get the film kinds and a note; 'all' and ids never seen get the overview.
+    /// </summary>
+    [Fact]
+    public async Task Describe_FilmsWithNoTypeAskForTheFilmKindsAndSaySo()
+    {
+        const string tags = """{ "results": { "tags": [ { "name": "Sample Gloom", "tag_id": "urn:tag:style:qloo:sample_gloom", "type": "urn:tag", "subtype": "urn:tag:style:qloo" } ] } }""";
+        DrawingMcpTools.TasteClient = new QlooClient("test-key", new HttpClient(new StubHandler(r =>
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(r.RequestUri!.AbsolutePath.Contains("insights") ? tags : Search, Encoding.UTF8, "application/json"),
+            })), QlooClient.HackathonBaseUrl);
+        var tools = new DrawingMcpTools();
+        await tools.Taste("resolve", name: "Twin Title", type: "movie");
+
+        var films = await tools.Taste("describe", entities: "M-1,M-2");
+        var all = await tools.Taste("describe", entities: "M-1,M-2", type: "all");
+        var unseen = await tools.Taste("describe", entities: Guid.NewGuid().ToString());
+
+        var sent = Uri.UnescapeDataString(films["request"]!.GetValue<string>());
+        Assert.Contains("filter.tag.types=urn:tag:style:qloo,urn:tag:theme:qloo", sent);
+        Assert.Contains("diversify.by=subtype", sent);
+        Assert.Contains("only the kinds that describe", films["note"]!.GetValue<string>());
+        Assert.Equal("Sample Gloom", films["tags"]![0]!["name"]!.GetValue<string>());
+
+        Assert.DoesNotContain("filter.tag.types", all["request"]!.GetValue<string>());
+        Assert.Null(all["note"]);
+        Assert.DoesNotContain("filter.tag.types", unseen["request"]!.GetValue<string>());
+        Assert.Contains("places and brands", unseen["note"]!.GetValue<string>());
+    }
 
     /// <summary>
     /// A synthetic Qloo for a profile: the audience's list (age signal present) is E-1, E-2, E-3; the place's baseline

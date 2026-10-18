@@ -161,7 +161,7 @@ internal static class MotionVideo
     /// <summary>
     /// A looping animated WebP at <paramref name="filePath"/> made from the finished video at <paramref name="video"/>, for
     /// a page or a README that shows an image and not a video. <c>options</c>: <c>{ width?, quality?, loop? }</c> — at
-    /// most 1280 wide unless given and never wider than the video, quality 80, looping forever.
+    /// most 960 wide unless given and never wider than the video, quality 80, looping forever.
     /// </summary>
     public static Dictionary<string, object?> ToWebp(string video, string filePath, MotionOptions o, string? projectRoot, MotionToolkit? motion)
     {
@@ -181,7 +181,7 @@ internal static class MotionVideo
         var info = FFmpeg.Probe(source, video, format, who);
         var quality = o.Number("quality", 80);
         if (quality is < 1 or > 100) throw new ArgumentException($"{who}'s quality is from 1 to 100, not {quality}.");
-        var width = o.Number("width", Math.Min(1280, info.Width));
+        var width = o.Number("width", Math.Min(960, info.Width));
         if (width != Math.Floor(width) || width < 16 || width > info.Width)
             throw new ArgumentException($"{who}'s width is a whole number from 16 to the video's own {info.Width}, not {width}: " +
                 "a WebP is made at the video's size or smaller.");

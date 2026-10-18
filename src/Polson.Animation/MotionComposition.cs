@@ -415,8 +415,9 @@ public abstract class MotionLayerList
 
     /// <summary>
     /// A wipe of everything below it in this stack, hidden as <c>completion</c> runs 0 → 1:
-    /// <c>{ type, completion, feather?, angle?, startAngle?, center?, sweep?, points?, innerRadius?, rotation?, invert?, width?, amount?, desc? }</c>.
-    /// <c>type</c> is <c>'linear'</c> (<c>angle</c>, 90 left to right), <c>'radial'</c> (<c>startAngle</c> clockwise from up,
+    /// <c>{ type, completion, feather?, angle?, over?, startAngle?, center?, sweep?, points?, innerRadius?, rotation?, invert?, width?, amount?, desc? }</c>.
+    /// <c>type</c> is <c>'linear'</c> (<c>angle</c>, 90 left to right; <c>over</c>, a box <c>[x0, y0, x1, y1]</c> or
+    /// <c>{ x, y, width, height }</c>, to cross that and erase only inside it), <c>'radial'</c> (<c>startAngle</c> clockwise from up,
     /// <c>center</c>, <c>sweep</c> clockwise, counterclockwise or both), <c>'iris'</c> (<c>center</c>, a circle or <c>points</c>
     /// with <c>innerRadius</c> and <c>rotation</c>, <c>invert</c> to close down instead) or <c>'blinds'</c> (<c>angle</c>,
     /// <c>width</c>). A reveal keys completion 1 → 0. It stops at its own group.
@@ -429,7 +430,7 @@ public abstract class MotionLayerList
         var withBlend = new Hashtable();
         foreach (DictionaryEntry e in given) withBlend[e.Key] = e.Value;
         withBlend["blend"] = "alphaOver";
-        var o = new MotionOptions(withBlend, "wipe", "type", "completion", "feather", "angle", "startAngle", "center", "sweep",
+        var o = new MotionOptions(withBlend, "wipe", "type", "completion", "feather", "angle", "over", "startAngle", "center", "sweep",
             "points", "innerRadius", "rotation", "invert", "width", "amount", "blend", "desc");
         layers.Add(new MotionWipeLayer(o, this));
         return this;

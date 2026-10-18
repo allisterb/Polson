@@ -100,6 +100,14 @@ Scripts execute within a secure, sandboxed [Jint](https://github.com/sebastianro
   > **This is the difference between editing a drawing and retyping it.** On a measured four-agent run, 850 KB of JavaScript went over the wire in 55 calls; the twenty largest took a mean of **three minutes each to emit**, against a median engine time of **45 ms** — and consecutive large scripts shared **71%** of their lines. Nearly all of that was re-sending a program in order to change part of it.
   >
   > So once a piece is more than a screenful, keep it in a file: write `artwork.js` with your ordinary editor, change the layer you are working on, and run `ExecuteScript(scriptFile: 'artwork.js', outFile: 'artifacts/stage3.webp')`. The record is unaffected — the server still copies **what actually ran** into `scripts/`, so a later edit to the file never rewrites the history of an earlier execution.
+- **Running one file as several variants (`args`):** Pass `args` as a JSON object string — `ExecuteScript(scriptFile: 'trailer.js', args: '{"audience":"b","mode":"part","part":2}')` — and the script reads it as the global **`ARGS`**, a plain JavaScript object. `ARGS` is `{}` when no `args` are given (and in `polson eval`), so give every read a default and the file still runs alone:
+  ```javascript
+  const AUDIENCE = ARGS.audience ?? 'a';
+  const MODE = ARGS.mode ?? 'frame';
+  ```
+  Values are JSON only — strings, numbers, booleans, null, arrays and objects; no functions — and at most 16 KB, which is for choosing a variant, not for carrying data. Anything else is **refused** before the script runs, with an error naming `args`. Each call's `args` are recorded on its `script.start` event, and do not carry over to the next call; `Session` is for what should.
+  > [!TIP]
+  > **Prefer this to editing a constant before each run.** One trailer run switched audience, mode and part with an edit to `trailer.js` before each of about twenty executions. The file was then different every time it was run, and since `scripts/` holds whatever ran, those snapshots were the only record of which variant each execution was. With `args` the file stays put and the record names the variant.
 - **Logging & Output:** Output via `console.log(...)`, `log(...)`, `error(...)`, or `table(...)`.
   > [!IMPORTANT]
   > **`JSON.stringify` on an SDK result is safe, and gives you the documented names.** A result carrying an image — `PhotoAsset`, `MaterialAsset`, `BackdropPlate`, `MatteAsset`, `ImageData` — serialises its pixels as a **`byteLength`** rather than transcribing them, and every key comes back in the camelCase spelling this reference uses, so `JSON.parse(JSON.stringify(photo)).aspectRatio` is the number you expect. The real buffer is untouched: `photo.bytes` and `imageData.data` are unchanged.
@@ -5032,6 +5040,9 @@ ctx.fillText(p.cite(), 24, H - 18);                     // "Qloo Insights API, /
 >
 > **Requests are metered** — five a second and 10,000 a month for the whole studio — and this session has an allowance (`Taste.budget`). A repeated question is answered from the cache and costs nothing (`fromCache`), so ask the same thing the same way. A query with an unknown or misspelt parameter is refused before it is sent, because Qloo would otherwise ignore it silently and answer with nothing.
 
+> [!WARNING]
+> **An unfiltered `describe` over films answers with places and brands.** Tags shared by a set of entities span every domain Qloo tags, and the off-domain ones rank first: over six films (2026-10-18) the top four were "JCB" (a credit card), "Cultural landmark", "Five Star" (a hotel rating) and "Identifies as women-owned", all at affinity 1.0. So with no `type`, a `describe` whose entities this session knows to be films or shows asks only for the kinds that describe a film — style, theme, archetype, plot, subgenre and genre, the same as `type: 'film'` — and the reply's `note` says so; the request line shows the `filter.tag.types` it sent. `type: 'all'` asks for the overview anyway, and ids this session never saw get it too, with a `note`. `aesthetic` and `motif` are not film tags (none of 238 films carries one): asked for over films they return fashion words like "Fluid Silhouettes". Even filtered, `describe` is **weak evidence**: two halves of one audience's titles shared none of their tags.
+
 ## `Taste`
 
 - `Taste.results` → `TasteResult[]` — Every answer fetched this session, in order.
@@ -5057,7 +5068,7 @@ ctx.fillText(p.cite(), 24, H - 18);                     // "Qloo Insights API, /
 - `tasteResult.warnings` → `string[]` — Ours (a parameter Qloo may ignore for this type, an empty answer) and Qloo's own.
 - `tasteResult.locality` → `object?` — `{ id, name, disambiguation }`: where Qloo placed the location.
 - `tasteResult.entities` → `object[]` — Each `{ id, name, type, types, disambiguation, popularity, affinity, tags, explainability, properties }`. `affinity` is to the query's signals; `popularity` is a 0–1 percentile.
-- `tasteResult.tags` → `object[]` — Each `{ id, name, type, popularity, affinity }`. Visual vocabulary has type `urn:tag:aesthetic_property:qloo`.
+- `tasteResult.tags` → `object[]` — Each `{ id, name, type, popularity, affinity }`. A place's visual vocabulary has type `urn:tag:aesthetic_property:qloo`; a film's look is `urn:tag:style:qloo`. A type ending `:place` or `:brand` is another domain's tag.
 - `tasteResult.audiences` → `object[]` — Each `{ id, name, type, parents }`.
 - `tasteResult.demographics` → `object[]` — For `demographics`: one block per signal, affinity by age band and gender, as Qloo sent it.
 - `tasteResult.comparison` → `object?` — For `compare`: Qloo's result as sent.
@@ -5133,9 +5144,9 @@ log(`${film.frames} frames, ${film.durationMs} ms, warnings: ${film.warnings.len
 
 A silent short film often has to go where only images go: a README, a Markdown write-up, a page with no video player. Make the video first, then make a looping animated WebP from it:
 
-- `Motion.videoToWebp(video: string, filePath: string, options?)` → `{ path, format: 'webp', video, frames, storedFrames, fps, durationMs, width, height, loop, bytes, warnings }` — re-encodes an `.mp4` or `.webm` that `saveVideo` or `joinVideos` wrote as an animated `.webp`. `options`: `{ width?, quality?, loop? }`. `width` is **at most 1280 unless you give one**, never wider than the video, and the height keeps the aspect. `quality` is 1–100 (80). `loop` is read as `Motion.save` reads it: `true` (the default) loops forever, `false` plays once and holds the last frame, a number plays that many times.
+- `Motion.videoToWebp(video: string, filePath: string, options?)` → `{ path, format: 'webp', video, frames, storedFrames, fps, durationMs, width, height, loop, bytes, warnings }` — re-encodes an `.mp4` or `.webm` that `saveVideo` or `joinVideos` wrote as an animated `.webp`. `options`: `{ width?, quality?, loop? }`. `width` is **at most 960 unless you give one**, never wider than the video, and the height keeps the aspect. `quality` is 1–100 (80). `loop` is read as `Motion.save` reads it: `true` (the default) loops forever, `false` plays once and holds the last frame, a number plays that many times.
 - **The WebP is silent**: a video with sound gives a warning that it was left out. **Frames that do not change are merged**, so `storedFrames` is often fewer than `frames`. A video whose frames are all the same comes out as a still image, and `warnings` says so.
-- **Its cost is in a script's time limit.** Measured, a 15-second 24 fps film takes about 8 s at 1280 wide (about 1.4 MB) and about 28 s at 1920 wide (about 2.2 MB), which is nearly a whole script. Make it in a script of its own after the film is joined, and keep the default width unless the brief asks for more.
+- **Its cost is in a script's time limit, and it depends on how much moves.** The encoder is one thread, and a frame that changes costs far more than one that holds. Measured on 15-second 24 fps films: **7–9 s at 960 wide** (1.4–4.1 MB); **8–16 s at 1280** — the low end for a film of long holds, the high end for one with a camera push or a turning object in every frame — and about twice that on a busy machine; **more than a script at 1920**. Make it in a script of its own after the film is joined, and keep the default width unless the brief asks for more.
 - This is not `Motion.save`, which encodes frames held in memory and so cannot take a long film or one encoded in parts.
 
 ```javascript
@@ -5511,12 +5522,12 @@ Every layer, groups included, takes `blend`: how it combines with **what is unde
 ### Wipes — `comp.wipe(options)`
 
 `{ type, completion, feather?, ...the type's options, amount?, desc? }` — **hides everything below it in its stack as `completion` runs from 0 to 1**; a reveal keys it 1 → 0. It erases (Synfig's alpha over), so it **stops at its own group**: put it in a group with what it hides. `feather` softens the edge (0, hard). The wipes are EffectCraft's:
-- `type: 'linear'` — an edge crossing the frame along `angle` (90, left to right; 180, top to bottom), feather a linear ramp of that width.
+- `type: 'linear'` — an edge crossing the frame along `angle` (90, left to right; 180, top to bottom), feather a linear ramp of that width. **`over: [x0, y0, x1, y1]` makes it cross that box instead, and erase only inside it** — at 0.5 the edge is at the box's middle, not the frame's. Without it the edge's travel is the frame, so on a shape filling only a strip the edge is over the shape for a fraction of the key (trailer5: a 0.6 s key read as a two- or three-frame snap). `over` also takes `{ x, y, width, height }`, so `over: title.boundsAt(t)` crosses a text's ink box. It is read once, not keyed.
 - `type: 'radial'` — a sweep about `center` (the frame's centre) from `startAngle` (0, up), `sweep: 'clockwise' | 'counterclockwise' | 'both'`, feather in degrees.
 - `type: 'iris'` — a circle, or a polygon or star of `points` with `innerRadius` (a fraction of the outer, 1) and `rotation`, growing from `center` until it covers the frame; **`invert: true` erases outside it instead — the iris closing down on a subject**. Its feather blurs the shape, as Synfig feathers a shape.
 - `type: 'blinds'` — bands `width` apart (30) across `angle` (90: horizontal bands), each closing as completion rises.
 
-An option the type does not take is refused by name.
+An option the type does not take is refused by name. **A wipe's `center` and `over` are in its stack's units; in a 2D group above 3D planes, that is the frame's pixels**, not the planes' units before the camera projects them.
 
 **A wipe that erases nothing costs nothing**: at completion 0 (or amount 0) it is passed over, so it can wait in the film until its beat; an inverted iris at 0 is open past the frame, so it erases nothing and costs nothing too. Only feathered blinds begin half erased, so they cost a frame-sized layer for as long as they are shown. Erasing keeps the film on 8-bit surfaces; only a formula blend (`subtract`, `divide`, `multiply`…) puts the whole film on a float surface, which makes every layer dearer.
 
@@ -5531,7 +5542,7 @@ card.wipe({ type: 'iris', invert: true, feather: 6, completion: Motion.nodes.ani
 comp.render(1.6);
 ```
 
-To `.sif` as Synfig layers that erase: a hard linear or radial wipe as a region, a feathered linear one as a linear gradient, a feathered radial one as a conical gradient, an iris as a circle or region with Synfig's feather (all checked against `synfig`: within 24 levels on 98.6–100% of pixels). **Blinds go out as a looped linear gradient, which Synfig softens**: it averages over a tenth of a band either way, spreading each band's edges (measured: the same 19.9% of a frame erased, 22% of pixels by more than 24 levels). To SVG: hard linear, radial and iris wipes; feathered wipes and blinds are refused there.
+To `.sif` as Synfig layers that erase: a hard linear or radial wipe as a region, a feathered linear one as a linear gradient (with `over`, in an erasing group with an inverted box that confines it), a feathered radial one as a conical gradient, an iris as a circle or region with Synfig's feather (all checked against `synfig`: within 24 levels on 98.6–100% of pixels). **Blinds go out as a looped linear gradient, which Synfig softens**: it averages over a tenth of a band either way, spreading each band's edges (measured: the same 19.9% of a frame erased, 22% of pixels by more than 24 levels). To SVG: hard linear, radial and iris wipes; feathered wipes and blinds are refused there.
 
 ### Colour — `comp.colorCorrect(options?)`
 

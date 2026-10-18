@@ -108,18 +108,26 @@ film is planned, and the shared parts are shared on purpose.
 - **Each audience's motion comes from its own evidence, drafted before you look back at the other's.** The
   holds, the grade and the transitions of the second film are worked out from the second profile, not
   adjusted from the first. The poster workflow's first pairs came out as one poster twice because the second
-  audience was only asked whether it objected; it never objects.
+  audience was only asked whether it objected; it never objects. Make the separation a step you can show — the
+  first film's beats recorded in a `Stage.note` before the second's are written — and **claim it in `direction.md`
+  only if it happened**. If both were drafted together, say so there, as plainly as in `findings.md`: the
+  people judging the films read `direction.md`, and that is where an overclaim does its damage.
 - **Then decide what the pair shares, as the poster's series does.** Hold the system where it serves both:
   the type, the title, the end card's layout, and the beat grid when the evidence gives no reason for different
   beats. **Never share what each audience's evidence decides**: the holds when `comparePace` says they differ,
   and the grade.
 - **When `comparePace` says they differ, check that the films do.** The audience whose screen taste leans
   fast should get more changes on the beat or shorter holds. Record it with `Stage.check`, from the beat
-  tables (the count of beats where something arrives, or the median hold), not from a feeling. When it says
-  they do not differ, the films may share their holds; say so, and let the grade and the imagery carry the
-  difference.
-- **One `trailer.js` builds every film**: a `build(audience)` function and a constant beside `MODE`,
-  `const AUDIENCE = 'a'`, so the script still runs alone and an export takes whichever film the constant names.
+  tables, not from a feeling — and **across the whole film**: the count of beats where something arrives and
+  the median hold, and also **the longest stretch where nothing arrives** and **the end card's hold**. The
+  first two can be met in the opening seconds by a film that then holds still: one run's fast-leaning film landed
+  its title at 5 s, held it for ten, and held its end card longer than the slow film did. A fast-leaning film
+  holds its end card for the brief's minimum and spends what that saves on the beats before it. When
+  `comparePace` says they do not differ, the films may share their holds; say so, and let the grade and the
+  imagery carry the difference.
+- **One `trailer.js` builds every film**: a `build(audience)` function and `const AUDIENCE = ARGS.audience ?? 'a'`
+  beside `MODE` (see stage 4), so each film is a call's `args` rather than an edit, and the script still runs
+  alone with the default.
 - **Sheets and films are named by audience**, as the poster names its finals: `artifacts/03_animatic_a.png`,
   `05_sheet_a.png`, and the films `artifacts/final_a.mp4`, `artifacts/final_b.mp4`. Each film is encoded in its
   own script, so each has the whole script limit.
@@ -250,9 +258,20 @@ with `comp.render(t)` to look at any moment.
 **Keep `trailer.js` runnable on its own.** After the run, `polson eval trailer.js --sif trailer.sif`
 exports the film as Synfig's file for whoever wants it in Synfig Studio — outside this session, with no
 director and no record. So:
-- **Pick what a run does with a constant at the bottom** — `const MODE = 'deliver'` and the like — and
-  give it a mode that only builds the composition and returns one frame, so an export does not encode
-  the video again.
+- **Pick what a run does from `ARGS` at the bottom, with a default** — and make the default a mode that only
+  builds the composition and returns one frame, so an export does not encode the video again:
+
+  ```javascript
+  const AUDIENCE = ARGS.audience ?? 'a';
+  const MODE = ARGS.mode ?? 'frame';    // 'frame' (the export's) | 'sheet' | 'checks' | 'part' | 'join' …
+  const PART = ARGS.part ?? 1;          // which span MODE 'part' encodes
+  ```
+
+  Then each run names its variant in the call instead of editing the file:
+  `ExecuteScript(scriptFile: 'trailer.js', args: '{"audience":"b","mode":"part","part":2}')`.
+  `ARGS` is `{}` when no `args` are given — in `polson eval` too — so the defaults are what an export
+  gets. trailer5 switched these with an edit before each of about twenty runs; with `args` the record
+  says which variant each run was, and the file never changes under you between runs.
 - **Nothing on that path may need the session**: outside it `Stage.elapsedMinutes` is null rather than
   zero, so guard a read of it (`Stage.elapsedMinutes ?? 0`) or keep it to the session's modes.
 
@@ -307,8 +326,9 @@ pair's own check from *More than one audience*:
   `artifacts/final_a.mp4`, `final_b.mp4`…, one script each.
 - **A silent film is also delivered as a looping WebP**, for the pages that show images and not video:
   `Motion.videoToWebp('output.mp4', 'output.webp')`, or `artifacts/final_a.webp` beside `final_a.mp4`, each in a
-  script of its own after any join. Keep its default width (1280 or less): fifteen seconds takes about 8 s there
-  and close to a whole script at 1920. A film with sound stays a video.
+  script of its own after any join. Keep its default width (960 or less): measured on fifteen-second films, 7–9 s
+  there, 8–16 s at 1280 depending on how much changes from frame to frame, about twice that on a busy machine, and
+  more than a script at 1920. A film with sound stays a video.
 - **`trailer.js`**, runnable on its own as above. **Do not write a `.sif` during the run.** With text
   animators it is a bake — a group per letter, its motion sampled — that nobody edits in Synfig, and it
   is exported from the script afterwards when someone wants one.

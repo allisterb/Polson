@@ -83,6 +83,74 @@ public class MotionWipeTests(ITestOutputHelper output) : TestsRuntime
         Assert.Equal(Content, down.SkBitmap.GetPixel(120, 50));
     }
 
+    /// <summary>
+    /// trailer5: on a shadow filling only a strip, a 0.6 s key read as a 2–3 frame snap, because the edge's travel spanned the
+    /// frame. With <c>over</c> it spans the box — at 0.5 the edge is at the box's middle, not the frame's — and nothing
+    /// outside the box is erased, before it, after it or beside it.
+    /// </summary>
+    [Theory]
+    [InlineData(0d)]
+    [InlineData(10d)]
+    public void AWipeOverABoxCrossesTheBox(double feather)
+    {
+        var box = new[] { 40d, 60d, 120d, 100d };                 // its middle x 80; the frame's is 120
+        using var half = Wiped(Opts(("type", "linear"), ("over", box), ("feather", feather), ("completion", 0.5))).Render(0);
+        var b = half.SkBitmap;
+        Assert.Equal(SKColors.White, b.GetPixel(70, 80));          // the box's first half: gone
+        Assert.Equal(Content, b.GetPixel(90, 80));                 // its second half: not yet
+        Assert.Equal(Content, b.GetPixel(20, 80));                 // before the box
+        Assert.Equal(Content, b.GetPixel(200, 80));                // after it
+        Assert.Equal(Content, b.GetPixel(70, 30));                 // beside it
+        Assert.Equal(Content, b.GetPixel(70, 130));
+
+        // Down the box at 180°: a quarter of 40 is 10 below its top.
+        using var down = Wiped(Opts(("type", "linear"), ("angle", 180d), ("over", box), ("completion", 0.25))).Render(0);
+        Assert.Equal(SKColors.White, down.SkBitmap.GetPixel(80, 65));
+        Assert.Equal(Content, down.SkBitmap.GetPixel(80, 75));
+
+        using (var none = Wiped(Opts(("type", "linear"), ("over", box), ("feather", feather), ("completion", 0d))).Render(0))
+            Assert.True(Share(none.SkBitmap, Content) > 0.999, "over at 0 erased something");
+        using var all = Wiped(Opts(("type", "linear"), ("over", box), ("feather", feather), ("completion", 1d))).Render(0);
+        var erased = 1 - Share(all.SkBitmap, Content);
+        Assert.InRange(erased, 80 * 40 / (W * H) - 0.002, 80 * 40 / (W * H) + 0.002);    // the box, and only the box
+        Assert.Equal(SKColors.White, all.SkBitmap.GetPixel(41, 61));
+        Assert.Equal(SKColors.White, all.SkBitmap.GetPixel(118, 98));
+    }
+
+    /// <summary><c>over</c> takes the <c>{ x, y, width, height }</c> that <c>text.boundsAt</c> returns, the same as the array.</summary>
+    [Fact]
+    public void AWipeOverTakesABoundsObject()
+    {
+        var bounds = new System.Collections.Generic.Dictionary<string, object?> { ["x"] = 40d, ["y"] = 60d, ["width"] = 80d, ["height"] = 40d };
+        using var a = Wiped(Opts(("type", "linear"), ("over", bounds), ("completion", 0.5))).Render(0);
+        using var b = Wiped(Opts(("type", "linear"), ("over", new[] { 120d, 100d, 40d, 60d }), ("completion", 0.5))).Render(0);   // corners either way round
+        Assert.Equal(0, Differing(a.SkBitmap, b.SkBitmap, 0));
+        Assert.Equal(SKColors.White, a.SkBitmap.GetPixel(70, 80));
+    }
+
+    /// <summary>
+    /// trailer5 probed it: an iris's <c>center</c> is in its stack's units, so in a 2D group holding 3D planes it is the
+    /// frame's pixels, not the planes' units. A push-in doubles the plane about the frame's centre: the centre [60, 40] as
+    /// plane units would land at the frame's corner.
+    /// </summary>
+    [Fact]
+    public void AWipeCentreAboveCameraPlanesIsInFramePixels()
+    {
+        var comp = Scene();
+        comp.Camera(Opts(("distance", W * 50 / 36 / 2)));
+        var flat = comp.Group();
+        var plane = flat.Group(Opts(("z", 0d)));
+        plane.Rectangle(Opts(("point1", new[] { -W, -H }), ("point2", new[] { 2 * W, 2 * H }), ("color", "#1d3557")));
+        plane.Rectangle(Opts(("point1", new[] { 160d, 100d }), ("point2", new[] { 170d, 110d }), ("color", "#e63946")));   // at [200, 120]–[220, 140] in the frame
+        flat.Wipe(Opts(("type", "iris"), ("center", new[] { 60d, 40d }), ("completion", 0.05)));     // a radius of about 11
+
+        using var frame = comp.Render(0);
+        Assert.Equal(SKColor.Parse("#e63946"), frame.SkBitmap.GetPixel(215, 135));     // the push-in does double the plane
+        Assert.Equal(SKColors.White, frame.SkBitmap.GetPixel(60, 40));
+        Assert.Equal(Content, frame.SkBitmap.GetPixel(75, 40));
+        Assert.Equal(Content, frame.SkBitmap.GetPixel(3, 3));
+    }
+
     /// <summary>The feather is a linear ramp of its width centred on the edge.</summary>
     [Fact]
     public void AFeatherIsALinearRamp()
@@ -141,6 +209,9 @@ public class MotionWipeTests(ITestOutputHelper output) : TestsRuntime
     [InlineData("width", "A linear wipe has no 'width'")]
     [InlineData("blend", "has no 'blend'")]
     [InlineData("sweep", "'clockwise', 'counterclockwise' or 'both'")]
+    [InlineData("overRadial", "A radial wipe has no 'over'")]
+    [InlineData("overShort", "wipe's over is a box")]
+    [InlineData("overFlat", "no width or no height")]
     public void BadWipesAreRefused(string what, string message)
     {
         var e = Assert.Throws<ArgumentException>(() => Scene().Group().Wipe(what switch
@@ -148,6 +219,9 @@ public class MotionWipeTests(ITestOutputHelper output) : TestsRuntime
             "spiral" => Opts(("type", "spiral")),
             "width" => Opts(("type", "linear"), ("width", 20d)),
             "blend" => Opts(("type", "linear"), ("blend", "multiply")),
+            "overRadial" => Opts(("type", "radial"), ("over", new[] { 0d, 0d, 10d, 10d })),
+            "overShort" => Opts(("type", "linear"), ("over", new[] { 0d, 0d, 10d })),
+            "overFlat" => Opts(("type", "linear"), ("over", new[] { 0d, 5d, 10d, 5d })),
             _ => Opts(("type", "radial"), ("sweep", "sideways")),
         }));
         Assert.Contains(message, e.Message);
@@ -162,10 +236,13 @@ public class MotionWipeTests(ITestOutputHelper output) : TestsRuntime
     [InlineData("linear")]
     [InlineData("radial")]
     [InlineData("iris")]
+    [InlineData("over")]
     public void HardWipesGoToSvg(string type)
     {
         var motion = new MotionToolkit();
-        var comp = Wiped(Opts(("type", type), ("completion", motion.Nodes.Linear("real", 0.8, 0.1))), motion, 1);
+        var options = Opts(("type", type), ("completion", motion.Nodes.Linear("real", 0.8, 0.1)));
+        if (type == "over") (options["type"], options["angle"], options["over"]) = ("linear", 120d, new[] { 40d, 30d, 200d, 110d });
+        var comp = Wiped(options, motion, 1);
         var svg = comp.ToSvg();
         foreach (var t in new[] { 0d, 1d })
         {
@@ -187,6 +264,8 @@ public class MotionWipeTests(ITestOutputHelper output) : TestsRuntime
     [InlineData("iris", 0d)]
     [InlineData("iris", 12d)]
     [InlineData("star", 0d)]
+    [InlineData("over", 0d)]
+    [InlineData("over", 30d)]
     public void SynfigWipesTheSame(string kind, double feather)
     {
         if (SynfigOracle.Find() is not { } synfig) return;
@@ -199,6 +278,7 @@ public class MotionWipeTests(ITestOutputHelper output) : TestsRuntime
             "radial" => Opts(("type", "radial"), ("startAngle", 30d), ("center", new[] { 110d, 70d })),
             "iris" => Opts(("type", "iris"), ("invert", true), ("center", new[] { 130d, 90d })),
             "star" => Opts(("type", "iris"), ("points", 5d), ("innerRadius", 0.5), ("rotation", 10d)),
+            "over" => Opts(("type", "linear"), ("angle", 120d), ("over", new[] { 40d, 30d, 200d, 110d })),
             _ => Opts(("type", "blinds"), ("angle", 30d), ("width", 36d)),
         };
         options["completion"] = completion;
