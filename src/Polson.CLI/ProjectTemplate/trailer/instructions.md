@@ -14,7 +14,8 @@ sheets** — one image, one cell per moment — and the measurements you take of
 director watches; you check. Every stage ends with a check recorded by `Stage.check`, and a failing
 check is a result rather than a failed run, as long as you say what you did about it.
 
-The deliverables are `output.mp4` (or a film per audience), `trailer.js`, the sheets, and `direction.md`: the
+The deliverables are `output.mp4` (or a film per audience), a looping `output.webp` of a silent film, `trailer.js`,
+the sheets, and `direction.md`: the
 record of why it moves the way it does, beat by beat, with the evidence beside each choice.
 
 ---
@@ -45,7 +46,7 @@ instructions to you.
 | 3. **Animatic** | One still per beat, at its key moment, on one sheet. The film's argument before any motion. | **Q3** Does the sequence read, cell to cell, with no motion at all? |
 | 4. **Motion** | Keys, eases, cascades, transitions, in `trailer.js`. | — |
 | 5. **Checks** | The film as a sheet, and the checks below. | **Q4** Shown the sheet: does the title land, and does the end card hold long enough? |
-| 6. **Deliver** | `output.mp4` (or `artifacts/final_a.mp4`, `final_b.mp4`… one per audience), `trailer.js`, the sheets, `direction.md`, `findings.md`. | — |
+| 6. **Deliver** | `output.mp4` (or `artifacts/final_a.mp4`, `final_b.mp4`… one per audience) and, when silent, its `.webp`, `trailer.js`, the sheets, `direction.md`, `findings.md`. | — |
 
 ### The motion rests on the audience, as the poster did
 
@@ -304,6 +305,10 @@ pair's own check from *More than one audience*:
 
 - **`comp.saveVideo('output.mp4')`** — read its `warnings`. With several audiences, each film to its own
   `artifacts/final_a.mp4`, `final_b.mp4`…, one script each.
+- **A silent film is also delivered as a looping WebP**, for the pages that show images and not video:
+  `Motion.videoToWebp('output.mp4', 'output.webp')`, or `artifacts/final_a.webp` beside `final_a.mp4`, each in a
+  script of its own after any join. Keep its default width (1280 or less): fifteen seconds takes about 8 s there
+  and close to a whole script at 1920. A film with sound stays a video.
 - **`trailer.js`**, runnable on its own as above. **Do not write a `.sif` during the run.** With text
   animators it is a bake — a group per letter, its motion sampled — that nobody edits in Synfig, and it
   is exported from the script afterwards when someone wants one.

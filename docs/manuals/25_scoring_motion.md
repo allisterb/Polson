@@ -111,7 +111,7 @@ Five ways to put a change into it, and the choice is about what kind of change i
 
 ## 4. Looking at Something You Cannot Watch
 
-> **Implemented by**: `Motion.frame(...)`, `Motion.sheet(...)`, `Motion.save(...)`, `Motion.saveVideo(...)`, `comp.saveVideo(...)`, `Motion.joinVideos(...)`, `Motion.count`, `Motion.clear()`.
+> **Implemented by**: `Motion.frame(...)`, `Motion.sheet(...)`, `Motion.save(...)`, `Motion.saveVideo(...)`, `comp.saveVideo(...)`, `Motion.joinVideos(...)`, `Motion.videoToWebp(...)`, `Motion.count`, `Motion.clear()`.
 
 The loop is always the same: seek, capture, repeat.
 
@@ -124,6 +124,7 @@ Then two different artifacts, for two different readers:
 - **`Motion.sheet(...)` is what you look at.** A contact sheet is one image, so it is one read, and the eye works *across* cells — which is how you see that a beat lands late or that two moves collide. It is also comparable: `bitmap.diff` can be pointed at it.
 - **`Motion.save(...)` is what you ship.** An animated file is the deliverable and close to the worst thing to hand yourself for inspection: you can produce one and still not perceive the motion in it.
 - **With sound, ship a video instead: `Motion.saveVideo('output.mp4', { audio })`**, or `comp.saveVideo(...)` straight from a composition, which renders each frame into the encoder and holds none, so a long film does not meet the frame ceiling below. A video has no alpha, so give the film a ground or name a `background`; and read the result's `warnings`, which is the only place a line cut off by the end of the film is reported. **A film too long to encode inside one script's time limit is encoded a span at a time** — `comp.saveVideo(part, { from, to })`, one script each — and the parts joined with `Motion.joinVideos([parts], 'output.mp4', { audio })`, which copies them end to end without re-encoding and lays the sound over the whole.
+- **A silent film that has to go where only images go** — a README, a Markdown write-up — is made a video first and then a looping WebP with `Motion.videoToWebp('output.mp4', 'output.webp')`, in a script of its own: about 8 s for fifteen seconds of film at its default width of 1280 or less, and close to a whole script at 1920. `Motion.save` cannot do this for a long film, because it holds every frame in memory and cannot take one encoded in parts.
 
 > [!CAUTION]
 > **Do not hand an animated file to the next stage of work either.** Animated WebP is frame-differenced — measured on a 47-frame file, exactly one frame was independently decodable and the rest chained, so reaching frame 36 cost 13 ms against 1 ms for frame 0. Random access is O(n) and gets worse with length. Pass on **the script**, and re-seek to reach a moment; that is O(1) at any `t`.

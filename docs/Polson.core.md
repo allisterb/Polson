@@ -5129,6 +5129,23 @@ const film = Motion.joinVideos(['artifacts/part1.mp4', 'artifacts/part2.mp4'], '
 log(`${film.frames} frames, ${film.durationMs} ms, warnings: ${film.warnings.length}`);
 ```
 
+### A looping WebP of a finished film — `Motion.videoToWebp(video, filePath, options?)`
+
+A silent short film often has to go where only images go: a README, a Markdown write-up, a page with no video player. Make the video first, then make a looping animated WebP from it:
+
+- `Motion.videoToWebp(video: string, filePath: string, options?)` → `{ path, format: 'webp', video, frames, storedFrames, fps, durationMs, width, height, loop, bytes, warnings }` — re-encodes an `.mp4` or `.webm` that `saveVideo` or `joinVideos` wrote as an animated `.webp`. `options`: `{ width?, quality?, loop? }`. `width` is **at most 1280 unless you give one**, never wider than the video, and the height keeps the aspect. `quality` is 1–100 (80). `loop` is read as `Motion.save` reads it: `true` (the default) loops forever, `false` plays once and holds the last frame, a number plays that many times.
+- **The WebP is silent**: a video with sound gives a warning that it was left out. **Frames that do not change are merged**, so `storedFrames` is often fewer than `frames`. A video whose frames are all the same comes out as a still image, and `warnings` says so.
+- **Its cost is in a script's time limit.** Measured, a 15-second 24 fps film takes about 8 s at 1280 wide (about 1.4 MB) and about 28 s at 1920 wide (about 2.2 MB), which is nearly a whole script. Make it in a script of its own after the film is joined, and keep the default width unless the brief asks for more.
+- This is not `Motion.save`, which encodes frames held in memory and so cannot take a long film or one encoded in parts.
+
+```javascript
+const comp = Motion.composition({ width: 64, height: 36, fps: 24, duration: 1 });
+comp.fill({ color: Motion.nodes.animated('color', [{ time: 0, value: '#e63946' }, { time: 1, value: '#1d3557' }]) });
+comp.saveVideo('artifacts/film.mp4', { to: 0.958 });
+const loop = Motion.videoToWebp('artifacts/film.mp4', 'artifacts/film.webp');
+log(`${loop.width}x${loop.height}, ${loop.storedFrames} of ${loop.frames} frames stored, ${loop.bytes} bytes, loop: ${loop.loop}`);
+```
+
 ## The Score — `Motion.timeline()`
 
 A **seekable score**. Entries are placed on a timeline and every one is a pure function of the time you ask for, so `tl.seek(t)` states the whole scene at `t` without having played anything before it.

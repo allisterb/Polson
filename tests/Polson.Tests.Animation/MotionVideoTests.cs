@@ -295,6 +295,145 @@ public class MotionVideoTests : TestsRuntime, IDisposable
         Assert.False(File.Exists(Path.Combine(root, "x.mp4")));
     }
 
+    /// <summary>Every frame of an animated WebP, decoded in order onto the one before as a viewer shows it.</summary>
+    private static List<SKBitmap> WebpFrames(string file)
+    {
+        using var codec = SKCodec.Create(new MemoryStream(File.ReadAllBytes(file)))!;
+        var info = new SKImageInfo(codec.Info.Width, codec.Info.Height, SKColorType.Rgba8888, SKAlphaType.Unpremul);
+        var shown = new List<SKBitmap>();
+        using var canvas = new SKBitmap(info);
+        for (var i = 0; i < codec.FrameCount; i++)
+        {
+            Assert.Equal(SKCodecResult.Success, codec.GetPixels(info, canvas.GetPixels(), new SKCodecOptions(i, i - 1)));
+            shown.Add(canvas.Copy());
+        }
+        return shown;
+    }
+
+    /// <summary>The loop count an animated WebP's <c>ANIM</c> chunk holds: 0 is forever.</summary>
+    private static int WebpLoops(string file)
+    {
+        var bytes = File.ReadAllBytes(file);
+        for (var at = 12; at + 8 <= bytes.Length; at += 8 + BitConverter.ToInt32(bytes, at + 4) + (BitConverter.ToInt32(bytes, at + 4) & 1))
+            if (bytes[at] == 'A' && bytes[at + 1] == 'N' && bytes[at + 2] == 'I' && bytes[at + 3] == 'M') return bytes[at + 12] | bytes[at + 13] << 8;
+        throw new InvalidDataException($"{file} has no ANIM chunk.");
+    }
+
+    private static void Near(SKColor actual, int r, int g, int b) => Near((actual.Red, actual.Green, actual.Blue), r, g, b);
+
+    /// <summary>
+    /// A finished video becomes a looping WebP of the same film: as long, in its colours from first frame to last, looping
+    /// forever, and holding fewer frames when some do not change.
+    /// </summary>
+    [Fact]
+    public void TestAVideoBecomesALoopingWebp()
+    {
+        if (!FFmpeg.Available) return;
+        var motion = new MotionToolkit(root);
+        var comp = motion.Composition(Opts(("width", 48d), ("height", 32d), ("fps", 25d), ("duration", 2d)));
+        comp.Fill(Opts(("color", motion.Nodes.Animated("color", new object[]
+            { Opts(("time", 0d), ("value", "#e63946")), Opts(("time", 1d), ("value", "#1d3557")), Opts(("time", 2d), ("value", "#1d3557")) }))));
+        comp.SaveVideo("film.mp4", Opts(("to", 1.96)));
+
+        var result = motion.VideoToWebp("film.mp4", "out/film.webp");
+
+        var file = Path.Combine(root, "out", "film.webp");
+        Assert.Equal("webp", result["format"]);
+        Assert.Equal(50, result["frames"]);
+        Assert.Equal(48, result["width"]);
+        Assert.Equal(32, result["height"]);
+        Assert.Equal(true, result["loop"]);
+        Assert.Equal(0, WebpLoops(file));
+        Assert.InRange((double)result["durationMs"]!, 1960, 2040);
+        Assert.InRange((int)result["storedFrames"]!, 20, 30);              // the blue second holds still
+        Assert.Equal(new FileInfo(file).Length, result["bytes"]);
+        Assert.Empty((List<object?>)result["warnings"]!);
+        Assert.False(File.Exists(file + ".part"));
+
+        var frames = WebpFrames(file);
+        try
+        {
+            Near(frames[0].GetPixel(24, 16), 0xe6, 0x39, 0x46);           // through bt709 video and bt601 WebP, unshifted
+            Near(frames[^1].GetPixel(24, 16), 0x1d, 0x35, 0x57);
+        }
+        finally { frames.ForEach(f => f.Dispose()); }
+    }
+
+    /// <summary>
+    /// A wide video is made 1280 wide unless told, the height keeping the aspect, and a narrower width is honoured. A video
+    /// that never changes is a still image, and says so.
+    /// </summary>
+    [Fact]
+    public void TestAWebpIsAtMost1280WideUnlessTold()
+    {
+        if (!FFmpeg.Available) return;
+        var motion = new MotionToolkit(root);
+        var comp = motion.Composition(Opts(("width", 1600d), ("height", 100d), ("fps", 25d), ("duration", 0.08)));
+        comp.Fill(Opts(("color", "#336699")));
+        comp.SaveVideo("wide.mp4", Opts(("to", 0.04)));
+
+        var wide = motion.VideoToWebp("wide.mp4", "wide.webp");
+        Assert.Equal(1280, wide["width"]);
+        Assert.Equal(80, wide["height"]);
+        Assert.Contains((List<object?>)wide["warnings"]!, w => ((string)w!).Contains("still image"));
+
+        var narrow = motion.VideoToWebp("wide.mp4", "narrow.webp", Opts(("width", 400d)));
+        Assert.Equal(400, narrow["width"]);
+        Assert.Equal(25, narrow["height"]);
+    }
+
+    /// <summary><c>loop</c> is read as <c>Motion.save</c> reads it: false plays once and holds, a number plays that many times.</summary>
+    [Fact]
+    public void TestAWebpLoopsAsTold()
+    {
+        if (!FFmpeg.Available) return;
+        var motion = new MotionToolkit(root);
+        Ramp(motion).SaveVideo("ramp.mp4", Opts(("to", 0.96)));
+
+        Assert.Equal(false, motion.VideoToWebp("ramp.mp4", "once.webp", Opts(("loop", false)))["loop"]);
+        Assert.Equal(1, WebpLoops(Path.Combine(root, "once.webp")));
+        Assert.Equal(3, motion.VideoToWebp("ramp.mp4", "three.webp", Opts(("loop", 3d)))["loop"]);
+        Assert.Equal(3, WebpLoops(Path.Combine(root, "three.webp")));
+        Assert.Contains("Motion.videoToWebp: loop", Assert.Throws<ArgumentException>(() => motion.VideoToWebp("ramp.mp4", "x.webp", Opts(("loop", 0.5)))).Message);
+    }
+
+    /// <summary>A WebP is silent, and a video with sound says it was left out.</summary>
+    [Fact]
+    public void TestAVideosSoundIsLeftOutAndSaysSo()
+    {
+        if (!FFmpeg.Available) return;
+        Wav("line.wav", 0.1, 0.2);
+        var motion = new MotionToolkit(root);
+        Ramp(motion).SaveVideo("loud.mp4", Opts(("to", 0.96), ("audio", "line.wav")));
+
+        var result = motion.VideoToWebp("loud.mp4", "quiet.webp");
+
+        Assert.Contains((List<object?>)result["warnings"]!, w => ((string)w!).Contains("silent"));
+    }
+
+    /// <summary>
+    /// What cannot be made a WebP is refused by name: wider than the video, a WebP that is not a .webp, a source that is
+    /// not a video or not what its name says, a missing one, one outside the project, and an option it does not take.
+    /// </summary>
+    [Fact]
+    public void TestWhatCannotBeAWebpIsRefusedByName()
+    {
+        if (!FFmpeg.Available) return;
+        var motion = new MotionToolkit(root);
+        Ramp(motion).SaveVideo("small.mp4", Opts(("to", 0.96)));
+        File.WriteAllText(Path.Combine(root, "fake.mp4"), "not a video at all");
+
+        Assert.Contains("the video's own 32", Assert.Throws<ArgumentException>(() => motion.VideoToWebp("small.mp4", "x.webp", Opts(("width", 64d)))).Message);
+        Assert.Contains("an animated .webp", Assert.Throws<ArgumentException>(() => motion.VideoToWebp("small.mp4", "x.gif")).Message);
+        Assert.Contains("a finished .mp4 or .webm", Assert.Throws<ArgumentException>(() => motion.VideoToWebp("small.gif", "x.webp")).Message);
+        Assert.Contains("does not begin like", Assert.Throws<ArgumentException>(() => motion.VideoToWebp("fake.mp4", "x.webp")).Message);
+        Assert.Contains("no video at", Assert.Throws<ArgumentException>(() => motion.VideoToWebp("gone.mp4", "x.webp")).Message);
+        Assert.Contains("quality", Assert.Throws<ArgumentException>(() => motion.VideoToWebp("small.mp4", "x.webp", Opts(("quality", 0d)))).Message);
+        Assert.Contains("has no 'fps'", Assert.Throws<ArgumentException>(() => motion.VideoToWebp("small.mp4", "x.webp", Opts(("fps", 12d)))).Message);
+        Assert.ThrowsAny<Exception>(() => motion.VideoToWebp("../outside.mp4", "x.webp"));
+        Assert.False(File.Exists(Path.Combine(root, "x.webp")));
+    }
+
     /// <summary>Frames captured from a composition carry their rate and start, so the sound needs neither repeated.</summary>
     [Fact]
     public void TestCapturedFramesSayTheirOwnRateAndStart()
@@ -457,6 +596,8 @@ public class MotionVideoTests : TestsRuntime, IDisposable
 
             var error = Assert.Throws<InvalidOperationException>(() => motion.SaveVideo("x.mp4"));
             Assert.Contains("bootstrap.py --only ffmpeg", error.Message);
+            File.WriteAllText(Path.Combine(root, "v.mp4"), "");
+            Assert.Contains("bootstrap.py --only ffmpeg", Assert.Throws<InvalidOperationException>(() => motion.VideoToWebp("v.mp4", "v.webp")).Message);
         }
         finally { FFmpeg.ExecutableOverride = was; }
     }

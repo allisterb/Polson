@@ -10,8 +10,8 @@ using System.Text;
 using SkiaSharp;
 
 /// <summary>
-/// Video with sound, by way of <c>ffmpeg</c>: Skia frames in over a pipe, an MP4 or WebM out. Also decodes a recording
-/// that is not 16-bit PCM WAV into one, for the aligner.
+/// Video with sound, by way of <c>ffmpeg</c>: Skia frames in over a pipe, an MP4 or WebM out, joined or made into an
+/// animated WebP. Also decodes a recording that is not 16-bit PCM WAV into one, for the aligner.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -275,6 +275,50 @@ public static class FFmpeg
         finally
         {
             File.Delete(list);
+            File.Delete(partial);
+        }
+    }
+
+    /// <summary>
+    /// Re-encodes the finished video at <paramref name="input"/> as an animated WebP <paramref name="width"/> wide, the
+    /// height keeping the aspect, playing <paramref name="loops"/> times (0 is forever) and silent.
+    /// </summary>
+    /// <remarks>
+    /// Read with its own container's demuxer and only the <c>file</c> protocol, as <see cref="Join"/> reads parts. The
+    /// frames reach libwebp as RGB decoded with the bt709 matrix they were written with: WebP's own YUV is bt601, so
+    /// handing it the video's planes as they are would shift every colour. Written beside the output and moved into place
+    /// only when ffmpeg succeeds.
+    /// </remarks>
+    internal static long ToWebp(string input, VideoFormat format, string output, int width, int quality, int loops, string who)
+    {
+        if (Executable is not { } exe)
+            throw new InvalidOperationException($"{who} needs the 'ffmpeg' program and none was found: {Install}.");
+        string N(double x) => x.ToString("0.######", CultureInfo.InvariantCulture);
+        var partial = output + ".part";
+        var info = Info(exe, "-hide_banner", "-nostdin", "-loglevel", "error", "-y",
+            "-protocol_whitelist", "file", "-f", format == VideoFormat.Mp4 ? "mov" : "matroska", "-i", "file:" + input,
+            "-an", "-vf", $"scale={width}:-1:flags=lanczos:in_color_matrix=bt709:in_range=tv,format=bgra",
+            "-c:v", "libwebp_anim", "-quality", N(quality), "-compression_level", "4", "-loop", N(loops),
+            "-f", "webp", "file:" + partial);
+
+        try
+        {
+            using var process = Process.Start(info) ?? throw new InvalidOperationException($"{who}: ffmpeg would not start.");
+            process.StandardInput.Close();
+            var stderr = process.StandardError.ReadToEndAsync();
+            _ = process.StandardOutput.ReadToEndAsync();
+            if (!process.WaitForExit(FinishMs))
+            {
+                Kill(process);
+                throw new TimeoutException($"{who}: ffmpeg did not finish the WebP within {FinishMs / 1000} s.");
+            }
+            if (process.ExitCode != 0)
+                throw new InvalidOperationException($"{who}: ffmpeg failed to write the WebP (exit {process.ExitCode}). {Trim(stderr.Result)}");
+            File.Move(partial, output, overwrite: true);
+            return new FileInfo(output).Length;
+        }
+        finally
+        {
             File.Delete(partial);
         }
     }
