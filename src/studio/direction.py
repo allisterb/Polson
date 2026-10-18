@@ -225,8 +225,15 @@ def _titles_after(cell: str, label: str) -> list[str]:
     if at < 0:
         return []
     rest = cell[at + len(label):]
-    end = re.search(r"\*\.\s|\.\s+[A-Z]", rest)
-    return _ITALIC.findall(rest[:end.start() + 1] if end else rest)[:8]
+    # The sentence ends at a full stop *between* titles, never at one inside a title: *Dr. Strangelove*
+    # would otherwise end the list at "Dr." and lose itself and every title after it.
+    titles, pos = [], 0
+    for m in _ITALIC.finditer(rest):
+        if re.search(r"\.(\s|$)", rest[pos:m.start()]):
+            break
+        titles.append(m.group(1))
+        pos = m.end()
+    return titles[:8]
 
 
 def explain(text: str, events: Iterable[dict[str, Any]], since: str | None = None) -> dict[str, Any]:

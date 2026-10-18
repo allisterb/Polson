@@ -203,9 +203,14 @@ try:
         #
         # `console_at` is conditional on SERVE_CONSOLE for the same reason: with the console off,
         # `web=False` above means /dev-ui/ is not routed at all, and a link to it would 404.
+        #
+        # `commissioner` is the one way it can make work here: the studio's composer commissions
+        # through it, which is `/projects` under another form — same checks, caps and launch — so
+        # the client-facing pages can start a run on this runtime without a driver.
         _studio = _create_studio(root=_Path(_projects), observe_only=True, create_at="/new",
                                  console_at="/dev-ui/" if SERVE_CONSOLE else None,
-                                 console_apps=_Path(AGENTS_DIR))
+                                 console_apps=_Path(AGENTS_DIR),
+                                 commissioner=intake.Commissioner(app))
 
         # **"Observe only" was a sentence in this comment and nothing enforced it.** The mounted app
         # still served `POST /projects`, `POST /runs`, `/answer` and `/say` — and its create path

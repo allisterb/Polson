@@ -64,7 +64,7 @@
 {% macro workflow_card(card, base) -%}
 <a class="ps-wcard" href="{{ base }}/compose/{{ card.slug }}">
   <span class="ps-wcard-media">
-    {%- if card.image %}<img src="{{ base }}/static/gallery/{{ card.image }}" alt="{{ card.alt }}" loading="lazy">
+    {%- if card.image and card.image in gallery %}<img src="{{ base }}/static/gallery/{{ card.image }}" alt="{{ card.alt }}" loading="lazy">
     {%- else %}<span class="ps-wcard-empty">{{ kind_icon(card.kind, 40) }}</span>{% endif -%}
   </span>
   <span class="ps-wcard-cap">

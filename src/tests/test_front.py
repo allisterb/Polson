@@ -378,5 +378,205 @@ class FrontRoutingTests(unittest.TestCase):
         self.assertEqual(list(self.root.iterdir()), [])
 
 
+class FakeCommissioner:
+    """Stands in for `adk_agent.intake.Commissioner`: offers drawing (review only) and the infographics."""
+
+    TYPES = {"drawing": ("review",), "vector_infographic": ("editorial", "swiss"), "infographic": ("editorial",)}
+
+    def __init__(self, root: Path, refuse: Exception | None = None) -> None:
+        self.root, self.refuse, self.made = root, refuse, []
+
+    def types(self, workflow: str):
+        return self.TYPES.get(workflow)
+
+    def free_name(self, title: str) -> str:
+        return catalogue.slugify(title).replace("-", "_")
+
+    async def commission(self, name, workflow, kind, brief, documents):
+        if self.refuse is not None:
+            raise self.refuse
+        self.made.append({"name": name, "workflow": workflow, "kind": kind, "brief": brief,
+                          "documents": [Path(d).name for d in documents],
+                          "contents": [Path(d).read_bytes() for d in documents]})
+        project_dir(self.root, name, workflow=workflow, policy=False)
+        return f"/studio/runs/{name}-watch-1"
+
+
+class Refusal(Exception):
+    def __init__(self, status: int, message: str) -> None:
+        super().__init__(message)
+        self.status = status
+
+
+class CommissionedComposerTests(unittest.TestCase):
+    """The composer on the ADK runtime: an observing studio that was handed a commissioner.
+
+    Point 5 of the 2026-10-18 UI review: the deployed studio is mounted read-only, so before this the new
+    composer answered 409 and sent a visitor to the old form at /new.
+    """
+
+    def setUp(self) -> None:
+        self.root = Path(tempfile.mkdtemp(prefix="polson-front-adk-"))
+        self.commissioner = FakeCommissioner(self.root)
+        self.client = TestClient(app_mod.create_app(self.root, Registry(), observe_only=True, create_at="/new",
+                                                    commissioner=self.commissioner))
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def drawing(self, **overrides):
+        data = {"card": "drawing", "title": "Lighthouse sketch", "route": "0", "kind": "",
+                "sizes": ["1080x1080"], "formats": [".png"], "brief": "A lighthouse on a rocky point.",
+                "action": "start"}
+        data.update(overrides)
+        return data
+
+    def test_the_composer_offers_start_and_no_draft(self):
+        page = self.client.get("/compose/drawing").text
+        self.assertNotIn("can watch requests but not make them", page)
+        self.assertNotIn("Save as draft", page, "this host cannot start a draft later")
+        self.assertRegex(page, r'value="start"\s*\n?\s*>Start in the studio', "Start must not be disabled")
+
+    def test_a_workflow_the_host_does_not_run_says_so_before_the_form_is_filled(self):
+        page = self.client.get("/compose/poster").text
+        self.assertIn("does not make poster requests yet", page)
+        self.assertIn('value="start" disabled', page)
+
+    def test_a_request_is_commissioned_and_opens_its_own_page(self):
+        reply = self.client.post("/requests", data=self.drawing(),
+                                 files=[("files", ("notes.txt", b"lantern room first", "text/plain"))],
+                                 follow_redirects=False)
+
+        self.assertEqual(reply.status_code, 303, reply.text[:300])
+        self.assertTrue(reply.headers["location"].endswith("/requests/lighthouse_sketch"))
+        made = self.commissioner.made[0]
+        self.assertEqual((made["name"], made["workflow"]), ("lighthouse_sketch", "drawing"))
+        self.assertEqual(made["kind"], "review", "one offered type is chosen, as the intake form does")
+        self.assertIn("A lighthouse on a rocky point.", made["brief"])
+        self.assertIn("## What to deliver", made["brief"])
+        self.assertEqual((made["documents"], made["contents"]), (["notes.txt"], [b"lantern room first"]))
+        record = json.loads((self.root / "lighthouse_sketch" / front.REQUEST_FILE).read_text(encoding="utf-8"))
+        self.assertEqual((record["title"], record["type"], record["files"]), ("Lighthouse sketch", "review", ["notes.txt"]))
+
+    def test_a_workflow_the_host_does_not_run_is_refused_without_commissioning(self):
+        reply = self.client.post("/requests", data={**self.drawing(), "card": "poster", "kind": "film",
+                                                    "sizes": ["1200x1800"], "aud_place": ["Lisbon"],
+                                                    "aud_age": [""]})
+        self.assertEqual(reply.status_code, 409)
+        self.assertIn("does not make poster requests yet", reply.text)
+        self.assertEqual(self.commissioner.made, [])
+
+    def test_a_type_the_host_does_not_offer_is_refused(self):
+        reply = self.client.post("/requests", data=self.drawing(kind="seed"))
+        self.assertEqual(reply.status_code, 409)
+        self.assertIn("review", reply.text)
+        self.assertEqual(self.commissioner.made, [])
+
+    def test_the_hosts_own_refusal_is_shown_with_its_status(self):
+        self.commissioner.refuse = Refusal(429, "This host has started its 25 runs for today.")
+        reply = self.client.post("/requests", data=self.drawing())
+        self.assertEqual(reply.status_code, 429)
+        self.assertIn("started its 25 runs for today", reply.text)
+        self.assertEqual(list(self.root.iterdir()), [])
+
+    def test_an_unexpected_error_is_not_swallowed_as_a_refusal(self):
+        self.commissioner.refuse = RuntimeError("the CLI is missing")
+        client = TestClient(self.client.app, raise_server_exceptions=False)
+        self.assertEqual(client.post("/requests", data=self.drawing()).status_code, 500)
+
+
+class AdkStatusTests(unittest.TestCase):
+    """A watched ADK run that is waiting on an answer reads as Needs you, like a driven one."""
+
+    def setUp(self) -> None:
+        self.root = Path(tempfile.mkdtemp(prefix="polson-front-ask-"))
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def test_an_open_question_on_a_watched_run_needs_you(self):
+        p = project_dir(self.root, "lighthouse")
+        run = mock.Mock(observed=True, live=True, status="running")
+        channel = mock.Mock()
+        with mock.patch.object(front.observe_mod, "_ask_channel", return_value=channel):
+            channel.pending.return_value = ["q1"]
+            self.assertEqual(front.status_of(p, run, []), "needs-you")
+            channel.pending.assert_called_with("lighthouse")
+            channel.pending.return_value = []
+            self.assertEqual(front.status_of(p, run, []), "running")
+
+    def test_a_commissioned_run_before_its_first_event_is_queued_not_a_draft(self):
+        p = project_dir(self.root, "fresh")
+        watching = mock.Mock(observed=True, live=False, status="watching")
+        self.assertEqual(front.status_of(p, watching, []), "queued")
+        self.assertEqual(front.status_of(p, None, []), "draft")
+
+    def test_a_watched_run_that_has_ended_is_delivered_while_still_live(self):
+        """Measured on harbour_at_dawn: Delivered on its page, Active on the list for three minutes after."""
+        p = project_dir(self.root, "harbour")
+        events(p, {"type": "run.start"}, {"type": "render", "artifact": "output.webp", "format": "webp"})
+        with (p / "events" / "agent.jsonl").open("w", encoding="utf-8") as out:
+            out.write(json.dumps({"ts": "2026-10-18T23:00:00Z", "type": "run.begin"}) + "\n")
+            out.write(json.dumps({"ts": "2026-10-18T23:16:08Z", "type": "run.end", "reason": "completed"}) + "\n")
+        live = mock.Mock(observed=True, live=True, status="watching")
+        from orchestrator.events import read_events
+        self.assertEqual(front.status_of(p, live, read_events(p / "events" / "server.jsonl")), "delivered")
+
+    def test_a_new_run_after_an_earlier_end_is_running_again(self):
+        """One MCP server per app on ADK: only the agent's own last start counts."""
+        p = project_dir(self.root, "again")
+        with (p / "events" / "agent.jsonl").open("w", encoding="utf-8") as out:
+            for kind in ("run.begin", "run.end", "run.begin"):
+                out.write(json.dumps({"ts": "2026-10-18T23:00:00Z", "type": kind}) + "\n")
+        live = mock.Mock(observed=True, live=True, status="watching")
+        with mock.patch.object(front.observe_mod, "_ask_channel", return_value=None):
+            self.assertEqual(front.status_of(p, live, [{"type": "run.start"}]), "running")
+
+    def test_without_a_channel_it_is_simply_running(self):
+        p = project_dir(self.root, "elsewhere")
+        with mock.patch.object(front.observe_mod, "_ask_channel", return_value=None):
+            self.assertEqual(front.status_of(p, mock.Mock(observed=True, live=True, status="running"), []), "running")
+
+
+class GalleryFallbackTests(unittest.TestCase):
+    """The card pictures are not in git, so a clone has none: a card shows its kind icon, not a broken image."""
+
+    # Rendered with context rather than through a page: Jinja caches an imported macro module with the
+    # globals it first saw, so patching the global after a page has rendered would test nothing.
+    CARD = '{% import "front/macros.html" as m with context %}{{ m.workflow_card(card, "") }}'
+
+    def card(self, gallery: frozenset) -> str:
+        TestClient(app_mod.create_app(Path(tempfile.gettempdir()), Registry()))   # installs the front's globals
+        template = app_mod.TEMPLATES.env.from_string(self.CARD)
+        return template.render(card=catalogue.BY_SLUG["poster"], gallery=gallery)
+
+    def test_a_missing_picture_falls_back_to_the_kind_icon(self):
+        html = self.card(frozenset())
+        self.assertNotIn("/static/gallery/", html)
+        self.assertIn("ps-wcard-empty", html)
+
+    def test_a_picture_that_is_here_is_shown(self):
+        self.assertIn("/static/gallery/poster.webp", self.card(frozenset({"poster.webp"})))
+
+    def test_the_gallery_is_what_is_on_disk(self):
+        TestClient(app_mod.create_app(Path(tempfile.gettempdir()), Registry()))
+        on_disk = {p.name for p in (Path(front.__file__).parent / "static" / "gallery").glob("*") if p.is_file()}
+        self.assertEqual(app_mod.TEMPLATES.env.globals["gallery"], on_disk)
+
+
+class TitleListTests(unittest.TestCase):
+    """A full stop inside an italic title does not end the list of titles."""
+
+    def test_a_title_with_a_full_stop_is_kept_and_so_are_those_after_it(self):
+        from studio import direction
+        cell = "Fast titles: *Dr. Strangelove*, *Mr. Nobody*, *Heat*. Slow titles: *Minari*."
+        self.assertEqual(direction._titles_after(cell, "fast titles"), ["Dr. Strangelove", "Mr. Nobody", "Heat"])
+        self.assertEqual(direction._titles_after(cell, "slow titles"), ["Minari"])
+
+    def test_a_sentence_before_any_title_ends_the_list(self):
+        from studio import direction
+        self.assertEqual(direction._titles_after("Fast titles: none. Slow titles: *Minari*.", "fast titles"), [])
+
+
 if __name__ == "__main__":
     unittest.main()

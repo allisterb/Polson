@@ -76,12 +76,17 @@ def status_of(project: Path, run: Run | None, events: list[dict[str, Any]]) -> s
     if run is not None and run.live and not run.observed:
         director = getattr(run.stream, "director", None)
         return "needs-you" if director is not None and director.pending else "running"
-    if run is not None and run.observed and run.live:
-        return "running"
+    # A watched run is "live" for a while after its record last moved, so the agent's own ending has to win
+    # over that: otherwise a finished ADK run reads as in the studio for minutes after it delivered.
+    if run is not None and run.observed and run.live and not agent_ended(project):
+        return "needs-you" if asking(project) else "running"
     if run is not None and run.status in ("failed", "incomplete", "cancelled"):
         return "stopped"
     if not events:
-        return "draft"
+        # Watched with nothing written yet is a run commissioned and not yet begun — the ADK runtime starts
+        # a request the moment it is composed, and the agent's first event is seconds away. A draft is
+        # never watched: the page only registers a watch on a project that has a record.
+        return "queued" if run is not None and run.observed else "draft"
     started = [i for i, e in enumerate(events) if e.get("type") == "run.start"]
     after = events[started[-1]:] if started else events
     # The agent's own ending, where its runtime wrote one, outranks the files: a run that hit a quota error
@@ -100,6 +105,51 @@ def status_of(project: Path, run: Run | None, events: list[dict[str, Any]]) -> s
     if any(e.get("type") == "run.end" for e in after) and any(e.get("type") == "render" for e in events):
         return "delivered"
     return "stopped"
+
+
+def agent_ended(project: Path) -> bool:
+    """Whether the agent's own record ends with its run's end: a `run.end` after its last start.
+
+    Read from `agent.jsonl` alone, and its own start — `run.begin` on ADK, `run.start` on Antigravity —
+    rather than the server's: ADK keeps one MCP server per app across runs, so the server's `run.start`
+    can belong to an earlier run and would make a new one read as finished.
+    """
+    last = ""
+    for e in read_events(project / "events" / "agent.jsonl"):
+        kind = e.get("type")
+        if kind in ("run.begin", "run.start"):
+            last = "start"
+        elif kind == "run.end":
+            last = "end"
+    return last == "end"
+
+
+def asking(project: Path) -> bool:
+    """Whether an agent in this process is waiting on an answer for `project`.
+
+    Only the ADK runtime's runs are watched *and* askable from here: its question channel holds the future
+    the agent awaits, keyed by the project's directory name. A driven run says so through its own director.
+    """
+    channel = observe_mod._ask_channel()
+    try:
+        return bool(channel is not None and channel.pending(project.name))
+    except Exception:                                            # noqa: BLE001 - a status, never fatal
+        return False
+
+
+def offered(state: Any, card: catalogue.Card) -> dict[int, tuple[str, ...] | None]:
+    """The routes of `card` this host can run, by index, each with the types it offers (None: all of them).
+
+    A driving studio runs every route. One that only watches runs none, unless it was given a commissioner,
+    which then says per workflow — the ADK runtime offers what its own intake offers, so the composer cannot
+    take a request the host will refuse. A route missing here is shown, and cannot be chosen.
+    """
+    if not state.observe_only:
+        return {i: None for i in range(len(card.routes))}
+    if state.commissioner is None:
+        return {}
+    return {i: types for i, r in enumerate(card.routes)
+            if (types := state.commissioner.types(r.workflow)) is not None}
 
 
 def latest_render(project: Path, events: list[dict[str, Any]]) -> Path | None:
@@ -202,11 +252,18 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
 
     notices: dict[str, str] = {}
 
+    # The workflow cards' pictures that are actually here. They are not in git, so a fresh clone has none,
+    # and a card naming a missing one shows its kind icon rather than a broken image. Read once: the
+    # directory does not change under a running server.
+    gallery = Path(__file__).parent / "static" / "gallery"
+    templates.env.globals["gallery"] = frozenset(p.name for p in gallery.glob("*") if p.is_file())
+
     def page(request: Request, name: str, nav: str, status_code: int = 200, **context: Any) -> HTMLResponse:
         state = request.app.state
         # Questions open right now, from the runs in memory rather than a scan of every project.
         waiting = sum(1 for r in state.registry.runs if r.live and not r.observed
                       and getattr(getattr(r.stream, "director", None), "pending", None))
+        waiting += sum(1 for r in state.registry.runs if r.live and r.observed and asking(Path(r.project.root)))
         return templates.TemplateResponse(request, f"front/{name}", {
             "base": base(request), "nav": nav, "waiting_count": waiting,
             "observe_only": state.observe_only, "create_at": state.create_at,
@@ -230,7 +287,7 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
                     waiting=[r for r in rows if r["status"] == "needs-you"],
                     working=[r for r in rows if r["status"] == "running"],
                     drafts=[r for r in rows if r["status"] == "draft"][:3],
-                    cards=[c for c in catalogue.CARDS if c.image][:3])
+                    cards=[c for c in catalogue.CARDS if c.image in templates.env.globals["gallery"]][:3])
 
     @app.get("/workflows", response_class=HTMLResponse)
     async def workflows(request: Request) -> Any:
@@ -245,11 +302,20 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
 
     def composer(request: Request, card: catalogue.Card, form: dict[str, Any], refused: str = "",
                  status_code: int = 200) -> HTMLResponse:
+        state = request.app.state
         route = int(form.get("route") or 0) if str(form.get("route") or "0").isdigit() else 0
         route = min(route, len(card.routes) - 1)
+        runs = offered(state, card)
+        if runs and route not in runs:
+            route = min(runs)
+        styles = {i: [(v, label) for v, label in catalogue.types_for(card, r.workflow)
+                      if i in runs and (runs[i] is None or v in runs[i])]
+                  for i, r in enumerate(card.routes)}
         return page(request, "compose.html", "new", status_code=status_code, card=card,
                     sizes=catalogue.SIZES[card.kind], formats=catalogue.FORMATS[card.kind],
-                    styles={i: catalogue.types_for(card, r.workflow) for i, r in enumerate(card.routes)},
+                    styles=styles, offered=runs,
+                    can_make=not state.observe_only or state.commissioner is not None,
+                    drafts=not state.observe_only,
                     form=form, route=route, refused=refused, ages=catalogue.AGE_BANDS,
                     max_audiences=catalogue.MAX_AUDIENCES,
                     accept=",".join(sorted(uploads.DOCUMENT_SUFFIXES)), max_files=uploads.MAX_FILES)
@@ -331,8 +397,11 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
         if chosen is None:
             raise HTTPException(status_code=404, detail=f"no such workflow: {card}")
         if state.observe_only:
-            return composer(request, chosen, form, "This studio can watch requests but not make them. "
-                            "Use the create page instead.", 409)
+            if state.commissioner is None:
+                return composer(request, chosen, form, "This studio can watch requests but not make them. "
+                                "Use the create page instead.", 409)
+            return await commissioned(request, chosen, form, title, route, kind, sizes, custom_size, formats,
+                                      extras, brief, aud_place, aud_age, files)
 
         scratch = Path(tempfile.mkdtemp(prefix="polson-request-"))
         try:
@@ -367,6 +436,57 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
                 notices[made.name] = f"Saved as a draft, but not started: {exc}"
 
         return RedirectResponse(f"{base(request)}/requests/{made.name}", status_code=303)
+
+    async def commissioned(request: Request, chosen: catalogue.Card, form: dict[str, Any], title: str,
+                           route: str, kind: str, sizes: list[str], custom_size: str, formats: list[str],
+                           extras: dict[str, str], brief: str, aud_place: list[str], aud_age: list[str],
+                           files: list[UploadFile]) -> Any:
+        """The composer on a host that commissions rather than drives: the ADK runtime.
+
+        The commission is checked, staged and named here and made by the host's commissioner, which applies
+        every check its own intake form does — name, offered workflow and type, deadline ceiling, spend brake —
+        and starts the run. Always started: this host has no driver to start a draft later, nor a session
+        to continue, so neither is offered.
+        """
+        state = request.app.state
+        commissioner = state.commissioner
+        scratch = Path(tempfile.mkdtemp(prefix="polson-request-"))
+        try:
+            commission = catalogue.parse(chosen.slug, title, route, kind, sizes, custom_size, formats, extras,
+                                         brief, aud_place, aud_age)
+            types = commissioner.types(commission.workflow)
+            if types is None:
+                raise StudioError(f"This studio does not make {chosen.title.lower()} requests yet.")
+            if commission.kind and commission.kind not in types:
+                raise StudioError(f"That {chosen.style_label.lower()} is not offered here. "
+                                  f"Choose one of: {', '.join(types)}.")
+            # One type is not a choice, as on the intake form: what it would have chosen anyway is chosen.
+            if not commission.kind and len(types) == 1:
+                commission.kind = types[0]
+            staged = await uploads.stage(files, scratch)
+            name = commissioner.free_name(commission.title)
+            await commissioner.commission(name, commission.workflow, commission.kind,
+                                          commission.brief_text([p.name for p in staged]), staged)
+        except Exception as exc:                                 # noqa: BLE001 - refusals carry a status
+            status = 409 if isinstance(exc, StudioError) else getattr(exc, "status", None)
+            if status is None:
+                raise
+            note = " Files have to be chosen again." if any((f.filename or "").strip() for f in files) else ""
+            return composer(request, chosen, form, f"{exc}{note}", status)
+        finally:
+            shutil.rmtree(scratch, ignore_errors=True)
+
+        # Display data beside the project, as on a driving studio. The project is already running, so this
+        # is best effort: a request page without it falls back to the project's name.
+        made = Path(state.root) / name
+        try:
+            record = commission.record()
+            record["files"] = [p.name for p in staged]
+            record["created"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            (made / REQUEST_FILE).write_text(json.dumps(record, indent=2), encoding="utf-8")
+        except OSError:
+            pass
+        return RedirectResponse(f"{base(request)}/requests/{name}", status_code=303)
 
     @app.post("/requests/{name}/start")
     async def start(request: Request, name: str, change: str = Form("")) -> Any:
