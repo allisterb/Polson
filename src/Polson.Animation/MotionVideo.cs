@@ -10,7 +10,8 @@ using SkiaSharp;
 
 /// <summary>
 /// What <c>Motion.saveVideo</c> and <c>comp.saveVideo</c> share: reading their options, naming the recordings to mix
-/// in, and saying what was written, including what of the sound was not heard.
+/// in, and saying what was written, including what of the sound was not heard. Also what a finished video becomes:
+/// joined with others (<c>Motion.joinVideos</c>) or made a looping WebP (<c>Motion.videoToWebp</c>).
 /// </summary>
 internal static class MotionVideo
 {
@@ -153,6 +154,78 @@ internal static class MotionVideo
             ["height"] = first.Info.Height,
             ["bytes"] = bytes,
             ["audio"] = audio,
+            ["warnings"] = warnings
+        };
+    }
+
+    /// <summary>
+    /// A looping animated WebP at <paramref name="filePath"/> made from the finished video at <paramref name="video"/>, for
+    /// a page or a README that shows an image and not a video. <c>options</c>: <c>{ width?, quality?, loop? }</c> — at
+    /// most 1280 wide unless given and never wider than the video, quality 80, looping forever.
+    /// </summary>
+    public static Dictionary<string, object?> ToWebp(string video, string filePath, MotionOptions o, string? projectRoot, MotionToolkit? motion)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(video);
+        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+        var who = o.Who;
+        var source = ProjectPath.Resolve(projectRoot, video, nameof(video), "Read");
+        var full = ProjectPath.Resolve(projectRoot, filePath, nameof(filePath), "Write to");
+        if (!string.Equals(Path.GetExtension(full), ".webp", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException($"{who} writes an animated .webp, not '{Path.GetExtension(full)}'.");
+        if (Path.GetExtension(source).ToLowerInvariant() is not (".mp4" or ".webm"))
+            throw new ArgumentException($"{who} reads a finished .mp4 or .webm, as saveVideo or joinVideos wrote it, not '{Path.GetExtension(source)}'.");
+        if (!File.Exists(source)) throw new ArgumentException($"{who}: there is no video at '{video}'.");
+        if (!FFmpeg.Available) throw new InvalidOperationException($"{who} needs the 'ffmpeg' program and none was found: {FFmpeg.Install}.");
+
+        var format = Format(source, who);
+        var info = FFmpeg.Probe(source, video, format, who);
+        var quality = o.Number("quality", 80);
+        if (quality is < 1 or > 100) throw new ArgumentException($"{who}'s quality is from 1 to 100, not {quality}.");
+        var width = o.Number("width", Math.Min(1280, info.Width));
+        if (width != Math.Floor(width) || width < 16 || width > info.Width)
+            throw new ArgumentException($"{who}'s width is a whole number from 16 to the video's own {info.Width}, not {width}: " +
+                "a WebP is made at the video's size or smaller.");
+        var loops = MotionToolkit.LoopCount(o.Raw("loop"), who);
+        var warnings = new List<object?>();
+        if (info.HasAudio) warnings.Add("The video's sound was left out: an animated WebP is silent.");
+
+        Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+        var bytes = FFmpeg.ToWebp(source, format, full, (int)width, (int)Math.Round(quality), loops, who);
+
+        // What the file holds, read back from the file: the encoder merges frames that do not change and sums their
+        // durations, so the frames stored are not the frames the video had.
+        using var codec = SKCodec.Create(new MemoryStream(File.ReadAllBytes(full)))
+            ?? throw new InvalidOperationException($"{who}: the WebP ffmpeg wrote could not be read back.");
+        var frames = (int)Math.Round(info.Seconds * info.Fps);
+        var durationMs = codec.FrameInfo.Sum(f => (double)f.Duration);
+        if (codec.FrameCount <= 1) warnings.Add("Every frame was the same, so the WebP is a still image and does not play or loop.");
+
+        motion?.Record("render", full, new()
+        {
+            ["motion"] = "animation",
+            ["format"] = "webp",
+            ["bytes"] = bytes,
+            ["frames"] = frames,
+            ["storedFrames"] = codec.FrameCount,
+            ["durationMs"] = durationMs,
+            ["width"] = codec.Info.Width,
+            ["height"] = codec.Info.Height,
+            ["video"] = video
+        });
+
+        return new Dictionary<string, object?>
+        {
+            ["path"] = filePath,
+            ["format"] = "webp",
+            ["video"] = video,
+            ["frames"] = frames,
+            ["storedFrames"] = codec.FrameCount,
+            ["fps"] = info.Fps,
+            ["durationMs"] = durationMs,
+            ["width"] = codec.Info.Width,
+            ["height"] = codec.Info.Height,
+            ["loop"] = loops == 0 ? true : loops == 1 ? false : loops,
+            ["bytes"] = bytes,
             ["warnings"] = warnings
         };
     }
