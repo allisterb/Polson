@@ -40,4 +40,9 @@ google-adk[mcp]==2.8.0
 # markupsafe, which is jinja2's sole dependency — check the lock diff and refuse anything more.
 jinja2==3.1.6
 pygments==2.19.2
+
+# The request page's reading panel renders delivered Markdown (direction.md's tables) through it; see
+# src/studio/requirements.in. Adds only mdurl. The version python/ already runs.
+#   markdown-it-py  https://github.com/executablebooks/markdown-it-py
+markdown-it-py==4.2.0
 google-cloud-storage>=2.18,<4

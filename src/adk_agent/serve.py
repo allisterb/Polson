@@ -31,6 +31,9 @@ DEFAULT_PORT = 8010
 #: number `studio.DEFAULT_TOKEN_CAP` uses. Set POLSON_BUDGET_TOKENS=0 for none.
 DEFAULT_TOKENS = "2000000"
 
+#: How long Ctrl-C waits for open responses before cutting them; see the `uvicorn.run` call.
+SHUTDOWN_SECONDS = 2
+
 
 def parse(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -71,7 +74,13 @@ def main(argv: list[str] | None = None) -> int:
 
     import uvicorn  # noqa: PLC0415 - only once the arguments are known to be good
 
-    uvicorn.run("main:app", host=args.host, port=args.port, app_dir=str(HERE))
+    # Ctrl-C hung at "Shutting down" with no limit: uvicorn waits for every response still being sent, and a
+    # browser holds one open indefinitely once a <video> has buffered enough and stops reading. Measured
+    # 2026-10-19 with a client that stopped reading final_a.mp4: "Waiting for connections to close" until that
+    # client let go 86 s later. The event streams are not it; sse-starlette ends those itself within half a
+    # second. Two seconds, then whatever is still open is cut, as `python -m studio` already does.
+    uvicorn.run("main:app", host=args.host, port=args.port, app_dir=str(HERE),
+                timeout_graceful_shutdown=SHUTDOWN_SECONDS)
     return 0
 
 

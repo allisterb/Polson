@@ -73,6 +73,13 @@ class ServeTests(unittest.TestCase):
         self.assertEqual(os.environ["POLSON_BUDGET_TOKENS"], serve.DEFAULT_TOKENS)
         self.assertIn(f"localhost:{serve.DEFAULT_PORT}/studio/home", out)
 
+    def test_shutdown_does_not_wait_on_a_reader_that_stopped(self):
+        """A buffered <video> stops reading and keeps its response open; without a limit Ctrl-C waits for it."""
+        if not (serve.REPO / "bin" / "cli" / "Polson.CLI.dll").is_file():
+            self.skipTest("bin/cli is not built here")
+        _, run, _, _ = self.run_main(self.root)
+        self.assertEqual(run.call_args.kwargs["timeout_graceful_shutdown"], serve.SHUTDOWN_SECONDS)
+
     def test_a_token_cap_already_set_is_kept_and_the_port_is_taken(self):
         if not (serve.REPO / "bin" / "cli" / "Polson.CLI.dll").is_file():
             self.skipTest("bin/cli is not built here")

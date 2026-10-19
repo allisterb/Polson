@@ -34,6 +34,13 @@ sse-starlette
 #   pygments  https://github.com/pygments/pygments
 pygments
 
+# Delivered Markdown documents (direction.md, findings.md…) rendered as documents in the request page's
+# reading panel: their tables and nested lists are the content. CommonMark-compliant, pure Python, and
+# its one dependency is mdurl. Raw HTML stays off in `app.MARKDOWN`, so agent-written text cannot become
+# markup. It was already installed here, unnamed, as a dependency of rich.
+#   markdown-it-py  https://github.com/executablebooks/markdown-it-py
+markdown-it-py
+
 # NOT named here, deliberately: the agent SDK.
 #
 # `studio/` itself has zero references to it, and `runs._drive` imports the driver lazily - so

@@ -91,7 +91,37 @@ label.ps-asset-upload { box-sizing: border-box; width: 148px; }
 .fr-side-stack { display: grid; gap: var(--space-6); align-content: start; }
 .fr-docs { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
 .fr-docs a { color: var(--ink); text-decoration: none; font-weight: 500; }
-.fr-docs a:hover { color: var(--accent); }
+.fr-docs a:hover, .fr-docs a[aria-current] { color: var(--accent); }
+
+/* The reading panel: a delivered document opened under the piece. */
+.fr-doc { margin-top: var(--space-6); }
+.fr-doc-head { display: flex; align-items: flex-start; gap: var(--space-2); margin-bottom: var(--space-4); }
+.fr-doc-head > div { flex: 1; min-width: 0; }
+.fr-doc-head .fr-small { margin: var(--space-1) 0 0; }
+.fr-doc-code { max-height: 75vh; }
+/* Markdown as a document. Headings at document sizes rather than the transcript's small ones; tables keep their
+   columns and scroll sideways rather than squeezing, since direction.md's carry the evidence in them. */
+.fr-prose { font: 400 15px/24px var(--font-sans); color: var(--ink); overflow-wrap: anywhere; }
+.fr-prose > :first-child { margin-top: 0; }
+.fr-prose > :last-child { margin-bottom: 0; }
+.fr-prose :is(p, ul, ol, blockquote, pre, table) { margin: 0 0 var(--space-4); }
+.fr-prose :is(h1, h2, h3, h4, h5, h6) { margin: var(--space-6) 0 var(--space-2); color: var(--ink); }
+.fr-prose h1 { font: 600 24px/32px var(--font-display); }
+.fr-prose h2 { font: 600 20px/28px var(--font-display); }
+.fr-prose h3 { font: 600 17px/24px var(--font-sans); }
+.fr-prose :is(h4, h5, h6) { font: 600 15px/22px var(--font-sans); }
+.fr-prose :is(ul, ol) { padding-left: var(--space-6); }
+.fr-prose li > :is(ul, ol) { margin: var(--space-1) 0 0; }
+.fr-prose li + li { margin-top: var(--space-1); }
+.fr-prose a { color: var(--accent); }
+.fr-prose hr { margin: var(--space-6) 0; border: 0; border-top: 1px solid var(--line); }
+.fr-prose blockquote { padding-left: var(--space-4); border-left: 3px solid var(--line); color: var(--ink-muted); }
+.fr-prose code { font: 500 13px/20px var(--font-mono); padding: 1px 4px; border-radius: 4px; background: var(--surface-sunken); font-variant-ligatures: none; }
+.fr-prose pre { padding: var(--space-3) var(--space-4); overflow: auto; border-radius: var(--radius-md); background: var(--surface-sunken); }
+.fr-prose pre code { padding: 0; background: none; }
+.fr-prose table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; font-size: 14px; line-height: 20px; overflow-wrap: normal; }
+.fr-prose :is(th, td) { padding: var(--space-2) var(--space-3); border: 1px solid var(--line); text-align: left; vertical-align: top; min-width: 8ch; }
+.fr-prose th { background: var(--surface-sunken); font-weight: 600; }
 .fr-summary { display: grid; grid-template-columns: auto 1fr; gap: var(--space-1) var(--space-4); margin: 0; font: 400 13px/18px var(--font-sans); }
 .fr-summary dt { color: var(--ink-muted); }
 .fr-summary dd { margin: 0; color: var(--ink); }
