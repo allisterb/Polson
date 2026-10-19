@@ -124,7 +124,8 @@ ol#events { list-style: none; margin: 0; padding: 0; max-height: 46vh; overflow-
    to shrink below the content's own width. */
 .ev .detail { font-family: var(--mono); font-size: .82rem; word-break: break-word; min-width: 0; }
 
-.ev.script-error .detail, .ev.script-error .kind { color: var(--warn); }
+.ev.script-error .detail, .ev.script-error .kind,
+.ev.script-refused .detail, .ev.script-refused .kind { color: var(--warn); }
 .ev.render .detail { color: var(--good); }
 .ev.note .detail { font-family: inherit; font-size: .87rem; }
 .ev.thinking .detail { color: var(--dim); font-family: inherit; font-style: italic; }

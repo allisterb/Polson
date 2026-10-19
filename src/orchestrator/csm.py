@@ -71,6 +71,11 @@ SPINE_MODES: dict[str, str] = {
     # remedy is to reword, and a run of these is a run stuck, which should be visible as one.
     "asset.refused": "attempt",
 
+    # An ExecuteScript call the server turned down before running it: bad `args`, a missing
+    # scriptFile. The same as a script that failed and drew nothing, and until 2026-10-19 absent from
+    # the record altogether.
+    "script.refused": "attempt",
+
     # `observe` is deliberately absent. One is written per measurement *within* an execution that
     # already emits a single `inspect`, so coding both would count one looking-episode two to thirty
     # times and drag the curve toward unclamped in proportion to how thorough the checking was —
@@ -434,6 +439,9 @@ def _code_server(event: dict[str, Any], kind: str, rendered: set[Any]) -> Coded 
 
     if kind == "artifact.read":
         return _make(event, mode, kind, event.get("artifact") or "")
+
+    if kind == "script.refused":
+        return _make(event, mode, kind, _clip(f"{event.get('source') or 'a script'} — refused: {event.get('error') or ''}"))
 
     return _make(event, mode, kind, _clip(event.get("message") or event.get("stage") or ""))
 

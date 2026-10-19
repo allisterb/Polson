@@ -201,6 +201,7 @@
     if (kind === 'inspect') return Object.entries(e.probes || {}).map(function (p) { return p[0] + ' ' + p[1]; }).join(', ');
     if (kind === 'tool.call') return toolDetail(e);
     if (kind === 'script.error') return e.error || e.script || '';
+    if (kind === 'script.refused') return (e.source ? e.source + ' — ' : '') + (e.error || '');
     if (kind === 'run.error') return (e.error || '') + (e.traceback ? '\n\n' + e.traceback : '');
     if (kind === 'stage.begin' || kind === 'stage.end') return e.stage || '';
     if (kind === 'question.open') return e.text || '';

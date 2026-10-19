@@ -75,6 +75,15 @@ class CodingTests(unittest.TestCase):
         self.assertEqual([p.mode for p in coded], ["attempt"])
         self.assertIn("nothing drawn", coded[0].detail)
 
+    def test_a_call_refused_before_it_ran_is_an_attempt(self):
+        """Bad `args` or a missing scriptFile: nothing was saved or run, but the agent did try."""
+        coded = csm.code([server("script.refused", 1, execution="e1", stage="Blocking",
+                                 source="artwork.js", error="Script file not found")]).points
+
+        self.assertEqual([p.mode for p in coded], ["attempt"])
+        self.assertIn("artwork.js", coded[0].detail)
+        self.assertIn("not found", coded[0].detail)
+
     def test_an_attempt_leaves_the_curve_flat_rather_than_falling(self):
         """Zero, like waiting. A curve that fell here would say a broken engine had produced."""
         self.assertEqual(csm.VALUES["attempt"], 0.0)
