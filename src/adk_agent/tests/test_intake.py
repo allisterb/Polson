@@ -308,15 +308,33 @@ class WorkflowTypeTests(unittest.TestCase):
         """
         import studio
 
-        ceiling = 3600.0
+        ceiling = intake.RUN_LIMIT_SECONDS
         for workflow in intake.WORKFLOWS:
             with self.subTest(workflow=workflow):
                 minutes = intake.DEADLINES.get(workflow)
                 self.assertIsNotNone(minutes, f"{workflow} would take the CLI default unchecked")
 
-                worst = (minutes + studio.BREAKER_GRACE_MINUTES) * 60 + studio.MAX_CREDIT_SECONDS
+                # What `check` actually gives it on this host: the allowance, clamped to the ceiling.
+                given = min(minutes, intake.MAX_DEADLINE_MINUTES)
+                worst = (given + studio.BREAKER_GRACE_MINUTES) * 60 + studio.MAX_CREDIT_SECONDS
                 self.assertLess(worst, ceiling,
-                                f"{workflow} can reach {worst:.0f}s against a {ceiling:.0f}s timeout")
+                                f"{workflow} can reach {worst:.0f}s against a {ceiling:.0f}s limit")
+
+    def test_with_the_keepalive_every_offered_workflow_gets_its_whole_allowance(self):
+        """The clamp is for a host without the keepalive; with it, nothing offered should be cut short."""
+        ceiling = intake._max_deadline(keepalive.MAX_HOLD_MINUTES * 60.0)
+        for workflow, minutes in intake.DEADLINES.items():
+            with self.subTest(workflow=workflow):
+                self.assertLessEqual(minutes, ceiling)
+
+    def test_without_the_keepalive_a_long_allowance_is_clamped_not_refused(self):
+        """A poster on a host without the keepalive still runs, on the time that host can stop cleanly."""
+        with mock.patch.object(intake, "MAX_DEADLINE_MINUTES", 38), \
+             mock.patch.object(intake, "archived_names", return_value=[]):
+            self.assertEqual(intake.check("lanternkeeper", "poster", "film", "A film poster."), 38)
+        with mock.patch.object(intake, "MAX_DEADLINE_MINUTES", 158), \
+             mock.patch.object(intake, "archived_names", return_value=[]):
+            self.assertEqual(intake.check("lanternkeeper", "poster", "film", "A film poster."), 45)
 
     def test_every_declined_type_says_why(self):
         """The entry is the record. A blank reason is the same as having forgotten."""
@@ -440,7 +458,9 @@ class StarterTests(unittest.TestCase):
         for starter in intake.STARTERS:
             with self.subTest(starter=starter["label"]):
                 self.assertIn(starter["workflow"], intake.WORKFLOWS)
-                self.assertIn(starter["kind"], intake.WORKFLOWS[starter["workflow"]],
+                types = intake.WORKFLOWS[starter["workflow"]]
+                # A workflow with no types (trailer) has the control disabled, so its starter names none.
+                self.assertIn(starter["kind"], types or ("",),
                               "the type control hides types the workflow does not offer")
                 self.assertTrue(intake.VALID_APP_NAME.match(starter["name"]))
                 self.assertLessEqual(len(starter["name"]), intake.MAX_NAME)
@@ -977,7 +997,7 @@ class CommissionTests(unittest.IsolatedAsyncioTestCase):
                                        deadline=intake.DEADLINES["drawing"], documents=[str(doc)])
 
     async def test_what_the_form_refuses_commission_refuses_before_creating_anything(self):
-        cases = (("lighthouse", "poster", "film", "x", 400, "not offered here"),
+        cases = (("lighthouse", "comic", "review", "x", 400, "not offered here"),
                  ("light-house", "drawing", "", "x", 400, "cannot be a project name"),
                  ("lighthouse", "drawing", "seed", "x", 400, "does not offer a type"),
                  ("lighthouse", "drawing", "", "  ", 400, "brief is required"))
@@ -1004,7 +1024,7 @@ class CommissionTests(unittest.IsolatedAsyncioTestCase):
         commissioner = intake.Commissioner(None)
         for workflow, types in intake.WORKFLOWS.items():
             self.assertEqual(commissioner.types(workflow), types)
-        self.assertIsNone(commissioner.types("poster"))
+        self.assertIsNone(commissioner.types("comic"))
 
 
 if __name__ == "__main__":
