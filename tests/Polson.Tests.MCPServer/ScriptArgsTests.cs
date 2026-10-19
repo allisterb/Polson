@@ -103,6 +103,7 @@ public class ScriptArgsTests : TestsRuntime, IDisposable
 
         Assert.Contains("'args'", ex.Message);
         Assert.Empty(OfType("script.start"));
+        Assert.Equal(ex.Message, Assert.Single(OfType("script.refused")).GetProperty("error").GetString());
     }
 
     [Theory]
@@ -129,6 +130,35 @@ public class ScriptArgsTests : TestsRuntime, IDisposable
     #endregion
 
     #region Record
+    /// <summary>
+    /// A call refused before its script is saved is still one call: without <c>script.refused</c> a reader
+    /// pairing the agent's calls with the server's executions in order is shifted by one from there on.
+    /// </summary>
+    [Fact]
+    public async Task TestEveryCallIsRecordedOnceInOrder()
+    {
+        var tools = Tools();
+        File.WriteAllText(Path.Combine(root, "trailer.js"), "1;");
+
+        await tools.ExecuteScript("1;");
+        await Assert.ThrowsAsync<ArgumentException>(() => tools.ExecuteScript("1;", args: "not json"));
+        await Assert.ThrowsAsync<ArgumentException>(() => tools.ExecuteScript("1;", outFile: "artifacts/x.webp", render: false));
+        await Assert.ThrowsAsync<FileNotFoundException>(() => tools.ExecuteScript(scriptFile: "missing.js"));
+        await tools.ExecuteScript(scriptFile: "trailer.js");
+
+        var calls = File.ReadAllLines(Path.Combine(root, "events", "server.jsonl"))
+            .Select(l => JsonDocument.Parse(l).RootElement)
+            .Where(e => e.GetProperty("type").GetString() is "script.start" or "script.refused")
+            .ToArray();
+        Assert.Equal(["script.start", "script.refused", "script.refused", "script.refused", "script.start"],
+                     calls.Select(e => e.GetProperty("type").GetString()));
+
+        // A file source is named on a refusal as on a start, so a reader can check the pair; an inline one is not.
+        Assert.Equal("missing.js", calls[3].GetProperty("source").GetString());
+        Assert.False(calls[1].TryGetProperty("source", out _));
+        Assert.All(calls, e => Assert.False(string.IsNullOrEmpty(e.GetProperty("execution").GetString())));
+    }
+
     [Fact]
     public async Task TestArgsAreRecordedOnScriptStart()
     {

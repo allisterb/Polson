@@ -625,9 +625,10 @@
   // An ExecuteScript row opens the script that call ran. Nothing in the record joins the agent's call to the
   // server's execution, so they are paired in order: the server runs a session's calls one at a time, in the
   // order they were made, and saves each before it runs (a call made while another runs waits its turn). A
-  // call refused before that (bad `args`, a missing scriptFile) saves nothing and would shift every later pair,
-  // so each pair is checked against what the call named, and linking stops at the first that disagrees: no
-  // link is better than the wrong script.
+  // call refused before that (bad `args`, a missing scriptFile) saves nothing; since 2026-10-19 the server says
+  // so with `script.refused`, which keeps the count, but an older record has a gap that shifts every later pair.
+  // So each pair is still checked against what the call named, and linking stops at the first that disagrees:
+  // no link is better than the wrong script.
   var calls = [], starts = [], paired = 0, unpaired = false, sourced = false;
   function sameFile(a, b) {
     a = String(a).replace(/\\/g, '/').replace(/^\.\//, ''); b = String(b).replace(/\\/g, '/').replace(/^\.\//, '');
@@ -686,6 +687,11 @@
       if (executes) { calls.push({ li: li, args: e.args || {} }); pair(); }
     },
     'script.start': function (e) { starts.push(e); pair(); },
+    // A call the server turned down before saving anything takes its place in the pairing with no script to open.
+    'script.refused': function (e) {
+      starts.push(e); pair();
+      row('failed', 'Refused', e.ts, String(R.detail('script.refused', e)).split('\n')[0], 'is-clamped');
+    },
     'script.ok': function (e) {
       var ms = typeof e.ms === 'number' ? line('  ' + (e.ms < 1000 ? e.ms + ' ms' : (e.ms / 1000).toFixed(1) + ' s'), 'fr-log-meta') : null;
       row('ran', 'Ran', e.ts, ranScript(e, ms));

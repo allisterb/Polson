@@ -776,21 +776,39 @@ public partial class DrawingMcpTools
         IProgress<ProgressNotificationValue>? progress = null,
         CancellationToken cancellationToken = default)
     {
-        script = ReadScriptSource(script, scriptFile);
-        var scriptArgs = ParseScriptArgs(args);
-
-        // Refused rather than resolved, as script/scriptFile is: one of the two was meant, and
-        // guessing would either write an empty file or silently pay the cost the caller declined.
-        if (render == false && !string.IsNullOrWhiteSpace(outFile))
-        {
-            throw new ArgumentException(
-                "'render: false' and 'outFile' contradict each other — outFile asks for the render that "
-              + "render:false suppresses. Drop outFile for a measurement pass, or drop render:false to save the image. "
-              + "'outSvg' is unaffected: vector markup is serialized, not rasterized.");
-        }
-
         var sessionId = GetSessionId(context?.Server);
         var session = Registry.GetOrCreate(sessionId);
+        var executionId = Guid.NewGuid().ToString("N")[..8];
+
+        JsonObject? scriptArgs;
+        try
+        {
+            script = ReadScriptSource(script, scriptFile);
+            scriptArgs = ParseScriptArgs(args);
+
+            // Refused rather than resolved, as script/scriptFile is: one of the two was meant, and
+            // guessing would either write an empty file or silently pay the cost the caller declined.
+            if (render == false && !string.IsNullOrWhiteSpace(outFile))
+            {
+                throw new ArgumentException(
+                    "'render: false' and 'outFile' contradict each other — outFile asks for the render that "
+                  + "render:false suppresses. Drop outFile for a measurement pass, or drop render:false to save the image. "
+                  + "'outSvg' is unaffected: vector markup is serialized, not rasterized.");
+            }
+        }
+        catch (Exception ex)
+        {
+            // Recorded because the call happened and nothing else says so: no script is saved and no
+            // script.start written. Without it a reader pairing the agent's ExecuteScript calls with the
+            // server's executions in order is shifted by one from here on, and shows the wrong scripts.
+            Events.Append("script.refused", session.Stage, executionId, new Dictionary<string, object?>
+            {
+                ["error"] = ex.Message,
+                ["session"] = sessionId,
+                ["source"] = string.IsNullOrWhiteSpace(scriptFile) ? null : scriptFile,
+            });
+            throw;
+        }
 
         lock (session.ScriptHistory)
         {
@@ -798,8 +816,6 @@ public partial class DrawingMcpTools
         }
 
         session.EnterCall();
-
-        var executionId = Guid.NewGuid().ToString("N")[..8];
 
         // Three nested scopes, outermost first, so ordinary log lines carry the same attribution the
         // event log does. The stage is re-read from the session on every call: a property pushed
