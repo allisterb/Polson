@@ -149,7 +149,7 @@ body { margin: 0; font-family: var(--font-sans); font-size: 15px; line-height: 2
 .ps-side { box-sizing: border-box; display: flex; flex-direction: column; gap: var(--space-1); width: var(--sidebar-width); min-height: 100%; padding: var(--space-6) var(--space-3); background: var(--surface-raised); border-right: 1px solid var(--line); }
 .ps-wordmark { padding: 0 var(--space-3) var(--space-6); font: 650 20px/28px var(--font-display); letter-spacing: -.01em; color: var(--ink); }
 .ps-wordmark span { font-weight: 500; color: var(--ink-muted); }
-.ps-nav { display: flex; align-items: center; gap: var(--space-3); width: 100%; height: var(--control-md); padding: 0 var(--space-3); border: 0; border-radius: var(--radius-md); background: none; font: 500 15px/22px var(--font-sans); color: var(--ink-muted); text-align: left; cursor: pointer; }
+.ps-nav { box-sizing: border-box; display: flex; align-items: center; gap: var(--space-3); width: 100%; height: var(--control-md); padding: 0 var(--space-3); border: 0; border-radius: var(--radius-md); background: none; font: 500 15px/22px var(--font-sans); color: var(--ink-muted); text-align: left; cursor: pointer; }
 .ps-nav:hover { background: var(--surface-sunken); color: var(--ink); }
 .ps-nav[aria-current="page"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .ps-nav-badge { margin-left: auto; min-width: 20px; padding: 0 6px; box-sizing: border-box; border-radius: var(--radius-pill); background: var(--attention-soft); color: var(--attention); font: 600 12px/20px var(--font-sans); text-align: center; }
