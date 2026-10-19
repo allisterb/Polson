@@ -94,6 +94,67 @@ public static class TastePace
         };
     }
 
+    /// <summary>
+    /// Several audiences' pace: each one's lean, every pair under Fisher's exact test, and the pairs that differ once the
+    /// p-values are adjusted for how many pairs there are (Holm): <c>{ audiences, pairs, differ, summary }</c>.
+    /// </summary>
+    /// <remarks>
+    /// The adjustment is the point of having this rather than calling <see cref="Compare"/> in a loop. Six audiences make
+    /// fifteen pairs, and at p &lt; 0.05 one in twenty pairs with no real difference still comes out "different": unadjusted,
+    /// a set of six would usually show a difference that is not there, and a trailer would be paced on it. Holm keeps the
+    /// chance of any false difference across the whole set at 0.05, and is never weaker than testing one pair.
+    /// </remarks>
+    public static Dictionary<string, object?> CompareAll(IReadOnlyList<(Dictionary<string, object?> Pace, string Name)> audiences)
+    {
+        int I(Dictionary<string, object?> d, string k) => d[k] is int i ? i : 0;
+
+        var pairs = new List<(int A, int B, double P)>();
+        for (var i = 0; i < audiences.Count; i++)
+            for (var j = i + 1; j < audiences.Count; j++)
+                pairs.Add((i, j, FisherExact(I(audiences[i].Pace, "fast"), I(audiences[i].Pace, "slow"),
+                                             I(audiences[j].Pace, "fast"), I(audiences[j].Pace, "slow"))));
+
+        // Holm: the k-th smallest p is multiplied by (m - k), and the adjusted values are kept non-decreasing.
+        var adjusted = new double[pairs.Count];
+        var order = Enumerable.Range(0, pairs.Count).OrderBy(k => pairs[k].P).ToArray();
+        var running = 0d;
+        for (var rank = 0; rank < order.Length; rank++)
+        {
+            running = Math.Max(running, Math.Min(1, (pairs.Count - rank) * pairs[order[rank]].P));
+            adjusted[order[rank]] = running;
+        }
+
+        var rows = pairs.Select((pair, k) => new Dictionary<string, object?>
+        {
+            ["a"] = audiences[pair.A].Name,
+            ["b"] = audiences[pair.B].Name,
+            ["p"] = Math.Round(pair.P, 4),
+            ["pAdjusted"] = Math.Round(adjusted[k], 4),
+            ["differ"] = adjusted[k] < 0.05,
+        }).ToList();
+
+        var leans = audiences.Select(x => new Dictionary<string, object?>
+        {
+            ["name"] = x.Name, ["fast"] = I(x.Pace, "fast"), ["slow"] = I(x.Pace, "slow"), ["fastShare"] = x.Pace["fastShare"],
+        }).ToList();
+
+        string Lean((Dictionary<string, object?> Pace, string Name) x) =>
+            x.Pace["fastShare"] is double s ? $"{x.Name} {s:P0} fast" : $"{x.Name} no pace tags";
+        var differing = rows.Where(r => r["differ"] is true).ToList();
+        var summary = string.Join("; ", audiences.Select(Lean)) + ". " + (differing.Count == 0
+            ? $"No pair differs measurably at these counts ({rows.Count} pairs, Holm-adjusted)."
+            : "Measurably different: " + string.Join(", ", differing.Select(r => $"{r["a"]} vs {r["b"]} (adjusted p = {r["pAdjusted"]:0.000})"))
+              + $" ({differing.Count} of {rows.Count} pairs, Holm-adjusted).");
+
+        return new()
+        {
+            ["audiences"] = leans,
+            ["pairs"] = rows,
+            ["differ"] = differing.Count > 0,
+            ["summary"] = summary,
+        };
+    }
+
     /// <summary>Two-sided Fisher's exact test on the table [[a, b], [c, d]]: the probability of a table at least as extreme.</summary>
     internal static double FisherExact(int a, int b, int c, int d)
     {

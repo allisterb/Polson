@@ -216,9 +216,21 @@ public sealed class TasteToolkit
         ArgumentNullException.ThrowIfNull(a);
         ArgumentNullException.ThrowIfNull(b);
         return TastePace.Compare(a.Pace(), b.Pace(), Named(a), Named(b));
-
-        static string Named(TasteResult r) => string.IsNullOrWhiteSpace(r.Label) ? r.Id : $"{r.Id} ({r.Label})";
     }
+
+    /// <summary>
+    /// Every audience's pace and every pair compared, adjusted for how many pairs there are:
+    /// <c>{ audiences, pairs, differ, summary }</c>. For three or more audiences; two can use either call.
+    /// </summary>
+    public Dictionary<string, object?> ComparePaceAll(TasteResult[] results)
+    {
+        ArgumentNullException.ThrowIfNull(results);
+        if (results.Length < 2 || results.Any(r => r is null))
+            throw new ArgumentException("Taste.comparePaceAll needs two or more profiles, e.g. [t1, t2, t3].", nameof(results));
+        return TastePace.CompareAll([.. results.Select(r => (r.Pace(), Named(r)))]);
+    }
+
+    private static string Named(TasteResult r) => string.IsNullOrWhiteSpace(r.Label) ? r.Id : $"{r.Id} ({r.Label})";
     #endregion
 
     #region Fields

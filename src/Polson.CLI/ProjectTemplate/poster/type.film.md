@@ -1,8 +1,8 @@
 ## The type: film
 
-**One film, two audiences, two posters**, each in the visual register of what its audience loves. Same
-title, same film; different taste, visibly different posters, each with its evidence. That pair is the
-argument this type exists to make.
+**One film, a set of audiences, one poster each**, each in the visual register of what its audience loves.
+The brief names two to six. Same title, same film; different taste, visibly different posters, each with
+its evidence. That set is the argument this type exists to make.
 
 ### Which film
 
@@ -79,13 +79,14 @@ These run inside the nine above.
      `filter.results.entities` under an audience's signals**: that filter only keeps entities already in
      the audience's results, so anything outside them comes back empty. If a comparable *does* appear in
      a profile's lists, that is the stronger evidence. Say so.
-   - **`compare`** the two audiences' distinctive references (`entities` against `versus`) when you
-     want to say what separates them rather than only what each holds.
+   - **`compare`** each audience's distinctive references (`entities`) against the rest of the set's
+     (`versus`) when you want to say what separates it rather than only what it holds. Two audiences is
+     one call; a larger set is one per audience — never one per pair, which for six is fifteen.
 3. **Message** (stage 3) is the title, the tagline if there is one, and the billing. **Q5** for a film is
    the register: the same film can be sold as a thriller or as a love story, and the evidence may pull
    the two posters different ways. Ask before you let it.
-4. **Concepts** (stage 4). Three per audience, as above — six thumbnails for a pair. **Q6 adds: one
-   poster for both, or a series?** A series holds the system — grid, type, title treatment — and varies
+4. **Concepts** (stage 4). Three per audience, as above — six thumbnails for two audiences, twelve for
+   four. **Q6 adds: one poster for all of them, or a series?** A series holds the system — grid, type, title treatment — and varies
    image, composition and palette; holding those too is one poster twice, not a series. Each poster must
    still work alone. Film posters may *overwhelm the eye* or *assault the surface* where the audience's
    references do; say which references license it. **Scale as narrative** is the film poster's own
@@ -93,19 +94,22 @@ These run inside the nine above.
    *How Posters Work*, pp. 140–142) — for a real film, a head that is nobody's, or an object in its
    place. **One frame, one moment**: the peak of the action or its aftermath implies the whole story
    (pp. 160–169).
-5. **Direction** (stage 5): **two `direction.md` sections**, one per audience, each with its own
-   evidence. Shared choices — the title, the system — are stated once and cited to the brief. **The
-   second section's opening paragraph says what its poster does differently from the first, and which
-   of its own profile's items caused each difference.**
+5. **Direction** (stage 5): **one `direction.md` section per audience**, each with its own evidence.
+   Shared choices — the title, the system — are stated once and cited to the brief. **Each section after
+   the first opens by saying what its poster does differently from those before it, and which of its own
+   profile's items caused each difference.**
 6. **Comps and checks** (stages 6–7). Beyond the checks above: **the title reads** from the far render;
    **the genre reads** — someone who knows none of the references should still guess what kind of film
-   it is; **each poster's choices trace to its own audience's evidence**, not to the other's.
-7. **The pair** (stage 8). Put the two finals side by side in one render (`artifacts/pair.png`) for the
-   run page. If a stranger could not tell they were for different people, the evidence did not reach
-   the design — say so in `findings.md` rather than forcing a difference the evidence does not support.
-   But **"the evidence confirmed it" is a claim like any other**: each choice the two posters share
-   cites items from *this* audience's profile. Your default, and the first audience's evidence, are not
-   evidence for the second.
+   it is; **each poster's choices trace to its own audience's evidence**, not to another's.
+7. **The set** (stage 8). Put the finals side by side in one render (`artifacts/set.png`) for the run
+   page — one row for up to three, two rows beyond — each labelled with its audience. If a stranger could
+   not tell they were for different people, or could not match each to its audience, the evidence did not
+   reach the design — say so in `findings.md` rather than forcing a difference the evidence does not
+   support. **With more than two, name the two posters that came closest**, and whether their audiences'
+   `compare` results were close too: posters that converge where the evidence does not is the failure to
+   look for. And **"the evidence confirmed it" is a claim like any other**: each choice a poster shares
+   with the others cites items from *its own* audience's profile. Your default, and an earlier audience's
+   evidence, are not evidence for a later one.
 
 ### The billing block
 

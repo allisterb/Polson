@@ -109,7 +109,7 @@ from studio import build_app
 # An `App` rather than a bare `root_agent`, so the supervising plugin comes with it. ADK's loader
 # checks a module for `app` first and falls back to `root_agent` (`agent_loader.py:128`), so this is
 # served exactly as the older form was.
-app = build_app(r"{project_dir}", name="{project_id}")
+app = build_app(r"{project_dir}", name="{project_id}"{budget})
 '''
 
 
@@ -172,8 +172,12 @@ def _run_create_project(
     return project
 
 
-def write_app(project_dir: Path, app_name: str, apps_dir: Path = APPS_DIR) -> Path:
-    """Writes the ADK app package that serves `project_dir`. Idempotent."""
+def write_app(project_dir: Path, app_name: str, apps_dir: Path = APPS_DIR, budget_tokens: int | None = None) -> Path:
+    """Writes the ADK app package that serves `project_dir`. Idempotent.
+
+    `budget_tokens` gives this run its own token cap in place of the server's `POLSON_BUDGET_TOKENS`: a poster for six
+    audiences is three times the work of one for two, and a cap sized for two would halt it partway.
+    """
     if not VALID_APP_NAME.match(app_name):
         raise GenerateError(
             f"{app_name!r} is not usable as an app name. It becomes a URL segment and a Python "
@@ -191,6 +195,7 @@ def write_app(project_dir: Path, app_name: str, apps_dir: Path = APPS_DIR) -> Pa
             project_id=app_name,
             runtime_dir=str(RUNTIME_DIR),
             project_dir=str(project_dir.resolve()),
+            budget=f", budget_tokens={int(budget_tokens)}" if budget_tokens else "",
         ),
         encoding="utf-8",
     )
@@ -250,7 +255,7 @@ def create(
     project_id: str, *, workflow: str = "logo", prompt: str | None = None,
     type_: str | None = None, force: bool = False, test: bool = False,
     deadline: int | None = None, documents: list[str] | None = None,
-    projects_dir: Path = PROJECTS_DIR, apps_dir: Path = APPS_DIR,
+    projects_dir: Path = PROJECTS_DIR, apps_dir: Path = APPS_DIR, budget_tokens: int | None = None,
 ) -> tuple[Path, Path]:
     """Generates the project and its app. Returns `(project_dir, app_package)`."""
     if not VALID_APP_NAME.match(project_id):
@@ -261,7 +266,7 @@ def create(
     project = _run_create_project(
         projects_dir, project_id, workflow, prompt, type_, force, test, deadline)
     stage_documents(project, documents)
-    return project, write_app(project, project_id, apps_dir)
+    return project, write_app(project, project_id, apps_dir, budget_tokens)
 
 
 def main(argv: list[str] | None = None) -> int:

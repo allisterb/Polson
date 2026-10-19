@@ -100,7 +100,7 @@ WORKFLOWS: dict[str, tuple[str, ...]] = {
     # `POLSON_QLOO_KEY` on the host. A poster reads `documents/` from stage 1 (a brand guide, an earlier poster);
     # a trailer builds on a poster found there. `film` is the poster's one type, and the CLI's default for it too.
     # Their deadlines are the craft defaults (45 and 60): no entry in `DEADLINES` below, since the keepalive's
-    # ceiling (158) holds both, where the old 38 held neither.
+    # ceiling (218) holds both, where the old 38 held neither — and a set of six, at +20 or +25 per audience.
     "poster": ("film",),
     "trailer": (),
 }
@@ -212,6 +212,49 @@ DEADLINES: dict[str, int] = {
     "poster": 45,
     "trailer": 60,
 }
+
+#: Minutes added to a commission's deadline for each audience past the second (`Audience C:` onward).
+#:
+#: **A set is more work in two places, and only one of them scales.** Each audience is its own profile and its
+#: own piece — a poster or a trailer — so that half is linear. The comparison is pairwise, but local
+#: (`Taste.comparePaceAll`, no Qloo calls), so it costs minutes at most however many pairs there are. Only the
+#: default is scaled: a deadline the director typed is theirs, and the ceiling still clamps either.
+PER_AUDIENCE_MINUTES: dict[str, int] = {
+    "poster": 20,
+    "trailer": 25,
+}
+
+#: How a brief names each audience: `Audience A:` to `Audience F:`. The composer writes one per line; the starters
+#: and a hand-typed brief run them inline, so this does not anchor on a line start.
+AUDIENCE_LINE = re.compile(r"\bAudience ([A-Z])\s*:")
+
+
+def audiences_in(brief: str) -> int:
+    """How many distinct `Audience X:` lines the brief carries; 0 when it names none that way."""
+    return len(set(AUDIENCE_LINE.findall(brief)))
+
+
+def _base_token_cap() -> int | None:
+    """The deployment's per-run token cap, read off `studio` as tolerantly as `_after_deadline_seconds` reads it."""
+    try:
+        import studio                                            # noqa: PLC0415 - deliberately late
+
+        return studio.resolve_token_cap(None)
+    except Exception as exc:                                     # noqa: BLE001 - never fatal
+        _logger.warning("polson intake: cannot read the token cap, so a set is not given more (%s)", exc)
+        return None
+
+
+def token_budget(workflow: str, brief: str) -> int | None:
+    """This commission's own token cap when it is a set of more than two audiences, else None for the host's.
+
+    **Scaled, not added to.** The host's cap is sized for the two-audience pair these workflows were built
+    for, so a set of n gets n/2 of it. None also means *leave it alone*: an uncapped host stays uncapped.
+    """
+    n = audiences_in(brief)
+    if workflow not in PER_AUDIENCE_MINUTES or n <= 2 or (base := _base_token_cap()) is None:
+        return None
+    return base * n // 2
 
 #: Types a workflow ships that this form deliberately does **not** offer, and why.
 #:
@@ -602,6 +645,8 @@ def check(name: str, workflow: str, kind: str, brief: str, deadline: str = "",
     # wins: a poster's 45 is offered whole with the keepalive on and as 38 without it, never past the run limit.
     minutes = DEADLINES.get(workflow)
     if minutes is not None:
+        if (extra := audiences_in(brief) - 2) > 0:
+            minutes += PER_AUDIENCE_MINUTES.get(workflow, 0) * extra
         minutes = min(minutes, MAX_DEADLINE_MINUTES)
     if (asked := deadline.strip()):
         try:
@@ -635,7 +680,7 @@ async def commission(app: FastAPI, name: str, workflow: str, brief: str, kind: s
     minutes = check(name, workflow, kind, brief, deadline, start)
     try:
         create(name, workflow=workflow, prompt=brief, type_=kind or None, deadline=minutes,
-               documents=[str(p) for p in documents] or None)
+               documents=[str(p) for p in documents] or None, budget_tokens=token_budget(workflow, brief))
     except GenerateError as exc:
         raise Refused(400, str(exc)) from exc
 

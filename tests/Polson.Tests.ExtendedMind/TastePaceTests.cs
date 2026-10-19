@@ -61,6 +61,64 @@ public class TastePaceTests : TestsRuntime
         Assert.Contains(differ ? "a measurable difference" : "no measurable difference", (string)compared["summary"]!);
     }
 
+    [Fact]
+    public void ComparePaceAllWithTwoAudiencesIsComparePace()
+    {
+        var (tokyo, mumbai) = (Lean("tokyo", 14, 12), Lean("mumbai", 23, 5));
+        var taste = new TasteToolkit(new TasteRegistry());
+
+        var all = taste.ComparePaceAll([tokyo, mumbai]);
+        var pair = Assert.Single((List<Dictionary<string, object?>>)all["pairs"]!);
+
+        Assert.Equal((double)taste.ComparePace(tokyo, mumbai)["p"]!, (double)pair["pAdjusted"]!, 4);
+        Assert.True((bool)all["differ"]!);
+    }
+
+    [Fact]
+    public void ComparePaceAllFindsTheCampsInASet()
+    {
+        // Two slow-leaning audiences and two fast-leaning ones: the four pairs across the camps differ, the two within do not.
+        var set = new[] { Lean("berlin", 5, 15), Lean("seoul", 5, 15), Lean("lagos", 15, 5), Lean("dubai", 15, 5) };
+
+        var all = new TasteToolkit(new TasteRegistry()).ComparePaceAll(set);
+        var pairs = (List<Dictionary<string, object?>>)all["pairs"]!;
+
+        Assert.Equal(6, pairs.Count);
+        foreach (var pair in pairs)
+        {
+            var crosses = ((string)pair["a"]!).Contains("berlin") || ((string)pair["a"]!).Contains("seoul")
+                ? ((string)pair["b"]!).Contains("lagos") || ((string)pair["b"]!).Contains("dubai")
+                : false;
+            Assert.Equal(crosses, pair["differ"]);
+            Assert.True((double)pair["pAdjusted"]! >= (double)pair["p"]!, "an adjusted p is never smaller");
+        }
+        Assert.Contains("4 of 6 pairs", (string)all["summary"]!);
+    }
+
+    [Fact]
+    public void ComparePaceAllDoesNotCountAChanceDifferenceInALargerSet()
+    {
+        // Tokyo against Mumbai alone is p = 0.040, a difference. Tested as one of three pairs, it is not one.
+        var set = new[] { Lean("tokyo", 14, 12), Lean("mumbai", 23, 5), Lean("osaka", 14, 12) };
+
+        var all = new TasteToolkit(new TasteRegistry()).ComparePaceAll(set);
+        var pairs = (List<Dictionary<string, object?>>)all["pairs"]!;
+
+        Assert.Contains(pairs, p => (double)p["p"]! < 0.05);
+        Assert.False((bool)all["differ"]!);
+        Assert.Contains("No pair differs measurably", (string)all["summary"]!);
+    }
+
+    [Fact]
+    public void ComparePaceAllNeedsTwoOrMore()
+    {
+        var taste = new TasteToolkit(new TasteRegistry());
+        Assert.Throws<System.ArgumentException>(() => taste.ComparePaceAll([Lean("alone", 3, 3)]));
+    }
+
+    private static TasteResult Lean(string label, int fast, int slow) =>
+        Profile(label, [.. Films($"{label}-fast", fast, "Fast paced"), .. Films($"{label}-slow", slow, "Slow burn")]);
+
     private static TasteResult Profile(string label, params object?[] entities) =>
         new() { Id = "t1", Op = "profile", Label = label, Ok = true, Entities = entities };
 

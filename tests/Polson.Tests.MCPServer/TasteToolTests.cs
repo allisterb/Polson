@@ -143,6 +143,31 @@ public class TasteToolTests : TestsRuntime, IDisposable
         Assert.Equal("1999", reply["candidates"]![0]!["disambiguation"]!.GetValue<string>());
     }
 
+    /// <summary>A set of audiences compared from a script: a JS array of results reaches the call as one.</summary>
+    [Fact]
+    public async Task AScriptComparesASetOfAudiences()
+    {
+        Serve(Insights);
+        var tools = new DrawingMcpTools();
+        var ids = new List<string>();
+        foreach (var place in new[] { "Port Sample", "Port Other", "Port Third" })
+        {
+            var reply = await tools.Taste("insights", type: "artist", audience: $$"""{"location":"{{place}}"}""", label: place);
+            ids.Add(reply["id"]!.GetValue<string>());
+        }
+
+        var result = await tools.ExecuteScript($$"""
+            const all = Taste.comparePaceAll([{{string.Join(", ", ids.Select(i => $"Taste.get('{i}')"))}}]);
+            log(JSON.stringify({ pairs: all.pairs.length, audiences: all.audiences.length, summary: all.summary }));
+            """, render: false);
+
+        Assert.True(result.Success, result.Error);
+        var read = JsonNode.Parse(result.Logs.Single(l => l.StartsWith("[LOG] {"))["[LOG] ".Length..])!;
+        Assert.Equal(3, read["pairs"]!.GetValue<int>());
+        Assert.Equal(3, read["audiences"]!.GetValue<int>());
+        Assert.Contains("Holm-adjusted", read["summary"]!.GetValue<string>());
+    }
+
     /// <summary>The point of keeping answers on the session: a later script reads and cites them.</summary>
     [Fact]
     public async Task AScriptReadsTheAnswerBackThroughTheTasteGlobal()

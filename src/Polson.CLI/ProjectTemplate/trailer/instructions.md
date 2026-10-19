@@ -46,8 +46,8 @@ for (const d of Documents.list()) log(`${d.path}  ${d.bytes}B  ${d.mimeType}`);
 
 | Stage | What happens | Ask the director |
 | :-- | :-- | :-- |
-| 1. **Sources** | Read the brief and everything in `documents/`. If a poster is there, its system — palette, type, the one object, what it cites — is the trailer's starting point. Then `Taste` op `profile` for the same audience, or for each audience (below). | **Q1** What must carry over from the poster, and what may the motion change? With several audiences, ask it for each. |
-| 2. **Beats** | The film as beats in seconds *and* frames (below). | **Q2** How should it feel — slow and sure, quick and sly, building? Propose an answer from the audience's pace counts (`pace()`, and `comparePace` with a second audience) before asking, naming the titles it rests on. |
+| 1. **Sources** | Read the brief and everything in `documents/`. If a poster is there, its system — palette, type, the one object, what it cites — is the trailer's starting point. Then `Taste` op `profile` for the same audience, or for each audience (below). | **Q1** What must carry over from the poster, and what may the motion change? With several audiences, one question for the set, each audience's answer by its letter. |
+| 2. **Beats** | The film as beats in seconds *and* frames (below). | **Q2** How should it feel — slow and sure, quick and sly, building? Propose an answer from the audience's pace counts (`pace()`, and the comparison across the audiences below) before asking, naming the titles it rests on. |
 | 3. **Animatic** | One still per beat, at its key moment, on one sheet. The film's argument before any motion. | **Q3** Does the sequence read, cell to cell, with no motion at all? |
 | 4. **Motion** | Keys, eases, cascades, transitions, in `trailer.js`. | — |
 | 5. **Checks** | The film as a sheet, and the checks below. | **Q4** Shown the sheet: does the title land, and does the end card hold long enough? |
@@ -76,10 +76,12 @@ Taste({ op: 'profile', audience: '{"location":"Mumbai","age":"45_to_54"}', label
   gives you no lean, so say so. Put the counts and a few titles from each list in `direction.md` as the pace
   line. Reading the artists' names and deciding they "sound steady" is not evidence: two runs did exactly that
   for two different audiences and both landed on the same pace.
-- **When the poster served another audience too, compare.** Fetch that audience's profile the same way (the
-  poster run cached it) and call `Taste.comparePace(yours, theirs)`. It runs Fisher's exact test on the two
-  sets of counts. With `differ` true, the two films should pace differently, and the difference is yours to
-  cite. With `differ` false, **report "no measurable difference in pace" and keep the difference where the
+- **When the poster served other audiences too, compare.** Fetch their profiles the same way (the poster run
+  cached them) and call `Taste.comparePace(yours, theirs)` for one other, `Taste.comparePaceAll([a, b, c, …])`
+  for more. Each runs Fisher's exact test on the counts; the set's version tests every pair and adjusts for how
+  many there are (Holm), so a pair that differs alone may not differ in the set — **use the set's result**, its
+  `pairs[i].differ` and its `summary`. Where a pair differs, its two films should pace differently, and the
+  difference is yours to cite. With `differ` false, **report "no measurable difference in pace" and keep the difference where the
   evidence does differ**, in the grade or the imagery. Inventing a pace difference the evidence does not show
   is the failure, not finding none.
 - **The beat is a separate choice from the holds.** A pulse taken from music an audience loves needs tempos
@@ -94,7 +96,7 @@ Taste({ op: 'profile', audience: '{"location":"Mumbai","age":"45_to_54"}', label
   and the name is what carries across. `placeAesthetics` are the place's, not
   the audience's.
 - **Pace and grade each need a line resting on this audience's own profile** in `direction.md`: the
-  pace line gives `pace()`'s counts and, with two audiences, `comparePace`'s p. A motion choice that cites
+  pace line gives `pace()`'s counts and, with several audiences, the comparison's adjusted p. A motion choice that cites
   only the manual is the gap above; when the profile has nothing to say about one, write that down rather
   than borrowing the poster's evidence for it.
 - **Two trailers of one poster system should differ where their audiences' evidence differs, and only
@@ -103,32 +105,31 @@ Taste({ op: 'profile', audience: '{"location":"Mumbai","age":"45_to_54"}', label
 
 ### More than one audience
 
-A brief that names several audiences — a poster made for two cities — gets **one film per audience, made in
-this one run.** The pair is designed as a system: the comparison between the audiences is made before either
-film is planned, and the shared parts are shared on purpose.
+A brief that names several audiences — a poster made for two to six cities — gets **one film per audience,
+made in this one run.** The set is designed as a system: the comparison between the audiences is made before
+any film is planned, and the shared parts are shared on purpose.
 
-- **Fetch every audience's profile first**, each with its own label (`'audience A'`, `'audience B'`), and run
-  `Taste.comparePace` between them before writing any beats. That result decides whether the films pace
-  differently at all.
-- **Each audience's motion comes from its own evidence, drafted before you look back at the other's.** The
-  holds, the grade and the transitions of the second film are worked out from the second profile, not
-  adjusted from the first. The poster workflow's first pairs came out as one poster twice because the second
+- **Fetch every audience's profile first**, each with its own label (`'audience A'`, `'audience B'`, …), and
+  compare their pace before writing any beats — `comparePace` for two, `comparePaceAll` for more. That result
+  decides which films pace differently at all.
+- **Each audience's motion comes from its own evidence, drafted before you look back at the others'.** The
+  holds, the grade and the transitions of each later film are worked out from its own profile, not
+  adjusted from an earlier one. The poster workflow's first pairs came out as one poster twice because the second
   audience was only asked whether it objected; it never objects. Make the separation a step you can show — the
-  first film's beats recorded in a `Stage.note` before the second's are written — and **claim it in `direction.md`
+  each film's beats recorded in a `Stage.note` before the next one's are written — and **claim it in `direction.md`
   only if it happened**. If both were drafted together, say so there, as plainly as in `findings.md`: the
   people judging the films read `direction.md`, and that is where an overclaim does its damage.
-- **Then decide what the pair shares, as the poster's series does.** Hold the system where it serves both:
+- **Then decide what the set shares, as the poster's series does.** Hold the system where it serves all of them:
   the type, the title, the end card's layout, and the beat grid when the evidence gives no reason for different
-  beats. **Never share what each audience's evidence decides**: the holds when `comparePace` says they differ,
-  and the grade.
-- **When `comparePace` says they differ, check that the films do.** The audience whose screen taste leans
-  fast should get more changes on the beat or shorter holds. Record it with `Stage.check`, from the beat
+  beats. **Never share what each audience's evidence decides**: the holds where a pair differs, and the grade.
+- **Where a pair differs, check that its two films do** — every differing pair in a set, not only the most
+  different. The audience whose screen taste leans faster should get more changes on the beat or shorter holds. Record it with `Stage.check`, from the beat
   tables, not from a feeling — and **across the whole film**: the count of beats where something arrives and
   the median hold, and also **the longest stretch where nothing arrives** and **the end card's hold**. The
   first two can be met in the opening seconds by a film that then holds still: one run's fast-leaning film landed
   its title at 5 s, held it for ten, and held its end card longer than the slow film did. A fast-leaning film
-  holds its end card for the brief's minimum and spends what that saves on the beats before it. When
-  `comparePace` says they do not differ, the films may share their holds; say so, and let the grade and the
+  holds its end card for the brief's minimum and spends what that saves on the beats before it. Where the
+  comparison says a pair does not differ, those films may share their holds; say so, and let the grade and the
   imagery carry the difference.
 - **One `trailer.js` builds every film**: a `build(audience)` function and `const AUDIENCE = ARGS.audience ?? 'a'`
   beside `MODE` (see stage 4), so each film is a call's `args` rather than an edit, and the script still runs
@@ -137,9 +138,10 @@ film is planned, and the shared parts are shared on purpose.
   `05_sheet_a.png`, and the films `artifacts/final_a.mp4`, `artifacts/final_b.mp4`. Each film is encoded in its
   own script, so each has the whole script limit.
 - **`direction.md` has a section per audience** (its beats and its choices, each with its evidence), then
-  **"Between the audiences"**: `comparePace`'s summary, what the pair shares and why, and what differs and the
-  evidence for each difference.
-- **Budget the time for every film.** One film took about a quarter of a 60-minute run; two take about half.
+  **"Between the audiences"**: the pace comparison's summary, what the set shares and why, and what differs and
+  the evidence for each difference.
+- **Budget the time for every film.** One film took about a quarter of a 60-minute run. The deadline already
+  counts the size of the set, so each film has about the same time a pair's would — not a pair's time shared.
 
 **Carry a poster's shapes over as its own path data.** `comp.region({ path })` and `comp.outline({ path })`
 take an SVG `d` unchanged, holes and curves included, so paste the poster's `<path>` data into a group whose
@@ -165,6 +167,11 @@ smooth ones. trailer2 re-sampled the poster's curves by hand, built ellipses fro
 **Ask all of a stage's questions at once, each with your proposed answer**, so the director can accept
 rather than compose. If the director says to proceed, or has already answered in the brief, proceed on
 your proposal and record it in `direction.md` as *assumed, not confirmed*.
+
+**With three or more audiences, ask once for the set, not once per audience.** A question per audience
+per stage is a dozen clicks for six. Put every audience's proposed answer in one question, labelled by
+its letter (*A: …; B: …; C: …*), with an option to accept them all; ask about one audience alone only
+when its answer would change the others'.
 
 ---
 
@@ -305,7 +312,7 @@ const small = t => { const c = createCanvas(320, 180); const x = c.getContext('2
 
 `comp.saveVideo` itself took 10 s on one run and 19 s on another for the same film, so budget for the
 slow figure. Then record each of these with `Stage.check`, for every film when there are several, plus the
-pair's own check from *More than one audience*:
+set's own check from *More than one audience*:
 
 1. **Reading time.** Every line of text holds still long enough to read: as a working rule, about
    three words a second plus half a second to find the line, and the title at least two seconds still.

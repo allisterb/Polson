@@ -115,7 +115,7 @@ class CatalogueTests(unittest.TestCase):
                          [("São Paulo", ""), ("Mexico City", "55_and_older")])
         for places, ages, words in ((["", ""], ["30_to_34", ""], "needs a place"),
                                     (["<script>"], [""], "place name"),
-                                    (["A", "B", "C", "D"], [""] * 4, "up to 3")):
+                                    (list("ABCDEFG"), [""] * 7, "up to 6")):
             with self.subTest(places=places), self.assertRaisesRegex(StudioError, words):
                 catalogue.parse_audiences(places, ages)
 
