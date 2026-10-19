@@ -12,9 +12,13 @@
 #
 #     py -3.13 -m venv python-mediapipe
 #     python-mediapipe/Scripts/python.exe -m pip install pip-tools
-#     python-mediapipe/Scripts/python.exe -m piptools compile --generate-hashes \
+#     python-mediapipe/Scripts/python.exe -m piptools compile --generate-hashes --allow-unsafe \
 #         --extra-index-url https://download.pytorch.org/whl/cpu \
 #         --output-file=src/vision/requirements.lock.txt src/vision/requirements.in
+#
+# **`--allow-unsafe` is required, not optional.** torch needs `setuptools` on Python 3.12+, and pip-compile leaves
+# it out of the lock by default, as "unsafe". `--require-hashes` then refuses the whole install wherever setuptools
+# is not already present: a fresh venv, and the Cloud Build image, which failed on it on 2026-10-19.
 #     python-mediapipe/Scripts/python.exe -m pip install --require-hashes \
 #         -r src/vision/requirements.lock.txt
 #

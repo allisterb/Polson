@@ -254,3 +254,9 @@ try:
         _logger.warning("polson runtime: studio not mounted — no studio package at %s", _shared)
 except Exception as _e:
     _logger.warning("polson runtime: studio not mounted (%s)", _e)
+
+# Last, so it is the outermost middleware: nothing above answers anyone without the password. Not wrapped like the
+# mounts: a malformed POLSON_BASIC_AUTH must stop the server starting rather than leave it open (basic_auth.parse).
+import basic_auth  # noqa: E402
+
+_logger.warning("polson runtime: %s", basic_auth.install(app, os.environ.get("POLSON_BASIC_AUTH")))
