@@ -33,6 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from fastapi import HTTPException
 
 import intake
+import keepalive
 import studio
 import newproject
 
@@ -672,13 +673,26 @@ class TypeSelectionTests(unittest.TestCase):
 
         worst = (intake.MAX_DEADLINE_MINUTES * 60 + studio.MAX_CREDIT_SECONDS
                  + studio.BREAKER_GRACE_MINUTES * 60)
-        self.assertLessEqual(worst, intake.REQUEST_TIMEOUT_SECONDS - intake.DEADLINE_MARGIN_SECONDS)
+        self.assertLessEqual(worst, intake.RUN_LIMIT_SECONDS - intake.DEADLINE_MARGIN_SECONDS)
 
         # And derived, not typed: a hardcoded number would be right today and quietly wrong the
         # first time the grace or the credit is tuned.
-        spare = (intake.REQUEST_TIMEOUT_SECONDS - studio.MAX_CREDIT_SECONDS
+        spare = (intake.RUN_LIMIT_SECONDS - studio.MAX_CREDIT_SECONDS
                  - studio.BREAKER_GRACE_MINUTES * 60 - intake.DEADLINE_MARGIN_SECONDS)
         self.assertEqual(intake.MAX_DEADLINE_MINUTES, int(spare // 60))
+
+    def test_without_the_keepalive_the_run_limit_is_the_request_timeout(self):
+        """A run typed into ADK's own console lives inside one request, so it still fits in that hour: 38."""
+        self.assertEqual(intake._max_deadline(intake.REQUEST_TIMEOUT_SECONDS), 38)
+
+    def test_with_the_keepalive_the_ceiling_is_what_it_holds_less_what_comes_after(self):
+        """A commission is a background task the keepalive holds awake, so its limit is the keepalive's cap, and
+        the longest deadline offered must still be held all the way through the breaker's grace."""
+        ceiling = intake._max_deadline(keepalive.MAX_HOLD_MINUTES * 60.0)
+
+        self.assertEqual(ceiling, 158)
+        self.assertLessEqual(ceiling + intake.AFTER_DEADLINE_SECONDS / 60, keepalive.MAX_HOLD_MINUTES)
+        self.assertGreaterEqual(ceiling, 60, "the trailer's craft default must fit")
 
     def test_a_type_the_workflow_does_not_offer_is_refused(self):
         answer = self.client.post("/projects", data={
