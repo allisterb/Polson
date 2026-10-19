@@ -134,6 +134,22 @@ ol#events { list-style: none; margin: 0; padding: 0; max-height: 46vh; overflow-
 .ev.thinking { cursor: pointer; }
 .ev.thinking:hover { background: #f6f9fb; }
 .ev.folded .detail { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Rendered Markdown arrives as blocks; folded, only the first shows, on one line. */
+.ev.folded .detail > * { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ev.folded .detail > :not(:first-child) { display: none; }
+
+/* The agent's Markdown, at the trace's own scale: section titles are bold body text, not page headings. */
+.ev .detail p, .ev .detail ul, .ev .detail ol, .ev .detail pre, .ev .detail blockquote, .ev .detail table { margin: .3em 0; }
+.ev .detail > :first-child { margin-top: 0; }
+.ev .detail > :last-child { margin-bottom: 0; }
+.ev .detail ul, .ev .detail ol { padding-left: 1.3em; }
+.ev .detail h4, .ev .detail h5, .ev .detail h6 { margin: .4em 0 .2em; font-size: 1em; font-weight: 600; font-style: normal; }
+.ev .detail pre { overflow-x: auto; padding: .4em .6em; background: #f3f5f7; border-radius: 3px; white-space: pre; }
+.ev .detail code { font-family: ui-monospace, Consolas, monospace; font-size: .92em; }
+.ev .detail blockquote { padding-left: .7em; border-left: 2px solid #d5dbe1; color: var(--dim); }
+.ev .detail table { border-collapse: collapse; font-size: .92em; }
+.ev .detail th, .ev .detail td { padding: .15em .5em; border: 1px solid #e1e5ea; text-align: left; }
+.ev .detail hr { border: 0; border-top: 1px solid #e1e5ea; }
 
 /* What the agent said: prose, so it reads in the detail column like a note rather than in the mono
    the machine-written rows use. Clipped to five lines because a long one buries the trace as
@@ -141,8 +157,10 @@ ol#events { list-style: none; margin: 0; padding: 0; max-height: 46vh; overflow-
 .ev.text { cursor: pointer; }
 .ev.text .detail { font-family: inherit; font-size: .87rem; white-space: pre-wrap; }
 .ev.text:hover { background: #f6f9fb; }
-.ev.text.clamped .detail { display: -webkit-box; -webkit-line-clamp: 5; line-clamp: 5;
-                           -webkit-box-orient: vertical; overflow: hidden; white-space: normal; }
+/* By height rather than by line-clamp: the detail is rendered Markdown, and line-clamp only counts the
+   lines of a single block. */
+.ev.text.clamped .detail { max-height: 7.2em; overflow: hidden; white-space: normal; }
+.ev.text .detail:has(> p) { white-space: normal; }
 
 /* The model's hosting failing, which arrives on the same channel as the agent's own words. Neither
    clipped nor clickable: it is one line, and it is not speech to be expanded. */

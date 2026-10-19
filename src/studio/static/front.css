@@ -82,7 +82,7 @@ label.ps-asset-upload { box-sizing: border-box; width: 148px; }
 
 /* Request page */
 .fr-request { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(300px, 1fr); gap: var(--space-8); max-width: 1320px; margin: 0 auto; padding: var(--space-8) var(--space-6) 0; box-sizing: border-box; }
-.fr-viewer { position: relative; display: grid; place-items: center; min-height: 420px; overflow: hidden; border-radius: var(--radius-lg); background: var(--gallery); color: var(--on-gallery-muted); box-shadow: var(--shadow-card); }
+.fr-viewer { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; min-height: 420px; overflow: hidden; border-radius: var(--radius-lg); background: var(--gallery); color: var(--on-gallery-muted); box-shadow: var(--shadow-card); }
 .fr-viewer img, .fr-viewer video { display: block; max-width: 100%; max-height: 72vh; object-fit: contain; }
 .fr-viewer-empty { display: grid; justify-items: center; gap: var(--space-2); padding: var(--space-8); text-align: center; font: 400 13px/18px var(--font-sans); }
 .fr-viewer-empty strong { font: 600 20px/28px var(--font-display); color: var(--on-gallery); }
@@ -123,4 +123,68 @@ details.fr-more > summary { cursor: pointer; font: 600 13px/18px var(--font-sans
   .fr-request, .fr-compose-body { padding: var(--space-6) var(--space-4) 0; }
   .fr-page { padding: var(--space-6) var(--space-4) var(--space-8); }
   .ps-table th:nth-child(2), .ps-table td:nth-child(2), .ps-table th:nth-child(4), .ps-table td:nth-child(4) { display: none; }
+}
+
+/* Request views: Progress and Agent. The tabs sit where the request grid begins, at its width. */
+.fr-views { max-width: 1320px; margin: 0 auto; padding: var(--space-6) var(--space-6) 0; box-sizing: border-box; }
+.fr-views + .fr-request { padding-top: var(--space-6); }
+
+/* The Agent view: the transcript of what the agent thought, said and did. */
+.fr-agent { max-width: 1320px; margin: 0 auto; padding: var(--space-6) var(--space-6) var(--space-8); box-sizing: border-box; }
+.fr-agent-now { display: flex; align-items: center; gap: var(--space-2); margin: 0 0 var(--space-4); padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); background: var(--running-soft); color: var(--ink); font-size: 14px; line-height: 20px; }
+.fr-agent-now [data-agent-did] { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fr-agent-now .ps-run-dot { flex: none; }
+.fr-agent-empty { margin: var(--space-4) 0 0; }
+.fr-log { list-style: none; margin: 0; padding: 0; max-height: calc(100vh - 300px); min-height: 240px; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-raised); box-shadow: var(--shadow-card); }
+.fr-log:empty { display: none; }
+.fr-log-row { display: grid; grid-template-columns: 52px 96px minmax(0, 1fr); gap: var(--space-3); padding: var(--space-2) var(--space-4); border-bottom: 1px solid var(--line); font-size: 14px; line-height: 20px; color: var(--ink); }
+.fr-log-row[tabindex] { cursor: pointer; }
+.fr-log-row[tabindex]:focus-visible { outline: 2px solid var(--focus-ring, var(--accent)); outline-offset: -2px; }
+.fr-log-time { font: 500 12px/20px var(--font-mono); color: var(--ink-muted); text-align: right; }
+.fr-log-kind { font: 600 12px/20px var(--font-sans); letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-muted); }
+.fr-log-body { min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* Folded by height, not line-clamp: the body is rendered Markdown, and line-clamp counts the lines of one block only.
+   Folded thinking shows its first block on one line; a clipped reply shows about four lines. */
+.fr-log-body.is-folded { max-height: 20px; overflow: hidden; }
+.fr-log-body.is-folded .fr-md > * { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fr-log-body.is-folded .fr-md > :not(:first-child) { display: none; }
+.fr-log-body.is-clamped { max-height: 84px; overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent); mask-image: linear-gradient(to bottom, #000 70%, transparent); }
+
+/* The agent's Markdown, at the transcript's scale: its section titles are bold body text, not page headings. */
+.fr-md { white-space: normal; }
+.fr-md p, .fr-md ul, .fr-md ol, .fr-md pre, .fr-md blockquote, .fr-md table { margin: 0 0 var(--space-2); }
+.fr-md > :last-child { margin-bottom: 0; }
+.fr-md ul, .fr-md ol { padding-left: var(--space-5); }
+.fr-md li + li { margin-top: 2px; }
+.fr-md h4, .fr-md h5, .fr-md h6 { margin: var(--space-2) 0 var(--space-1); font: 600 14px/20px var(--font-sans); color: inherit; }
+.fr-md > h4:first-child, .fr-md > h5:first-child, .fr-md > h6:first-child { margin-top: 0; }
+.fr-md code { font: 500 12.5px/18px var(--font-mono); padding: 1px 4px; border-radius: 4px; background: var(--surface-sunken); font-style: normal; }
+.fr-md pre { overflow-x: auto; padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--surface-sunken); }
+.fr-md pre code { padding: 0; background: none; white-space: pre; }
+.fr-md blockquote { padding-left: var(--space-3); border-left: 2px solid var(--line-control); color: var(--ink-muted); }
+.fr-md table { border-collapse: collapse; font-size: 13px; font-style: normal; }
+.fr-md th, .fr-md td { padding: 2px var(--space-2); border: 1px solid var(--line); text-align: left; vertical-align: top; }
+.fr-md th { font-weight: 600; background: var(--surface-sunken); }
+.fr-md hr { border: 0; border-top: 1px solid var(--line); margin: var(--space-2) 0; }
+.fr-md a { color: var(--accent); }
+.fr-log-tool { font: 500 13px/20px var(--font-mono); color: var(--running); }
+.fr-log-meta, .fr-log-repeat { font: 500 12px/20px var(--font-mono); color: var(--ink-muted); }
+.fr-log-options { margin: var(--space-1) 0 0; padding-left: var(--space-5); color: var(--ink-muted); }
+.fr-log-render { display: flex; align-items: center; gap: var(--space-3); }
+.fr-log-render img { width: 96px; height: 54px; object-fit: cover; border-radius: var(--radius-sm); background: var(--gallery); cursor: zoom-in; }
+.fr-log-stage { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: var(--space-3); padding: var(--space-3) var(--space-4) var(--space-2); border-bottom: 1px solid var(--line); background: var(--surface-sunken); font: 600 15px/22px var(--font-sans); color: var(--ink); }
+/* Thinking is the bulk of the record and the least often read: quieter than what the agent did. */
+.fr-log-row.is-thinking .fr-log-body { color: var(--ink-muted); font-style: italic; }
+.fr-log-row.is-failed .fr-log-kind, .fr-log-row.is-failed .fr-log-body { color: var(--failed); }
+.fr-log-row.is-ask { background: var(--attention-soft); }
+.fr-log-row.is-ask .fr-log-kind { color: var(--attention); }
+.fr-log-row.is-you .fr-log-kind { color: var(--accent); }
+.fr-log-row.is-end .fr-log-kind, .fr-log-row.is-check .fr-log-kind { color: var(--done); }
+
+@media (max-width: 720px) {
+  .fr-views, .fr-agent { padding-left: var(--space-4); padding-right: var(--space-4); }
+  .fr-log-row { grid-template-columns: 44px minmax(0, 1fr); }
+  .fr-log-row .fr-log-kind { grid-column: 2; }
+  .fr-log-row .fr-log-body { grid-column: 2; }
+  .fr-log { max-height: none; }
 }

@@ -96,10 +96,10 @@ def asset_version(*names: str) -> str:
 
 # Read once at import: the file does not change under a running server, and hashing it per request
 # would be a file read on every page for a value that cannot have moved.
-TEMPLATES.env.globals["asset_version"] = asset_version()
+TEMPLATES.env.globals["asset_version"] = asset_version("studio.css", "record.js")
 
 # The user-facing pages load three files of their own; one token covers all of them.
-TEMPLATES.env.globals["front_version"] = asset_version("polson.css", "front.css", "front.js")
+TEMPLATES.env.globals["front_version"] = asset_version("polson.css", "front.css", "front.js", "record.js")
 
 #: Line numbers because the record refers to scripts by path and a reader refers to them by line.
 FORMATTER = HtmlFormatter(style="friendly", cssclass="code", linenos="table", lineanchors="L")

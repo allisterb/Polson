@@ -22,7 +22,7 @@ from studio import app as app_mod
 from studio import direction
 from studio.runs import Registry, Run
 
-from test_run_page import EXTRACT, RUN_HTML
+from test_run_page import EXTRACT, RECORD_JS, RUN_HTML
 from test_studio import _loaded, project_dir
 
 DIRECTION = """# Direction — THE LONG LISTEN
@@ -165,9 +165,13 @@ class WhyRouteTests(unittest.TestCase):
         self.assertEqual(self.client.get("/runs/nope/why").status_code, 404)
 
 
+# `esc` and `inline` come from the shared `record.js`, as the page takes them; `tasteRef` is still the page's own.
 HARNESS = EXTRACT + """
-const make = new Function(extract('esc') + extract('inline') + extract('tasteRef') + '; return { inline, tasteRef };');
-const { inline, tasteRef } = make();
+const vm = require('vm');
+const box = { window: {} };
+vm.runInNewContext(fs.readFileSync(process.argv[4], 'utf8'), box);
+const { esc, inline } = box.window.PolsonRecord;
+const tasteRef = new Function('esc', extract('tasteRef') + '; return tasteRef;')(esc);
 const cases = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
 process.stdout.write(JSON.stringify({
   inline: cases.inline.map(inline),
@@ -185,7 +189,7 @@ class InlineFormatterTests(unittest.TestCase):
             script, data = Path(tmp) / "h.js", Path(tmp) / "c.json"
             script.write_text(HARNESS, encoding="utf-8")
             data.write_text(json.dumps(cases), encoding="utf-8")
-            out = subprocess.run(["node", str(script), str(RUN_HTML), str(data)],
+            out = subprocess.run(["node", str(script), str(RUN_HTML), str(data), str(RECORD_JS)],
                                  capture_output=True, text=True, timeout=60, check=True)
             return json.loads(out.stdout)
 
@@ -199,7 +203,7 @@ class InlineFormatterTests(unittest.TestCase):
         hostile, marks, coded = result["inline"]
         self.assertNotIn("<img", hostile)
         self.assertIn("&lt;img", hostile)
-        self.assertEqual(marks, "<i>Isle of Dogs</i> and <code>t5</code> and <b>bold</b>")
+        self.assertEqual(marks, "<em>Isle of Dogs</em> and <code>t5</code> and <strong>bold</strong>")
         self.assertEqual(coded, "<code>&lt;script&gt;alert(1)&lt;/script&gt;</code>")
 
         self.assertNotIn("<b>audience</b>", result["ref"])

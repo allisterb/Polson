@@ -206,10 +206,16 @@
   <p class="hint">click anywhere, or press Esc, to close</p>
 </div>
 
+<script src="{{ base }}/static/record.js?v={{ asset_version }}"></script>
 <script>
 // Deliberately plain: no framework, no build step. The record is already the model — every event
 // carries what a reader needs, so the page appends rather than reconciles.
 (function () {
+  // How events are described and the agent's Markdown rendered: shared with the client request page.
+  const { esc, inline, markdown, detail, toolDetail, motionNote } = window.PolsonRecord;
+  // The rows whose detail is the agent's own writing, and so Markdown.
+  const PROSE = new Set(['thinking', 'text', 'note']);
+
   const main = document.querySelector('main');
   const runId = main.dataset.run;
   // The prefix this app is mounted under: "" standalone, "/studio" on the ADK runtime.
@@ -459,7 +465,9 @@
       // detail up into the 7rem stage column — and every event that carries no stage (said, thinking,
       // tool, director, the run brackets) was being read in a 112px gutter as a result.
       `<span class="stage">${esc(event.stage || '')}</span>` +
-      `<span class="detail">${esc(detail(kind, event))}</span>`;
+      // The agent's own prose is Markdown; `markdown` escapes it first and adds only its own tags.
+      `<span class="detail">${PROSE.has(kind) && !fromProvider && !(event.redacted && !event.text)
+        ? markdown(detail(kind, event)) : esc(detail(kind, event))}</span>`;
 
     // Thinking arrives folded to one line. It is the bulkiest thing in the trace and the least
     // often wanted, and left open it buries everything that says what the agent actually did.
@@ -864,18 +872,6 @@
 
   // What a motion render is, beside its path: an animation's length and frames, a sheet's cells.
   // Empty for a still. Never NaN or undefined in front of a reader.
-  function motionNote(e) {
-    const count = (v, unit) => Number.isFinite(Number(v)) && v !== null && v !== '' ? `${Number(v)} ${unit}` : '';
-    const secs = Number(e.durationMs) / 1000;
-    const len = Number.isFinite(secs) && secs > 0 ? `${secs.toFixed(1)}s` : '';
-    if (e.motion === 'animation') return ['\u25B6 ' + (len || 'animation'), count(e.frames, 'frames')].filter(Boolean).join(' \u00B7 ');
-    if (e.motion === 'video') return ['\u25B6 ' + (len || 'video'), count(e.frames, 'frames'),
-      Array.isArray(e.audio) && e.audio.length ? 'with sound' : 'silent'].filter(Boolean).join(' \u00B7 ');
-    if (e.motion === 'svg') return ['\u25B6 ' + (len || 'animation'), 'animated svg'].join(' \u00B7 ');
-    if (e.motion === 'sheet') return ['contact sheet', count(e.cells, 'cells')].filter(Boolean).join(' \u00B7 ');
-    return '';
-  }
-
   function keyOf(kind, event) {
     if (event.execution) return event.execution;
     // RenderSvg writes a render with no execution of its own, so the artifact path is its identity.
@@ -1058,147 +1054,6 @@
     }
   }
 
-  function detail(kind, e) {
-    if (kind === 'note' || kind === 'message') return e.message || e.text || '';
-    if (kind === 'render') return (e.artifact || '') + (motionNote(e) ? '  ' + motionNote(e) : '');
-    if (kind === 'export' || kind === 'artifact.read') return e.artifact || '';
-    // The host stored the block signed and empty: the agent did reason here, and its words were not
-    // kept. The desktop app does this to most thinking blocks; Claude Code in a terminal keeps them.
-    // A blank row read as a display fault.
-    if (kind === 'thinking' && e.redacted && !e.text) return '(reasoning not stored by this host)';
-    if (kind === 'inspect') return Object.entries(e.probes || {}).map(([k, v]) => `${k} ${v}`).join(', ');
-    if (kind === 'tool.call') return toolDetail(e);
-    if (kind === 'script.error') return e.error || e.script || '';
-    if (kind === 'run.error') return (e.error || '') + (e.traceback ? '\n\n' + e.traceback : '');
-    if (kind === 'stage.begin' || kind === 'stage.end') return e.stage || '';
-    if (kind === 'question.open') return e.text || '';
-    // **The row that says the run is going to stop.** Spelt out rather than left as numbers,
-    // because a director reading `spent 1801505 cap 2000000` has to do arithmetic to learn the one
-    // thing that matters — and on the run this was written for, the two warnings arrived twelve
-    // and four minutes before the halt with nobody able to see either of them.
-    if (kind === 'budget') {
-      // **Two unrelated producers write this kind, so branch on shape rather than on the name.**
-      // `studio.py` emits a *warning* when an allowance threshold is crossed - `limit`, `share`,
-      // `spent`, `cap`. `DrawingMcpTools` emits a requisition *snapshot* after every execution that
-      // touched the asset surface - `total`, `spent`, `remaining`, `cacheHits`, `tokensSpent`. Only
-      // `spent` is common to both, and it counts different things in each.
-      //
-      // Read as the first shape, the second rendered as `0% of the token budget - 1 of NaN`: no
-      // `limit` took the token branch, no `share` read as 0%, `spent` was a count of requisitions,
-      // and `+undefined` is NaN. It named the wrong allowance and invented a ceiling that does not
-      // exist - and it renders perfectly, which is why it survived a live run to be noticed by eye.
-      //
-      // `limit` is the discriminator because only the warning carries it, and branching on shape
-      // keeps every run already on disk readable: those records are frozen and cannot be reissued.
-      if (e.limit) {
-        const pct = Math.round((e.share || 0) * 100);
-        return e.limit === 'time'
-          ? `${pct}% of the time budget — ${(+e.spent).toFixed(1)} of ${(+e.cap).toFixed(0)} min`
-          : `${pct}% of the token budget — ${(+e.spent).toLocaleString()} of ${(+e.cap).toLocaleString()}`;
-      }
-
-      // The requisition snapshot. `total` is the allowance in *requisitions*, not tokens, so it is
-      // spelt as such - and the tokens are reported beside it rather than in place of it, because
-      // the two answer different questions and conflating them is what produced the line above.
-      const parts = [`${(+e.spent || 0).toLocaleString()} of ${(+e.total || 0).toLocaleString()} requisitions`];
-      if (e.cacheHits) parts.push(`${(+e.cacheHits).toLocaleString()} from cache`);
-      if (e.tokensSpent) parts.push(`${(+e.tokensSpent).toLocaleString()} tokens`);
-      return parts.join(' — ');
-    }
-    if (kind === 'stream.lag' || kind === 'stream.truncated') return `${e.dropped} not shown`;
-    // A check is the one row that can be wrong, so its verdict leads. An accepted failure says so and
-    // carries its reason: without that a reader sees a failure the run had already decided to keep.
-    if (kind === 'check') {
-      const verdict = (e.passed ? 'pass' : e.accepted ? 'failed, kept' : 'FAILED') + (e.judged ? ' (judged by eye)' : '');
-      return [verdict, e.claim, e.detail, e.accepted && e.reason ? `kept because ${e.reason}` : null]
-        .filter(Boolean).join(' — ');
-    }
-    // The row that has to earn its place: what follows it is minutes of nothing, and a reader who
-    // does not know that is watching a run they think has died. The server already measured the
-    // wait — `expectSeconds` — so the page says how long rather than implying it will be quick.
-    if (kind === 'research.started') {
-      const wait = e.expectSeconds ? ` — up to about ${Math.round(e.expectSeconds / 60)} min, and the record stays quiet until it returns` : '';
-      return (e.description || '') + wait;
-    }
-    if (kind === 'research.completed') return e.description || '';
-    // Labelled but empty is worse than unlabelled: forty rows saying `tokens` and nothing else is
-    // noise a reader has to scroll past. The counts are what the event is for — and `cached` is the
-    // one worth seeing, because cached input bills at roughly a tenth and is most of a long run.
-    if (kind === 'usage') {
-      const bits = [];
-      if (e.inputTokens != null) bits.push(`in ${e.inputTokens.toLocaleString()}`);
-      if (e.cacheReadTokens) bits.push(`cached ${e.cacheReadTokens.toLocaleString()}`);
-      if (e.outputTokens != null) bits.push(`out ${e.outputTokens.toLocaleString()}`);
-      if (e.thinkingTokens) bits.push(`thinking ${e.thinkingTokens.toLocaleString()}`);
-      return bits.join(' · ');
-    }
-    // **Two producers again, and here the wrong reading was silent rather than ugly.** `transcript.py`
-    // ends a run with `reason` - completed / failed / halted, the last carrying `limit`, `used` and
-    // `cap`. `run.py` ends one with `status` - ok / incomplete - and an `error`, and carries no
-    // `reason` at all. Keyed only on `reason`, an Antigravity run that ended *incomplete* fell past
-    // both tests and rendered as **completed**: the page said a run had finished when it had not.
-    // No NaN, nothing to notice, and the one row a director reads to learn the outcome was wrong.
-    if (kind === 'run.end') {
-      if (e.reason === 'halted') {
-        // Guarded because a halt from a producer that did not carry the pair would otherwise read
-        // as `NaN min against a cap of NaN min` - the same coercion that broke the budget row.
-        const tokens = e.limit === 'tokens';
-        const used = e.used == null ? null : (tokens ? (+e.used).toLocaleString() + ' input tokens' : (+e.used / 60).toFixed(0) + ' min');
-        const cap = e.cap == null ? null : (tokens ? (+e.cap).toLocaleString() : (+e.cap / 60).toFixed(0) + ' min');
-        return used && cap ? `halted — ${used} against a cap of ${cap}` : 'halted';
-      }
-      if (e.reason === 'failed') return e.error || 'failed';
-      if (e.reason === 'completed') return 'completed';
-
-      // The `status` vocabulary. Anything that is not `ok` is reported as itself rather than
-      // flattened to a word this producer never used.
-      if (e.status && e.status !== 'ok') return e.error ? `${e.status} — ${e.error}` : e.status;
-      return e.error || 'completed';
-    }
-    return (e.text || e.script || e.message || '').toString();
-  }
-
-  // A tool call, with the argument that says what it was actually doing.
-  //
-  // The name alone was almost no information: a row reading `Bash` is indistinguishable from any
-  // other `Bash`, so a call that has been running for twenty minutes looks like every call that
-  // returned in forty milliseconds. Naming the command turns "a tool is slow" into "this command is
-  // slow", which is the difference between noticing and diagnosing.
-  //
-  // Which argument matters is per tool, and guessing wrongly is worse than showing none: a path for
-  // a file tool, the command for a shell, the pattern for a search. `hostlog` already summarises
-  // long values as `<N chars>`, so a whole script never arrives here to be truncated twice.
-  const TOOL_ARG = {
-    Bash: 'command', PowerShell: 'command',
-    Read: 'file_path', Write: 'file_path', Edit: 'file_path', NotebookRead: 'file_path',
-    Glob: 'pattern', Grep: 'pattern',
-    WebFetch: 'url', WebSearch: 'query',
-    Agent: 'description', Task: 'description',
-  };
-
-  function toolDetail(e) {
-    const tool = (e.tool || '').replace(/^mcp__[^_]+__/, '');
-    const args = e.args || {};
-
-    // Named argument first, then the conventions the Polson tools use, then whatever single short
-    // argument there is — a one-argument call is unambiguous and worth showing.
-    let shown = args[TOOL_ARG[tool]] ?? args.scriptFile ?? args.outFile ?? args.query ?? args.name;
-    if (shown === undefined) {
-      const values = Object.values(args).filter((v) => typeof v === 'string');
-      if (values.length === 1) shown = values[0];
-    }
-    if (shown === undefined || shown === '') return tool;
-
-    // One line. A heredoc is many, and its first line is the part that says what it is doing.
-    const flat = String(shown).replace(/\s+/g, ' ').trim();
-    return tool + '  ' + (flat.length > 160 ? flat.slice(0, 160) + '…' : flat);
-  }
-
-  function esc(s) {
-    return String(s).replace(/[&<>"']/g, (c) =>
-      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-  }
-
   // ── the lightbox ───────────────────────────────────────────────────────────────────────────
   // The panel render is scaled to a narrow column, which is fine for "what is happening" and no use
   // for judging a drawing. Clicking it shows the artifact at its own size.
@@ -1350,13 +1205,6 @@
   const why = document.getElementById('why');
   const whyBody = document.getElementById('whybody');
   const whyTally = document.getElementById('whytally');
-
-  function inline(s) {
-    return esc(s)
-      .replace(/`([^`]+)`/g, '<code>$1</code>')
-      .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
-      .replace(/\*([^*]+)\*/g, '<i>$1</i>');
-  }
 
   // A cited Taste result, opening in place to what it was for and the request it made.
   function tasteRef(handle, queries) {

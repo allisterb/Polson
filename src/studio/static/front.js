@@ -360,6 +360,7 @@
     if (status === 'stopped') stoppedOnce = true;
     if (stoppedOnce) status = 'stopped';
     finished = status !== 'stopped';
+    var strip = page.querySelector('[data-agent-now]'); if (strip) strip.hidden = true;
     stages.forEach(function (s) { if (s.state === 'current') s.state = finished ? 'done' : s.state; });
     later();
     setStatus(finished ? 'delivered' : 'stopped', finished ? 'Delivered' : 'Stopped');
@@ -452,18 +453,209 @@
   });
   // The server's run.end says only that the MCP server stopped. The agent's says how the run ended, as
   // `reason` or `status`; anything but a completion is a stop, even when the files were already written.
+  // How events are described and the agent's Markdown rendered: shared with the developer run page.
+  var R = window.PolsonRecord;
   var failure = '';
   on('run.error', function (e) { failure = String(e.error || '').split('\n')[0]; });
   on('run.end', function (e) {
-    var how = e.reason || e.status || '';
-    var ok = !how || how === 'completed' || how === 'done';
-    deliver(ok && !e.error ? 'delivered' : 'stopped');
-    if (!ok || e.error) stopped(failure || String(e.error || how).split('\n')[0]);
+    var end = R.runEnd(e);
+    deliver(end.ok ? 'delivered' : 'stopped');
+    if (!end.ok) stopped(failure || String(end.text).split('\n')[0]);
   });
   on('run.closed', function (summary) {
     source.close();
     if (!finished) deliver(summary && summary.status === 'done' ? 'delivered' : 'stopped');
   });
+
+  // region Agent view
+  // The developer page's transcript, in this design and from the same stream: what the agent thought, said and
+  // did. Token counts, budgets and probe measurements are left to that page; this is the work, not the meter.
+  var views = page.querySelector('.fr-views');
+  var log = page.querySelector('[data-agent-log]'), empty = page.querySelector('[data-agent-empty]');
+  var now = page.querySelector('[data-agent-now]'), nowDid = page.querySelector('[data-agent-did]');
+  var nowAgo = page.querySelector('[data-agent-ago]'), count = page.querySelector('[data-agent-count]');
+  var firstAt = null, lastAt = null, lastDid = '', rows = 0, lastFold = null, lastFoldKey = null, began = false;
+
+  function select(view) {
+    if (!views) return;
+    views.querySelectorAll('.ps-tab').forEach(function (t) {
+      var on = t.dataset.view === view;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+    });
+    if (view === 'agent' && log) log.scrollTop = log.scrollHeight;
+    try { history.replaceState(null, '', view === 'agent' ? '#agent' : location.pathname + location.search); } catch (err) { /* a view, not state */ }
+  }
+  if (views) {
+    views.addEventListener('click', function (ev) { var t = ev.target.closest('.ps-tab'); if (t) select(t.dataset.view); });
+    views.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'ArrowLeft' && ev.key !== 'ArrowRight') return;
+      var tabs = Array.prototype.slice.call(views.querySelectorAll('.ps-tab'));
+      var i = tabs.indexOf(document.activeElement); if (i < 0) return;
+      var next = tabs[(i + (ev.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+      select(next.dataset.view); next.focus();
+    });
+    if (location.hash === '#agent') select('agent');
+    // A link to #agent from this same page is a hash change, not a load.
+    window.addEventListener('hashchange', function () { select(location.hash === '#agent' ? 'agent' : 'progress'); });
+  }
+
+  // Minutes and seconds since the first thing the record says, as the progress list counts them.
+  function since(ts) {
+    var t = ts ? Date.parse(ts) : NaN;
+    if (isNaN(t)) return '';
+    if (firstAt === null) firstAt = t;
+    var s = Math.max(0, Math.round((t - firstAt) / 1000));
+    return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  }
+
+  // The agent's own writing is Markdown, rendered by the shared script: escaped first, so it adds only its own tags.
+  function md(text) { var d = el('div', 'fr-md'); d.innerHTML = R.markdown(text); return d; }
+
+  // Everything up to and including this project's own directory, in either separator: `C:\…\trailer5\brief.md`
+  // reads as `brief.md`.
+  var projectPath = new RegExp('^.*?[\\\\/]' + String(page.dataset.name || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '[\\\\/]', 'g');
+
+  // One line for the "now" strip, without the Markdown marks.
+  function gist(text) { return String(text || '').replace(/[*_`#>|]+/g, '').replace(/\s+/g, ' ').trim(); }
+
+  function tickNow() {
+    if (!lastAt || !nowAgo) return;
+    var s = Math.round((Date.now() - lastAt) / 1000);
+    nowAgo.textContent = s < 10 ? '' : s < 90 ? s + 's ago' : Math.floor(s / 60) + 'm ' + (s % 60) + 's ago';
+  }
+  setInterval(tickNow, 1000);
+
+  // A request the page already knows is over has nothing being done now. Claude Code ends a run without a
+  // run.end, so for those the strip would otherwise keep the last thing said, in the running colour, for good.
+  var over = page.dataset.status === 'delivered' || page.dataset.status === 'stopped';
+  function doing(text) {
+    if (!now || !text || over || finished) return;
+    now.hidden = false; lastAt = Date.now(); lastDid = text;
+    nowDid.textContent = text.length > 110 ? text.slice(0, 109) + '…' : text; tickNow();
+  }
+
+  // One row: when, what kind of thing, and the thing. `fold` is for prose too long to show whole: thinking
+  // opens on a click, what the agent said is clipped to a few lines.
+  function row(kind, label, ts, body, fold) {
+    if (!log) return null;
+    var follow = log.scrollHeight - log.scrollTop - log.clientHeight < 48;
+    var li = el('li', 'fr-log-row is-' + kind);
+    li.appendChild(el('span', 'fr-log-time', since(ts)));
+    li.appendChild(el('span', 'fr-log-kind', label));
+    var b = el('div', 'fr-log-body');
+    if (typeof body === 'string') b.textContent = body; else if (body) b.appendChild(body);
+    li.appendChild(b);
+    if (fold) {
+      b.classList.add(fold); li.tabIndex = 0; li.setAttribute('aria-expanded', 'false');
+      var toggle = function () { var open = b.classList.toggle(fold); li.setAttribute('aria-expanded', open ? 'false' : 'true'); };
+      li.addEventListener('click', toggle);
+      li.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); toggle(); } });
+    }
+    log.appendChild(li); rows += 1;
+    if (count) count.textContent = rows;
+    if (empty) empty.hidden = true;
+    if (follow) log.scrollTop = log.scrollHeight;
+    lastFold = null; lastFoldKey = null;
+    return li;
+  }
+
+  function line(text, cls) { return el('span', cls || null, text); }
+
+  var AGENT = {
+    'run.begin': function (e) { if (began) return; began = true; row('start', 'Started', e.ts, 'The agent began work on the brief.'); },
+    'run.start': function (e) { if (began) return; began = true; row('start', 'Started', e.ts, 'The agent began work on the brief.'); },
+    'stage.begin': function (e) {
+      if (!log) return;
+      var li = el('li', 'fr-log-stage'); li.appendChild(el('span', 'fr-log-time', since(e.ts)));
+      li.appendChild(el('span', null, e.stage || 'Stage')); log.appendChild(li);
+      lastFold = null; lastFoldKey = null; doing('Working on ' + (e.stage || 'a new stage'));
+    },
+    'thinking': function (e) {
+      if (e.redacted && !e.text) { row('thinking', 'Thinking', e.ts, '(reasoning not stored by this host)'); return; }
+      var text = String(e.text || '').trim(); if (!text) return;
+      row('thinking', 'Thinking', e.ts, md(text), 'is-folded'); doing('Thinking');
+    },
+    'text': function (e) {
+      var text = String(e.text || '').trim(); if (!text) return;
+      if (e.source === 'SYSTEM' && e.status === 'ERROR') { row('failed', 'Provider', e.ts, text, 'is-clamped'); return; }
+      row('said', 'Said', e.ts, md(text), 'is-clamped'); doing(gist(text));
+    },
+    'tool.call': function (e) {
+      var t = R.toolParts(e), key = t.tool + ' ' + t.arg;
+      // A host's file tools name absolute paths; inside the project, the path from its root is the readable part.
+      t.arg = t.arg.replace(projectPath, '');
+      // A repeated call is one wait polled several times, not a loop: it folds into the row above.
+      if (key === lastFoldKey && lastFold) {
+        var n = (Number(lastFold.dataset.repeats) || 1) + 1; lastFold.dataset.repeats = n;
+        var badge = lastFold.querySelector('.fr-log-repeat') || lastFold.querySelector('.fr-log-body').appendChild(el('span', 'fr-log-repeat'));
+        badge.textContent = ' ×' + n; return;
+      }
+      var body = el('span'); body.appendChild(line(t.tool, 'fr-log-tool'));
+      if (t.arg) body.appendChild(line(' ' + t.arg));
+      var li = row('tool', 'Tool', e.ts, body);
+      lastFold = li; lastFoldKey = key; doing(t.arg ? t.tool + ': ' + t.arg : t.tool);
+    },
+    'script.ok': function (e) {
+      var b = el('span'); b.appendChild(line(e.script || 'a script', 'fr-spec'));
+      if (typeof e.ms === 'number') b.appendChild(line('  ' + (e.ms < 1000 ? e.ms + ' ms' : (e.ms / 1000).toFixed(1) + ' s'), 'fr-log-meta'));
+      row('ran', 'Ran', e.ts, b);
+    },
+    'script.error': function (e) { row('failed', 'Failed', e.ts, String(R.detail('script.error', e)).split('\n')[0], 'is-clamped'); },
+    'render': function (e) {
+      var path = e.artifact || ''; if ((e.motion || '').toLowerCase() === 'sheet') return;
+      var b = el('span', 'fr-log-render');
+      if (IMAGE.test(path)) {
+        var img = el('img'); img.alt = ''; img.loading = 'lazy'; img.src = artifactUrl(path);
+        img.title = 'Show it in the viewer';
+        img.addEventListener('click', function (ev) { ev.stopPropagation(); show(path); caption.textContent = path; select('progress'); });
+        b.appendChild(img);
+      }
+      b.appendChild(line(path, 'fr-spec'));
+      row('render', 'Rendered', e.ts, b); doing('Rendered ' + path);
+    },
+    'artifact.read': function (e) { row('look', 'Looked at', e.ts, line(e.artifact || '', 'fr-spec')); },
+    'note': function (e) { if (e.message) row('note', 'Note', e.ts, md(e.message), 'is-clamped'); },
+    'check': function (e) { row(e.passed || e.accepted ? 'check' : 'failed', 'Checked', e.ts, R.detail('check', e), 'is-clamped'); },
+    'question.open': function (e) {
+      var b = el('span'); b.appendChild(line(e.text || 'A question for you'));
+      if ((e.options || []).length) {
+        var ul = el('ul', 'fr-log-options');
+        e.options.forEach(function (o) { ul.appendChild(el('li', null, String(o).replace(/^\s*\(recommended\)\s*/i, ''))); });
+        b.appendChild(ul);
+      }
+      row('ask', 'Asked you', e.ts, b); doing('Waiting for your answer');
+    },
+    'answer': function (e) {
+      var said = e.skipped ? 'You let the agent choose.' : (e.text || (e.selected || []).join(', ') || 'You answered.');
+      row('you', 'You', e.ts, said);
+    },
+    'question.closed': function (e) { if (e.reason === 'timeout') row('you', 'No answer', e.ts, 'The question timed out, so the agent chose for itself.'); },
+    // The first message, before the agent has done anything, is the opening the studio sends to start the run
+    // (on ADK, the intake's own words), not something the person typed. Later ones are the person speaking.
+    'message': function (e) {
+      if (!(e.text || e.message)) return;
+      var opening = rows <= 1;
+      row(opening ? 'meta' : 'you', opening ? 'Opening' : 'You', e.ts, e.text || e.message);
+    },
+    'research.started': function (e) { row('tool', 'Researching', e.ts, R.detail('research.started', e)); doing('Researching: ' + (e.description || '')); },
+    'research.completed': function (e) { row('tool', 'Research done', e.ts, e.description || ''); },
+    'asset.requisition': function (e) { row('tool', 'Requested', e.ts, e.description || e.prompt || e.artifact || 'an image'); },
+    'asset.refused': function (e) { row('failed', 'Refused', e.ts, e.reason || e.description || ''); },
+    'document.read': function (e) { row('look', 'Read', e.ts, line(e.path || e.document || '', 'fr-spec')); },
+    'stream.truncated': function (e) { row('meta', 'Earlier', e.ts, (e.dropped || 'Some') + ' earlier events are not shown.'); },
+    'run.error': function (e) { row('failed', 'Error', e.ts, String(e.error || '').split('\n')[0], 'is-clamped'); },
+    'run.end': function (e) {
+      if (e.src === 'server') return;
+      var end = R.runEnd(e);
+      row(end.ok ? 'end' : 'failed', end.ok ? 'Finished' : 'Stopped', e.ts,
+          end.ok ? 'The agent finished the work.' : String(end.text).split('\n')[0]);
+      if (now) { now.hidden = true; lastAt = null; }
+    }
+  };
+  if (log) Object.keys(AGENT).forEach(function (kind) { on(kind, AGENT[kind]); });
+  // endregion
   later();
   if (page.dataset.status === 'delivered' || page.dataset.status === 'stopped') {
     // After the replay has had a moment, so a piece from the stream's own run.end is not fetched twice.
