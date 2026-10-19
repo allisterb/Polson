@@ -56,6 +56,7 @@ import subprocess
 import sys
 import tempfile
 import urllib.request
+import zipfile
 import zlib
 from pathlib import Path
 
@@ -177,10 +178,13 @@ FFMPEG = [
 #: What Motion.saveVideo asks ffmpeg for: H.264 and AAC in an MP4, VP9 and Opus in a WebM.
 FFMPEG_ENCODERS = ("libx264", "aac", "libvpx-vp9", "libopus")
 
-#: A glTF binary starts `glTF`; a MediaPipe `.task`, a PyTorch `.pth` or `.pt` and NLTK's data are zips (`PK`); a
-#: `.tflite` is a FlatBuffer carrying `TFL3` at 4.
-MAGIC = {".glb": (0, b"glTF"), ".task": (0, b"PK"), ".pth": (0, b"PK"), ".pt": (0, b"PK"), ".zip": (0, b"PK"),
-         ".tflite": (4, b"TFL3")}
+#: A glTF binary starts `glTF`; a `.tflite` is a FlatBuffer carrying `TFL3` at 4.
+MAGIC = {".glb": (0, b"glTF"), ".tflite": (4, b"TFL3")}
+
+#: A MediaPipe `.task`, a PyTorch `.pth` or `.pt` and NLTK's data are zips, checked as zips rather than by their first
+#: bytes: MediaPipe's three models begin `\0\0PK`, a zip with a two-byte prefix that every zip reader accepts. A `PK`
+#: at offset 0 refused all three, correctly hashed, and failed the first Cloud Build after the check (2026-10-19).
+ZIPS = {".task", ".pth", ".pt", ".zip"}
 
 
 def sha256(path: Path) -> str:
@@ -224,8 +228,8 @@ def fetch(url: str, dest: Path, expected: str, size: int, force: bool) -> str:
         offset, magic = MAGIC.get(dest.suffix, (0, b""))
         with open(tmp, "rb") as f:
             head = f.read(offset + len(magic))
-        if magic and head[offset:] != magic:
-            raise SystemExit(f"FATAL: {dest.name} hashes correctly but does not begin like a {dest.suffix} file.")
+        if (magic and head[offset:] != magic) or (dest.suffix in ZIPS and not zipfile.is_zipfile(tmp)):
+            raise SystemExit(f"FATAL: {dest.name} hashes correctly but is not a {dest.suffix} file.")
         os.replace(tmp, dest)
         return "fetched"
     finally:

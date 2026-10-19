@@ -20,6 +20,10 @@
 
 #!include:.gitignore
 
+# Back in, after the include: the workflow cards' pictures. `*.webp` is gitignored repo-wide, so without this the
+# cards on a deployed studio fall back to icons. They stay untracked because they are generated images.
+!src/studio/static/gallery/*.webp
+
 # ---------------------------------------------------------------------------------------------
 # Tracked, and still not wanted in the image.
 # ---------------------------------------------------------------------------------------------
@@ -61,7 +65,8 @@ tests/
 **/appsettings.json
 python/
 python-adk/
-# Ignored only by the .gitignore venv writes inside itself, which the include above does not read. The
-# image builds its own from the lock (tools/bootstrap.py); a developer's is ~350 MB of Windows wheels.
-python-mediapipe/
+# Every other venv, by pattern. These are ignored only by the .gitignore a venv writes inside itself, which the
+# include above does not read, so each new one shipped until it was named here: python-mediapipe/ (~350 MB of
+# Windows wheels), then python-speech/, found on 2026-10-19 as 557 of a 565 MB upload. The image builds its own.
+python-*/
 **/__pycache__/

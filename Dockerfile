@@ -156,6 +156,10 @@ ENV DOTNET_ROOT=/usr/share/dotnet \
 # time_t transition; bookworm's was `libglib2.0-0`, so a base-image change back would need this edited.
 # (PortAudio is not needed: mediapipe imports `sounddevice` inside a try and tolerates its absence.)
 #
+# **`libegl1` and `libgles2` are for mediapipe itself**, from 1.0: it loads `libEGL.so.1` through ctypes on import,
+# GPU or not, and the first build with the vision step failed there (2026-10-19). Both are glvnd dispatch stubs, a
+# few hundred KB together.
+#
 # **`ffmpeg` is what `Motion.saveVideo` and `comp.saveVideo` encode with** (H.264 and AAC, VP9 and Opus;
 # Debian's build has all four). The studio finds it on the PATH and runs it as its own process; on Windows
 # `tools/bootstrap.py --only ffmpeg` fetches a pinned build instead. Without it the calls refuse, saying so.
@@ -240,6 +244,8 @@ RUN apt-get update \
         ffmpeg \
         libgl1 \
         libglib2.0-0t64 \
+        libegl1 \
+        libgles2 \
         fonts-recommended \
         fonts-dejavu-core \
         fonts-liberation2 \
