@@ -32,11 +32,12 @@ import contextlib
 import logging
 import os
 import time
+import uuid
 from typing import Any, AsyncIterator, Callable
 
 import httpx
-from fastapi import FastAPI
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, Request, Response
+from fastapi.responses import PlainTextResponse, StreamingResponse
 
 _logger = logging.getLogger("polson.keepalive")
 
@@ -63,6 +64,14 @@ OPEN_SECONDS = 30.0
 
 #: Wait before trying again after a hold fails to open, or ends as soon as it opened.
 RETRY_SECONDS = 15.0
+
+#: Which instance this is, sent with every hold. **A hold only helps the instance it reaches**, and during a revision
+#: rollout the service URL routes to the new revision's instance while a run is still working on the old one. Seen
+#: on 2026-10-19: the old instance's holds landed on the new one, which had no work, ended each at once, and was
+#: asked again every `RETRY_SECONDS` until the old run ended. An instance now refuses a hold that is not its own
+#: (409), and the sender stops: the traffic it would need no longer reaches it.
+INSTANCE = uuid.uuid4().hex
+INSTANCE_HEADER = "X-Polson-Keepalive-Instance"
 
 #: The longest any one run is held, whatever it asks for. A run that hangs instead of ending must not keep an instance
 #: billed for good; past this it carries on unheld, and the log says so.
@@ -119,7 +128,11 @@ def mount(app: FastAPI) -> None:
     """The route the held request asks for, and (only under `POLSON_KEEPALIVE_PROBE=1`) the measuring probe."""
 
     @app.get(HOLD_PATH, include_in_schema=False)
-    async def hold() -> StreamingResponse:
+    async def hold(request: Request) -> Response:
+        sender = request.headers.get(INSTANCE_HEADER)
+        if sender and sender != INSTANCE:
+            return PlainTextResponse("held for another instance; it does not receive this service's traffic\n",
+                                     status_code=409, headers={"Cache-Control": "no-store"})
         return StreamingResponse(_hold_body(), media_type="text/plain",
                                  headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
 
@@ -151,20 +164,24 @@ def _ensure() -> None:
         _holder = asyncio.get_running_loop().create_task(_hold_loop())
 
 
-async def _hold_once(make: Callable[[], httpx.AsyncClient], up: asyncio.Event) -> None:
-    """One held request, from opening to its end. Sets `up` at the first byte; never raises."""
+async def _hold_once(make: Callable[[], httpx.AsyncClient], up: asyncio.Event) -> str | None:
+    """One held request, from opening to its end. Sets `up` at the first byte; never raises.
+    Returns "elsewhere" when it reached another instance, which no hold from here can help."""
     try:
         async with make() as web:
             async with web.stream("GET", SELF_URL + HOLD_PATH, headers=await _headers(web)) as answer:
+                if answer.status_code == 409:
+                    return "elsewhere"
                 if answer.status_code != 200:
                     _logger.error("keepalive: the held request was refused with %d", answer.status_code)
-                    return
+                    return None
                 async for _ in answer.aiter_bytes():
                     up.set()
     except asyncio.CancelledError:
         raise
     except Exception as exc:                                       # noqa: BLE001 - logged; the loop retries
         _logger.error("keepalive: the held request failed (%r)", exc)
+    return None
 
 
 async def _hold_loop(client: Callable[[], httpx.AsyncClient] | None = None, retry: float | None = None,
@@ -184,6 +201,10 @@ async def _hold_loop(client: Callable[[], httpx.AsyncClient] | None = None, retr
             await asyncio.wait({nxt, waiting}, timeout=opening, return_when=asyncio.FIRST_COMPLETED)
             waiting.cancel()
             if not up.is_set():
+                if nxt.done() and nxt.result() == "elsewhere":
+                    _logger.warning("keepalive: the service's traffic now reaches another instance (a newer "
+                                    "revision); this one can no longer be held, so it stops asking")
+                    break
                 # Not up: the one before, if any, is still holding; try again shortly.
                 nxt.cancel()
                 await asyncio.sleep(retry)
@@ -210,7 +231,7 @@ async def _headers(web: httpx.AsyncClient) -> dict[str, str]:
     Two headers because both gates may be up at once: a private service checks IAM, and Cloud Run reads the token
     from `X-Serverless-Authorization` when present and passes `Authorization` through to the app untouched.
     """
-    headers: dict[str, str] = {}
+    headers: dict[str, str] = {INSTANCE_HEADER: INSTANCE}
     basic = os.environ.get("POLSON_BASIC_AUTH", "").strip()
     if basic:
         headers["Authorization"] = "Basic " + base64.b64encode(basic.encode("utf-8")).decode("ascii")

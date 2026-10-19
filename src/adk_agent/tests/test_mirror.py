@@ -131,6 +131,20 @@ class MirrorSelectionTests(unittest.TestCase):
             self.assertNotIn("documents", key)
         self.assertNotIn(b"secret,numbers", b"".join(self.bucket.uploaded.values()))
 
+    def test_every_deliverable_and_the_request_record_are_mirrored(self):
+        """A request restored after its instance recycled must open as it was. Until 2026-10-19 `direction.md` was
+        not mirrored, so a restored poster had lost the document explaining it; `request.json` neither, so it was
+        listed under its folder name. Read from the studio's own list, so a new deliverable cannot be missed."""
+        import re
+        app = Path(__file__).resolve().parents[2] / "studio" / "app.py"
+        source = app.read_text(encoding="utf-8")
+        block = source[source.index("DELIVERABLES: tuple"):source.index("DELIVERABLE_NAMES")]
+        deliverables = set(re.findall(r'^\s*\("([^"]+)",', block, flags=re.M))
+
+        self.assertTrue(deliverables, "no deliverables read from studio/app.py")
+        self.assertEqual(set(), deliverables - set(mirror_mod.MIRRORED_FILES))
+        self.assertIn("request.json", mirror_mod.MIRRORED_FILES)
+
     def test_machine_specific_configuration_is_not_copied(self):
         """`.agents/` holds MCP command lines built for the machine that generated them.
 
