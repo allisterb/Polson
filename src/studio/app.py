@@ -39,6 +39,11 @@ from pygments.formatters import HtmlFormatter
 from pygments.lexers import JavascriptLexer, MarkdownLexer
 from sse_starlette.sse import EventSourceResponse
 
+try:
+    from markdown_it import MarkdownIt
+except ImportError:  # Named in requirements.in; an environment installed before 2026-10-19 lacks it.
+    MarkdownIt = None
+
 from orchestrator import csm
 from orchestrator.events import read_events
 
@@ -131,6 +136,26 @@ PRIVATE_FOLDERS = frozenset({"documents"})
 
 #: Prose, so no line numbers. A drawing script is cited by line and a report is not.
 PROSE = HtmlFormatter(style="friendly", cssclass="code")
+
+
+def _link_opens_apart(self, tokens, idx, options, env):
+    """A link in a document opens in its own tab, so following it does not lose the page it was read on."""
+    tokens[idx].attrSet("target", "_blank")
+    tokens[idx].attrSet("rel", "noopener noreferrer")
+    return self.renderToken(tokens, idx, options, env)
+
+
+#: A delivered Markdown document as HTML, for the client page's reading panel.
+#:
+#: CommonMark plus tables and strikethrough, which is what the agents write. **Raw HTML is off**, and that
+#: is the security property rather than a style choice: these documents are agent-written, and the ones on
+#: disk already say `<shout>` and `<text>` in prose about markup, so markup must arrive as text. markdown-it
+#: refuses `javascript:`, `vbscript:`, `file:` and `data:` links itself. **Images are off** because an image
+#: is a fetch the reader's browser makes on the document's say-so, to any host the agent named.
+MARKDOWN = None if MarkdownIt is None else (
+    MarkdownIt("commonmark", {"html": False}).enable(["table", "strikethrough"]).disable("image"))
+if MARKDOWN is not None:
+    MARKDOWN.add_render_rule("link_open", _link_opens_apart)
 
 #: What a run *delivers*, as opposed to what it rendered: the documents beside the picture.
 #:
@@ -581,7 +606,7 @@ def create_app(root: Path | None = None, registry: Registry | None = None,
         return JSONResponse({"deliverables": written})
 
     @app.get("/runs/{run_id}/deliverables/{name}")
-    async def serve_deliverable(run_id: str, name: str, raw: int = 0) -> Response:
+    async def serve_deliverable(run_id: str, name: str, raw: int = 0, rendered: int = 0) -> Response:
         """One delivered document, highlighted, as a fragment the page drops into the overlay.
 
         This is the half of a finished run that neither the render nor the trace carries. The render
@@ -630,6 +655,14 @@ def create_app(root: Path | None = None, registry: Registry | None = None,
         if raw:
             return PlainTextResponse(source, media_type="text/plain; charset=utf-8",
                                      headers={"Content-Disposition": f'inline; filename="{name}"'})
+
+        # `?rendered=1` is the client page's reading panel: a Markdown document as a document, tables and all.
+        # The developer page's overlay keeps the highlighted source, where the marks themselves are the point.
+        if rendered and not code:
+            if MARKDOWN is None:
+                raise HTTPException(status_code=501, detail="markdown-it-py is not installed in this environment; "
+                                                            "see src/studio/requirements.in")
+            return HTMLResponse(MARKDOWN.render(source))
 
         return HTMLResponse(highlight(source, JavascriptLexer() if code else MarkdownLexer(),
                                       FORMATTER if code else PROSE))

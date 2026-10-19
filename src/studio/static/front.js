@@ -419,14 +419,44 @@
       data.deliverables.forEach(function (d) {
         if (d.kind === 'document') {
           var li = el('li'); var a = el('a', null, d.name);
-          a.href = base + '/runs/' + encodeURIComponent(run) + '/deliverables/' + encodeURIComponent(d.name) + '?raw=1';
+          a.href = deliverableUrl(d.name) + '?raw=1';
           a.target = '_blank'; li.appendChild(a); li.appendChild(el('span', 'fr-small', ' · ' + d.what));
+          // A plain click reads it here; the link stays the raw file, for a new tab, a copy or a save.
+          a.addEventListener('click', function (ev) {
+            if (ev.button || ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.altKey || !doc) return;
+            ev.preventDefault(); read(d, a);
+          });
           docs.appendChild(li);
         }
       });
       page.querySelector('[data-documents]').hidden = !docs.children.length;
     });
   }
+
+  // The reading panel: a delivered document opened under the piece. Markdown arrives rendered by the server
+  // with raw HTML off, a script highlighted; both are escaped there, so nothing the agent wrote becomes markup.
+  var doc = page.querySelector('[data-doc]'), reading = null, asked = 0;
+  function deliverableUrl(name) { return base + '/runs/' + encodeURIComponent(run) + '/deliverables/' + encodeURIComponent(name); }
+  function closeDoc() {
+    doc.hidden = true; reading = null;
+    page.querySelectorAll('[data-doc-list] a[aria-current]').forEach(function (o) { o.removeAttribute('aria-current'); });
+  }
+  function read(d, link) {
+    if (reading === d.name) { closeDoc(); return; }
+    closeDoc(); reading = d.name; link.setAttribute('aria-current', 'true');
+    var md = /\.md$/i.test(d.name), mine = ++asked, body = doc.querySelector('[data-doc-body]');
+    doc.querySelector('[data-doc-title]').textContent = d.name;
+    doc.querySelector('[data-doc-what]').textContent = d.what ? d.what.charAt(0).toUpperCase() + d.what.slice(1) : '';
+    doc.querySelector('[data-doc-raw]').href = deliverableUrl(d.name) + '?raw=1';
+    body.className = md ? 'fr-prose' : 'fr-code fr-doc-code'; body.textContent = 'Loading…';
+    doc.hidden = false;
+    doc.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    fetch(deliverableUrl(d.name) + (md ? '?rendered=1' : ''))
+      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
+      .then(function (html) { if (mine === asked) body.innerHTML = html; },
+            function () { if (mine === asked) body.textContent = d.name + ' could not be shown here. The Raw link opens the file itself.'; });
+  }
+  if (doc) doc.querySelector('[data-doc-close]').addEventListener('click', closeDoc);
 
   var source = new EventSource(base + '/runs/' + encodeURIComponent(run) + '/events');
   function on(type, fn) { source.addEventListener(type, function (m) { try { fn(JSON.parse(m.data)); } catch (err) { /* a malformed line is skipped, as the record reader does */ } }); }

@@ -1507,6 +1507,62 @@ class DeliverableRouteTests(unittest.TestCase):
         self.assertIn("text/plain", page.headers["content-type"])
         self.assertNotIn("<span", page.text)
 
+    def test_rendered_serves_a_report_as_a_document(self):
+        """The client page's reading panel: direction.md's tables are its content, so they arrive as tables."""
+        page = self.client.get("/runs/acme-1/deliverables/accuracy.md?rendered=1")
+
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("<table>", page.text)
+        self.assertIn("<th>figure</th>", page.text)
+        self.assertNotIn("<span", page.text)
+
+    def test_rendered_keeps_the_agents_markup_as_text(self):
+        """Agent-written, and the documents on disk already say `<shout>` and `<text>` in prose about markup.
+
+        Raw HTML off is what keeps any of it from becoming markup in the page; markdown-it refuses a
+        `javascript:` link itself, and images are off so a document cannot make the reader fetch from a
+        host it names.
+        """
+        (self.root / "acme" / "findings.md").write_text(
+            "Sent <shout> Ahoy! to the voice. <script>alert(1)</script>\n\n"
+            "| a | b |\n| --- | --- |\n| <img src=x onerror=alert(1)> | [j](javascript:alert(1)) |\n\n"
+            "![tracker](https://example.invalid/pixel.png) [ok](https://example.org)\n", encoding="utf-8")
+
+        text = self.client.get("/runs/acme-1/deliverables/findings.md?rendered=1").text
+
+        self.assertIn("&lt;shout&gt;", text)
+        self.assertNotIn("<script", text)
+        self.assertNotIn("<img", text)
+        self.assertNotIn('href="javascript:', text)
+        self.assertIn('<a href="https://example.org" target="_blank" rel="noopener noreferrer">ok</a>', text)
+
+    def test_rendered_is_highlighted_source_for_a_script(self):
+        """A script has no rendered form; it is code, so the panel gets the numbered listing."""
+        page = self.client.get("/runs/acme-1/deliverables/artwork.js?rendered=1")
+
+        self.assertIn("linenos", page.text)
+
+    def test_rendered_is_refused_for_everything_the_styled_route_refuses(self):
+        for attempt in ("GEMINI.md", "project.json", "documents/brief.md"):
+            page = self.client.get(f"/runs/acme-1/deliverables/{attempt}?rendered=1")
+            self.assertEqual(page.status_code, 404, attempt)
+            self.assertNotIn(b"confidential", page.content)
+
+    def test_rendered_says_what_is_missing_where_markdown_it_is_not_installed(self):
+        """An environment installed before it was named: the panel fails plainly, and nothing else does."""
+        with mock.patch.object(app_mod, "MARKDOWN", None):
+            page = self.client.get("/runs/acme-1/deliverables/accuracy.md?rendered=1")
+
+        self.assertEqual(page.status_code, 501)
+        self.assertIn("markdown-it-py", page.text)
+        self.assertEqual(self.client.get("/runs/acme-1/deliverables/accuracy.md?raw=1").status_code, 200)
+
+    def test_the_client_page_reads_documents_rendered_and_links_the_raw_file(self):
+        source = (Path(app_mod.__file__).parent / "static" / "front.js").read_text(encoding="utf-8")
+
+        self.assertIn("'?rendered=1'", source)
+        self.assertIn("deliverableUrl(d.name) + '?raw=1'", source)
+
     def test_raw_carries_the_filename_so_a_browser_names_the_save(self):
         page = self.client.get("/runs/acme-1/deliverables/artwork.js?raw=1")
 

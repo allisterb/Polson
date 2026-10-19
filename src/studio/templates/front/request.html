@@ -58,6 +58,19 @@
         <div class="fr-downloads" data-downloads></div>
       </div>
 
+      {#- A document from "What the studio wrote", read here rather than as raw text in another tab. -#}
+      <section class="fr-card fr-doc" data-doc hidden aria-labelledby="doc-title">
+        <header class="fr-doc-head">
+          <div>
+            <h2 class="fr-heading fr-spec" id="doc-title" data-doc-title></h2>
+            <p class="fr-small" data-doc-what></p>
+          </div>
+          <a class="ps-btn ps-btn-quiet ps-btn-sm" data-doc-raw target="_blank" rel="noopener">Raw</a>
+          <button class="ps-btn ps-btn-quiet ps-btn-sm" type="button" data-doc-close>Close</button>
+        </header>
+        <div data-doc-body></div>
+      </section>
+
       {% if can_run and row.status in ('delivered', 'stopped') %}
       <section class="fr-change fr-card">
         <h2 class="fr-heading">Ask for a change</h2>

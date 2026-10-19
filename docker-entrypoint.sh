@@ -217,8 +217,13 @@ fi
 #
 # `exec` so uvicorn becomes PID 1 and receives SIGTERM directly. Without it the shell holds PID 1,
 # swallows the signal, and every revision takes the full shutdown grace period to go away.
+#
+# `--timeout-graceful-shutdown`: without it uvicorn waits on every response still being sent, and a viewer's
+# buffered <video> holds one open indefinitely, so a revision lingers for the whole SIGTERM grace period. As
+# src/adk_agent/serve.py does locally.
 exec python -m uvicorn main:app \
     --host 0.0.0.0 \
+    --timeout-graceful-shutdown 2 \
     --port "${PORT:-8080}" \
     --app-dir /app/adk_agent \
     "$@"
