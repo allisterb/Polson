@@ -563,6 +563,89 @@
 
   function line(text, cls) { return el('span', cls || null, text); }
 
+  // A render or a script opens under its own row rather than in another view: the transcript is read in order,
+  // and switching views lost the reader's place in it. A second click closes it. `fill` puts the thing in.
+  function viewable(path, thumb, fill) {
+    var b = el('button', 'fr-log-open'); b.type = 'button'; b.setAttribute('aria-expanded', 'false');
+    b.title = 'Show it here';
+    if (thumb && IMAGE.test(path)) { var img = el('img'); img.alt = ''; img.loading = 'lazy'; img.src = artifactUrl(path); b.appendChild(img); }
+    b.appendChild(line(path, 'fr-spec'));
+    b.addEventListener('click', function (ev) {
+      ev.stopPropagation();
+      var body = b.closest('.fr-log-body'), open = body.querySelector('.fr-log-media');
+      if (open) { open.remove(); b.setAttribute('aria-expanded', 'false'); b.title = 'Show it here'; return; }
+      var fig = el('figure', 'fr-log-media');
+      // Selecting a line of code, or using a video's controls, is not a click on the row.
+      fig.addEventListener('click', function (e) { e.stopPropagation(); });
+      (fill || media)(fig, path); body.appendChild(fig);
+      b.setAttribute('aria-expanded', 'true'); b.title = 'Hide it';
+    });
+    return b;
+  }
+  function media(fig, path) {
+    var m;
+    if (VIDEO.test(path)) { m = el('video'); m.controls = true; m.muted = true; m.loop = true; m.autoplay = true; m.playsInline = true; }
+    else { m = el('img'); m.alt = path; }
+    m.src = artifactUrl(path);
+    var full = el('a', 'fr-small', 'Open full size'); full.href = artifactUrl(path); full.target = '_blank'; full.rel = 'noopener';
+    fig.appendChild(m); fig.appendChild(full);
+  }
+  // The script exactly as the engine ran it, from the copy it saved under scripts/, highlighted by the server
+  // as the developer page shows it. That fragment is Pygments' escaped output, so it carries no markup of the agent's.
+  // `sent` is what a tool call's record kept of an inline script, when the script is opened from that call:
+  // the copy is shown only if it agrees.
+  function script(fig, path, sent) {
+    var box = el('div', 'fr-code', 'Loading…'); fig.appendChild(box);
+    fetch(base + '/runs/' + encodeURIComponent(run) + '/' + path.split('/').map(encodeURIComponent).join('/'))
+      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
+      .then(function (html) {
+        box.innerHTML = html;
+        if (typeof sent === 'string' && !agrees(box, sent)) box.textContent = 'The saved ' + path + ' is not the script this call sent, so it is not shown.';
+      }, function () { box.textContent = path + ' could not be read.'; });
+  }
+  // Whether highlighted source is what a call sent. The record keeps a long argument as its length only
+  // (`<438 chars>`, in code points, as Python counts them); Pygments drops the newlines at either end and any
+  // carriage returns, so a shown script can be up to a line's worth shorter than it was sent.
+  function agrees(box, sent) {
+    var pre = box.querySelector('td.code pre') || box.querySelector('pre'); if (!pre) return false;
+    var text = pre.textContent.replace(/\r/g, '').replace(/^\n+|\n+$/g, '');
+    var sized = /<(\d+) chars>$/.exec(sent);
+    if (sized) { var d = Number(sized[1]) - Array.from(text).length; return d >= 0 && d <= text.split('\n').length + 1; }
+    return text === sent.replace(/\r/g, '').replace(/^\n+|\n+$/g, '');
+  }
+  var SCRIPT = /^scripts\/[\w.-]+\.js$/;
+  // A script row: what ran, openable when the record names the saved copy, then whatever follows it.
+  function ranScript(e, after) {
+    var b = el('span'), name = e.script || 'a script';
+    b.appendChild(SCRIPT.test(name) ? viewable(name, false, script) : line(name, 'fr-spec'));
+    if (after) b.appendChild(after);
+    return b;
+  }
+
+  // An ExecuteScript row opens the script that call ran. Nothing in the record joins the agent's call to the
+  // server's execution, so they are paired in order: the server runs a session's calls one at a time, in the
+  // order they were made, and saves each before it runs (a call made while another runs waits its turn). A
+  // call refused before that (bad `args`, a missing scriptFile) saves nothing and would shift every later pair,
+  // so each pair is checked against what the call named, and linking stops at the first that disagrees: no
+  // link is better than the wrong script.
+  var calls = [], starts = [], paired = 0, unpaired = false, sourced = false;
+  function sameFile(a, b) {
+    a = String(a).replace(/\\/g, '/').replace(/^\.\//, ''); b = String(b).replace(/\\/g, '/').replace(/^\.\//, '');
+    return a === b || a.slice(-b.length - 1) === '/' + b || b.slice(-a.length - 1) === '/' + a;
+  }
+  function pair() {
+    while (!unpaired && paired < calls.length && paired < starts.length) {
+      var c = calls[paired], s = starts[paired], file = c.args.scriptFile;
+      paired += 1;
+      // Since 2026-10 the server names a file source on its start; an older record names none for either kind.
+      sourced = sourced || s.source != null;
+      if (s.source != null ? file == null || !sameFile(s.source, file) : file != null && sourced) { unpaired = true; return; }
+      if (!c.li || !SCRIPT.test(s.script || '')) continue;
+      var body = c.li.querySelector('.fr-log-body > span'), sent = file == null ? c.args.script : undefined, path = s.script;
+      body.appendChild(line('  ')); body.appendChild(viewable(path, false, function (fig) { script(fig, path, sent); }));
+    }
+  }
+
   var AGENT = {
     'run.begin': function (e) { if (began) return; began = true; row('start', 'Started', e.ts, 'The agent began work on the brief.'); },
     'run.start': function (e) { if (began) return; began = true; row('start', 'Started', e.ts, 'The agent began work on the brief.'); },
@@ -587,35 +670,39 @@
       // A host's file tools name absolute paths; inside the project, the path from its root is the readable part.
       t.arg = t.arg.replace(projectPath, '');
       // A repeated call is one wait polled several times, not a loop: it folds into the row above.
+      var executes = t.tool === 'ExecuteScript';
       if (key === lastFoldKey && lastFold) {
         var n = (Number(lastFold.dataset.repeats) || 1) + 1; lastFold.dataset.repeats = n;
         var badge = lastFold.querySelector('.fr-log-repeat') || lastFold.querySelector('.fr-log-body').appendChild(el('span', 'fr-log-repeat'));
-        badge.textContent = ' ×' + n; return;
+        badge.textContent = ' ×' + n;
+        // A folded call still ran a script of its own, so it keeps its place in the pairing with no row to open.
+        if (executes) { calls.push({ li: null, args: e.args || {} }); pair(); }
+        return;
       }
       var body = el('span'); body.appendChild(line(t.tool, 'fr-log-tool'));
       if (t.arg) body.appendChild(line(' ' + t.arg));
       var li = row('tool', 'Tool', e.ts, body);
       lastFold = li; lastFoldKey = key; doing(t.arg ? t.tool + ': ' + t.arg : t.tool);
+      if (executes) { calls.push({ li: li, args: e.args || {} }); pair(); }
     },
+    'script.start': function (e) { starts.push(e); pair(); },
     'script.ok': function (e) {
-      var b = el('span'); b.appendChild(line(e.script || 'a script', 'fr-spec'));
-      if (typeof e.ms === 'number') b.appendChild(line('  ' + (e.ms < 1000 ? e.ms + ' ms' : (e.ms / 1000).toFixed(1) + ' s'), 'fr-log-meta'));
-      row('ran', 'Ran', e.ts, b);
+      var ms = typeof e.ms === 'number' ? line('  ' + (e.ms < 1000 ? e.ms + ' ms' : (e.ms / 1000).toFixed(1) + ' s'), 'fr-log-meta') : null;
+      row('ran', 'Ran', e.ts, ranScript(e, ms));
     },
-    'script.error': function (e) { row('failed', 'Failed', e.ts, String(R.detail('script.error', e)).split('\n')[0], 'is-clamped'); },
+    'script.error': function (e) {
+      var why = String(R.detail('script.error', e)).split('\n')[0];
+      row('failed', 'Failed', e.ts, e.script ? ranScript(e, el('span', 'fr-log-why', why)) : why, 'is-clamped');
+    },
     'render': function (e) {
       var path = e.artifact || ''; if ((e.motion || '').toLowerCase() === 'sheet') return;
-      var b = el('span', 'fr-log-render');
-      if (IMAGE.test(path)) {
-        var img = el('img'); img.alt = ''; img.loading = 'lazy'; img.src = artifactUrl(path);
-        img.title = 'Show it in the viewer';
-        img.addEventListener('click', function (ev) { ev.stopPropagation(); show(path); caption.textContent = path; select('progress'); });
-        b.appendChild(img);
-      }
-      b.appendChild(line(path, 'fr-spec'));
-      row('render', 'Rendered', e.ts, b); doing('Rendered ' + path);
+      row('render', 'Rendered', e.ts, IMAGE.test(path) || VIDEO.test(path) ? viewable(path, true, media) : line(path, 'fr-spec'));
+      doing('Rendered ' + path);
     },
-    'artifact.read': function (e) { row('look', 'Looked at', e.ts, line(e.artifact || '', 'fr-spec')); },
+    'artifact.read': function (e) {
+      var path = e.artifact || '';
+      row('look', 'Looked at', e.ts, IMAGE.test(path) || VIDEO.test(path) ? viewable(path, false, media) : line(path, 'fr-spec'));
+    },
     'note': function (e) { if (e.message) row('note', 'Note', e.ts, md(e.message), 'is-clamped'); },
     'check': function (e) { row(e.passed || e.accepted ? 'check' : 'failed', 'Checked', e.ts, R.detail('check', e), 'is-clamped'); },
     'question.open': function (e) {
@@ -644,7 +731,8 @@
     'asset.requisition': function (e) { row('tool', 'Requested', e.ts, e.description || e.prompt || e.artifact || 'an image'); },
     'asset.refused': function (e) { row('failed', 'Refused', e.ts, e.reason || e.description || ''); },
     'document.read': function (e) { row('look', 'Read', e.ts, line(e.path || e.document || '', 'fr-spec')); },
-    'stream.truncated': function (e) { row('meta', 'Earlier', e.ts, (e.dropped || 'Some') + ' earlier events are not shown.'); },
+    // Dropped calls and dropped starts need not number the same, so nothing after a gap can be paired.
+    'stream.truncated': function (e) { unpaired = true; row('meta', 'Earlier', e.ts, (e.dropped || 'Some') + ' earlier events are not shown.'); },
     'run.error': function (e) { row('failed', 'Error', e.ts, String(e.error || '').split('\n')[0], 'is-clamped'); },
     'run.end': function (e) {
       if (e.src === 'server') return;
