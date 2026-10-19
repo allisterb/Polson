@@ -144,6 +144,12 @@ try:
 
     intake.mount(app)
     _logger.warning("polson runtime: intake mounted at /new")
+
+    import keepalive
+
+    keepalive.mount(app)
+    _logger.warning("polson runtime: keepalive %s", f"holds {keepalive.SELF_URL} while a run works"
+                    if keepalive.SELF_URL else "off (no POLSON_SELF_URL)")
 except Exception as _e:
     _logger.warning("polson runtime: intake not mounted (%s)", _e)
 

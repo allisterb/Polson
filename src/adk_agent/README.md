@@ -424,6 +424,19 @@ gcloud run deploy <service> --source . \
 > service's own host. This is a proxy-only requirement, which is why it is easy to meet for the first
 > time long after the deploy that "worked".
 
+> [!IMPORTANT]
+> **Set `POLSON_SELF_URL` to the service's own URL, or a run nobody is watching all but stops.** A commission runs
+> as a background task, and on Cloud Run's default request-based billing an instance has CPU only while a request
+> is in flight: measured on 4 vCPU, a background loop got 0.3 million iterations per 10 s with no request open
+> against 170–188 million with one. While a run works, `keepalive.py` holds a request open to `POLSON_SELF_URL`,
+> so the run keeps the CPU and the instance still scales to zero when idle. It needs:
+>
+> - **`--max-instances=1`**, so the held request reaches the instance doing the work;
+> - **`roles/run.invoker` for the runtime service account** while the service is private (it sends an identity
+>   token in `X-Serverless-Authorization`); a public service behind `POLSON_BASIC_AUTH` needs nothing more.
+>
+> Unset, the server says `keepalive off` at startup.
+
 > [!NOTE]
 > **`POLSON_ARTIFACT_SERVICE_URI=gs://<bucket>` works, and on Cloud Run it should be set.**
 > `GcsArtifactService.__init__` does a lazy `from google.cloud import storage`, so this used to be a

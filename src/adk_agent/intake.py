@@ -40,6 +40,7 @@ import httpx
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 
+import keepalive
 from newproject import DOCUMENT_SUFFIXES, PROJECTS_DIR, VALID_APP_NAME, GenerateError, create
 
 _logger = logging.getLogger("polson.intake")
@@ -137,8 +138,8 @@ MIN_DEADLINE_MINUTES: int = 5
 DEADLINE_MARGIN_SECONDS: float = 120.0
 
 
-def _max_deadline() -> int:
-    """The longest commission that still leaves room to be stopped in an orderly way.
+def _after_deadline_seconds() -> float:
+    """What a run may still need once its deadline passes: credited waiting, the breaker's grace, the margin.
 
     **Read off `studio` rather than restated, and tolerantly.** Two modules in this tree are called
     `studio` — this package's agent factory and `src/studio`, the web layer — and which one a bare
@@ -158,9 +159,24 @@ def _max_deadline() -> int:
         credit = float(getattr(studio, "MAX_CREDIT_SECONDS", credit))
     except Exception as exc:                                     # noqa: BLE001 - never fatal
         _logger.warning("polson intake: using default breaker figures for the deadline cap (%s)", exc)
+    return credit + grace * 60 + DEADLINE_MARGIN_SECONDS
 
-    spare = REQUEST_TIMEOUT_SECONDS - credit - grace * 60 - DEADLINE_MARGIN_SECONDS
-    return max(MIN_DEADLINE_MINUTES, int(spare // 60))
+
+#: How long a run is held awake after its deadline (`keepalive.track`), and what the ceiling below leaves for it.
+AFTER_DEADLINE_SECONDS: float = _after_deadline_seconds()
+
+#: What ends a commission on this host. **With the keepalive on, it is the keepalive's own cap**: a commission is a
+#: background task, held awake for its deadline and `AFTER_DEADLINE_SECONDS` but never past
+#: `keepalive.MAX_HOLD_MINUTES`, and no single request's timeout reaches it. **With it off**, the request timeout, on
+#: the old assumption that a run lives inside one request. That assumption is what made the ceiling 38 minutes,
+#: and it was never true of a commission, only of a run typed into ADK's own console.
+RUN_LIMIT_SECONDS: float = (keepalive.MAX_HOLD_MINUTES * 60.0 if keepalive.SELF_URL else REQUEST_TIMEOUT_SECONDS)
+
+
+def _max_deadline(limit: float | None = None) -> int:
+    """The longest commission that still leaves room to be stopped in an orderly way within `limit`."""
+    limit = RUN_LIMIT_SECONDS if limit is None else limit
+    return max(MIN_DEADLINE_MINUTES, int((limit - AFTER_DEADLINE_SECONDS) // 60))
 
 
 MAX_DEADLINE_MINUTES: int = _max_deadline()
@@ -556,9 +572,9 @@ def check(name: str, workflow: str, kind: str, brief: str, deadline: str = "",
         if not MIN_DEADLINE_MINUTES <= minutes <= MAX_DEADLINE_MINUTES:
             raise Refused(400, (
                 f"A commission here runs between {MIN_DEADLINE_MINUTES} and "
-                f"{MAX_DEADLINE_MINUTES} minutes. The ceiling is not arbitrary: this host ends a "
-                f"request at {REQUEST_TIMEOUT_SECONDS / 60:.0f} minutes, and the agent needs the "
-                f"rest of that to be stopped in an orderly way rather than cut off mid-drawing."))
+                f"{MAX_DEADLINE_MINUTES} minutes. The ceiling is not arbitrary: this host stops a "
+                f"run at {RUN_LIMIT_SECONDS / 60:.0f} minutes, and the agent needs the rest of that "
+                f"to be stopped in an orderly way rather than cut off mid-drawing."))
 
     # Before the upload is staged and before the project is written, so a refused commission
     # leaves nothing behind and costs nothing. 429 rather than 400: the request is fine, the
@@ -601,6 +617,12 @@ async def commission(app: FastAPI, name: str, workflow: str, brief: str, kind: s
     run = asyncio.create_task(launch(app, name))
     _running.add(run)
     run.add_done_callback(_running.discard)
+    # The run outlives the request that started it; this keeps the instance's CPU while it works (keepalive.py).
+    # Awaited before answering, so the hold's own setup runs while this request still has the CPU.
+    # Held for the deadline and what the breaker may still need after it; a run hung past that is not. With no
+    # deadline, as long as the keepalive holds anything.
+    keepalive.track(run, minutes=minutes + AFTER_DEADLINE_SECONDS / 60 if minutes else None)
+    await keepalive.held()
     run.add_done_callback(lambda t: t.cancelled() or t.exception() is None
                           or _logger.error("intake: %s failed to run: %r", name, t.exception()))
 
@@ -796,7 +818,7 @@ FORM = """<!doctype html>
 
   <!-- The bounds are stated, not only enforced. `max` stops the spinner and blocks the submit, but
        a visitor who cannot see the ceiling only finds it by being refused — and the interesting half
-       is *why* it is 38 rather than the hour the platform seems to offer. -->
+       is *why* it is less than the run limit: the breaker's grace and credited waiting come after it. -->
   <label>Deadline <small>minutes &mdash; __MIN_DEADLINE__ to __MAX_DEADLINE__, blank for the
          workflow's own. The rest of the hour is held back so the agent can be stopped in an orderly
          way rather than cut off mid-drawing.</small></label>
