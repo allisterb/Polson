@@ -246,7 +246,10 @@ try:
             return _JSON({"detail": why}, status_code=409)
 
         app.mount("/studio", _studio)
-        _logger.warning("polson runtime: studio mounted at /studio (observing only, enforced)")
+        # Said as what it does, not as a mode name: "observing only" read as though the composer could not start
+        # a run, which it can, through the commissioner.
+        _logger.warning("polson runtime: studio mounted at /studio (requests start ADK runs; every run in the "
+                        "folder is watched; no Antigravity driver here)")
     else:
         _logger.warning("polson runtime: studio not mounted — no studio package at %s", _shared)
 except Exception as _e:

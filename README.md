@@ -179,18 +179,34 @@ which has cost a hand-written brief before.
 
 The studio's pages work over a project whoever is driving it — the MCP server writes the record regardless of which host called it, so this only puts a reader on it. Nothing is started and nothing is spent.
 
-With the base lock installed (§3), from the repo root:
+**The main way, since 2026-10-18,** is the studio on the ADK runtime, exactly as the container runs it. It needs the
+`python-adk/` venv (`src/adk_agent/README.md`). From the repo root:
 
 ```bash
-[./]polson studio projects --observe-only
+[./]polson studio ../PolsonRuns
 ```
 
-`studio` is the one verb the launcher sends to Python rather than to the .NET CLI; everything after
-it is forwarded verbatim, so `--host`, `--port` and `--observe-only` are the module's own options and
-`[./]polson help studio` prints them. Running it directly still works and is exactly equivalent, from
-`src/`: `python -m studio ../projects --observe-only`.
+It serves `http://localhost:8010/studio/home` over a directory of projects, which is required and must exist.
+- **Client pages:** make a request, follow it, answer the studio's questions, and read what the agent thought and
+  did.
+- **Developer view** at `/studio/`: the live trace, the renders beside the scripts that made them, and the creative
+  sense-making curve, the things `polson report` can only summarise afterwards.
 
-It serves `http://127.0.0.1:8000` over a directory of projects, and gives you the live trace, the renders beside the scripts that made them, and the creative sense-making curve — the things `polson report` can only summarise afterwards.
+It watches every run in the folder, whoever is driving it, and starts ADK runs from its composer.
+- **Options:** `--port` and `--host`; `[./]polson help studio` prints them.
+- **Equivalents:** `tools\adk-studio.cmd ../PolsonRuns` and `src/adk_agent/serve.py ../PolsonRuns` do the same.
+- **Stopping:** `tools\adk-studio-stop.cmd [port]` stops it. It finds the studio by its port and leaves anything
+  else on that port alone.
+
+**The studio with its Antigravity driver** is `agy-studio`, on the `python/` venv, which holds the Antigravity
+standalone harness. That venv cannot share `python-adk/`. With the base lock installed (§3):
+
+```bash
+[./]polson agy-studio projects --observe-only
+```
+
+That is `python -m studio` (from `src/`: `python -m studio ../projects --observe-only`), on
+`http://127.0.0.1:8000`, and its options are the module's own.
 
 **The base lock deliberately carries no agent SDK.** `studio/` has no reference to one and the driver is imported lazily, so serving the pages and reading a record need none of it — 17 packages rather than 52. Install the driver lock instead if you also want the page's **Start** button, which turns this from observing into mode 2 with a page attached.
 

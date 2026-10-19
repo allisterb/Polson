@@ -52,10 +52,16 @@ function extract(name) {
 }
 """
 
+# `detail`, `motionNote` and `toolDetail` moved to `studio/static/record.js` on 2026-10-18, shared with the client
+# request page, and the page now takes them from there. So the harness runs that script, which is what both pages
+# load, and still cannot drift from a copy.
+RECORD_JS = Path(__file__).resolve().parents[1] / "studio" / "static" / "record.js"
+
 HARNESS = EXTRACT + """
-const toolDetail = () => '(tool)';
-const make = new Function('toolDetail', extract('motionNote') + extract('detail') + '; return detail;');
-const detail = make(toolDetail);
+const vm = require('vm');
+const box = { window: {} };
+vm.runInNewContext(fs.readFileSync(process.argv[4], 'utf8'), box);
+const detail = box.window.PolsonRecord.detail;
 
 const cases = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
 const out = cases.map(c => ({ name: c.name, text: String(detail(c.event.type, c.event)) }));
@@ -189,7 +195,7 @@ class DetailRendererTests(unittest.TestCase):
             cases.write_text(json.dumps(payload), encoding="utf-8")
 
             done = subprocess.run(
-                [_node(), str(harness), str(RUN_HTML), str(cases)],
+                [_node(), str(harness), str(RUN_HTML), str(cases), str(RECORD_JS)],
                 capture_output=True, text=True, encoding="utf-8", timeout=60)
 
         if done.returncode != 0:

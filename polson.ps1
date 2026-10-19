@@ -7,8 +7,12 @@
 
       server, eval, create-project, reset, report,           the .NET CLI, bin/cli
       help, version
-      studio                                                 Python, src/studio
-      orchestrator                                           Python, src/orchestrator
+      studio                                                 Python (python-adk/), src/adk_agent/serve.py
+      agy-studio, orchestrator                               Python (python/), src/studio, src/orchestrator
+
+    `studio` serves the studio on the ADK runtime, as the container does - the main way to run it since
+    2026-10-18. `agy-studio` is the studio with its Antigravity driver, on the python/ venv that holds the
+    Antigravity standalone harness; the two venvs cannot be one (see src/adk_agent/README.md).
 
     The split follows where the code already is. `server` IS the MCP server and `eval`, `report`
     and `create-project` are C#-fronted; the studio is a FastAPI application with its own argparse,
@@ -38,8 +42,13 @@
     Generate a project directory for an agent to work in.
 
 .EXAMPLE
-    .\polson.ps1 studio projects --observe-only
-    Watch a run you are driving from your own agent host. Nothing is started, nothing is spent.
+    .\polson.ps1 studio ..\PolsonRuns
+    Serve the studio at http://localhost:8010/studio/home: make requests, and watch every run in the folder,
+    whoever is driving it.
+
+.EXAMPLE
+    .\polson.ps1 agy-studio ..\PolsonRuns --observe-only
+    The Antigravity-driven studio at http://127.0.0.1:8000, watching only.
 
 .EXAMPLE
     .\polson.ps1 report projects/acme
@@ -59,13 +68,15 @@ Set-StrictMode -Version Latest
 
 $RepoRoot = $PSScriptRoot
 
-# The routing table, and the only place a new Python verb needs adding. `NeedsDriver` says which
-# lock the verb wants: `studio` serves and reads a record and does not need an agent SDK - 17
-# packages against 52, which is the whole reason the two requirement files are separate -
-# while `orchestrator` drives an agent and does.
+# The routing table, and the only place a new Python verb needs adding. `Venv` is the interpreter: `adk` for
+# python-adk/, `python` for python/. A verb runs a `Module` (with src/ on the path) or a `Script`. `NeedsDriver`
+# says which lock a python/ verb wants: `agy-studio` serves and reads a record and does not need an agent SDK -
+# 17 packages against 52, which is the whole reason the two requirement files are separate - while
+# `orchestrator` drives an agent and does.
 $PythonVerbs = @{
-    studio       = [pscustomobject]@{ Module = 'studio';       NeedsDriver = $false }
-    orchestrator = [pscustomobject]@{ Module = 'orchestrator'; NeedsDriver = $true  }
+    studio         = [pscustomobject]@{ Venv = 'adk';    Module = $null;          Script = 'src/adk_agent/serve.py'; NeedsDriver = $false }
+    'agy-studio'   = [pscustomobject]@{ Venv = 'python'; Module = 'studio';       Script = $null;                    NeedsDriver = $false }
+    orchestrator   = [pscustomobject]@{ Venv = 'python'; Module = 'orchestrator'; Script = $null;                    NeedsDriver = $true  }
 }
 
 $HelpTokens = @('help', '--help', '-h', '-?', '/?')
@@ -115,6 +126,25 @@ Create the repo venv and install the studio's lock:
     src\studio\install.cmd
 
 or put python on PATH, or set POLSON_PYTHON.
+"@
+}
+
+# The ADK runtime's interpreter: POLSON_ADK_PYTHON, then the repo venv at python-adk/. Not PATH: an arbitrary
+# python without ADK would fail far from here, importing main.py.
+function Find-AdkPython {
+    if ($env:POLSON_ADK_PYTHON) { return $env:POLSON_ADK_PYTHON }
+    $candidates = @((Join-Path $RepoRoot 'python-adk/bin/python3'), (Join-Path $RepoRoot 'python-adk/bin/python'))
+    if ($OnWindows) { $candidates = @(Join-Path $RepoRoot 'python-adk/Scripts/python.exe') }
+    foreach ($candidate in $candidates) {
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) { return $candidate }
+    }
+    Stop-Polson @"
+polson studio serves the studio on the ADK runtime, and there is no python-adk/ venv. Create it:
+
+    python -m venv python-adk
+    src\adk_agent\install.cmd
+
+or set POLSON_ADK_PYTHON. The Antigravity-driven studio is ``polson agy-studio``, on the python/ venv.
 "@
 }
 
@@ -186,7 +216,7 @@ polson $Verb drives an agent, and the Antigravity SDK is not installed in this e
 
     src\studio\install.cmd driver
 
-``polson studio`` needs none of that and works as it is.
+``polson agy-studio`` needs none of that and works as it is, and ``polson studio`` runs on python-adk/.
 "@
     }
 
@@ -202,13 +232,24 @@ Or set POLSON_PYTHON to an interpreter that already has the Antigravity SDK.
 "@
 }
 
-function Invoke-PolsonPython([string] $Verb, [string] $Module, [bool] $NeedsDriver, [string[]] $Rest) {
+function Invoke-PolsonPython([string] $Verb, $Entry, [string[]] $Rest) {
     if ($null -eq $Rest) { $Rest = @() }
-    $python = Find-Python
-    if ($NeedsDriver) { Assert-Driver $python $Verb }
 
     # So that argparse opens with "usage: polson.ps1 studio" rather than naming a module nobody typed.
     $env:POLSON_VERB = "$(Split-Path -Leaf $PSCommandPath) $Verb"
+
+    if ($Entry.Venv -eq 'adk') {
+        $python = Find-AdkPython
+        # Agent text reaches this console; Windows' default code page cannot print all of it.
+        $env:PYTHONUTF8 = '1'
+        $line = @((Join-Path $RepoRoot $Entry.Script)) + @($Rest)
+        & $python @line
+        exit $LASTEXITCODE
+    }
+
+    $python = Find-Python
+    if ($Entry.NeedsDriver) { Assert-Driver $python $Verb }
+    $Module = $Entry.Module
 
     # `studio` is a package under src/, so src/ has to be importable. Set on the path rather than by
     # changing directory, so a relative argument still resolves against the caller's own cwd -
@@ -227,8 +268,11 @@ function Invoke-PolsonPython([string] $Verb, [string] $Module, [bool] $NeedsDriv
 
 # The CLI's own help cannot mention a verb it does not have, so this script says it afterwards.
 function Show-ExtraVerbs {
-    Write-Output '  studio            Serve the studio over a directory of projects: the live trace, the'
-    Write-Output '                    renders beside the scripts that made them, and the sense-making curve.'
+    Write-Output '  studio            Serve the studio over a directory of projects, on the ADK runtime as the'
+    Write-Output '                    container does: make requests, watch every run in it, answer questions.'
+    Write-Output '                    studio <projects-dir> [--port 8010]. Needs the python-adk/ venv.'
+    Write-Output ''
+    Write-Output '  agy-studio        The studio with its Antigravity driver (python -m studio), on port 8000.'
     Write-Output '                    Python, and needs the python/ venv - see README.md.'
     Write-Output ''
     Write-Output '  orchestrator      Drive one turn against a project from the terminal, with you as the'
@@ -248,14 +292,12 @@ if ($args.Count -gt 1) { $rest = @($args[1..($args.Count - 1)]) }
 if (($HelpTokens -contains $verb) -and $rest.Count -gt 0) {
     $topic = [string] $rest[0]
     if ($PythonVerbs.ContainsKey($topic)) {
-        $entry = $PythonVerbs[$topic]
-        Invoke-PolsonPython $topic $entry.Module $entry.NeedsDriver @('--help')
+        Invoke-PolsonPython $topic $PythonVerbs[$topic] @('--help')
     }
 }
 
 if ($PythonVerbs.ContainsKey($verb)) {
-    $entry = $PythonVerbs[$verb]
-    Invoke-PolsonPython $verb $entry.Module $entry.NeedsDriver $rest
+    Invoke-PolsonPython $verb $PythonVerbs[$verb] $rest
 }
 
 # Everything else is the CLI's, including an unknown verb: its parser writes a better error than a

@@ -369,6 +369,22 @@ class FrontRoutingTests(unittest.TestCase):
         self.assertIn("cannot continue it", page)
         self.assertNotIn("Start in the studio</button>", page)
 
+    def test_a_request_with_a_record_has_a_progress_and_an_agent_view(self):
+        p = project_dir(self.root, "harbour", workflow="drawing")
+        events(p, {"type": "run.start"}, {"type": "stage.begin", "stage": "Ground"})
+        page = self.client.get("/requests/harbour").text
+        self.assertIn('id="tab-progress"', page)
+        self.assertIn('id="tab-agent"', page)
+        self.assertIn('id="panel-agent"', page)
+        self.assertIn("data-agent-log", page)
+        self.assertRegex(page, r'id="panel-progress" role="tabpanel"')
+
+    def test_a_draft_has_no_agent_view_to_show(self):
+        project_dir(self.root, "fresh", workflow="drawing")
+        page = self.client.get("/requests/fresh").text
+        self.assertNotIn('id="tab-agent"', page)
+        self.assertNotIn("data-agent-log", page)
+
     def test_an_observing_studio_offers_the_form_and_refuses_to_make(self):
         client = TestClient(app_mod.create_app(self.root, Registry(), observe_only=True, create_at="/new"))
         page = client.get("/compose/poster")
