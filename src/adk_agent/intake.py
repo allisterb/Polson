@@ -96,6 +96,13 @@ WORKFLOWS: dict[str, tuple[str, ...]] = {
     # click, always room to say something unanticipated — so this is the workflow that demonstrates
     # the studio as a partner rather than as a generator.
     "drawing": ("review",),
+    # **The Qloo entry's two.** Both ground the work in an audience's taste through the `Taste` tool, so they need
+    # `POLSON_QLOO_KEY` on the host. A poster reads `documents/` from stage 1 (a brand guide, an earlier poster);
+    # a trailer builds on a poster found there. `film` is the poster's one type, and the CLI's default for it too.
+    # Their deadlines are the craft defaults (45 and 60): no entry in `DEADLINES` below, since the keepalive's
+    # ceiling (158) holds both, where the old 38 held neither.
+    "poster": ("film",),
+    "trailer": (),
 }
 
 #: What a workflow is **called** on the form, where its template name is not the useful name.
@@ -201,6 +208,9 @@ DEADLINES: dict[str, int] = {
     # craft default because a partner run is bounded by the director's attention anyway: this is a
     # workflow with no fixed endpoint, so something has to end it.
     "drawing": 35,
+    # The craft defaults. They need the keepalive: without it the ceiling is 38 and `check` clamps them to it.
+    "poster": 45,
+    "trailer": 60,
 }
 
 #: Types a workflow ships that this form deliberately does **not** offer, and why.
@@ -317,6 +327,31 @@ STARTERS: tuple[dict[str, str], ...] = (
         "brief": "A location sketch in graphite: a rain-slicked street corner at night, signage and "
                  "reflections, the kind of place a crew would block a chase through. Start with the "
                  "perspective and the darks; I will steer the mood.",
+    },
+    # **The Qloo pair: one film, two audiences.** An original film keeps the work clear of any studio's key art; its
+    # comparables are real, and they are how Qloo knows what kind of film it is (`type.film.md`). The audiences
+    # are written as the composer writes them. The trailer is the same film, so a director can run the poster
+    # first and attach it.
+    {
+        "label": "Film poster, two cities",
+        "name": "lanternkeeper",
+        "workflow": "poster",
+        "kind": "film",
+        "brief": "An original film, The Lantern Keeper: a retired lighthouse keeper is asked to light the "
+                 "lamp one last night, as a storm comes in and the town below loses power. Comparable "
+                 "films: The Lighthouse (2019), The Banshees of Inisherin (2022), Aftersun (2022). "
+                 "Audience A: Lisbon, aged 35 to 44. Audience B: Seoul, aged 25 to 34.",
+    },
+    {
+        "label": "Film trailer, two cities",
+        "name": "lanternkeepertrailer",
+        "workflow": "trailer",
+        "kind": "",
+        "brief": "A fifteen-second trailer for an original film, The Lantern Keeper: a retired lighthouse "
+                 "keeper lights the lamp one last night as a storm takes the town's power. Comparable "
+                 "films: The Lighthouse (2019), The Banshees of Inisherin (2022), Aftersun (2022). "
+                 "Audience A: Lisbon, aged 35 to 44. Audience B: Seoul, aged 25 to 34. Silent. If a "
+                 "poster for it is attached, carry its system over.",
     },
     {
         "label": "Empty room, after",
@@ -563,7 +598,11 @@ def check(name: str, workflow: str, kind: str, brief: str, deadline: str = "",
     # **Checked here, not by the input's own min/max.** Those are a convenience for a browser;
     # this endpoint is reachable without one, and the ceiling is what keeps a run being halted
     # cleanly by the breaker rather than killed mid-flight by the platform.
+    # The host's own allowance, clamped to what this host can stop cleanly. Where the two disagree the smaller
+    # wins: a poster's 45 is offered whole with the keepalive on and as 38 without it, never past the run limit.
     minutes = DEADLINES.get(workflow)
+    if minutes is not None:
+        minutes = min(minutes, MAX_DEADLINE_MINUTES)
     if (asked := deadline.strip()):
         try:
             minutes = int(asked)
