@@ -372,8 +372,11 @@ is Synfig's, and the craft follows from it:
   tags, "Fast paced", "Action packed", "Kinetic" against "Slow burn", "Deliberate pacing". The profile you
   fetched (`Taste.find('…')`, or any of `Taste.results`) counts them with `tasteResult.pace()`. An audience
   leaning fast motivates more changes on the beat; one leaning slow, longer holds. One evenly split gives no
-  lean. With two audiences, `Taste.comparePace(a, b)` says whether they differ at all (Fisher's exact test).
-  When they do not, the films should not pretend to; put the difference where the evidence does differ.
+  lean. With two audiences, `Taste.comparePace(a, b)` says whether they differ at all (Fisher's exact test);
+  with three or more, `Taste.comparePaceAll([a, b, c])` tests every pair and adjusts for how many there are, so
+  a difference it reports is not one that turns up by chance in a large set. Audiences it groups together may
+  share their holds. When they do not differ, the films should not pretend to; put the difference where the
+  evidence does differ.
   Measured once: two audiences whose fans' music ran at the same ~100 BPM still differed in their screen
   taste's pace, so **the beat and the holds are separate questions**. And reading an artist's name as
   "steady" gave two different audiences the same pace.

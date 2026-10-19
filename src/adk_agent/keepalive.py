@@ -75,7 +75,7 @@ INSTANCE_HEADER = "X-Polson-Keepalive-Instance"
 
 #: The longest any one run is held, whatever it asks for. A run that hangs instead of ending must not keep an instance
 #: billed for good; past this it carries on unheld, and the log says so.
-MAX_HOLD_MINUTES = 180
+MAX_HOLD_MINUTES = 240
 
 _tracked: set[asyncio.Task] = set()
 _until: dict[asyncio.Task, tuple[float, float]] = {}     # task -> (monotonic cut-off, minutes it was given)

@@ -24,4 +24,5 @@ Answer these in `findings.md`:
 - **The concepts.** Were your three per audience genuinely different — dominant element, composition,
   palette — or one idea three ways? Which item in the profile started each, and why did the chosen one
   win?
-- **The pair.** Could a stranger tell the two posters were for different people — and for the right ones?
+- **The set.** Could a stranger tell the posters were for different people — and match each to its
+  audience? With more than two, which two came closest, and were their audiences close too?

@@ -384,7 +384,7 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
                     can_make=not state.observe_only or state.commissioner is not None,
                     drafts=not state.observe_only,
                     form=form, route=route, refused=refused, ages=catalogue.AGE_BANDS,
-                    max_audiences=catalogue.MAX_AUDIENCES,
+                    max_audiences=catalogue.MAX_AUDIENCES, example_places=catalogue.EXAMPLE_PLACES,
                     accept=",".join(sorted(uploads.DOCUMENT_SUFFIXES)), max_files=uploads.MAX_FILES)
 
     @app.get("/requests", response_class=HTMLResponse)

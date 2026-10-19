@@ -35,14 +35,14 @@
         <summary class="ps-field"><span class="ps-field-label">Audience<span class="ps-req" aria-hidden="true"> *</span></span><span class="ps-field-value" data-summary>Who is it for?</span>{{ m.icon('chevron-down', 18) }}</summary>
         <section class="ps-ogrid fr-panel fr-narrow" aria-label="Audience">
           <h3 class="ps-ogrid-title">Who is it for?</h3>
-          <p class="ps-ogrid-hint">A place and an age band for each audience. With two, the studio makes one {{ 'film' if card.kind == 'video' else 'piece' }} for each and compares what they love.</p>
+          <p class="ps-ogrid-hint">A place and an age band for each audience. With more than one, the studio makes a {{ 'film' if card.kind == 'video' else 'piece' }} for each and compares what they love.</p>
           <div class="fr-audiences">
             {% for i in range(max_audiences) %}
             {%- set a = given[i] if i < given|length else {} -%}
             <div class="fr-audience" data-audience>
-              <span class="fr-letter" aria-hidden="true">{{ 'ABC'[i] }}</span>
-              <input name="aud_place" maxlength="60" placeholder="{{ ['Tokyo', 'Mumbai', 'Lagos'][i] }}" aria-label="Audience {{ 'ABC'[i] }} place" value="{{ a.place or '' }}">
-              <select name="aud_age" aria-label="Audience {{ 'ABC'[i] }} age band">
+              <span class="fr-letter" aria-hidden="true">{{ 'ABCDEF'[i] }}</span>
+              <input name="aud_place" maxlength="60" placeholder="{{ example_places[i] }}" aria-label="Audience {{ 'ABCDEF'[i] }} place" value="{{ a.place or '' }}">
+              <select name="aud_age" aria-label="Audience {{ 'ABCDEF'[i] }} age band">
                 <option value="">Any age</option>
                 {% for code, words in ages %}<option value="{{ code }}" {{ 'selected' if a.age == code }}>{{ words }}</option>{% endfor %}
               </select>

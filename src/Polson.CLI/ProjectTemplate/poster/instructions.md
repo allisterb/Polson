@@ -54,13 +54,18 @@ concepts when a comp fails is normal, and is recorded rather than hidden.
 | 5. **Direction** | `direction.md`: every choice with its evidence (below). | — decide and cite |
 | 6. **Comps** | Two or three comps on the paper, then the checks. | **Q7** In a two-second glance, what must a passer-by take in — and does the focal point deliver it? |
 | 7. **Feedback** | The director looks fresh; revise. | **Q8** Does it hold from across the room? — answered with the distance renders beside the comp |
-| 8. **Variant / series** | Across the audiences: hold the system (grid, type, title) if it serves both — never the image, its composition or the palette, which are what each audience's evidence decides. | — |
+| 8. **Variant / series** | Across the audiences: hold the system (grid, type, title) if it serves all of them — never the image, its composition or the palette, which are what each audience's evidence decides. | — |
 | 9. **Deliver** | Picture, print file, `direction.md`, `findings.md`. | — |
 
 **Ask all of a stage's questions at once, each with your proposed answer**, so the director can accept
 rather than compose. If the director says to proceed, or has already answered in the brief, proceed on
 your proposal and record it in `direction.md` as *assumed, not confirmed*. The questions above are the
 whole list: everything else you decide, and write down why.
+
+**With three or more audiences, ask once for the set, not once per audience.** A question per audience
+per stage is a dozen clicks for six. Put every audience's proposed answer in one question, labelled by
+its letter (*A: …; B: …; C: …*), with an option to accept them all; ask about one audience alone only
+when its answer would change the others'.
 
 ---
 
@@ -84,8 +89,9 @@ Taste({ op: 'profile', audience: '{"location":"Mexico City","age":"55_and_older"
   tags. Explore with it; never rest a direction on it.
 - **Before leaning hard on one reference**, `demographics` on it confirms it really skews to this
   audience.
-- **It is metered.** A profile is about seven requests; a second audience in the same place reuses the
-  cached baseline. `Taste` op `status` is free. Ask the same thing the same way and it costs nothing.
+- **It is metered.** A profile is about seven requests; another audience in the same place reuses the
+  cached baseline. A set of six is about forty for its profiles, plus one `compare` per audience.
+  `Taste` op `status` is free. Ask the same thing the same way and it costs nothing.
 
 > [!IMPORTANT]
 > **What Qloo is not.** It measures taste, not culture's rules — it does not know which colours mean
@@ -123,10 +129,10 @@ evidence objected to it. It never objects, and the pair came out as one poster t
   dark; which colour leads. One composition recoloured, recropped or retyped is one concept.
 - **Each uses a different operation** from the lists above, and **each starts from a different item in
   that audience's profile** — name it.
-- **The second audience's concepts come from its own profile, drawn before you look back at the first
-  audience's choice.** Holding the system (grid, type, title) is decided afterwards, in stage 8.
-- **Thumbnails are rough**: tone blocks, the dominant shape, one line for the title. Three on one sheet,
-  `artifacts/03_concepts_a.png`, `03_concepts_b.png` — minutes, not comps.
+- **Each later audience's concepts come from its own profile, drawn before you look back at the choices
+  already made.** Holding the system (grid, type, title) is decided afterwards, in stage 8.
+- **Thumbnails are rough**: tone blocks, the dominant shape, one line for the title. Three on one sheet
+  per audience, `artifacts/03_concepts_a.png`, `03_concepts_b.png`, … — minutes, not comps.
 
 Then choose, and record all three in `direction.md` (below) with why the other two lost.
 
@@ -252,7 +258,9 @@ of a family's name — `'Franklin Gothic Heavy'` is `'Franklin Gothic'` at `font
 ## Before you finish
 
 - The final poster for each audience: `outFile` PNG, `outSvg`, and `outPdf` at the brief's size. Name
-  them by audience — `final_a.png` / `final_a.svg` / `final_a.pdf` — and do not overwrite comps.
+  them by audience letter — `final_a.png` / `final_a.svg` / `final_a.pdf`, then `final_b`, … — and do
+  not overwrite comps. **Budget the clock per poster**: the deadline already counts the size of the set,
+  so a set of four has more time than a pair, not the same time shared four ways.
 - `direction.md` complete: every choice, its evidence, and any warning you kept with the reason.
 - `findings.md`: what the evidence changed, where it was thin, which questions you asked and which you
   assumed, and what you would do with more clock.

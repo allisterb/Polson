@@ -332,9 +332,53 @@ class WorkflowTypeTests(unittest.TestCase):
         with mock.patch.object(intake, "MAX_DEADLINE_MINUTES", 38), \
              mock.patch.object(intake, "archived_names", return_value=[]):
             self.assertEqual(intake.check("lanternkeeper", "poster", "film", "A film poster."), 38)
-        with mock.patch.object(intake, "MAX_DEADLINE_MINUTES", 158), \
+        with mock.patch.object(intake, "MAX_DEADLINE_MINUTES", 218), \
              mock.patch.object(intake, "archived_names", return_value=[]):
             self.assertEqual(intake.check("lanternkeeper", "poster", "film", "A film poster."), 45)
+
+    def test_a_set_of_audiences_is_given_more_time_per_audience_past_two(self):
+        """Each audience is its own profile and its own piece, so a set of four is two more pieces' worth."""
+        def brief(n):
+            return "A film poster.\n" + "".join(f"Audience {chr(65 + i)}: Somewhere, aged 30s\n" for i in range(n))
+
+        with mock.patch.object(intake, "MAX_DEADLINE_MINUTES", 218), \
+             mock.patch.object(intake, "archived_names", return_value=[]):
+            self.assertEqual(intake.check("p", "poster", "film", brief(2)), 45)
+            self.assertEqual(intake.check("p", "poster", "film", brief(4)), 45 + 2 * 20)
+            self.assertEqual(intake.check("p", "trailer", "", brief(6)), 60 + 4 * 25)
+            self.assertEqual(intake.check("p", "trailer", "", brief(6), deadline="30"), 30,
+                             "a deadline the director typed is theirs")
+        with mock.patch.object(intake, "MAX_DEADLINE_MINUTES", 100), \
+             mock.patch.object(intake, "archived_names", return_value=[]):
+            self.assertEqual(intake.check("p", "trailer", "", brief(6)), 100, "still clamped to the ceiling")
+
+    def test_six_audiences_fit_under_the_keepalive(self):
+        """The composer offers six; the scaled default for six must not be clamped on a host with the keepalive."""
+        ceiling = intake._max_deadline(keepalive.MAX_HOLD_MINUTES * 60.0)
+        for workflow, extra in intake.PER_AUDIENCE_MINUTES.items():
+            with self.subTest(workflow=workflow):
+                self.assertLessEqual(intake.DEADLINES[workflow] + 4 * extra, ceiling)
+
+    def test_audiences_are_counted_by_letter(self):
+        self.assertEqual(intake.audiences_in("Audience A: Tokyo\nAudience B: Lagos\n  Audience C : Dubai"), 3)
+        self.assertEqual(intake.audiences_in("Audience A: Tokyo\nAudience A: Tokyo again"), 1)
+        self.assertEqual(intake.audiences_in("An audience in Tokyo."), 0)
+        # The composer's delivery block is a Markdown list (catalogue.brief_text); a line-anchored pattern missed
+        # every one of these, and the first four-audience run went out on a pair's time and tokens.
+        composed = "Brief.\n\n---\n\n## What to deliver\n\n- Request: x\n- Audience A: Berlin, aged 35 to 44\n" \
+                   "- Audience B: Lagos\n- Audience C: Dubai\n- Audience D: Seoul, aged 25 to 29\n"
+        self.assertEqual(intake.audiences_in(composed), 4)
+        poster = next(s["brief"] for s in intake.STARTERS if s["workflow"] == "poster")
+        self.assertEqual(intake.audiences_in(poster), 2, "the starters name their audiences inline")
+
+    def test_a_set_scales_the_token_cap_and_a_pair_leaves_it_alone(self):
+        brief = "".join(f"Audience {c}: X\n" for c in "ABCD")
+        with mock.patch.object(intake, "_base_token_cap", return_value=3_000_000):
+            self.assertEqual(intake.token_budget("poster", brief), 6_000_000)
+            self.assertIsNone(intake.token_budget("poster", "Audience A: X\nAudience B: Y"))
+            self.assertIsNone(intake.token_budget("infographic", brief), "only the audience workflows scale")
+        with mock.patch.object(intake, "_base_token_cap", return_value=None):
+            self.assertIsNone(intake.token_budget("poster", brief), "an uncapped host stays uncapped")
 
     def test_every_declined_type_says_why(self):
         """The entry is the record. A blank reason is the same as having forgotten."""
@@ -710,7 +754,7 @@ class TypeSelectionTests(unittest.TestCase):
         the longest deadline offered must still be held all the way through the breaker's grace."""
         ceiling = intake._max_deadline(keepalive.MAX_HOLD_MINUTES * 60.0)
 
-        self.assertEqual(ceiling, 158)
+        self.assertEqual(ceiling, 218)
         self.assertLessEqual(ceiling + intake.AFTER_DEADLINE_SECONDS / 60, keepalive.MAX_HOLD_MINUTES)
         self.assertGreaterEqual(ceiling, 60, "the trailer's craft default must fit")
 
@@ -994,7 +1038,8 @@ class CommissionTests(unittest.IsolatedAsyncioTestCase):
                                             documents=[doc], start=False)
         self.assertIsNone(where, "nothing is watched when nothing was started")
         create.assert_called_once_with("lighthouse", workflow="drawing", prompt="A lighthouse.", type_="review",
-                                       deadline=intake.DEADLINES["drawing"], documents=[str(doc)])
+                                       deadline=intake.DEADLINES["drawing"], documents=[str(doc)],
+                                   budget_tokens=None)
 
     async def test_what_the_form_refuses_commission_refuses_before_creating_anything(self):
         cases = (("lighthouse", "comic", "review", "x", 400, "not offered here"),

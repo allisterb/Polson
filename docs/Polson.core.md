@@ -5051,6 +5051,12 @@ ctx.fillText(p.cite(), 24, H - 18);                     // "Qloo Insights API, /
 - `Taste.get(id: string)` → `TasteResult?` — By the id the tool returned (`'t3'`), or null.
 - `Taste.find(text: string)` → `TasteResult?` — The latest answer whose label contains the text, case-insensitively — finding evidence by what it was *for*.
 - `Taste.comparePace(a: TasteResult, b: TasteResult)` → `{ a, b, p, differ, summary }` — two answers' `pace()` side by side, normally two audiences' profiles, with **Fisher's exact test** on their fast and slow counts. `differ` is p < 0.05. Small counts make a real difference hard to show, so **"no measurable difference" is an answer to report**, not a reason to invent one. `summary` is a sentence to quote.
+- `Taste.comparePaceAll(results: TasteResult[])` → `{ audiences, pairs, differ, summary }` — **three or more audiences**:
+  each one's lean (`audiences`: `name`, `fast`, `slow`, `fastShare`), and **every pair** under the same Fisher's exact
+  test (`pairs`: `a`, `b`, `p`, `pAdjusted`, `differ`), with the p-values **Holm-adjusted** for how many pairs there are.
+  Six audiences make fifteen pairs, and unadjusted one in twenty would come out "different" by chance; `differ` uses
+  `pAdjusted` < 0.05, so a difference here is one to build on. `differ` at the top is whether any pair does. Pass the
+  profiles as an array, `[t1, t2, t3, t4]`. With two audiences it gives the same p as `comparePace`.
 - `Taste.budget` → `QlooBudget` — What remains of this session's allowance, and the key's month.
 
 ## `TasteResult`
