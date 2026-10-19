@@ -1,0 +1,30 @@
+{
+  "displayName": "Polson — model turns over 150 in an hour",
+  "combiner": "OR",
+  "conditions": [
+    {
+      "conditionThreshold": {
+        "filter": "metric.type=\"logging.googleapis.com/user/polson_turns\" AND resource.type=\"cloud_run_revision\"",
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 150,
+        "duration": "0s",
+        "aggregations": [
+          {
+            "alignmentPeriod": "3600s",
+            "perSeriesAligner": "ALIGN_SUM",
+            "crossSeriesReducer": "REDUCE_SUM"
+          }
+        ]
+      },
+      "displayName": "Turns > 150 / hour"
+    }
+  ],
+  "documentation": {
+    "content": "A normal drawing run is ~30 model turns. 150/hour is about five runs' worth, past the 2 concurrent the intake form allows — so runs are starting faster than they finish, or one is not converging.",
+    "mimeType": "text/markdown"
+  },
+  "notificationChannels": [
+    "NOTIFICATION_CHANNEL"
+  ],
+  "enabled": true
+}

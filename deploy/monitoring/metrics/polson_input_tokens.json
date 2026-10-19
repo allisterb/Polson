@@ -1,0 +1,21 @@
+{
+  "name": "polson_input_tokens",
+  "description": "Input tokens per model turn, from the polson.turn log line. Count of points = turns.",
+  "filter": "resource.type=\"cloud_run_revision\"\nresource.labels.service_name=\"polson-studio\"\ntextPayload=~\"^turn .* in=[0-9]+\"",
+  "metricDescriptor": {
+    "metricKind": "DELTA",
+    "valueType": "DISTRIBUTION",
+    "unit": "1",
+    "description": "Input tokens per model turn, from the polson.turn log line. Count of points = turns.",
+    "displayName": "Polson input tokens per turn",
+    "type": "logging.googleapis.com/user/polson_input_tokens"
+  },
+  "valueExtractor": "REGEXP_EXTRACT(textPayload, \"in=([0-9]+)\")",
+  "bucketOptions": {
+    "exponentialBuckets": {
+      "numFiniteBuckets": 20,
+      "growthFactor": 2,
+      "scale": 100
+    }
+  }
+}

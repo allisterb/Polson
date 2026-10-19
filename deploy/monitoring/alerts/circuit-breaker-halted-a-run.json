@@ -1,0 +1,28 @@
+{
+  "displayName": "Polson — circuit breaker halted a run",
+  "combiner": "OR",
+  "conditions": [
+    {
+      "conditionThreshold": {
+        "filter": "metric.type=\"logging.googleapis.com/user/polson_breaker\" AND resource.type=\"cloud_run_revision\"",
+        "comparison": "COMPARISON_GT",
+        "duration": "0s",
+        "aggregations": [
+          {
+            "alignmentPeriod": "300s",
+            "perSeriesAligner": "ALIGN_SUM"
+          }
+        ]
+      },
+      "displayName": "BREAKER log line seen"
+    }
+  ],
+  "documentation": {
+    "content": "The studio's own breaker stopped a run for spend or non-convergence. Check the run page and the daily run count.",
+    "mimeType": "text/markdown"
+  },
+  "notificationChannels": [
+    "NOTIFICATION_CHANNEL"
+  ],
+  "enabled": true
+}

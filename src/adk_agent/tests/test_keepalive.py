@@ -211,6 +211,28 @@ class HoldLoopTests(KeepaliveTestCase):
         self.assertFalse(keepalive._held.is_set(), "nothing is held once no run works")
 
 
+    async def test_a_hold_reaching_another_instance_stops_the_asking(self):
+        """During a rollout the service URL reaches the new revision while a run still works on the old instance.
+        Seen on Cloud Run: the old instance asked every 15 s, keeping the new one warm and helping nothing."""
+        asked = []
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            asked.append(request.headers.get(keepalive.INSTANCE_HEADER))
+            return httpx.Response(409, text="held for another instance\n")
+
+        run = self.working(5)
+        try:
+            with mock.patch.object(keepalive, "SELF_URL", "https://self.invalid"), \
+                 mock.patch.dict(os.environ, {"POLSON_BASIC_AUTH": "", "K_SERVICE": ""}), \
+                 self.assertLogs("polson.keepalive", "WARNING") as log:
+                await asyncio.wait_for(keepalive._hold_loop(self.client(handler), retry=0.01), 2)
+        finally:
+            run.cancel()
+
+        self.assertEqual(asked, [keepalive.INSTANCE], "one ask, carrying this instance's id, then it stops")
+        self.assertTrue(any("another instance" in line for line in log.output))
+
+
 class HeldTests(KeepaliveTestCase):
 
     async def test_off_it_answers_at_once(self):
@@ -248,7 +270,7 @@ class HeaderTests(KeepaliveTestCase):
     async def test_off_cloud_run_and_without_a_password_it_sends_neither(self):
         with mock.patch.dict(os.environ, {"POLSON_BASIC_AUTH": "", "K_SERVICE": ""}):
             async with httpx.AsyncClient() as web:
-                self.assertEqual(await keepalive._headers(web), {})
+                self.assertEqual(await keepalive._headers(web), {keepalive.INSTANCE_HEADER: keepalive.INSTANCE})
 
 
 class MountTests(unittest.TestCase):
@@ -265,6 +287,15 @@ class MountTests(unittest.TestCase):
 
         self.assertEqual(page.status_code, 200)
         self.assertEqual(page.text, "held\n")
+
+    def test_an_instance_refuses_a_hold_sent_for_another(self):
+        keepalive._tracked.clear()
+        client = self.app("")
+        other = client.get("/keepalive/hold", headers={keepalive.INSTANCE_HEADER: "someone-else"})
+        own = client.get("/keepalive/hold", headers={keepalive.INSTANCE_HEADER: keepalive.INSTANCE})
+
+        self.assertEqual(other.status_code, 409)
+        self.assertEqual(own.status_code, 200)
 
     def test_the_probe_exists_only_when_asked_for(self):
         """A CPU burner is a measurement, never part of a deployment."""

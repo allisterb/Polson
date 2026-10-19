@@ -14,6 +14,11 @@ differ, they say so.
 real, and they are how Qloo knows what kind of film this is. They are **signals, never imagery**: do not
 quote their key art, borrow their title treatments, or draw their actors. The billing is invented.
 
+**Invented billing stops at the film's own credits.** No real festival selection or laurel ("Festival de
+Cannes — Official Selection"), award, review quote, critic, publication or rating. Those are claims about
+the world, made by real institutions, and a film that does not exist has none; on the poster they read as
+facts. A release line ("In cinemas October 2026") and an invented company are fine; a laurel is not.
+
 **A real film is an unofficial poster study**, and the same rule reaches the film itself:
 
 - **No studio material.** Not its key art, stills, logo or title treatment, and no studio's or

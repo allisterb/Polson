@@ -43,6 +43,7 @@ import logging
 import os
 import re
 from pathlib import Path
+from typing import Callable
 from urllib.parse import urlparse
 
 _logger = logging.getLogger("polson.archive")
@@ -121,8 +122,12 @@ def names() -> list[str]:
     return sorted(out)
 
 
-def restore(name: str, into: Path) -> Path:
+def restore(name: str, into: Path, only: Callable[[str], bool] | None = None) -> Path:
     """Downloads the archived project `name` into `into/name`, and returns that directory.
+
+    `only` takes a relative path and says whether to fetch it: the request list restores just what a row is read
+    from (`LIGHT`), and the rest comes when the request is opened. Cloud Run's disk is memory, and a whole archive of
+    videos restored to draw one list would spend it on files nobody looked at.
 
     Raises `ArchiveError` rather than returning a sentinel, because every caller has something
     specific to say to a visitor and none of them can do anything useful with a None.
@@ -150,7 +155,7 @@ def restore(name: str, into: Path) -> Path:
     written = 0
     for blob in blobs:
         rel = blob.name[len(base):]
-        if not rel or rel.endswith("/"):
+        if not rel or rel.endswith("/") or (only is not None and not only(rel)):
             continue
 
         # **Resolve, then verify it is still inside** — the same discipline `app.contain` uses, and
@@ -173,6 +178,11 @@ def restore(name: str, into: Path) -> Path:
 
     _logger.info("polson archive: restored %s, %d file(s), %d bytes", name, written, total)
     return target
+
+
+def light(rel: str) -> bool:
+    """What a request's row is read from: its manifest, its record, its brief and its event logs. Kilobytes."""
+    return rel in ("project.json", "request.json", "brief.md") or (rel.startswith("events/") and rel.endswith(".jsonl"))
 
 
 def restorable(root: Path) -> list[str]:

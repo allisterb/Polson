@@ -205,6 +205,24 @@ ENV DOTNET_ROOT=/usr/share/dotnet \
 #                 those widths still measures sensibly.
 #   dejavu-core   the fallback of last resort.
 #
+# **Every script, because the work is culturally adaptive.** The studio designs for audiences by
+# place (Qloo's taste by city), so a poster for Seoul, Tokyo, Mumbai or Cairo needs its own script set
+# properly. Until 2026-10-19 the image had no non-Latin face at all: a Seoul poster's agent was told
+# the family was missing, drew 등대지기 by hand from vector paths, and got the syllable blocks wrong.
+# Name the face per script and language (manual 11 says how); never hand-draw glyphs.
+#
+#   noto-cjk        54 MB. Noto Sans and Serif CJK in SC, TC, HK, JP and KR. The language suffix is
+#                   not cosmetic: the same codepoint takes different regional forms.
+#   noto-cjk-extra  128 MB. The remaining CJK weights, Thin to Black, because display type is set
+#                   heavy or light, not only in Regular and Bold.
+#   noto-core       12 MB. About a hundred scripts: Arabic (Naskh, Kufi, and Nastaliq for Urdu),
+#                   Devanagari, Bengali, Gurmukhi, Gujarati, Tamil, Telugu, Kannada, Malayalam,
+#                   Sinhala, Thai, Lao, Khmer, Myanmar, Hebrew, Ethiopic, Georgian, Armenian and more.
+#   noto-extra      69 MB. Those scripts' extra weights and display cuts.
+#
+# About 260 MB downloaded. Fonts live in the image, not in the instance's in-memory disk, so this
+# costs build time and image size, not Cloud Run memory.
+#
 # `fonts-urw-base35` was considered and rejected as redundant: it is the Type 1 ancestor of the
 # same URW lineage TeX Gyre extends, so it would add 15 MB of near-duplicates.
 #
@@ -253,6 +271,10 @@ RUN apt-get update \
         fonts-texgyre \
         fonts-inter \
         fonts-solide-mirage \
+        fonts-noto-cjk \
+        fonts-noto-cjk-extra \
+        fonts-noto-core \
+        fonts-noto-extra \
     && echo "ICU: $(dpkg-query -W -f='${Version}' libicu-dev 2>/dev/null || echo MISSING)" \
     && rm -rf /var/lib/apt/lists/*
 

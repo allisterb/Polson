@@ -1,0 +1,30 @@
+{
+  "displayName": "Polson — a single turn over 300k input tokens",
+  "combiner": "OR",
+  "conditions": [
+    {
+      "conditionThreshold": {
+        "filter": "metric.type=\"logging.googleapis.com/user/polson_input_tokens\" AND resource.type=\"cloud_run_revision\"",
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 300000,
+        "duration": "0s",
+        "aggregations": [
+          {
+            "alignmentPeriod": "600s",
+            "perSeriesAligner": "ALIGN_PERCENTILE_99",
+            "crossSeriesReducer": "REDUCE_MAX"
+          }
+        ]
+      },
+      "displayName": "p99 input tokens > 300000"
+    }
+  ],
+  "documentation": {
+    "content": "Something large entered the conversation. This is the failure mode where a stringified asset took one turn from 32k to 555k tokens, collapsed prompt caching to zero and hit the breaker four turns later — every turn after it re-pays the full amount.",
+    "mimeType": "text/markdown"
+  },
+  "notificationChannels": [
+    "NOTIFICATION_CHANNEL"
+  ],
+  "enabled": true
+}

@@ -1,0 +1,39 @@
+{
+  "displayName": "Polson — studio billed continuously for 3 hours",
+  "combiner": "OR",
+  "conditions": [
+    {
+      "conditionThreshold": {
+        "filter": "metric.type=\"run.googleapis.com/container/billable_instance_time\" AND resource.type=\"cloud_run_revision\" AND resource.label.\"service_name\"=\"polson-studio\"",
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 0.9,
+        "duration": "10800s",
+        "trigger": {
+          "count": 1
+        },
+        "aggregations": [
+          {
+            "alignmentPeriod": "300s",
+            "perSeriesAligner": "ALIGN_RATE",
+            "crossSeriesReducer": "REDUCE_SUM",
+            "groupByFields": [
+              "resource.label.\"service_name\""
+            ]
+          }
+        ]
+      },
+      "displayName": "Billable instance time over 90% for 3 h"
+    }
+  ],
+  "documentation": {
+    "content": "The polson-studio service has been billed for over 90% of every minute for 3 hours. An alert only: nothing is shut down. A run is held awake (keepalive.py) for at most its deadline plus 30 minutes and never more than 3 hours, and no run lasts long enough to fill the gaps between, so this means either steady use (a judge exploring) or something holding the instance that should not. Check the service's request log for /keepalive/hold and long-lived requests.",
+    "mimeType": "text/markdown"
+  },
+  "notificationChannels": [
+    "NOTIFICATION_CHANNEL"
+  ],
+  "enabled": true,
+  "alertStrategy": {
+    "autoClose": "86400s"
+  }
+}

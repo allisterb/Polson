@@ -180,6 +180,9 @@ A trailer is short enough to plan in full before any key is set. Write the beats
 - **One idea a beat.** The eye reads one thing at a time; a beat that asks for two gets neither.
 - **The usual shape** is a cold open that poses a question (the object, the place, the trouble), a build
   that adds to it, the **title**, and an **end card** — but the brief decides.
+- **The end card carries only the film's own credits.** For a film that does not exist: no real festival
+  laurel, award, review quote or rating. Those are claims made by real institutions, and on screen they read
+  as facts.
 - **Motion arrives and then holds.** Text is read after it stops moving: give a line at least as long
   still as its arrival took, and the title longer.
 - **Cut or move, not both at once**, unless the cut is the point.

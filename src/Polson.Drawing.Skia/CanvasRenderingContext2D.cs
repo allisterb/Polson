@@ -794,64 +794,35 @@ public class CanvasRenderingContext2D
         _ => y // alphabetic
     };
 
-    /// <summary>Grapheme clusters, so tracking never splits an emoji or a combining accent.</summary>
-    private static List<string> Graphemes(string text)
-    {
-        var result = new List<string>();
-        var walker = StringInfo.GetTextElementEnumerator(text);
-        while (walker.MoveNext()) result.Add((string)walker.Current);
-        return result;
-    }
-
     /// <summary>
     /// Advance width of a run, including tracking.
     /// </summary>
     /// <remarks>
-    /// A tracked run is measured as the sum of its individual glyph advances rather than as one
-    /// shaped string, because that is how it will be <i>drawn</i>. Measuring it the other way would
-    /// leave the kerning in the measurement but not in the render, and centred text would sit off
-    /// its point by exactly the kerning the shaper applied.
+    /// Measured by shaping, exactly as <see cref="DrawTextRun"/> draws it (<see cref="TextShaper"/>): a measurement
+    /// taken one way and a render made another disagree by the kerning, the joining and the fallback faces, and
+    /// centred or right-aligned text then sits off its point by that much.
     /// </remarks>
-    private static float MeasureRun(string text, SKFont font, float spacing)
-    {
-        if (string.IsNullOrEmpty(text)) return 0f;
-        if (spacing == 0f) return font.MeasureText(text);
-
-        var glyphs = Graphemes(text);
-        var total = 0f;
-        foreach (var g in glyphs) total += font.MeasureText(g);
-        return total + spacing * Math.Max(0, glyphs.Count - 1);
-    }
+    private static float MeasureRun(string text, SKFont font, float spacing) =>
+        string.IsNullOrEmpty(text) ? 0f : TextShaper.Shape(text, font, spacing).Width;
 
     /// <summary>Draws one run, resolving <c>textAlign</c> and <c>textBaseline</c> and any tracking.</summary>
+    /// <remarks>Shaped (<see cref="TextShaper"/>): Arabic joins, right-to-left scripts run right to left, and a
+    /// character the face lacks is drawn from one that has it instead of as a box.</remarks>
     private void DrawTextRun(string text, float x, float y, SKFont font, SKPaint paint, float spacing)
     {
         if (string.IsNullOrEmpty(text)) return;
 
-        var width = MeasureRun(text, font, spacing);
+        var line = TextShaper.Shape(text, font, spacing);
         font.GetFontMetrics(out var metrics);
 
         var startX = _currentState.TextAlign switch
         {
-            "center" => x - width / 2f,
-            "right" or "end" => x - width,
+            "center" => x - line.Width / 2f,
+            "right" or "end" => x - line.Width,
             _ => x
         };
 
-        var baselineY = ResolveBaselineY(y, metrics);
-
-        if (spacing == 0f)
-        {
-            Canvas.SkCanvas.DrawText(text, startX, baselineY, SKTextAlign.Left, font, paint);
-            return;
-        }
-
-        var cursor = startX;
-        foreach (var g in Graphemes(text))
-        {
-            Canvas.SkCanvas.DrawText(g, cursor, baselineY, SKTextAlign.Left, font, paint);
-            cursor += font.MeasureText(g) + spacing;
-        }
+        TextShaper.Draw(Canvas.SkCanvas, line, font, startX, ResolveBaselineY(y, metrics), paint);
     }
 
     /// <summary>

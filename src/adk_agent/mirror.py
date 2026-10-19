@@ -90,9 +90,13 @@ MIRRORED_DIRS = ("artifacts", "scripts", "events", ".polson/research", "audio")
 #: backed up. Measured on `nightstreet2`: seven intermediate passes mirrored, and the finished
 #: drawing not — the exact inverse of what is worth keeping. Found because a director asked why the
 #: pass they had chosen was not the one they could save.
+#: **Every studio deliverable is here** (`test_mirror` checks it against `studio.app.DELIVERABLES`): until 2026-10-19
+#: `direction.md`, `trailer.js` and `sketch.md` were not, so a poster restored after its instance recycled had lost
+#: the document that explains it. `request.json` is the composer's record of the request (title, card, audiences),
+#: without which a restored request is listed under its folder name.
 MIRRORED_FILES = (
-    "brief.md", "artwork.js", "accuracy.md", "findings.md",
-    "critique_log.md", "materials.md", "turns.md", "animation.md", "project.json",
+    "brief.md", "direction.md", "artwork.js", "trailer.js", "accuracy.md", "findings.md",
+    "critique_log.md", "materials.md", "turns.md", "sketch.md", "animation.md", "project.json", "request.json",
     "GEMINI.md", "CLAUDE.md",
     "output.webp", "output.svg", "output.png", "output.mp4",
 )

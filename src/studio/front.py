@@ -19,9 +19,12 @@ nothing the agent reads — and a project without one falls back to its id.
 from __future__ import annotations
 
 import json
+import logging
 import re
 import shutil
 import tempfile
+import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -29,13 +32,16 @@ from typing import Any
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from starlette.concurrency import run_in_threadpool
 
 from orchestrator.events import read_events
 
-from . import catalogue, projects, uploads
+from . import archive, catalogue, projects, uploads
 from . import direction as direction_mod
 from . import observe as observe_mod
 from .runs import Registry, Run, StudioError
+
+_logger = logging.getLogger("polson.front")
 
 REQUEST_FILE = "request.json"
 
@@ -152,8 +158,9 @@ def offered(state: Any, card: catalogue.Card) -> dict[int, tuple[str, ...] | Non
             if (types := state.commissioner.types(r.workflow)) is not None}
 
 
-def latest_render(project: Path, events: list[dict[str, Any]]) -> Path | None:
-    """The newest still image the record says was rendered, if it is still on disk and inside the project."""
+def still_renders(project: Path, events: list[dict[str, Any]]):
+    """The still images the record says were rendered, newest first, inside the project and never from `documents/`,
+    whether or not they are on disk."""
     root = project.resolve()
     for event in reversed(events):
         if event.get("type") != "render" or (event.get("motion") or "").lower() == "sheet":
@@ -164,12 +171,14 @@ def latest_render(project: Path, events: list[dict[str, Any]]) -> Path | None:
         candidate = (root / artifact).resolve()
         if root not in candidate.parents:
             continue
-        relative = candidate.relative_to(root).as_posix()
-        if relative.split("/", 1)[0].lower() in ("documents",):
+        if candidate.relative_to(root).as_posix().split("/", 1)[0].lower() in ("documents",):
             continue
-        if candidate.is_file():
-            return candidate
-    return None
+        yield candidate
+
+
+def latest_render(project: Path, events: list[dict[str, Any]]) -> Path | None:
+    """The newest still image the record says was rendered, if it is still on disk and inside the project."""
+    return next((c for c in still_renders(project, events) if c.is_file()), None)
 
 
 def describe(project: Path, registry: Registry) -> dict[str, Any]:
@@ -247,6 +256,63 @@ def unique_id(root: Path, title: str) -> str:
 # endregion
 
 
+# region Requests that outlived their instance
+# A Cloud Run instance is replaced when it idles or a revision rolls out, and its disk goes with it: every request
+# made there vanished from these pages, though `adk_agent/mirror.py` had copied each one to the bucket. They are
+# rebuilt from there, and nothing on the page says so: a request is a request, wherever its files were last.
+#
+# **In two steps, because the disk is memory.** Listing restores only what a row is read from (`archive.light`, plus
+# the thumbnail); opening a request restores the rest. Restoring every archived request whole to draw one list would
+# spend memory on videos nobody opened.
+
+#: Requests restored as far as their row and no further, by name.
+_partial: set[str] = set()
+_rebuilding = threading.Lock()
+_checked_at = float("-inf")
+
+#: How long a look at the archive stands, so a page load is not a bucket listing.
+RECHECK_SECONDS = 60.0
+
+
+def rebuild_listed(root: Path) -> None:
+    """Brings back, as far as the request list needs, every archived request this instance does not have."""
+    global _checked_at
+    if not archive.ARCHIVE_URI or time.monotonic() - _checked_at < RECHECK_SECONDS:
+        return
+    with _rebuilding:
+        if time.monotonic() - _checked_at < RECHECK_SECONDS:
+            return
+        _checked_at = time.monotonic()
+        for name in archive.restorable(root):
+            try:
+                project = archive.restore(name, root, only=archive.light)
+                _partial.add(name)
+                thumb = next(still_renders(project, read_events(project / "events" / "server.jsonl")), None)
+                if thumb is not None:
+                    wanted = thumb.relative_to(project.resolve()).as_posix()
+                    archive.restore(name, root, only=lambda rel, wanted=wanted: rel in (wanted, "project.json"))
+            except Exception as exc:                             # noqa: BLE001 - one bad request never hides the rest
+                _logger.warning("polson front: could not bring back %s for the list (%s)", name, exc)
+
+
+def rebuild_request(root: Path, name: str) -> None:
+    """Makes `name` whole on this disk before it is shown: the rest of a listed one, or all of one not seen yet."""
+    if not archive.ARCHIVE_URI:
+        return
+    with _rebuilding:
+        here = (Path(root) / name / "project.json").is_file()
+        if here and name not in _partial:
+            return
+        if not here and name not in archive.names():
+            return
+        try:
+            archive.restore(name, root)
+            _partial.discard(name)
+        except Exception as exc:                                 # noqa: BLE001 - the page then says it is not found
+            _logger.warning("polson front: could not bring back %s (%s)", name, exc)
+# endregion
+
+
 def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
     """Adds the user-facing pages to the studio app. `base` and `contain` are `app.base` and `app.contain`."""
 
@@ -282,6 +348,7 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
     # region Pages
     @app.get("/home", response_class=HTMLResponse)
     async def home(request: Request) -> Any:
+        await run_in_threadpool(rebuild_listed, Path(request.app.state.root))
         rows = requests(request.app.state.root, request.app.state.registry)
         return page(request, "home.html", "home", rows=rows[:6],
                     waiting=[r for r in rows if r["status"] == "needs-you"],
@@ -322,6 +389,7 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
 
     @app.get("/requests", response_class=HTMLResponse)
     async def listing(request: Request, view: str = "active") -> Any:
+        await run_in_threadpool(rebuild_listed, Path(request.app.state.root))
         rows = requests(request.app.state.root, request.app.state.registry)
         groups = {"active": [r for r in rows if r["status"] in ("needs-you", "running", "queued")],
                   "drafts": [r for r in rows if r["status"] == "draft"],
@@ -332,6 +400,7 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
 
     @app.get("/requests/{name}", response_class=HTMLResponse)
     async def show(request: Request, name: str) -> Any:
+        await run_in_threadpool(rebuild_request, Path(request.app.state.root), name)
         project = project_dir(request, name)
         row = describe(project, request.app.state.registry)
         run = row["run"]
@@ -363,6 +432,7 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
     @app.get("/requests/{name}/learned", response_class=HTMLResponse)
     async def learned(request: Request, name: str) -> Any:
         """The learned panel alone, for the page to swap in once a run has written its direction."""
+        await run_in_threadpool(rebuild_request, Path(request.app.state.root), name)
         project = project_dir(request, name)
         row = describe(project, request.app.state.registry)
         return templates.TemplateResponse(request, "front/learned.html",

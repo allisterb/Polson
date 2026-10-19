@@ -116,6 +116,37 @@ What the shorthand accepts:
 > `Skia.Font.resolve(family)` reports what a name would *actually* become — when it comes back as
 > something other than what you asked for, that request fell through.
 
+### Setting Other Scripts
+
+Work for an audience in Seoul, Tokyo, Cairo or Mumbai sets its own script, and sets it in a face made
+for that script. **Name the face for the script and the language; never draw glyphs by hand.** A Korean
+title built from vector strokes misses the syllable blocks a reader sees at once, and a face that lacks
+the script substitutes something that was never chosen.
+
+| Script | Face | Note |
+| --- | --- | --- |
+| Korean | `Noto Sans CJK KR`, `Noto Serif CJK KR` | Weights 100–900; a display title can take `900`. |
+| Japanese | `Noto Sans CJK JP`, `Noto Serif CJK JP` | |
+| Chinese | `Noto Sans CJK SC` (simplified), `TC` (traditional), `HK` | The same character takes different regional forms, so the suffix matters. |
+| Arabic | `Noto Naskh Arabic` (text), `Noto Kufi Arabic` (display), `Noto Sans Arabic` | Right to left. |
+| Urdu | `Noto Nastaliq Urdu` | Right to left, cascading. |
+| Hebrew | `Noto Sans Hebrew`, `Noto Serif Hebrew` | Right to left. |
+| Hindi, Marathi, Nepali | `Noto Sans Devanagari`, `Noto Serif Devanagari` | |
+| Bengali, Tamil, Gujarati, Gurmukhi, Telugu, Kannada, Malayalam | `Noto Sans <Script>` | |
+| Thai, Lao, Khmer, Myanmar | `Noto Sans <Script>` | |
+
+These are what the studio's image installs; a developer's machine may have others. Check with
+`Skia.Font.has(...)` first, as above.
+
+**All three text calls shape**: Snap's `paper.text(...)`, Motion's `comp.text(...)` and the canvas
+`ctx.fillText(...)` / `measureText(...)`. Arabic letters join, right-to-left scripts run right to left, and a
+character the face lacks is drawn from one that has it, not as a box. For Snap, `direction: 'rtl'` with
+`'text-anchor': 'start'` aligns a line on its right edge; on the canvas, `textAlign = 'right'` does.
+
+**Keep one direction to a line.** A right-to-left title, a credit, or a year inside Arabic sets correctly. A
+single line that switches direction several times (an English phrase holding Arabic holding English) may
+not: set the parts as separate lines or separate text calls.
+
 ---
 
 ## 4. The 6 Modes of Typographic Contrast
