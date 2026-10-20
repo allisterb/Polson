@@ -498,6 +498,65 @@ public partial class ProjectGeneratorTests : TestsRuntime, IDisposable
         Assert.Contains(heading, File.ReadAllText(Path.Combine(root, "bydefault", "GEMINI.md")), StringComparison.Ordinal);
         Assert.DoesNotContain(heading, File.ReadAllText(Path.Combine(root, "optedout", "GEMINI.md")), StringComparison.Ordinal);
     }
+
+    /// <summary><c>--document</c> copies the director's files into <c>documents/</c>, where <c>Documents.list()</c> finds them.</summary>
+    [Fact]
+    public void TestADocumentIsCopiedIntoTheProject()
+    {
+        Directory.CreateDirectory(root);
+        var report = Path.Combine(root, "annual report.pdf");
+        var notes = Path.Combine(root, "notes.md");
+        File.WriteAllText(report, "%PDF-1.4 report");
+        File.WriteAllText(notes, "# Notes");
+
+        Assert.True(ProjectGenerator.Create(Options("withdocs", o => { o.Workflow = "logo"; o.Documents = [report, notes]; })));
+
+        Assert.Equal("%PDF-1.4 report", File.ReadAllText(Path.Combine(root, "withdocs", "documents", "annual report.pdf")));
+        Assert.True(File.Exists(Path.Combine(root, "withdocs", "documents", "notes.md")));
+        Assert.True(File.Exists(Path.Combine(root, "withdocs", "documents", "README.md")));
+
+        // The same file again, on a reset, is no conflict; a different one under the same name is.
+        Assert.True(ProjectGenerator.Create(Options("withdocs", o => { o.Workflow = "logo"; o.Reset = true; o.Documents = [report]; })));
+        var other = Path.Combine(root, "other", "annual report.pdf");
+        Directory.CreateDirectory(Path.GetDirectoryName(other)!);
+        File.WriteAllText(other, "%PDF-1.4 a different report");
+        Assert.False(ProjectGenerator.Create(Options("withdocs", o => { o.Workflow = "logo"; o.Reset = true; o.Documents = [other]; })));
+        Assert.Equal("%PDF-1.4 report", File.ReadAllText(Path.Combine(root, "withdocs", "documents", "annual report.pdf")));
+    }
+
+    /// <summary>A bad document is refused before anything is generated: a missing file, or a type the agent cannot read.</summary>
+    [Theory]
+    [InlineData("missing.pdf", false)]
+    [InlineData("tool.exe", true)]
+    public void TestABadDocumentIsRefusedBeforeTheProjectExists(string name, bool exists)
+    {
+        Directory.CreateDirectory(root);
+        var path = Path.Combine(root, name);
+        if (exists) File.WriteAllText(path, "MZ");
+
+        Assert.False(ProjectGenerator.Create(Options("refused", o => { o.Workflow = "logo"; o.Documents = [path]; })));
+        Assert.False(Directory.Exists(Path.Combine(root, "refused")));
+    }
+
+    /// <summary>A type can add manuals to its workflow's: a report explainer's subject is figures, so it gets Manual 13.</summary>
+    [Fact]
+    public void TestAReportExplainerCarriesTheDataManualAndAProductAdDoesNot()
+    {
+        Assert.True(ProjectGenerator.Create(Options("report", o => { o.Workflow = "trailer"; o.Type = "report"; })));
+        Assert.True(ProjectGenerator.Create(Options("product", o => { o.Workflow = "trailer"; o.Type = "product"; })));
+
+        var data = $"### Manual 13 — {PolsonManuals.Find("13")!.Title}";
+        var motion = $"### Manual 25 — {PolsonManuals.Find("25")!.Title}";
+        var report = File.ReadAllText(Path.Combine(root, "report", "GEMINI.md"));
+        var product = File.ReadAllText(Path.Combine(root, "product", "GEMINI.md"));
+
+        Assert.Contains("## The type: report", report, StringComparison.Ordinal);
+        Assert.Contains("Documents.ask(REPORT, ASK, { schema: SHAPE })", report, StringComparison.Ordinal);
+        Assert.Contains(data, report, StringComparison.Ordinal);
+        Assert.Contains(motion, report, StringComparison.Ordinal);
+        Assert.DoesNotContain(data, product, StringComparison.Ordinal);
+        Assert.Equal(1, report.Split(data).Length - 1);
+    }
     #endregion
 
     #region Test-Mode Tests

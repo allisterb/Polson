@@ -104,6 +104,8 @@ class Card:
     #: A film trailer and a product ad are one workflow; without this each card would offer the other's type, and a
     #: lone type is chosen for the visitor (`front.commissioned`), so every film trailer would become an ad.
     types: tuple[str, ...] | None = None
+    #: A file the request cannot run without, by extension: a report explainer with no report has nothing to explain.
+    needs: str = ""
 
     @property
     def multi_route(self) -> bool:
@@ -113,6 +115,11 @@ class Card:
     def fixed_type(self) -> str:
         """The type this card always runs, or ''. Not offered as a choice: the card is the choice."""
         return self.types[0] if self.types is not None and len(self.types) == 1 else ""
+
+    def check_files(self, names: list[str]) -> None:
+        """Refuses a request missing the file this card needs. Raises `StudioError`."""
+        if self.needs and not any(n.lower().endswith(self.needs) for n in names):
+            raise StudioError(f"{self.title} needs its document: attach the {self.needs[1:].upper()}.")
 
     @property
     def piece(self) -> str:
@@ -161,6 +168,15 @@ CARDS: tuple[Card, ...] = (
                  Extra("cta", "Call to action", placeholder="What the viewer should do next"),
                  Extra("duration", "Duration", ("15 seconds", "30 seconds"), "15 seconds")),
          audiences=True, types=("product",)),
+    # An audience's questions answered from a long document the director attaches — an annual report, a 10-K. The
+    # trailer workflow's `report` type: Nemotron reads the PDF as page text through `Documents.ask`, and every figure
+    # on screen is one the engine found on its page. No audience fields: who is watching is said in words.
+    Card("report-explainer", "Report explainer", "video", "Video · 45 seconds, questions answered from a report",
+         (Route("trailer", "Motion graphics explainer"),),
+         extras=(Extra("viewer", "Who is watching", placeholder="Who they are, and what they already know"),
+                 Extra("questions", "Their questions", placeholder="Up to five, separated by semicolons"),
+                 Extra("duration", "Duration", ("45 seconds", "60 seconds"), "45 seconds")),
+         types=("report",), needs=".pdf"),
     Card("motion-graphic", "Motion graphic", "motion", "Animation · one action, keyed",
          (Route("animation", "One keyed action"),),
          extras=(Extra("duration", "Duration", ("2 seconds", "4 seconds", "8 seconds"), "4 seconds"),
@@ -266,7 +282,9 @@ class Commission:
             lines.append(f"- One {'ad' if self.kind == 'product' else self.card.piece} per audience")
         lines += ["- Sizes: " + "; ".join(f"{s.label} {s.detail}" for s in self.sizes),
                   "- Formats: " + ", ".join(f.ext for f in self.formats)]
-        lines += [f"- {label}: {value}" for label, value in self.extras]
+        for label, value in self.extras:
+            asked = [q.strip() for q in re.split(r"[;\n]", value) if q.strip()] if label == "Their questions" else []
+            lines += [f"- {label}:"] + [f"  {i}. {q}" for i, q in enumerate(asked, 1)] if asked else [f"- {label}: {value}"]
         clips = [f for f in files if f.lower().endswith(".mp4")]
         others = [f for f in files if f not in clips]
         if others:

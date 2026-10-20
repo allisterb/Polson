@@ -191,14 +191,15 @@ public class DocumentProcessor : Runtime, IDisposable
                 RequisitionScope.Record(new RequisitionRecord(
                     Kind, named, Success: true, Failure: null,
                     Reason: hit.Warnings.Count == 0 ? null : string.Join("; ", hit.Warnings),
-                    Model: useModel, FromCache: true, Refused: false));
+                    Model: hit.Model, FromCache: true, Refused: false));
                 RecordBudgetState();
 
                 return new DocumentAnswer
                 {
                     Success = true,
                     Text = hit.Text,
-                    Warnings = hit.Warnings,
+                    Warnings = [.. hit.Warnings],
+                    Evidence = [.. hit.Evidence],
                     Provenance = new DocumentProvenance
                     {
                         Model = hit.Model,
@@ -212,6 +213,9 @@ public class DocumentProcessor : Runtime, IDisposable
                         ReadUtc = hit.ReadUtc,
                         TokensSpent = hit.TokensSpent,
                         FromCache = true,
+                        Route = hit.Route,
+                        Pages = hit.Pages,
+                        Fallback = hit.Fallback,
                     },
                 };
             }
@@ -227,7 +231,9 @@ public class DocumentProcessor : Runtime, IDisposable
 
         try
         {
-            var (text, tokens, finish) = await Generate(bytes, mime, query, useModel, schema, ct);
+            var generated = await Generate(bytes, mime, query, useModel, schema, ct);
+            var (text, tokens, finish) = (generated.Text, generated.Tokens, generated.Finish);
+            var answeredBy = generated.Model ?? useModel;
 
             // A 200 carrying no text is not an empty answer. Reporting it as success with an empty
             // string would let "" propagate into a caption and read as a deliberate blank.
@@ -236,12 +242,15 @@ public class DocumentProcessor : Runtime, IDisposable
                 var blocked = finish?.Contains("SAFETY", StringComparison.OrdinalIgnoreCase) == true;
                 return Attempted(blocked ? DocumentFailure.SafetyBlocked : DocumentFailure.NoAnswer,
                     finish is null ? "The response carried no text." : $"Finish reason: {finish}.",
-                    named, useModel);
+                    named, answeredBy);
             }
 
             budget.TokensSpent += tokens;
 
-            var warnings = Scan(text);
+            // The evidence is the document's own words, so it is scanned with the answer: a quote is where an
+            // instruction hidden in a filing would ride back.
+            var evidence = generated.Evidence.Select(e => e with { Quote = TextScan.Sanitize(e.Quote) }).ToList();
+            var warnings = Scan(string.Join("\n", [text, .. generated.Evidence.Select(e => e.Quote)]));
             if (warnings.Count > 0)
             {
                 Warn("{0} '{1}' produced an answer carrying {2} scan finding(s).", Kind, named, warnings.Count);
@@ -255,7 +264,7 @@ public class DocumentProcessor : Runtime, IDisposable
                 Kind, named, Success: true,
                 Failure: null,
                 Reason: warnings.Count == 0 ? null : string.Join("; ", warnings),
-                Model: useModel, FromCache: false, Refused: false));
+                Model: answeredBy, FromCache: false, Refused: false));
             RecordBudgetState();
 
             var sanitised = TextScan.Sanitize(text);
@@ -274,9 +283,13 @@ public class DocumentProcessor : Runtime, IDisposable
                 {
                     Text = sanitised,
                     Warnings = warnings,
-                    Model = useModel,
+                    Model = answeredBy,
                     ReadUtc = readUtc,
                     TokensSpent = tokens,
+                    Evidence = evidence,
+                    Route = generated.Route,
+                    Pages = generated.Pages,
+                    Fallback = generated.Fallback,
                 });
             }
 
@@ -284,10 +297,11 @@ public class DocumentProcessor : Runtime, IDisposable
             {
                 Success = true,
                 Text = sanitised,
-                Warnings = warnings,
+                Warnings = [.. warnings],
+                Evidence = [.. evidence],
                 Provenance = new DocumentProvenance
                 {
-                    Model = useModel,
+                    Model = answeredBy,
                     Source = named,
                     MimeType = mime,
                     Bytes = bytes.Length,
@@ -296,6 +310,9 @@ public class DocumentProcessor : Runtime, IDisposable
                     ReadUtc = readUtc,
                     TokensSpent = tokens,
                     FromCache = false,
+                    Route = generated.Route,
+                    Pages = generated.Pages,
+                    Fallback = generated.Fallback,
                 },
             };
         }
@@ -321,7 +338,12 @@ public class DocumentProcessor : Runtime, IDisposable
     /// at all, which is worse than a protected method.
     /// </remarks>
     /// <param name="schema">A JSON Schema the answer must follow, as JSON text; null for prose.</param>
-    protected virtual async Task<(string? Text, long Tokens, string? Finish)> Generate(
+    protected virtual Task<Generation> Generate(
+        byte[] bytes, string mime, string query, string model, string? schema, CancellationToken ct) =>
+        GenerateInline(bytes, mime, query, model, schema, ct);
+
+    /// <summary>The document sent whole to Gemini, which reads it itself. Overridable for tests.</summary>
+    protected virtual async Task<Generation> GenerateInline(
         byte[] bytes, string mime, string query, string model, string? schema, CancellationToken ct)
     {
         var parts = new List<Part>
@@ -344,9 +366,12 @@ public class DocumentProcessor : Runtime, IDisposable
             .Select(p => p.Text)
             .Where(t => !string.IsNullOrEmpty(t)) ?? []);
 
-        return (text, response.UsageMetadata?.TotalTokenCount ?? 0,
-            response.Candidates?.FirstOrDefault()?.FinishReason?.ToString());
+        return new Generation(text, response.UsageMetadata?.TotalTokenCount ?? 0,
+            response.Candidates?.FirstOrDefault()?.FinishReason?.ToString()) { Model = model };
     }
+
+    /// <summary>Whether a Gemini key is configured, so a document can be sent whole.</summary>
+    protected bool CanReadInline => client is not null;
 
     /// <summary>Releases the client. Host lifetime, not something a script calls.</summary>
     public void Dispose()
@@ -545,6 +570,24 @@ public class DocumentProcessor : Runtime, IDisposable
     #endregion
 
     #region Types
+    /// <summary>What one call to a model produced.</summary>
+    /// <param name="Text">The answer; empty or null is no answer.</param>
+    /// <param name="Tokens">Billed, as the service reported.</param>
+    /// <param name="Finish">The service's finish reason, when it gave one.</param>
+    protected sealed record Generation(string? Text, long Tokens, string? Finish)
+    {
+        /// <summary>The model that actually answered, when it is not the one asked for.</summary>
+        public string? Model { get; init; }
+
+        public IReadOnlyList<DocumentEvidence> Evidence { get; init; } = [];
+
+        public string Route { get; init; } = "inline";
+
+        public int Pages { get; init; }
+
+        public string? Fallback { get; init; }
+    }
+
     /// <summary>A local refusal, carrying the failure it should be reported as.</summary>
     /// <remarks>
     /// Internal to the read step so that every locally-decidable problem can be raised where it is

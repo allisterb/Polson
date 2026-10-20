@@ -478,6 +478,7 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
             commission = catalogue.parse(card, title, route, kind, sizes, custom_size, formats, extras, brief,
                                          aud_place, aud_age)
             staged = await uploads.stage(files, scratch)
+            commission.card.check_files([p.name for p in staged])
             project_id = unique_id(state.root, commission.title)
             made = await projects.create(state.root, project_id, commission.workflow, commission.kind,
                                          commission.brief_text([p.name for p in staged]))
@@ -536,6 +537,7 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
             if not commission.kind and len(offered) == 1:
                 commission.kind = offered[0]
             staged = await uploads.stage(files, scratch)
+            commission.card.check_files([p.name for p in staged])
             name = commissioner.free_name(commission.title)
             await commissioner.commission(name, commission.workflow, commission.kind,
                                           commission.brief_text([p.name for p in staged]), staged)

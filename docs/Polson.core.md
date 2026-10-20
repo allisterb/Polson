@@ -4812,7 +4812,29 @@ if (answer.warnings.length) for (const w of answer.warnings) error('SCAN: ' + w)
 
 log(answer.text);
 log(`read ${answer.provenance.bytes} bytes of ${answer.provenance.mimeType}, ${Documents.budget.remaining} reads left`);
+
+// Every figure the answer rests on, checked against the page it names. Empty `unverified` is the expected result.
+for (const e of answer.evidence) log(`p.${e.page} ${e.found ? 'on the page' : 'NOT ON THE PAGE'}: ${e.quote}`);
+if (answer.unverified.length) error('Not on their pages: ' + answer.unverified.join('; '));
 ```
+
+> [!IMPORTANT]
+> **Which model reads it, and how.** A PDF or a text file is read by **Nemotron 3.5 Super VL** (Nebius Token
+> Factory) as **text, page by page** — the PDF's own text layer, or OCR at 300 dpi for a page that is a scan —
+> and the answer comes back with **`evidence`**: the page and the exact figures it used. **The engine then looks
+> for every figure on the page it names**, and lists any it cannot find in **`answer.unverified`**. Measured on
+> NVIDIA's 93-page FY2026 10-K: ten analyst questions in one call, 10/10, about 20 s. Read from page images instead,
+> the same model turned 102,718 into 102,714 — the error this check exists for.
+>
+> **Gemini answers instead** — the file sent whole, with no `evidence` — for images and clips, and whenever Nemotron
+> cannot: no Token Factory key, the service failing, no `mutool`, or a PDF with more than 8 scanned pages (OCR is
+> about two seconds a page, and a script has a minute). **`provenance.model` says who answered** and
+> **`provenance.fallback` why the first choice did not**. A figure from a Gemini answer is unchecked: say so, or
+> find it again in a read that has evidence.
+>
+> **A figure in `unverified` does not go into a piece.** Ask again, more narrowly, naming the table or the page.
+> `evidence[].page` counts the PDF's pages from 1; it is not the number printed on the page, though in many reports
+> they agree. A quote stitched from a table row (`Graphics $ 22,459`) is checked by its figures, so it is found.
 
 > [!IMPORTANT]
 > **Start with `Documents.list()`, not with a guessed filename.** Nothing else on either side of the
@@ -4843,7 +4865,7 @@ log(`read ${answer.provenance.bytes} bytes of ${answer.provenance.mimeType}, ${D
 - `Documents.list()` → `DocumentEntry[]` — What the project holds, from its `documents/` folder. **Free, offline, unmetered, and works with no key** — finding out what exists must never cost what reading it costs. Files of a type this surface cannot declare are omitted rather than listed then refused, and the folder's own `README.md` is not listed.
 - `Documents.ask(source: string | byte[], query: string, options?: object)` → `Promise<DocumentAnswer>` — Reads the document and answers the question. `source` is a **project-relative path**, contained exactly as `outFile` is, or the bytes themselves. `options`: `{ model?: string, mimeType?: string, schema?: object }`. A path that is not there comes back naming **what is**, so a near-miss costs one turn rather than several. With `schema` (a JSON Schema object), **`answer.text` is JSON in that shape** — `JSON.parse(answer.text)` — and the schema is part of the cache key.
 - `Documents.budget` → `DocumentBudget` — Remaining allowance. **Check before a run of reads.**
-- `Documents.model` → `string` — The default model.
+- `Documents.model` → `string` — The first-choice model: Nemotron 3.5 Super VL when Token Factory is configured, else Gemini. `options.model` naming a `gemini-…` model sends the document whole to Gemini.
 - `Documents.isAvailable` → `boolean` — Whether a key is configured. `false` means every call refuses.
 
 > [!NOTE]
@@ -4889,6 +4911,8 @@ Deliberately not the contents: listing is free and reading is metered, so you ca
 - `answer.text` → `string` — The answer, scanned and stripped. Empty on failure.
 - `answer.warnings` → `string[]` — What the scan found. **Empty is the expected result**; see the CAUTION above.
 - `answer.provenance` → `DocumentProvenance?` — Null when the read failed.
+- `answer.evidence` → `DocumentEvidence[]` — The pages and figures the answer rests on, each checked. Empty when Gemini read the document whole.
+- `answer.unverified` → `string[]` — The evidence not found on its page, as `'p.55: 102,714'`. **Empty is the expected result**; anything here stays out of the piece.
 - `answer.failure` → the same value as a number; prefer `failureName`.
 
 `failureName` is one of: `'None'`, `'NotConfigured'`, `'BudgetExhausted'`, `'NotFound'`, `'TooLarge'`, `'UnsupportedType'`, `'NoQuery'`, `'SafetyBlocked'`, `'NoAnswer'`, `'RateLimited'`, `'Network'`, `'Timeout'`, `'Auth'`, `'ServiceError'`, `'InvalidRequest'`, `'Cancelled'`.
@@ -4908,6 +4932,15 @@ What the answer rests on, so a figure drawn from a document traces back to the d
 - `provenance.query` → `string` — The question, verbatim.
 - `provenance.readUtc` → `Date` · `provenance.tokensSpent` → `number`
 - `provenance.fromCache` → `boolean` — True when the answer was served from cache and nothing was spent. **`readUtc` and `tokensSpent` then describe the original read**, not this call, so together they say how old the answer you are using actually is.
+- `provenance.route` → `string` — `'text'` (the PDF's text layer, page by page), `'text+ocr'` (some pages read by OCR) or `'inline'` (sent whole).
+- `provenance.pages` → `number` — Pages read as text; `0` when sent whole.
+- `provenance.fallback` → `string?` — Why the first-choice model did not answer, when another did: `'nvidia/…: Token Factory answered 404 …'`, `'… 12 of 40 pages are scans …'`. Null when it did.
+
+## `DocumentEvidence`
+
+- `evidence.page` → `number` — The PDF's page, from 1.
+- `evidence.quote` → `string` — The words or figures, as the model quoted them.
+- `evidence.found` → `boolean` — Whether that page carries it: every figure in the quote, or the words when it has none.
 
 > [!TIP]
 > **The same question of the same document costs once.** Answers are cached on the document's content, the question and the model together — so re-running a script that opens with a `Documents.ask` re-bills nothing, which is the loop that matters, since a drawing is built by editing one file and running it again. Change any of the three and it is a new read: a different question of the same file is a different answer, and serving the first question's text for the second would be the wrong answer in the right shape.

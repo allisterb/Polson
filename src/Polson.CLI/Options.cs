@@ -97,6 +97,9 @@ public class CreateProjectOptions : Options
     [Option("prompt", Required = false, HelpText = "The subject, in a line — a short form of --brief. Treated as untrusted data and quoted into brief.md exactly as --brief is.")]
     public string Prompt { get; set; } = string.Empty;
 
+    [Option("document", Required = false, HelpText = "Source material to copy into the project's documents/ folder — a PDF of a report, a CSV, a brand guide, a reference clip. Give one or more paths after the flag. Each must be a type Documents.ask can read; a file already there under the same name is kept if identical and refused if not.")]
+    public IEnumerable<string> Documents { get; set; } = [];
+
     [Option("deadline", Required = false, HelpText = "Minutes the commission is allowed to take, written into project.json and stated in the instructions so the agent can plan against it. Omit it for the workflow's own default — a logo is quarter of an hour, a study painting is two. Pass 0 for no deadline.")]
     public int? Deadline { get; set; }
 

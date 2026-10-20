@@ -26,6 +26,12 @@ Answer these in `findings.md`:
 - **The packshot** (product ad without a supplied shot). Was it one generation, and was it the same can in every
   view? Did lettering appear on it anyway? Did your label read on the band, and on the three-quarter view? If a
   product shot was supplied, what did `Documents.ask` tell you about it, and what did you take from it?
+- **A report explainer** (type `report`). Who read the document (`provenance.model`, `route`, pages) and how long
+  the one call took; was there a fallback, and why? How many figures did the reading return, how many were `found`
+  on their pages, how many did you compute, and how many did you leave out — quote each one left out and what the
+  narrower question then found. Did any `unverified` figure come back, and was the misreading the model's or the
+  page's (a figure split across lines, a footnote mark)? Which question did the document not answer, and what did
+  that scene say? Quote the read-back: every number `Video.ask` read, and any it read that you did not set or missed.
 - **Text animators.** Did the *Type* section give you what you needed to build a cascade? Quote the
   animator you used for the title, and say whether it did what you expected the first time. Name any
   property or selector option you wanted and did not find.

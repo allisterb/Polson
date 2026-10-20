@@ -63,8 +63,9 @@ WORKFLOWS: dict[str, tuple[str, ...]] = {
     # One action, keyed and checked, delivered as an animated WebP (Manual 25 §10). No types.
     "animation": (),
     # Motion graphics: shapes and type in the animation model, delivered as a video. **No type is a film
-    # trailer**, which is not the same as "the studio's choice": `product` is a fifteen-second product ad.
-    "trailer": ("product",),
+    # trailer**, which is not the same as "the studio's choice": `product` is a fifteen-second product ad, and
+    # `report` an explainer that answers an audience's questions from a document the director attached.
+    "trailer": ("product", "report"),
     "harness": ("image", "infographic", "logo"),
 }
 

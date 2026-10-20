@@ -179,11 +179,47 @@ public class DocumentInteropTests : TestsRuntime, IDisposable
                 .Where(e => e.GetProperty("type").GetString() == type)];
     }
 
+    /// <summary>The same question twice in one engine, the second from the cache, reads the same members both times.</summary>
+    /// <remarks>
+    /// nvdareport2 (2026-10-20): a fresh answer's <c>warnings</c> was an array and a cached one's a <c>List</c>; Jint keeps the
+    /// first type it saw behind a member, so every re-run of the type's reading threw "Unable to cast … List`1 to
+    /// System.Array", uncatchable, and the agent worked round the cache the report type is built on.
+    /// </remarks>
+    [Fact]
+    public async Task TestACachedAnswerReadsLikeAFreshOneInTheSameEngine()
+    {
+        File.WriteAllText(Path.Combine(root, "notes.txt"), "Revenue was 215,938.");
+        JsDrawingEngine.Documents = new Answering(new DocumentBudget(5), root, new DocumentCache(Path.Combine(root, "cache")));
+
+        const string Read = """
+            const a = await Documents.ask('notes.txt', 'What was revenue?');
+            log(a.provenance.fromCache + '|' + a.warnings.length + '|' + a.evidence.length + '|' + JSON.stringify(a.unverified));
+            """;
+        var fresh = await Run(Read);
+        var cached = await Run(Read);
+
+        Assert.True(fresh.Success, fresh.Error);
+        Assert.True(cached.Success, cached.Error);
+        Assert.Equal("false|0|0|[]", Logged(fresh));
+        Assert.Equal("true|0|0|[]", Logged(cached));
+    }
+
     private Task<DrawingExecutionResult> Run(string script) =>
         new DrawingMcpTools(null, null, null, root).ExecuteScript(
             script + " const _c = createCanvas(20,20); _c.getContext('2d').fillRect(0,0,20,20); _c;", 20, 20);
 
     private static string Logged(DrawingExecutionResult result) =>
         string.Join(" ", result.Logs).Replace("[LOG]", string.Empty, StringComparison.Ordinal).Trim();
+    #endregion
+
+    #region Types
+    /// <summary>A processor that answers without a network, so the cache path can be reached from a script.</summary>
+    private sealed class Answering(DocumentBudget budget, string root, DocumentCache cache)
+        : DocumentProcessor("test-key", budget, root, "fake-model", cache)
+    {
+        protected override Task<Generation> Generate(
+            byte[] bytes, string mime, string query, string model, string? schema, System.Threading.CancellationToken ct) =>
+            Task.FromResult(new Generation("215,938", 10, null));
+    }
     #endregion
 }

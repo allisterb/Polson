@@ -537,10 +537,11 @@ class StarterTests(unittest.TestCase):
         self.assertIn("if (types.length === 1 && !chosen.dataset.untyped) kind.value = types[0];", body)
 
     def test_a_trailer_is_not_made_a_product_ad_by_having_one_type(self):
-        """`trailer` offers one type, `product`, and **no type is the film trailer**. Selecting the lone type for the
-        visitor would turn every film trailer into an ad, so the option is marked and the selection skips it."""
+        """`trailer` offers `product` and `report`, and **no type is the film trailer**. It offered `product` alone at
+        first, when selecting the lone type would have turned every film trailer into an ad; the mark stays, so a
+        trailer stays untyped however many types it gains or loses."""
         body = TestClient(_app()).get("/new").text
-        self.assertIn('value="trailer" data-types="product" data-untyped="1"', body)
+        self.assertIn('value="trailer" data-types="product,report" data-untyped="1"', body)
         self.assertNotIn('value="poster" data-types="film,product" data-untyped', body)
 
     def test_switching_workflow_cannot_leave_an_unoffered_type_selected(self):

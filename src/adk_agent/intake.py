@@ -103,8 +103,10 @@ WORKFLOWS: dict[str, tuple[str, ...]] = {
     # Their deadlines are the craft defaults (45 and 60): no entry in `DEADLINES` below, since the keepalive's
     # ceiling (218) holds both, where the old 38 held neither — and a set of six, at +20 or +25 per audience.
     "poster": ("film", "product"),
-    # `product` is a product ad; **no type is a film trailer**, so it is in `UNTYPED_IS_A_CHOICE` below.
-    "trailer": ("product",),
+    # `product` is a product ad; `report` explains a long document the director attached (a 10-K) — the Nebius entry,
+    # read by Nemotron through `Documents.ask` and needing no Qloo. **No type is a film trailer**, so it is in
+    # `UNTYPED_IS_A_CHOICE` below.
+    "trailer": ("product", "report"),
 }
 
 #: Workflows whose lone type is **not** what an empty type means. The form selects a workflow's only type for

@@ -87,6 +87,7 @@ SETTINGS = [
     ("POLSON_ASSETS_BUDGET",          "Assets:Budget",               int),
     ("POLSON_ASSETS_CACHE_DIR",       "Assets:CacheDir",             str),
     ("POLSON_DOCUMENTS_MODEL",        "Documents:Model",             str),
+    ("POLSON_DOCUMENTS_NEMOTRON_MODEL", "Documents:NemotronModel",   str),
     ("POLSON_DOCUMENTS_BUDGET",       "Documents:Budget",            int),
     ("POLSON_DOCUMENTS_CACHE_DIR",    "Documents:CacheDir",          str),
     ("POLSON_PHOTOS_BUDGET",          "Photos:Budget",               int),

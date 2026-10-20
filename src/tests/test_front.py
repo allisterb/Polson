@@ -134,6 +134,25 @@ class CatalogueTests(unittest.TestCase):
         self.assertEqual(c.kind, "")
         self.assertIn("- One film per audience", c.brief_text([]))
 
+    def test_a_report_explainer_is_a_trailer_of_type_report_with_its_questions_numbered(self):
+        c = catalogue.parse("report-explainer", "NVIDIA explained", "0", "", ["1920x1080"], "", [".mp4"],
+                            {"viewer": "New retail investors", "questions": "How big was revenue?; Where did it come from?"},
+                            "Explain the annual report.", [], [])
+        self.assertEqual((c.workflow, c.kind), ("trailer", "report"))
+        text = c.brief_text(["nvda-10k.pdf"])
+        for line in ("- Who is watching: New retail investors",
+                     "- Their questions:\n  1. How big was revenue?\n  2. Where did it come from?",
+                     "- Files supplied, in documents/: nvda-10k.pdf"):
+            self.assertIn(line, text)
+        self.assertNotIn("per audience", text)
+
+    def test_a_report_explainer_needs_its_pdf(self):
+        card = catalogue.BY_SLUG["report-explainer"]
+        with self.assertRaisesRegex(StudioError, "attach the PDF"):
+            card.check_files(["notes.txt", "spot.mp4"])
+        card.check_files(["Annual Report.PDF"])
+        catalogue.BY_SLUG["product-ad"].check_files([])     # a card that needs nothing refuses nothing
+
     def test_a_poster_may_be_a_product_ad(self):
         self.assertIn(("product", "Product ad"), catalogue.types_for(catalogue.BY_SLUG["poster"], "poster"))
 
@@ -444,7 +463,7 @@ class FakeCommissioner:
     """Stands in for `adk_agent.intake.Commissioner`: offers drawing (review only) and the infographics."""
 
     TYPES = {"drawing": ("review",), "vector_infographic": ("editorial", "swiss"), "infographic": ("editorial",),
-             "trailer": ("product",)}
+             "trailer": ("product", "report")}
 
     def __init__(self, root: Path, refuse: Exception | None = None) -> None:
         self.root, self.refuse, self.made = root, refuse, []
@@ -535,6 +554,20 @@ class CommissionedComposerTests(unittest.TestCase):
         made = self.commissioner.made[0]
         self.assertEqual((made["workflow"], made["kind"]), ("trailer", "product"))
         self.assertIn("- Claim: Steeped for twenty hours.", made["brief"])
+
+    def test_a_report_explainer_is_refused_without_its_pdf_and_commissioned_with_it(self):
+        data = self.trailer("report-explainer", x_questions="How big was revenue?", aud_place=[], aud_age=[])
+        refused = self.client.post("/requests", data=data, follow_redirects=False)
+        self.assertEqual(refused.status_code, 409)
+        self.assertIn("attach the PDF", refused.text)
+        self.assertEqual(self.commissioner.made, [])
+
+        reply = self.client.post("/requests", data=data, files=[("files", ("nvda-10k.pdf", b"%PDF-1.4", "application/pdf"))],
+                                 follow_redirects=False)
+        self.assertEqual(reply.status_code, 303, reply.text[:300])
+        made = self.commissioner.made[0]
+        self.assertEqual((made["workflow"], made["kind"], made["documents"]), ("trailer", "report", ["nvda-10k.pdf"]))
+        self.assertIn("  1. How big was revenue?", made["brief"])
 
     def test_a_film_trailer_is_not_given_the_workflows_lone_type(self):
         """The host offers `trailer` one type; the film trailer's card offers none, and the card decides."""

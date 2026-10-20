@@ -253,6 +253,10 @@ ENV DOTNET_ROOT=/usr/share/dotnet \
 # > not exist in Debian** — the page returns "No such package". Checking every name against the
 # > real repository is the rule `requirements.in` states for PyPI, and it earns its keep here
 # > too: this is the second recommendation in this file that verification caught.
+# **`mutool` and `tesseract` are how `Documents.ask` reads a PDF as text for Nemotron**: the text layer page by
+# page, and OCR at 300 dpi for a page that is a scan (`DocumentPages`). Checked against packages.debian.org/trixie
+# on 2026-10-20: `mupdf-tools` 1.25.1, `tesseract-ocr` 5.5.0, `tesseract-ocr-eng`. Without them a PDF goes whole
+# to Gemini, as it did before, and the answer carries no checked evidence.
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends \
         libicu-dev \
@@ -260,6 +264,9 @@ RUN apt-get update \
         fontconfig \
         potrace \
         ffmpeg \
+        mupdf-tools \
+        tesseract-ocr \
+        tesseract-ocr-eng \
         libgl1 \
         libglib2.0-0t64 \
         libegl1 \
