@@ -503,9 +503,10 @@ class StarterTests(unittest.TestCase):
             with self.subTest(starter=starter["label"]):
                 self.assertIn(starter["workflow"], intake.WORKFLOWS)
                 types = intake.WORKFLOWS[starter["workflow"]]
-                # A workflow with no types (trailer) has the control disabled, so its starter names none.
-                self.assertIn(starter["kind"], types or ("",),
-                              "the type control hides types the workflow does not offer")
+                # A workflow with no types has the control disabled, so its starter names none; one whose empty
+                # type is a choice of its own (a film trailer) may name none too.
+                allowed = (*types, "") if not types or starter["workflow"] in intake.UNTYPED_IS_A_CHOICE else types
+                self.assertIn(starter["kind"], allowed, "the type control hides types the workflow does not offer")
                 self.assertTrue(intake.VALID_APP_NAME.match(starter["name"]))
                 self.assertLessEqual(len(starter["name"]), intake.MAX_NAME)
                 self.assertTrue(starter["brief"].strip())
@@ -533,7 +534,14 @@ class StarterTests(unittest.TestCase):
         self.assertTrue(single, "no single-type workflow to check")
 
         body = TestClient(_app()).get("/new").text
-        self.assertIn("if (types.length === 1) kind.value = types[0];", body)
+        self.assertIn("if (types.length === 1 && !chosen.dataset.untyped) kind.value = types[0];", body)
+
+    def test_a_trailer_is_not_made_a_product_ad_by_having_one_type(self):
+        """`trailer` offers one type, `product`, and **no type is the film trailer**. Selecting the lone type for the
+        visitor would turn every film trailer into an ad, so the option is marked and the selection skips it."""
+        body = TestClient(_app()).get("/new").text
+        self.assertIn('value="trailer" data-types="product" data-untyped="1"', body)
+        self.assertNotIn('value="poster" data-types="film,product" data-untyped', body)
 
     def test_switching_workflow_cannot_leave_an_unoffered_type_selected(self):
         """**Hiding an option does not clear a value already on it.**

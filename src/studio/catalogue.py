@@ -100,10 +100,24 @@ class Card:
     style_label: str = "Style"      # what the workflow's types are called on this card
     type_labels: dict[str, str] = field(default_factory=dict)
     audiences: bool = False         # asks who it is for: a place and an age band per audience, A, B…
+    #: The workflow types this card offers, when not all of them: `()` for none, one for a card that *is* that type.
+    #: A film trailer and a product ad are one workflow; without this each card would offer the other's type, and a
+    #: lone type is chosen for the visitor (`front.commissioned`), so every film trailer would become an ad.
+    types: tuple[str, ...] | None = None
 
     @property
     def multi_route(self) -> bool:
         return len(self.routes) > 1
+
+    @property
+    def fixed_type(self) -> str:
+        """The type this card always runs, or ''. Not offered as a choice: the card is the choice."""
+        return self.types[0] if self.types is not None and len(self.types) == 1 else ""
+
+    @property
+    def piece(self) -> str:
+        """What one audience gets, in the visitor's words."""
+        return "ad" if self.fixed_type == "product" else "film" if self.kind == "video" else "piece"
 
 
 #: Presets per kind. A tile draws the ratio, so the order is the order a person scans in.
@@ -136,7 +150,17 @@ CARDS: tuple[Card, ...] = (
     Card("film-trailer", "Film trailer", "video", "Video · 15 seconds, one film per audience",
          (Route("trailer", "Motion graphics trailer"),),
          extras=(Extra("duration", "Duration", ("15 seconds", "30 seconds"), "15 seconds"),),
-         audiences=True),
+         audiences=True, types=()),
+    # Dynamic creative: one product, an ad per audience, each from that audience's buyers (Qloo). The trailer
+    # workflow's `product` type; its evidence method is `docs/internal/product-ad-probe.md`.
+    Card("product-ad", "Product ad", "video", "Video · 15 seconds, one ad per audience",
+         (Route("trailer", "Motion graphics ad"),),
+         extras=(Extra("product", "Product", placeholder="Its name, and what it is"),
+                 Extra("comparables", "Comparable brands", placeholder="Two or three real brands like it"),
+                 Extra("claim", "Claim", placeholder="The one claim, worded as it may appear"),
+                 Extra("cta", "Call to action", placeholder="What the viewer should do next"),
+                 Extra("duration", "Duration", ("15 seconds", "30 seconds"), "15 seconds")),
+         audiences=True, types=("product",)),
     Card("motion-graphic", "Motion graphic", "motion", "Animation · one action, keyed",
          (Route("animation", "One keyed action"),),
          extras=(Extra("duration", "Duration", ("2 seconds", "4 seconds", "8 seconds"), "4 seconds"),
@@ -154,7 +178,7 @@ CARDS: tuple[Card, ...] = (
     Card("poster", "Poster", "image", "Image · grounded in audience taste",
          (Route("poster", "Taste-grounded poster"),),
          image="poster.webp", alt="A neo-brutalist poster on the history of the web",
-         style_label="Kind", type_labels={"film": "Film poster"},
+         style_label="Kind", type_labels={"film": "Film poster", "product": "Product ad"},
          extras=(Extra("headline", "Headline", placeholder="The words that must appear"),),
          audiences=True),
     Card("book-cover", "Book cover", "image", "Image · one composed cover",
@@ -184,7 +208,12 @@ CARDS: tuple[Card, ...] = (
 BY_SLUG: dict[str, Card] = {c.slug: c for c in CARDS}
 
 #: Which card a project belongs to, for projects made on the developer page or by another host.
-BY_WORKFLOW: dict[str, Card] = {r.workflow: c for c in CARDS for r in c.routes}
+#: The first card wins: `trailer` is the film trailer's before it is the product ad's. A project's own record names its
+#: card, so this is only the fallback for one made elsewhere.
+BY_WORKFLOW: dict[str, Card] = {}
+for _card in CARDS:
+    for _route in _card.routes:
+        BY_WORKFLOW.setdefault(_route.workflow, _card)
 
 
 def card_for(workflow: str) -> Card | None:
@@ -192,8 +221,9 @@ def card_for(workflow: str) -> Card | None:
 
 
 def types_for(card: Card, workflow: str) -> list[tuple[str, str]]:
-    """The styles offered for this route, as (value, label), from the closed set in `projects`."""
-    return [(t, card.type_labels.get(t, t.capitalize())) for t in projects.WORKFLOWS.get(workflow, ())]
+    """The styles offered for this route, as (value, label), from the closed set in `projects` narrowed by the card."""
+    return [(t, card.type_labels.get(t, t.capitalize())) for t in projects.WORKFLOWS.get(workflow, ())
+            if card.types is None or t in card.types]
 
 
 def slugify(title: str) -> str:
@@ -233,7 +263,7 @@ class Commission:
                  f"- Workflow: {self.card.title}"]
         lines += [f"- {line}" for line in self.audience_lines()]
         if len(self.audiences) > 1:
-            lines.append(f"- One {'film' if self.card.kind == 'video' else 'piece'} per audience")
+            lines.append(f"- One {'ad' if self.kind == 'product' else self.card.piece} per audience")
         lines += ["- Sizes: " + "; ".join(f"{s.label} {s.detail}" for s in self.sizes),
                   "- Formats: " + ", ".join(f.ext for f in self.formats)]
         lines += [f"- {label}: {value}" for label, value in self.extras]
@@ -294,6 +324,7 @@ def parse(card_slug: str, title: str, route: str, kind: str, sizes: list[str], c
     offered = {t for t, _ in types_for(card, chosen.workflow)}
     if kind and kind not in offered:
         raise StudioError(f"{card.title} does not offer that {card.style_label.lower()}.")
+    kind = card.fixed_type or kind
 
     presets = {s.key: s for s in SIZES[card.kind]}
     picked = [presets[k] for k in dict.fromkeys(sizes) if k in presets]

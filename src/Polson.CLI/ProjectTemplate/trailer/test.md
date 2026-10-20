@@ -17,6 +17,12 @@ Answer these in `findings.md`:
   before planning any film? Was each later film's motion drafted from its own evidence before you looked back
   at the earlier ones? Name what the set shares and what differs, and whether each differing pair's measured
   holds differ in the direction the comparison gave — or why they did not need to.
+- **A product ad** (type `product`). What did each comparable resolve to, and did `demographics` fit the audiences?
+  How many of each audience's buyers were local-only against the buyers anywhere, and did that list give you
+  anything to design from? Were the brands' design tags the same across audiences — and if so, where did you put the
+  difference? Did the places come back in the right city, and which mood tags did you use? Quote the claim as it
+  appears on screen, and name anything you wanted to say about the product that the brief did not give you. Qloo
+  requests spent, from `status`.
 - **Text animators.** Did the *Type* section give you what you needed to build a cascade? Quote the
   animator you used for the title, and say whether it did what you expected the first time. Name any
   property or selector option you wanted and did not find.

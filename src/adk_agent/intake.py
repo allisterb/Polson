@@ -98,12 +98,19 @@ WORKFLOWS: dict[str, tuple[str, ...]] = {
     "drawing": ("review",),
     # **The Qloo entry's two.** Both ground the work in an audience's taste through the `Taste` tool, so they need
     # `POLSON_QLOO_KEY` on the host. A poster reads `documents/` from stage 1 (a brand guide, an earlier poster);
-    # a trailer builds on a poster found there. `film` is the poster's one type, and the CLI's default for it too.
+    # a trailer builds on a poster found there. `film` is the CLI's default for a poster; `product` makes either one
+    # a product ad, the dynamic-creative case (`docs/internal/product-ad-probe.md`).
     # Their deadlines are the craft defaults (45 and 60): no entry in `DEADLINES` below, since the keepalive's
     # ceiling (218) holds both, where the old 38 held neither — and a set of six, at +20 or +25 per audience.
-    "poster": ("film",),
-    "trailer": (),
+    "poster": ("film", "product"),
+    # `product` is a product ad; **no type is a film trailer**, so it is in `UNTYPED_IS_A_CHOICE` below.
+    "trailer": ("product",),
 }
+
+#: Workflows whose lone type is **not** what an empty type means. The form selects a workflow's only type for
+#: the visitor, on the reasoning that one type is not a choice — true when the CLI would default to it anyway
+#: (`poster` to `film`), false for `trailer`, where no type is the film trailer and `product` is something else.
+UNTYPED_IS_A_CHOICE: frozenset[str] = frozenset({"trailer"})
 
 #: What a workflow is **called** on the form, where its template name is not the useful name.
 #:
@@ -395,6 +402,19 @@ STARTERS: tuple[dict[str, str], ...] = (
                  "films: The Lighthouse (2019), The Banshees of Inisherin (2022), Aftersun (2022). "
                  "Audience A: Lisbon, aged 35 to 44. Audience B: Seoul, aged 25 to 34. Silent. If a "
                  "poster for it is attached, carry its system over.",
+    },
+    {
+        # A fictitious product with real comparables: the dynamic-creative case. The comparables are the ones the
+        # product-ad probe measured, so a run's evidence can be read against docs/internal/product-ad-probe.md.
+        "label": "Product ad, three cities",
+        "name": "nightshiftcoldbrew",
+        "workflow": "trailer",
+        "kind": "product",
+        "brief": "A fifteen-second ad for Nightshift, a fictitious canned cold brew coffee: slow-steeped for twenty "
+                 "hours, sold chilled. Comparable brands: Blue Bottle Coffee, La Colombe, Stumptown Coffee "
+                 "Roasters. Claim: \"Steeped for twenty hours.\" Call to action: \"Find it chilled.\" "
+                 "Audience A: Berlin, aged 30 to 34. Audience B: Lagos, aged 30 to 34. Audience C: Seoul, aged "
+                 "30 to 34. Silent. No logo is supplied: set the name in type.",
     },
     {
         "label": "Empty room, after",
@@ -957,7 +977,7 @@ FORM = """<!doctype html>
 
     // One type is not a choice. Select it, so the control shows what is going to happen rather than
     // an em-dash the server will quietly turn into the same thing.
-    if (types.length === 1) kind.value = types[0];
+    if (types.length === 1 && !chosen.dataset.untyped) kind.value = types[0];
     // The placeholder, not the value: an empty field means "the workflow's own", and pre-filling it
     // would turn a default the studio chose into a number the visitor appears to have set.
     if (deadline) deadline.placeholder = chosen.dataset.deadline || '';
@@ -1010,6 +1030,7 @@ def mount(app: FastAPI) -> None:
         # generator is given; only the visible text is relabelled.
         options = "".join(
             f'<option value="{w}" data-types="{",".join(types)}"'
+            f'{' data-untyped="1"' if w in UNTYPED_IS_A_CHOICE else ''}'
             f' data-deadline="{DEADLINES.get(w) or ""}">{escape(LABELS.get(w, w))}</option>'
             for w, types in WORKFLOWS.items())
         types_options = '<option value="">&mdash;</option>' + "".join(

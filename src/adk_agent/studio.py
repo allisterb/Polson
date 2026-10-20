@@ -118,6 +118,34 @@ def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8-sig")
 
 
+class Verbatim:
+    """An instruction ADK must pass to the model as written.
+
+    **ADK templates a string instruction**: `{name}` is looked up in session state, and a miss raises
+    `KeyError: Context variable not found` before the agent makes a single call. Our instructions are full of
+    JavaScript, and a code example such as `comp.region({ path })` is exactly that pattern — the trailer
+    template carried two, so every trailer started on this runtime died at startup (found 2026-10-19, before
+    one was ever run here). ADK skips the templating for an instruction *provider*, so this is one: a callable
+    returning the text. Nothing here uses ADK state variables, so nothing is lost.
+
+    `in` and `str()` still read the text, for the code and tests that look inside an instruction.
+    """
+
+    __slots__ = ("text",)
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+    def __call__(self, _context=None) -> str:
+        return self.text
+
+    def __contains__(self, item: str) -> bool:
+        return item in self.text
+
+    def __str__(self) -> str:
+        return self.text
+
+
 def instructions_for(project: Path) -> str:
     """The project's own instructions file, read as the agent's instruction.
 
@@ -1661,7 +1689,7 @@ def advisor_for(project: Path, model: str, perception: list) -> Agent:
         model=model,
         name=ADVISOR_NAME,
         description=ADVISOR_DESCRIPTION,
-        instruction=ADVISOR_INSTRUCTION,
+        instruction=Verbatim(ADVISOR_INSTRUCTION),
         tools=perception,
         generate_content_config=_retry_config(),
     )
@@ -1708,7 +1736,7 @@ def build(
     # layout is not the repository's.
     chosen_model = model or os.environ.get("POLSON_MODEL", "").strip() or DEFAULT_MODEL
     chosen_dll = cli_dll or os.environ.get("POLSON_CLI_DLL", "").strip() or None
-    instruction = instructions_for(project) + RUNTIME_ADDENDUM
+    instruction = Verbatim(instructions_for(project) + RUNTIME_ADDENDUM)
     # One toolset, shared. See the module docstring for why, and for what it costs.
     toolset = toolset_for(project, Path(chosen_dll) if chosen_dll else None)
     # Perception. Every agent gets these: a role that cannot see its own work is the failure
@@ -1798,7 +1826,7 @@ def build(
             model=chosen_model,
             name=name,
             description=description,
-            instruction=prompt + role_deadline_note(plan.get(name), allowance),
+            instruction=Verbatim(prompt + role_deadline_note(plan.get(name), allowance)),
             tools=[toolset, *perception, *advice],
             generate_content_config=_retry_config(),
             before_model_callback=_make_before_model(plan.get(name), cap, token_cap, raw_cap),
