@@ -307,6 +307,33 @@ public class MotionCameraTests(ITestOutputHelper output) : TestsRuntime
         Assert.True(differing < 0.03, $"{differing:P2} differ from synfig");
     }
 
+    /// <summary>A glow — a blur in a group inside a plane — renders at 1080p, and a plane at rest blurs exactly as the flat layers do.</summary>
+    /// <remarks>
+    /// nvdareport2 (2026-10-20): the plane's matrix is homogeneous, every term times the camera's w (~2,467 at 1920 wide),
+    /// and the filter read it as affine — a 26 px blur asked for a 92,516 px margin and the frame failed to allocate, so the
+    /// agent gave up the camera. <c>Tangent</c> now divides w out.
+    /// </remarks>
+    [Fact]
+    public void AGlowInsideAPlaneRendersAt1080pAsItDoesFlat()
+    {
+        MotionComposition Glow(bool camera)
+        {
+            var comp = new MotionToolkit().Composition(Opts(("width", 1920d), ("height", 1080d), ("fps", 1d), ("duration", 1d)));
+            comp.Fill(Opts(("color", "#07090c")));
+            if (camera) comp.Camera();
+            var plane = camera ? comp.Group(Opts(("z", -200d), ("keepSize", true))) : comp.Group();
+            var glow = plane.Group();
+            glow.Rectangle(Opts(("point1", new[] { 400d, 300d }), ("point2", new[] { 900d, 800d }), ("color", "#f0b030")));
+            glow.Blur(Opts(("type", "gaussian"), ("size", 26d)));
+            plane.Rectangle(Opts(("point1", new[] { 400d, 300d }), ("point2", new[] { 900d, 800d }), ("color", "#f0b030")));
+            return comp;
+        }
+
+        using var inPlane = Glow(camera: true).Render(0);
+        using var flat = Glow(camera: false).Render(0);
+        Assert.Equal(0, Differing(inPlane.SkBitmap, flat.SkBitmap, 2));
+    }
+
     private static MotionComposition Scene(MotionToolkit? motion = null)
     {
         var comp = (motion ?? new MotionToolkit()).Composition(Opts(("width", W), ("height", H), ("fps", 1d), ("duration", 1d)));
