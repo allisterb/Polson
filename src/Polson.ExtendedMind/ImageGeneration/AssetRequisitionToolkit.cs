@@ -427,6 +427,29 @@ public partial class AssetRequisitionToolkit : Runtime
             };
         }
 
+        // **A cutout is one element of an ad, never the ad.** A product ad's packshot is a cutout of the product,
+        // and the composition, the wordmark and the claim around it are the studio's work. The form classifier does
+        // not run on a cutout, so "an advertisement for cold brew" would otherwise be generated whole.
+        if (NamedAdvertisement(descriptor) is { } piece)
+        {
+            var reason =
+                "'" + piece + "' names a finished advertising piece, and a cutout is one element of a composition the "
+                + "code arranges. Ask for the product itself - 'a matte black aluminium can, plain band, no text' - and "
+                + "set its name, the claim and the layout yourself.";
+
+            RequisitionScope.Record(new RequisitionRecord(
+                "cutout", descriptor, Success: false, Failure: nameof(ImageGenerationFailure.InvalidRequest),
+                Reason: reason, Model: null, FromCache: false, Refused: true));
+            RecordBudgetState();
+
+            return new CutoutAsset
+            {
+                Success = false,
+                Failure = ImageGenerationFailure.InvalidRequest,
+                Error = reason,
+            };
+        }
+
         // **The ground is not the caller's to set, and a style that sets one defeats the key.**
         // Found on the first live run: `style` carried "white background", the model obliged both
         // instructions and drew each figure on its own white card inside the magenta gutters. The
@@ -1323,6 +1346,13 @@ public partial class AssetRequisitionToolkit : Runtime
         "painting", "drawing", "artwork", "poster", "sword", "weapon", "robot", "dragon",
     ];
 
+    /// <summary>Finished advertising pieces a cutout refuses (<see cref="NamedAdvertisement"/>).</summary>
+    static readonly string[] AdvertisingPieces =
+    [
+        "advertisement", "advertisements", "advert", "adverts", "ad", "ads", "billboard", "billboards",
+        "flyer", "flyers", "leaflet", "leaflets", "brochure", "brochures",
+    ];
+
     static readonly (string Name, double Ratio)[] Aspects =
     [
         ("1:1", 1.0), ("2:3", 2.0 / 3), ("3:2", 1.5), ("3:4", 0.75), ("4:3", 4.0 / 3),
@@ -1419,6 +1449,16 @@ public partial class AssetRequisitionToolkit : Runtime
     /// the message says how to proceed either way.
     /// </para>
     /// </remarks>
+    /// <summary>The word naming a finished advertising piece in a descriptor, or null. Whole words only.</summary>
+    /// <remarks>"Packshot" is not here: it names the product image a product ad is built round.</remarks>
+    internal static string? NamedAdvertisement(string descriptor)
+    {
+        if (string.IsNullOrWhiteSpace(descriptor)) return null;
+        var lower = descriptor.ToLowerInvariant();
+        return lower.Contains("ad hoc", StringComparison.Ordinal) ? null
+            : AdvertisingPieces.FirstOrDefault(w => ContainsWord(lower, w));
+    }
+
     internal static string? NamedLikeness(string descriptor)
     {
         if (string.IsNullOrWhiteSpace(descriptor)) return null;
