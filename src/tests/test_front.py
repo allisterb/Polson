@@ -110,6 +110,33 @@ class CatalogueTests(unittest.TestCase):
                      "Audience B: Mumbai, aged 45 to 54", "One film per audience"):
             self.assertIn(line, text)
 
+    def test_a_product_ad_is_a_trailer_of_type_product(self):
+        c = catalogue.parse("product-ad", "Nightshift", "0", "", ["1920x1080"], "", [".mp4"],
+                            {"product": "Nightshift, a canned cold brew", "comparables": "Blue Bottle, La Colombe",
+                             "claim": "Steeped for twenty hours.", "cta": "Find it chilled."},
+                            "An ad for a cold brew.", ["Berlin", "Lagos"], ["30_to_34", ""])
+        self.assertEqual((c.workflow, c.kind), ("trailer", "product"))
+        text = c.brief_text([])
+        for line in ("- One ad per audience", "- Comparable brands: Blue Bottle, La Colombe",
+                     "- Claim: Steeped for twenty hours.", "- Call to action: Find it chilled."):
+            self.assertIn(line, text)
+
+    def test_a_film_trailer_never_becomes_a_product_ad(self):
+        """One workflow, two cards: the film trailer offers no type, so it cannot be given the ad's."""
+        film = catalogue.BY_SLUG["film-trailer"]
+        self.assertEqual(catalogue.types_for(film, "trailer"), [])
+        self.assertIs(catalogue.card_for("trailer"), film, "a trailer made elsewhere is a film trailer")
+        with self.assertRaises(StudioError):
+            catalogue.parse("film-trailer", "Harbour", "0", "product", ["1920x1080"], "", [".mp4"], {}, "A film.",
+                            ["Tokyo"], [""])
+        c = catalogue.parse("film-trailer", "Harbour", "0", "", ["1920x1080"], "", [".mp4"], {}, "A film.",
+                            ["Tokyo", "Mumbai"], ["", ""])
+        self.assertEqual(c.kind, "")
+        self.assertIn("- One film per audience", c.brief_text([]))
+
+    def test_a_poster_may_be_a_product_ad(self):
+        self.assertIn(("product", "Product ad"), catalogue.types_for(catalogue.BY_SLUG["poster"], "poster"))
+
     def test_audiences_are_places_with_an_optional_age_band(self):
         self.assertEqual(catalogue.parse_audiences(["  São   Paulo ", "Mexico City", ""], ["", "55_and_older", ""]),
                          [("São Paulo", ""), ("Mexico City", "55_and_older")])
@@ -397,7 +424,8 @@ class FrontRoutingTests(unittest.TestCase):
 class FakeCommissioner:
     """Stands in for `adk_agent.intake.Commissioner`: offers drawing (review only) and the infographics."""
 
-    TYPES = {"drawing": ("review",), "vector_infographic": ("editorial", "swiss"), "infographic": ("editorial",)}
+    TYPES = {"drawing": ("review",), "vector_infographic": ("editorial", "swiss"), "infographic": ("editorial",),
+             "trailer": ("product",)}
 
     def __init__(self, root: Path, refuse: Exception | None = None) -> None:
         self.root, self.refuse, self.made = root, refuse, []
@@ -473,6 +501,32 @@ class CommissionedComposerTests(unittest.TestCase):
         self.assertEqual((made["documents"], made["contents"]), (["notes.txt"], [b"lantern room first"]))
         record = json.loads((self.root / "lighthouse_sketch" / front.REQUEST_FILE).read_text(encoding="utf-8"))
         self.assertEqual((record["title"], record["type"], record["files"]), ("Lighthouse sketch", "review", ["notes.txt"]))
+
+    def trailer(self, card: str, **overrides):
+        data = {"card": card, "title": "Nightshift", "route": "0", "kind": "", "sizes": ["1920x1080"],
+                "formats": [".mp4"], "brief": "Fifteen seconds.", "aud_place": ["Berlin", "Lagos"],
+                "aud_age": ["", ""], "action": "start"}
+        data.update(overrides)
+        return data
+
+    def test_a_product_ad_is_commissioned_as_a_product_trailer(self):
+        reply = self.client.post("/requests", data=self.trailer("product-ad", x_claim="Steeped for twenty hours."),
+                                 follow_redirects=False)
+        self.assertEqual(reply.status_code, 303, reply.text[:300])
+        made = self.commissioner.made[0]
+        self.assertEqual((made["workflow"], made["kind"]), ("trailer", "product"))
+        self.assertIn("- Claim: Steeped for twenty hours.", made["brief"])
+
+    def test_a_film_trailer_is_not_given_the_workflows_lone_type(self):
+        """The host offers `trailer` one type; the film trailer's card offers none, and the card decides."""
+        reply = self.client.post("/requests", data=self.trailer("film-trailer"), follow_redirects=False)
+        self.assertEqual(reply.status_code, 303, reply.text[:300])
+        self.assertEqual(self.commissioner.made[0]["kind"], "")
+
+    def test_neither_trailer_card_shows_a_kind_picker(self):
+        for card in ("product-ad", "film-trailer"):
+            with self.subTest(card=card):
+                self.assertNotIn('name="kind"', self.client.get(f"/compose/{card}").text)
 
     def test_a_workflow_the_host_does_not_run_is_refused_without_commissioning(self):
         reply = self.client.post("/requests", data={**self.drawing(), "card": "poster", "kind": "film",

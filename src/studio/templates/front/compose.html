@@ -35,7 +35,7 @@
         <summary class="ps-field"><span class="ps-field-label">Audience<span class="ps-req" aria-hidden="true"> *</span></span><span class="ps-field-value" data-summary>Who is it for?</span>{{ m.icon('chevron-down', 18) }}</summary>
         <section class="ps-ogrid fr-panel fr-narrow" aria-label="Audience">
           <h3 class="ps-ogrid-title">Who is it for?</h3>
-          <p class="ps-ogrid-hint">A place and an age band for each audience. With more than one, the studio makes a {{ 'film' if card.kind == 'video' else 'piece' }} for each and compares what they love.</p>
+          <p class="ps-ogrid-hint">A place and an age band for each audience. With more than one, the studio makes {{ 'an' if card.piece == 'ad' else 'a' }} {{ card.piece }} for each and compares what they love.</p>
           <div class="fr-audiences">
             {% for i in range(max_audiences) %}
             {%- set a = given[i] if i < given|length else {} -%}

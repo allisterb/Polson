@@ -24,8 +24,7 @@ director confirms it.
 | What it announces — the film, with its title (fictional, or real with its year) | |
 | Logline, in one sentence | |
 | Comparable titles (real, two or three; optional for a real film) | |
-| Audience A — place, age band, optionally gender | |
-| Audience B — place, age band, optionally gender | |
+| Audiences A, B, … (two to six) — each a place, an age band, optionally gender | |
 | Tagline, if any | |
 | Billing — fictional for a fictional film; the real credits, as text, for a real one | |
 | Where it will be seen, and from how far | |

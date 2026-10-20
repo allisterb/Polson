@@ -376,7 +376,7 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
         if runs and route not in runs:
             route = min(runs)
         styles = {i: [(v, label) for v, label in catalogue.types_for(card, r.workflow)
-                      if i in runs and (runs[i] is None or v in runs[i])]
+                      if i in runs and (runs[i] is None or v in runs[i]) and not card.fixed_type]
                   for i, r in enumerate(card.routes)}
         return page(request, "compose.html", "new", status_code=status_code, card=card,
                     sizes=catalogue.SIZES[card.kind], formats=catalogue.FORMATS[card.kind],
@@ -530,9 +530,11 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
             if commission.kind and commission.kind not in types:
                 raise StudioError(f"That {chosen.style_label.lower()} is not offered here. "
                                   f"Choose one of: {', '.join(types)}.")
-            # One type is not a choice, as on the intake form: what it would have chosen anyway is chosen.
-            if not commission.kind and len(types) == 1:
-                commission.kind = types[0]
+            # One type is not a choice, as on the intake form: what it would have chosen anyway is chosen. **The
+            # card's types, not the workflow's**: a film trailer's card offers none, though its workflow has one.
+            offered = [t for t, _ in catalogue.types_for(chosen, commission.workflow) if t in types]
+            if not commission.kind and len(offered) == 1:
+                commission.kind = offered[0]
             staged = await uploads.stage(files, scratch)
             name = commissioner.free_name(commission.title)
             await commissioner.commission(name, commission.workflow, commission.kind,

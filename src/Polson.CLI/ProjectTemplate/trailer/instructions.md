@@ -42,6 +42,10 @@ for (const d of Documents.list()) log(`${d.path}  ${d.bytes}B  ${d.mimeType}`);
 
 ---
 
+{{TYPE}}
+
+---
+
 ## The process
 
 | Stage | What happens | Ask the director |
