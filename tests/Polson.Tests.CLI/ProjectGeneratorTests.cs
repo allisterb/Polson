@@ -92,11 +92,16 @@ public partial class ProjectGeneratorTests : TestsRuntime, IDisposable
     public void TestNoBraceVariableSurvivesIntoTheInstructions(string workflow)
     {
         var id = "brace-" + workflow;
+        // The template's own text only. The inlined manuals carry JavaScript examples such as `createHeadGeometry({ face })`,
+        // and since 2026-10-19 ADK never templates them: `studio.Verbatim` hands every instruction over as a provider,
+        // which ADK passes through untouched (src/adk_agent/tests/test_verbatim_instruction.py). What this still guards
+        // is prose we write in a template, where a bare brace is a slip rather than an example.
         Assert.True(ProjectGenerator.Create(Options(id, o =>
         {
             o.Workflow = workflow;
             o.Test = true;
             o.Deadline = 15;
+            o.NoInlineManuals = true;
         })));
 
         var dir = Path.Combine(root, id);
@@ -473,9 +478,25 @@ public partial class ProjectGeneratorTests : TestsRuntime, IDisposable
         Assert.True(File.Exists(Path.Combine(folder, $"{PolsonManuals.Find("11")!.Id}_{PolsonManuals.Find("11")!.Slug}.md")), "the logo manual is there");
         Assert.True(File.Exists(Path.Combine(folder, "notes.md")), "the director's file is kept");
 
-        Assert.True(ProjectGenerator.Create(Options("regen", o => { o.Sdk = "claude"; o.Workflow = "logo"; o.Force = true; })));
+        Assert.True(ProjectGenerator.Create(Options("regen", o => { o.Sdk = "claude"; o.Workflow = "logo"; o.NoInlineManuals = true; o.Force = true; })));
 
         Assert.Equal(["notes.md"], Directory.GetFiles(folder).Select(Path.GetFileName));
+    }
+
+    /// <summary>
+    /// The manuals go in unless a command says otherwise (2026-10-20): a pointer has never reliably produced a read —
+    /// a Gemini logo run opened none of its manuals — and an open model given them inline worked in their terms.
+    /// </summary>
+    [Fact]
+    public void TestTheJudgmentManualsAreInlinedByDefault()
+    {
+        Assert.True(ProjectGenerator.Create(Options("bydefault", o => { o.Workflow = "logo"; })));
+        Assert.True(ProjectGenerator.Create(Options("optedout", o => { o.Workflow = "logo"; o.NoInlineManuals = true; })));
+
+        var manual = PolsonManuals.Find("11")!;
+        var heading = $"### Manual {manual.Id} — {manual.Title}";
+        Assert.Contains(heading, File.ReadAllText(Path.Combine(root, "bydefault", "GEMINI.md")), StringComparison.Ordinal);
+        Assert.DoesNotContain(heading, File.ReadAllText(Path.Combine(root, "optedout", "GEMINI.md")), StringComparison.Ordinal);
     }
     #endregion
 

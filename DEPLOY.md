@@ -151,7 +151,7 @@ Worth setting deliberately rather than leaving at defaults:
   15-minute grace already *is* the 3600s ceiling. Set it to `0` for a fully unattended deployment,
   where nobody will answer and every wait is real time spent.
 - **`POLSON_PEEK_STABLE_NAME`** — save every peek under one artifact name per file type instead of
-  the render's own path. **Off by default.** ADK's `LoadArtifactsTool` writes the artifact *name
+  the render's own path. **On by default since 2026-10-20; `0` turns it off.** ADK's `LoadArtifactsTool` writes the artifact *name
   list* into the instructions, which is the head of the prompt-cache prefix, so each new name
   re-bills the whole conversation at full price while a new *version* costs nothing. Measured across
   two drawing runs: cache misses took **57% and 62%** of the run's entire budget, and the misses land

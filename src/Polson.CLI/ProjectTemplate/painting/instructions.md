@@ -263,3 +263,5 @@ In this directory:
 Query them rather than recalling from memory. A call invented from memory that happens to sound right
 will fail in ways that cost more than the lookup — and here, a failed requisition costs money as well
 as time.
+
+{{MANUALS}}

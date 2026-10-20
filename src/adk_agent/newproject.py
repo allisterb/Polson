@@ -120,7 +120,7 @@ class GenerateError(RuntimeError):
 def _run_create_project(
     projects_dir: Path, project_id: str, workflow: str,
     prompt: str | None, type_: str | None, force: bool, test: bool = False,
-    deadline: int | None = None,
+    deadline: int | None = None, inline_manuals: bool = True,
 ) -> Path:
     """Shells out to the one thing that knows how to build a project."""
     if not CLI_DLL.is_file():
@@ -160,6 +160,10 @@ def _run_create_project(
     # 90, so its breaker sits at 105 against a 60-minute ceiling.
     if deadline is not None:
         args += ["--deadline", str(deadline)]
+    # The workflow's manuals are written into GEMINI.md by default (the CLI's own default since 2026-10-20): pointing
+    # at a manual has never reliably produced a read. The cost is a larger prefix, which the cache holds after turn one.
+    if not inline_manuals:
+        args += ["--no-inline-manuals"]
 
     done = subprocess.run(args, capture_output=True, text=True)
     if done.returncode != 0:
@@ -256,6 +260,7 @@ def create(
     type_: str | None = None, force: bool = False, test: bool = False,
     deadline: int | None = None, documents: list[str] | None = None,
     projects_dir: Path = PROJECTS_DIR, apps_dir: Path = APPS_DIR, budget_tokens: int | None = None,
+    inline_manuals: bool = True,
 ) -> tuple[Path, Path]:
     """Generates the project and its app. Returns `(project_dir, app_package)`."""
     if not VALID_APP_NAME.match(project_id):
@@ -264,7 +269,7 @@ def create(
             "letters, digits, underscores and dashes."
         )
     project = _run_create_project(
-        projects_dir, project_id, workflow, prompt, type_, force, test, deadline)
+        projects_dir, project_id, workflow, prompt, type_, force, test, deadline, inline_manuals)
     stage_documents(project, documents)
     return project, write_app(project, project_id, apps_dir, budget_tokens)
 
@@ -297,6 +302,9 @@ def main(argv: list[str] | None = None) -> int:
                              "Documents.list() and reads one with Documents.ask(path, question). "
                              "Copied, not referenced: a path outside the project is unreadable to "
                              "the agent and absent entirely when deployed.")
+    parser.add_argument("--no-inline-manuals", dest="inline_manuals", action="store_false",
+                        help="Leave the workflow's manuals to be looked up instead of writing them into GEMINI.md "
+                             "(the default writes them in).")
     parser.add_argument("--projects-dir", type=Path, default=PROJECTS_DIR)
     args = parser.parse_args(argv)
 
@@ -305,7 +313,7 @@ def main(argv: list[str] | None = None) -> int:
             args.project_id, workflow=args.workflow, prompt=args.prompt,
             type_=args.type_, force=args.force, test=args.test,
             deadline=args.deadline, documents=args.documents,
-            projects_dir=args.projects_dir)
+            projects_dir=args.projects_dir, inline_manuals=args.inline_manuals)
     except GenerateError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1

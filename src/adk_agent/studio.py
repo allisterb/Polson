@@ -268,12 +268,13 @@ def toolset_for(project: Path, cli_dll: Path | None = None) -> McpToolset:
 
 #: Save every peek under one artifact name per file type, rather than under the file's own path.
 #:
-#: **Off by default, and the default is the cautious one rather than the right one.** It is the whole
-#: perception path: if `peek` breaks, every run breaks. Switch it on with `POLSON_PEEK_STABLE_NAME`,
-#: watch one run, and switch it off again in seconds if anything looks wrong. See `_make_peek` for
-#: what it does and what it measurably saves.
-PEEK_STABLE_NAME = os.environ.get("POLSON_PEEK_STABLE_NAME", "").strip().lower() in {
-    "1", "true", "yes", "on"}
+#: **On by default since 2026-10-20**, after running on the deployed service throughout. It was off
+#: as the cautious default while untried; nemologo4 then showed the cost of leaving it off: ten peeks
+#: at ten new names, turns of 135-165k input with only the ~22k instruction head cached, and the run
+#: halted by the token breaker at 7 of its 20 minutes. `POLSON_PEEK_STABLE_NAME=0` turns it off. See
+#: `_make_peek` for what it does and what it saves.
+PEEK_STABLE_NAME = os.environ.get("POLSON_PEEK_STABLE_NAME", "1").strip().lower() not in {
+    "0", "false", "no", "off"}
 
 #: What a script can render, and so what `peek` can show. An `.svg` is not here and is not readable
 #: either: see `read_file`, which turns one away with the route that actually produces a picture.
@@ -299,8 +300,9 @@ def _make_peek(project: Path):
     async def peek(artifact_path: str, tool_context) -> dict:
         """Look at an image this project rendered. Call this after every render, before judging it.
 
-        Loads the image into your context so you can actually see it. You cannot assess a render you
-        have not peeked at — describing one you have not looked at is guessing, and it will be wrong.
+        The image itself is attached to your next turn, directly after this result, and you see it
+        there. You cannot assess a render you have not peeked at — describing one you have not looked
+        at is guessing, and it will be wrong.
 
         Args:
             artifact_path: Path of the image, relative to the project directory, exactly as passed
@@ -374,9 +376,60 @@ def _make_peek(project: Path):
 
         return {"ok": True, "filename": filename, "version": version, "bytes": len(data),
                 "source": source,
-                "note": "Loaded. Call load_artifacts to bring it into view, then say what you see."}
+                "note": "Attached: the image is in your next turn, right after this result. Look at it "
+                        "and say what you see. No further call is needed."}
 
     return peek
+
+
+def _make_attach_peeks(project: Path):
+    """A before-model step that puts each image just peeked at into the request, as a picture.
+
+    **One call to look, not two.** `peek` used to save the render and tell the model to call
+    `load_artifacts`, whose reply reads *"artifact contents temporarily inserted and removed"*. Gemini
+    took that in its stride. Nemotron 3.5 Super VL described its first renders correctly — *"the disks
+    are cut off at the bottom"* — and then, on its fourth look, decided *"as a text model, I actually
+    can't see it"* and worked from ASCII pixel dumps for the rest of the run (nemologo3, 2026-10-20). The
+    wording, not the model, took its eyes away; and the second call cost every model a turn per look.
+
+    The image goes in the way `LoadArtifactsTool` puts one in — a user turn after the tool's result,
+    present for the next request only — so the conversation does not carry every render for ever.
+    Read from disk, inside the project, by the path `peek` already checked.
+    """
+
+    async def attach_peeks(callback_context, llm_request):
+        contents = llm_request.contents or []
+        if not contents or not contents[-1].parts:
+            return None
+        attached: list = []
+        for part in contents[-1].parts:
+            response = part.function_response
+            if response is None or response.name != "peek" or not isinstance(response.response, dict):
+                continue
+            result = response.response
+            source = result.get("source")
+            if not result.get("ok") or not isinstance(source, str):
+                continue
+            candidate = (project / source).resolve()
+            mime = PEEKABLE.get(candidate.suffix.lower())
+            try:
+                candidate.relative_to(project)
+                data = candidate.read_bytes() if mime else b""
+            except (ValueError, OSError):
+                continue
+            if not data or len(data) > MAX_PEEK_BYTES:
+                continue
+            attached += [
+                types.Part.from_text(text=f"This is {source}, as rendered: the image itself, attached for this "
+                                          "turn. You are looking at it now. Say what you see before deciding what "
+                                          "to change."),
+                types.Part.from_bytes(data=data, mime_type=mime),
+            ]
+        if attached:
+            contents.append(types.Content(role="user", parts=attached))
+        return None
+
+    return attach_peeks
 
 
 #: What `write_script` will author. Still not a general file-write tool — a fixed, short list rather
@@ -765,9 +818,94 @@ RETRY_MAX_DELAY = 60.0
 RETRY_STATUS_CODES = [429, 500, 502, 503, 504]
 
 
-def _retry_config() -> types.GenerateContentConfig:
-    """Client-side backoff and thought summaries, applied to every agent this module builds."""
+# --------------------------------------------------------------------------------------------
+# Models served through LiteLLM (Nebius Token Factory).
+# --------------------------------------------------------------------------------------------
+#
+# **A Gemini model stays a string**, exactly as before: ADK resolves it, and nothing here imports LiteLLM. A
+# model named with a LiteLLM provider prefix becomes ADK's `LiteLlm`, which speaks the OpenAI-compatible API — the
+# route Nebius's own cookbook uses (token-factory-cookbook, agents/google-adk-tool-calling). It needs the
+# `python-nebius-adk/` venv (`requirements-nebius.txt`); the Qloo runtime on `python-adk/` never reaches this.
+#
+# Measured on Nemotron 3.5 Super VL (2026-10-19): it reasons at length before answering — 1,300-3,200 reasoning
+# tokens for one image question — and with a 4,000-token ceiling the reasoning used all of it and no answer came.
+
+#: Provider prefixes that mean "not Gemini: go through LiteLLM".
+LITELLM_PREFIXES: tuple[str, ...] = ("nebius/",)
+
+#: Output allowance per turn for a LiteLLM model, reasoning included. Gemini keeps its own default.
+LITELLM_MAX_OUTPUT_TOKENS = int(os.environ.get("POLSON_MAX_OUTPUT_TOKENS", "32768"))
+
+
+def is_litellm(model: str) -> bool:
+    return model.startswith(LITELLM_PREFIXES)
+
+
+def model_for(name: str):
+    """What an `Agent` is given as its model: the name itself for Gemini, a `LiteLlm` for a prefixed name.
+
+    **LiteLLM fetches its price list from GitHub at import** unless told not to, so the flag is set before the
+    import (measured under an audit hook: with it, importing LiteLLM opens no connection and starts no process).
+    The key is `NEBIUS_API_KEY`, which LiteLLM's `nebius/` provider reads itself, and the endpoint
+    `NEBIUS_API_BASE`: an account's Token Factory host is regional, so the provider's built-in default may not be it.
+    """
+    if not is_litellm(name):
+        return name
+    os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
+    from google.adk.models.lite_llm import LiteLlm               # noqa: PLC0415 - deliberately late
+
+    base = os.environ.get("NEBIUS_API_BASE", "").strip()
+    return LiteLlm(model=name, **({"api_base": base} if base else {}))
+
+
+#: The first segment of a name that is the JavaScript SDK's, not a tool: `Stage.begin`, `Snap(...)`.
+_SDK_GLOBALS = frozenset({
+    "Stage", "Snap", "Skia", "Motion", "Taste", "Documents", "Assets", "Drawing", "Session", "Scene", "Photo",
+    "Research", "Project", "Canvas", "console", "log",
+})
+
+
+def _unknown_tool(tool, args, tool_context, error):
+    """Answers a call to a tool that does not exist with what to do instead, so the run goes on.
+
+    **ADK ends the run on an unknown tool name**: `_get_tool` raises `ValueError`, and only an
+    `on_tool_error_callback` that returns a dict turns it into a tool response. Gemini never needed this. Nemotron
+    3.5 Super VL called `Stage.begin` as a tool — a JavaScript call that belongs inside `ExecuteScript` — twice in its
+    first two runs, the second time as the run's last act (nemologo1, 2026-10-19). The answer names the confusion,
+    because a bare "not found" teaches nothing and the next call repeats it.
+
+    Returns None for every other error, so those keep their own handling.
+    """
+    message = str(error)
+    if not isinstance(error, ValueError) or not message.startswith("Tool '") or " not found." not in message:
+        return None
+    name = getattr(tool, "name", "") or ""
+    available = message.split("Available tools:", 1)[1].split("\n", 1)[0].strip() if "Available tools:" in message else ""
+    logging.getLogger("polson.studio").warning("the model called a tool that does not exist: %s", name)
+    head = name.split(".", 1)[0].split("(", 1)[0]
+    if "." in name or head in _SDK_GLOBALS:
+        call = name if "(" in name else f"{name}(...)"
+        return {
+            "error": f"'{name}' is not a tool. It is part of the JavaScript SDK, which runs only inside a script.",
+            "remedy": f"Call ExecuteScript with a script that makes the call, e.g. script: \"{call};\" — the same as "
+                      f"any other SDK call. Tools are only these: {available}.",
+        }
+    return {
+        "error": f"There is no tool called '{name}'.",
+        "remedy": f"Use one of these tools: {available}. Anything else in the SDK is called from a script with "
+                  "ExecuteScript.",
+    }
+
+
+def _retry_config(model: str | None = None) -> types.GenerateContentConfig:
+    """Client-side backoff and thought summaries, applied to every agent this module builds.
+
+    For a LiteLLM model the same object is read differently: ADK's adapter takes the retry count as `num_retries`
+    and `max_output_tokens` as `max_completion_tokens`, and ignores the thinking config, which is Gemini's. So the
+    one addition is the output allowance, which a reasoning model needs and Gemini's default already gives.
+    """
     return types.GenerateContentConfig(
+        max_output_tokens=LITELLM_MAX_OUTPUT_TOKENS if model and is_litellm(model) else None,
         # **Thinking is billed whether or not it is returned, and it was being billed silently.**
         # Gemini emits a thought *part* only when summaries are asked for; without this the model
         # reasons, `thoughts_token_count` climbs, and `part.thought` is never true — so the
@@ -1559,8 +1697,8 @@ desktop host would otherwise provide.
 - **`read_file(path)` — read a text file in the project.** Start with `brief.md`: it is the
   client's actual request, and nothing else can open it for you.
 - **`peek(artifact_path)` — look at what you rendered.** You cannot see a render otherwise. After
-  every `outFile`, peek at it, then `load_artifacts` to bring it into view, and only then say what
-  you see. Describing a render you have not peeked at is guessing, and it will be wrong.
+  every `outFile`, peek at it: the image itself arrives with your next turn, and you see it there. Only
+  then say what you see. Describing a render you have not peeked at is guessing, and it will be wrong.
 - **`write_script(path, content)` — keep your drawing in a file.** Once a piece is more than a
   screenful, save it as `artwork.js` and run it with `ExecuteScript(scriptFile='artwork.js', ...)`.
 - **`edit_script(path, old_text, new_text)` — change part of it.** Use this for every revision
@@ -1633,8 +1771,8 @@ called for one answer, not for a conversation: what you say goes straight back t
 are gone.
 
 1. **Read `brief.md`** with `read_file`. Their problem is usually that they have drifted from it.
-2. **Look at the render they name**, with `peek`, then `load_artifacts`. Do not answer without
-   looking. If they gave you no path, say so and ask for one — that is a complete answer.
+2. **Look at the render they name**, with `peek`; the image arrives with your next turn. Do not
+   answer without looking. If they gave you no path, say so and ask for one — that is a complete answer.
 3. **Say what to do next**, in three sentences or fewer.
 
 What makes this useful is that you have not been in their head for the last hour. Say the obvious
@@ -1686,12 +1824,14 @@ that is not working is the usual way a deadline is missed.
 def advisor_for(project: Path, model: str, perception: list) -> Agent:
     """The agent behind `ask_facilitator`. Looking tools only — deliberately no drawing."""
     return Agent(
-        model=model,
+        model=model_for(model),
         name=ADVISOR_NAME,
         description=ADVISOR_DESCRIPTION,
         instruction=Verbatim(ADVISOR_INSTRUCTION),
         tools=perception,
-        generate_content_config=_retry_config(),
+        generate_content_config=_retry_config(model),
+        on_tool_error_callback=_unknown_tool,
+        before_model_callback=_make_attach_peeks(project),
     )
 
 
@@ -1823,13 +1963,15 @@ def build(
 
     sub_agents = [
         Agent(
-            model=chosen_model,
+            model=model_for(chosen_model),
             name=name,
             description=description,
             instruction=Verbatim(prompt + role_deadline_note(plan.get(name), allowance)),
             tools=[toolset, *perception, *advice],
-            generate_content_config=_retry_config(),
-            before_model_callback=_make_before_model(plan.get(name), cap, token_cap, raw_cap),
+            generate_content_config=_retry_config(chosen_model),
+            on_tool_error_callback=_unknown_tool,
+            before_model_callback=[_make_attach_peeks(project),
+                                   _make_before_model(plan.get(name), cap, token_cap, raw_cap)],
             after_model_callback=_after_model,
             disallow_transfer_to_peers=not transfer_between_roles,
         )
@@ -1837,7 +1979,7 @@ def build(
     ]
 
     return Agent(
-        model=chosen_model,
+        model=model_for(chosen_model),
         name=root_name,
         description=(
             "Coordinates a multi-agent design studio." if sub_agents else
@@ -1849,8 +1991,10 @@ def build(
         # multi-agent case the Facilitator still needs to look at what the roles produced. `asking`
         # is here and nowhere else — see where it is built.
         tools=[toolset, *perception, *asking],
-        generate_content_config=_retry_config(),
-        before_model_callback=_make_before_model(plan.get(root_name), cap, token_cap, raw_cap),
+        generate_content_config=_retry_config(chosen_model),
+        on_tool_error_callback=_unknown_tool,
+        before_model_callback=[_make_attach_peeks(project),
+                               _make_before_model(plan.get(root_name), cap, token_cap, raw_cap)],
         after_model_callback=_after_model,
         sub_agents=sub_agents,
     )
