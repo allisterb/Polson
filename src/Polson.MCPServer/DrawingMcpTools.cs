@@ -1158,11 +1158,12 @@ public partial class DrawingMcpTools
             // same scope because both are metered surfaces whose spend a reader needs, but filing a
             // read under `asset.requisition` would inflate `RunReport`'s requisition count — a run
             // that read three PDFs and bought nothing would report three assets bought.
-            var document = string.Equals(r.Kind, "document", StringComparison.Ordinal);
+            // A watched clip is the same kind of event under its own name: a client's file sent away to be read.
+            var read = r.Kind is "document" or "video";
 
             if (r.Refused)
             {
-                Events.Append(document ? "document.refused" : "asset.refused", stage, executionId, fields);
+                Events.Append(read ? $"{r.Kind}.refused" : "asset.refused", stage, executionId, fields);
                 continue;
             }
 
@@ -1172,7 +1173,7 @@ public partial class DrawingMcpTools
             // A spoken line is the one requisition that lands in the project as a file; name it as renders are named.
             if (r.Artifact is { } artifact) fields["artifact"] = Events.Relativize(artifact);
 
-            Events.Append(document ? "document.read" : "asset.requisition", stage, executionId, fields);
+            Events.Append(read ? $"{r.Kind}.read" : "asset.requisition", stage, executionId, fields);
         }
 
         if (requisitions.Budget is { } budget)

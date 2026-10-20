@@ -198,6 +198,9 @@ internal static class RunReport
             // reads of which three were cached is a different answer from four that were not.
             ["documentsCached"] = events.Count(e => Type(e) == "document.read"
                 && e["fromCache"]?.GetValue<bool>() == true),
+            ["videosRead"] = Count("video.read"),
+            ["videosRefused"] = Count("video.refused"),
+            ["videosCached"] = events.Count(e => Type(e) == "video.read" && e["fromCache"]?.GetValue<bool>() == true),
             ["artifactsRead"] = new JsonArray([.. artifactsRead.Select(a => (JsonNode)a!)]),
             ["stages"] = new JsonArray([.. stages.Select(s => (JsonNode)s!)]),
             ["scriptFilesOnDisk"] = scriptFiles.Length,
@@ -554,6 +557,11 @@ internal static class RunReport
                 : $"{Num("documentsRead")} read"
                   + (Num("documentsCached") > 0 ? $" ({Num("documentsCached")} from cache)" : "")
                   + (Num("documentsRefused") > 0 ? $", {Num("documentsRefused")} refused" : "")),
+            ("videos watched", Num("videosRead") == 0 && Num("videosRefused") == 0
+                ? "none"
+                : $"{Num("videosRead")} watched"
+                  + (Num("videosCached") > 0 ? $" ({Num("videosCached")} from cache)" : "")
+                  + (Num("videosRefused") > 0 ? $", {Num("videosRefused")} refused" : "")),
 
             // Concatenated across sessions this row is the misleading one, so it says so and hands
             // the reader to the breakdown instead of printing four runs as one stage sequence.

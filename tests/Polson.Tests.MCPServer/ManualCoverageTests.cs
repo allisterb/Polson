@@ -105,6 +105,9 @@ public class ManualCoverageTests : TestsRuntime
         // being brought up to it. No manual yet — the SDK reference is its only prose, which is why
         // the floor is what holds it reachable.
         ["Documents"] = 100,
+
+        // Documents' members on another service, documented as it was built (2026-10-20).
+        ["Video"] = 100,
         ["Snap"] = 82,
         ["Canvas2D"] = 75,
         ["VectorLogo"] = 74,

@@ -22,6 +22,7 @@ in place of the film ones, and ask for what is missing:
 | The claim, worded exactly as it may appear | |
 | Call to action, and where it sends people (words only; no real URL unless the brief gives one) | |
 | Product shot and logo in `documents/` (file names), or none | |
+| Reference video in `documents/` (file name), and what to take from it — or none | |
 | Audiences A, B, … — place, age band | |
 | Anything explicitly ruled out | |
 

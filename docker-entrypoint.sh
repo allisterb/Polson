@@ -40,7 +40,7 @@ CLI_SETTINGS="/app/bin/cli/appsettings.json"
 #
 # All whitespace rather than just the trailing newline: an API key contains none, so this also
 # covers a CRLF from a Windows-written file and a stray leading space from a copy-paste.
-for _credential in POLSON_AGENT_PLATFORM_KEY POLSON_PARALLEL_KEY POLSON_QLOO_KEY; do
+for _credential in POLSON_AGENT_PLATFORM_KEY POLSON_PARALLEL_KEY POLSON_QLOO_KEY POLSON_NEBIUS_KEY; do
     eval "_value=\${$_credential:-}"
     [ -n "$_value" ] || continue
 
@@ -100,6 +100,11 @@ SETTINGS = [
     ("POLSON_QLOO_BUDGET",            "Qloo:Budget",                 int),
     ("POLSON_QLOO_MONTHLY_RESERVE",   "Qloo:MonthlyReserve",         int),
     ("POLSON_QLOO_CACHE_DIR",         "Qloo:CacheDir",               str),
+    ("POLSON_NEBIUS_KEY",             "ApiKeys:NebiusTokenFactory",  str),
+    ("POLSON_NEBIUS_BASE_URL",        "NebiusTokenFactory:BaseUrl",  str),
+    ("POLSON_VIDEO_MODEL",            "Video:Model",                 str),
+    ("POLSON_VIDEO_BUDGET",           "Video:Budget",                int),
+    ("POLSON_VIDEO_CACHE_DIR",        "Video:CacheDir",              str),
     ("POLSON_SERVER_TIMEOUT_SECONDS", "Server:DefaultTimeoutSeconds", int),
 ]
 

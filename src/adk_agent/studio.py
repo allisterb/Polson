@@ -860,7 +860,7 @@ def model_for(name: str):
 
 #: The first segment of a name that is the JavaScript SDK's, not a tool: `Stage.begin`, `Snap(...)`.
 _SDK_GLOBALS = frozenset({
-    "Stage", "Snap", "Skia", "Motion", "Taste", "Documents", "Assets", "Drawing", "Session", "Scene", "Photo",
+    "Stage", "Snap", "Skia", "Motion", "Taste", "Documents", "Video", "Assets", "Drawing", "Session", "Scene", "Photo",
     "Research", "Project", "Canvas", "console", "log",
 })
 

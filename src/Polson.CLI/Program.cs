@@ -60,6 +60,9 @@ internal class Program : Runtime
     /// <summary>Document reads allowed per session when nothing is configured.</summary>
     const int DefaultDocumentBudget = 40;
 
+    /// <summary>Clips watched per session when nothing is configured. About 2,400 input tokens per 15 s of video.</summary>
+    const int DefaultVideoBudget = 40;
+
     /// <summary>
     /// Reference photographs allowed per run. Far smaller than the asset budget because the unit is
     /// bigger: one photograph is a whole subject in the finished graphic, and a piece needing more
@@ -249,14 +252,45 @@ internal class Program : Runtime
         }
     }
 
-    internal static int ResolveDocumentBudget(string? configured)
+    /// <summary>
+    /// Wires watching a clip, served by Nebius Token Factory whatever model the agent runs on.
+    /// </summary>
+    /// <remarks>
+    /// The same containment and the same reasoning about the cache as <see cref="ConfigureDocuments"/>; the
+    /// answers live beside the documents' rather than among them, so neither surface can serve the other's.
+    /// </remarks>
+    static void ConfigureVideo(string projectDir)
     {
-        if (string.IsNullOrWhiteSpace(configured)) return DefaultDocumentBudget;
+        var apiKey = Setting("ApiKeys:NebiusTokenFactory");
+        var baseUrl = Setting("NebiusTokenFactory:BaseUrl");
+        var model = Setting("Video:Model") ?? VideoReader.DefaultVideoModel;
+        var budget = ResolveDocumentBudget(Setting("Video:Budget"), DefaultVideoBudget, "Video:Budget");
+        var cacheDir = Setting("Video:CacheDir") ?? Path.Combine(projectDir, ".polson", "video");
+
+        JsDrawingEngine.Video = new VideoReader(
+            apiKey, baseUrl, new DocumentBudget(budget), projectDir, model, new DocumentCache(cacheDir));
+
+        if (string.IsNullOrWhiteSpace(apiKey) || string.IsNullOrWhiteSpace(baseUrl))
+        {
+            Warn("Video watching disabled: ApiKeys:NebiusTokenFactory or NebiusTokenFactory:BaseUrl is missing in {0}.",
+                Path.Combine(AssemblyLocation, "appsettings.json"));
+        }
+        else
+        {
+            Info("Video watching enabled (model: {0}, budget: {1} clips).", model, budget);
+        }
+    }
+
+    internal static int ResolveDocumentBudget(string? configured) =>
+        ResolveDocumentBudget(configured, DefaultDocumentBudget, "Documents:Budget");
+
+    internal static int ResolveDocumentBudget(string? configured, int fallback, string setting)
+    {
+        if (string.IsNullOrWhiteSpace(configured)) return fallback;
         if (int.TryParse(configured, out var parsed) && parsed >= 0) return parsed;
 
-        Warn("Documents:Budget '{0}' is not a non-negative integer; using {1}.",
-            configured, DefaultDocumentBudget);
-        return DefaultDocumentBudget;
+        Warn("{0} '{1}' is not a non-negative integer; using {2}.", setting, configured, fallback);
+        return fallback;
     }
 
     /// <summary>
@@ -681,6 +715,7 @@ internal class Program : Runtime
 
         ConfigureAssetRequisition(projectDir);
         ConfigureDocuments(projectDir);
+        ConfigureVideo(projectDir);
         ConfigurePhotos();
         ConfigureResearch(projectDir);
         ConfigureTaste();

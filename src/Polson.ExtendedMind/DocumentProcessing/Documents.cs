@@ -52,6 +52,10 @@ public static class Documents
         [".jpg"] = "image/jpeg",
         [".jpeg"] = "image/jpeg",
         [".webp"] = "image/webp",
+
+        // A reference clip the director supplied. Listed here so `Documents.list()` stays the one place an agent
+        // finds out what it was given; `Video.ask` is the surface built for watching one.
+        [".mp4"] = "video/mp4",
     };
 }
 
@@ -87,6 +91,10 @@ public sealed record DocumentOptions
     /// </summary>
     /// <remarks>Required for a <c>byte[]</c> source, which has no name to read a type from.</remarks>
     public string? MimeType { get; init; }
+
+    /// <summary>A JSON Schema the answer must follow — an object, or its JSON text. The answer is then JSON.</summary>
+    /// <remarks>Part of the cache key: the same question in a different shape is a different answer.</remarks>
+    public object? Schema { get; init; }
 }
 
 #endregion

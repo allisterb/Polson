@@ -19,7 +19,7 @@ from .runs import StudioError
 #: outside this set would sit in `documents/` where the agent can see it and cannot read it.
 DOCUMENT_SUFFIXES = frozenset({
     ".pdf", ".txt", ".md", ".csv", ".json", ".xml", ".html", ".htm",
-    ".png", ".jpg", ".jpeg", ".webp",
+    ".png", ".jpg", ".jpeg", ".webp", ".mp4",
 })
 
 #: Per file. Below `Documents.MaxInlineBytes` (18 MB), so nothing accepted is too large to read.

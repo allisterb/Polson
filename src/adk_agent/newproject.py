@@ -211,7 +211,7 @@ def write_app(project_dir: Path, app_name: str, apps_dir: Path = APPS_DIR, budge
 #: does not cover would put something in `documents/` that the agent can see and cannot read.
 DOCUMENT_SUFFIXES = {
     ".pdf", ".txt", ".md", ".csv", ".json", ".xml", ".html", ".htm",
-    ".png", ".jpg", ".jpeg", ".webp",
+    ".png", ".jpg", ".jpeg", ".webp", ".mp4",
 }
 
 

@@ -115,6 +115,8 @@ public static class JsSurface
         new("entry", typeof(DocumentEntry), "Documents", true),
         new("documentBudget", typeof(DocumentBudget), "Documents", true),
 
+        new("Video", typeof(VideoReader), "Video", false),
+
         new("Photo", typeof(PhotoToolkit), "Photo", false),
         new("photo", typeof(PhotoAsset), "Photo", true),
         new("subject", typeof(SubjectMatch), "Photo", true),

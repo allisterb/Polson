@@ -227,6 +227,47 @@ public class DocumentProcessorTests : TestsRuntime, IDisposable
         Assert.False(first.Provenance!.FromCache);
     }
 
+    /// <summary>A schema reaches the service as JSON text, and the same question in another shape is a new read.</summary>
+    [Fact]
+    public async Task ASchemaIsSentAndIsPartOfTheCacheKey()
+    {
+        var budget = new DocumentBudget(5);
+        var processor = new FakeProcessor(budget, root, new DocumentCache(Path.Combine(root, "cache")));
+        File.WriteAllText(Path.Combine(root, "a.txt"), "hello");
+        var schema = new System.Collections.Generic.Dictionary<string, object>
+        {
+            ["type"] = "object",
+            ["properties"] = new System.Collections.Generic.Dictionary<string, object> { ["word"] = new { type = "string" } },
+        };
+
+        await processor.Ask("a.txt", "what does it say");
+        var shaped = await processor.Ask("a.txt", "what does it say", new DocumentOptions { Schema = schema });
+        var again = await processor.Ask("a.txt", "what does it say", new DocumentOptions { Schema = schema });
+
+        Assert.True(shaped.Success, shaped.Error);
+        Assert.Equal(2, processor.Calls);        // prose and shaped are two reads; the repeat is a hit
+        Assert.Null(processor.Schemas[0]);
+        Assert.Contains("\"word\"", processor.Schemas[1]);
+        Assert.True(again.Provenance!.FromCache);
+    }
+
+    /// <summary>A schema that is not a JSON object is refused before anything is spent.</summary>
+    [Theory]
+    [InlineData("not json")]
+    [InlineData("[1, 2]")]
+    public async Task AMalformedSchemaIsRefusedForNothing(string schema)
+    {
+        var budget = new DocumentBudget(5);
+        var processor = new FakeProcessor(budget, root, null);
+        File.WriteAllText(Path.Combine(root, "a.txt"), "hello");
+
+        var answer = await processor.Ask("a.txt", "what does it say", new DocumentOptions { Schema = schema });
+
+        Assert.Equal("InvalidRequest", answer.FailureName);
+        Assert.Equal(0, processor.Calls);
+        Assert.Equal(0, budget.Spent);
+    }
+
     /// <summary>
     /// A hit is served even when the allowance is spent, because it costs nothing.
     /// </summary>
@@ -552,10 +593,13 @@ public class DocumentProcessorTests : TestsRuntime, IDisposable
     {
         public int Calls { get; private set; }
 
+        public System.Collections.Generic.List<string?> Schemas { get; } = [];
+
         protected override Task<(string? Text, long Tokens, string? Finish)> Generate(
-            byte[] bytes, string mime, string query, string model, System.Threading.CancellationToken ct)
+            byte[] bytes, string mime, string query, string model, string? schema, System.Threading.CancellationToken ct)
         {
             Calls += 1;
+            Schemas.Add(schema);
             return Task.FromResult<(string?, long, string?)>(($"answer to '{query}'", 100, null));
         }
     }
