@@ -348,7 +348,7 @@ public static partial class PosterTypeAudit
     }
 
     /// <summary>The checks an element is excused from, by <see cref="ExemptAttribute"/> on it or any ancestor.</summary>
-    private static HashSet<string> Exemptions(SvgElement element)
+    internal static HashSet<string> Exemptions(SvgElement element)
     {
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         for (var e = element; e is not null and not SvgDocument; e = e.Parent)
@@ -360,7 +360,7 @@ public static partial class PosterTypeAudit
     }
 
     /// <summary>The transform from an element's own units to the paper's: every <c>transform</c> from the root down.</summary>
-    private static SKMatrix Transform(SvgElement element)
+    internal static SKMatrix Transform(SvgElement element)
     {
         var chain = new List<SvgElement>();
         for (var e = element; e is not null and not SvgDocument; e = e.Parent) chain.Add(e);
@@ -407,9 +407,9 @@ public static partial class PosterTypeAudit
 
     private static string Collapse(string s) => Whitespace().Replace(s, " ").Trim();
 
-    private static string Quote(string words) => "\"" + (words.Length > 32 ? words[..31] + "…" : words) + "\"";
+    internal static string Quote(string words) => "\"" + (words.Length > 32 ? words[..31] + "…" : words) + "\"";
 
-    private static bool IsDefinition(SvgElement element)
+    internal static bool IsDefinition(SvgElement element)
     {
         for (var e = element.Parent; e is not null; e = e.Parent)
         {
@@ -418,7 +418,7 @@ public static partial class PosterTypeAudit
         return false;
     }
 
-    private static IEnumerable<SvgElement> Descendants(SvgElement element) =>
+    internal static IEnumerable<SvgElement> Descendants(SvgElement element) =>
         element.Children.SelectMany(c => Descendants(c).Prepend(c));
 
     [GeneratedRegex(@"\s+")]

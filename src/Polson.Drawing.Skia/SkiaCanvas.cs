@@ -1,6 +1,8 @@
 namespace Polson.Drawing.Skia;
 
 using System;
+using System.Collections.Generic;
+using Polson.Drawing.Svg;
 using SkiaSharp;
 
 /// <summary>Raster canvas surface — the root object a raster script draws onto.</summary>
@@ -90,6 +92,42 @@ public class SkiaCanvas : IDisposable, IDataUriSource, ILosslessImageSource
     public string ToDataURL(string format = "webp", int quality = 85) =>
         ToDataUri(format, quality);
 
+    /// <summary>The layout audit on what this canvas drew: type on type, off the canvas, or across a shape's edge.</summary>
+    /// <remarks>
+    /// <b>Internal, not on the script surface.</b> The engine reports it with every render that returns this canvas, as it
+    /// does for a paper (<see cref="LayoutAudit"/>), because the point is that the agent need not think to ask. Five of six
+    /// logo mood boards were drawn with <c>ctx.fillText</c>; a check that read only SVG saw none of their collisions.
+    /// </remarks>
+    internal IReadOnlyList<string> AuditLayout() =>
+        _layoutOverflowed ? [] : LayoutAudit.CheckMarks(_layoutLines, _layoutShapes, SKRect.Create(0, 0, Width, Height));
+
+    /// <summary>A line of text as drawn, in canvas pixels. Called by the context.</summary>
+    internal void RecordText(string words, SKRect bounds, float size, bool upright)
+    {
+        if (Room()) _layoutLines.Add(new TypeLine(words, bounds, size, upright));
+    }
+
+    /// <summary>A shape as drawn, in canvas pixels. Called by the context.</summary>
+    internal void RecordShape(LayoutShape shape)
+    {
+        if (Room()) _layoutShapes.Add(shape);
+    }
+
+    /// <summary>
+    /// Whether there is room for another mark. A canvas drawn a pixel or a cell at a time — noise, a texture, a pixel
+    /// sheet — has no layout to audit, so past the cap the record stops and the audit says nothing rather than fifty
+    /// thousand non-findings.
+    /// </summary>
+    private bool Room()
+    {
+        if (_layoutOverflowed) return false;
+        if (_layoutLines.Count + _layoutShapes.Count < MaxLayoutMarks) return true;
+        _layoutOverflowed = true;
+        _layoutLines.Clear();
+        _layoutShapes.Clear();
+        return false;
+    }
+
     public void Dispose()
     {
         SkCanvas.Dispose();
@@ -99,7 +137,12 @@ public class SkiaCanvas : IDisposable, IDataUriSource, ILosslessImageSource
     #endregion
 
     #region Fields
+    private const int MaxLayoutMarks = 4000;
+
     private CanvasRenderingContext2D? _context;
     private SkiaBitmapWrapper? _liveBitmap;
+    private readonly List<TypeLine> _layoutLines = [];
+    private readonly List<LayoutShape> _layoutShapes = [];
+    private bool _layoutOverflowed;
     #endregion
 }

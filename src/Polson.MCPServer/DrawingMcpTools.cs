@@ -1029,6 +1029,21 @@ public partial class DrawingMcpTools
                 });
             }
 
+            // Type set on type, off the page, or half across a shape — measured, because a model looking at the render
+            // does not reliably see it (every Nemotron mood board, one of Gemini's). Checked on every paper, as fonts are.
+            var collisions = !result.Success ? []
+                : result.RenderedFromPaper ? LayoutAudit.Check(result.SvgXml ?? "")
+                : result.ResultCanvas?.AuditLayout() ?? [];
+            if (collisions.Count > 0)
+            {
+                result.Logs.AddRange(collisions.Select(c => "[WARN] layout: " + c));
+                Events.Append("render.layout", session.Stage, executionId, new Dictionary<string, object?>
+                {
+                    ["script"] = scriptPath,
+                    ["warnings"] = collisions
+                });
+            }
+
             if (printSize is not null && result.Success)
             {
                 WritePrintPdf(result, outPdf!, printSize, bleedPt, safePt, session.Stage, executionId, scriptPath);

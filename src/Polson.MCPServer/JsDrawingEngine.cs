@@ -785,11 +785,13 @@ public partial class JsDrawingEngine : Runtime
             if (evalResult.ToObject() is SkiaCanvas c)
             {
                 result.ReturnValue = c;
+                result.ResultCanvas = c;
                 result.ImageBytes = Encode(() => c.ToImageBytes(format, quality));
             }
             else if (evalResult.ToObject() is CanvasRenderingContext2D ctx)
             {
                 result.ReturnValue = ctx;
+                result.ResultCanvas = ctx.Canvas;
                 result.ImageBytes = Encode(() => ctx.Canvas.ToImageBytes(format, quality));
             }
             else if (evalResult.ToObject() is SkiaBitmapWrapper bw)
@@ -816,6 +818,7 @@ public partial class JsDrawingEngine : Runtime
             {
                 var lastCanvas = canvases.Last();
                 result.ReturnValue = evalResult.ToObject();
+                result.ResultCanvas = lastCanvas;
                 result.ImageBytes = Encode(() => lastCanvas.ToImageBytes(format, quality));
             }
             else if (papers.Count > 0)
@@ -854,6 +857,7 @@ public partial class JsDrawingEngine : Runtime
 
             if (canvases.Count > 0)
             {
+                result.ResultCanvas = canvases.Last();
                 result.ImageBytes = Encode(() => canvases.Last().ToImageBytes(format, quality));
                 if (papers.Count > 0)
                 {
