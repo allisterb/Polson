@@ -677,8 +677,20 @@ public abstract class MotionLayerList
     /// device point (<paramref name="x"/>, <paramref name="y"/>) falls — the plane's scale and direction there — so a blur
     /// or shadow inside works on the picture as the camera sees it, sized as at the frame's centre.
     /// </summary>
+    /// <remarks>
+    /// <b>A plane's matrix arrives homogeneous</b>: every term multiplied by the camera's w (about 2,467 for a 1920-wide
+    /// frame at the default lens), which Skia divides out when it draws. Read as affine it is a 2,467× scale, so a 26 px
+    /// blur in a plane asked for a 92,516 px margin and a 1080p frame failed to allocate. Divided out first, it is the
+    /// matrix it draws as.
+    /// </remarks>
     internal static SKMatrix Tangent(SKMatrix m, float x, float y)
     {
+        if (m.Persp2 != 0 && m.Persp2 != 1)
+        {
+            var w = m.Persp2;
+            m = new SKMatrix(m.ScaleX / w, m.SkewX / w, m.TransX / w, m.SkewY / w, m.ScaleY / w, m.TransY / w,
+                m.Persp0 / w, m.Persp1 / w, 1);
+        }
         if (Math.Abs(m.Persp0) < 1e-12 && Math.Abs(m.Persp1) < 1e-12) return m;
         if (!m.TryInvert(out var back)) return m;
         var at = back.MapPoint(x, y);
