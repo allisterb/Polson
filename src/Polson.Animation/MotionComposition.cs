@@ -526,6 +526,17 @@ public abstract class MotionLayerList
         return (s ?? ps, t, own, pv && shown && s is not null);
     }
 
+    /// <summary>
+    /// How much of this stack reaches the frame at a time: every group above's <c>amount</c>, multiplied, each read at the
+    /// time its own stack sees, as <see cref="SpaceAt"/> reads their transforms. 1 at the root.
+    /// </summary>
+    internal double AmountAbove(double rootTime)
+    {
+        if (this is not MotionGroup g || g.Parent is null) return 1;
+        var own = g.Parent.TimeFor(g.Layer, g.Parent.SpaceAt(rootTime).Time);
+        return g.Layer.AmountAt(own) * g.Parent.AmountAbove(rootTime);
+    }
+
     /// <summary>Whether a skeleton deformation sits here or in any group below.</summary>
     internal bool HasDeformationDeep =>
         layers.Any(l => l is MotionDeformationLayer || l is MotionLayer.GroupLayer g && g.Children.HasDeformationDeep);
@@ -788,6 +799,14 @@ public sealed class MotionComposition : MotionLayerList
     #endregion
 
     #region Fields
+    /// <summary>
+    /// How near a whole frame an end time must land, in frames, to count as that frame. A time written to three places
+    /// for the last frame of a 24 fps film — the manual's own <c>{ to: 14.958 }</c>, frame 359 at 14.9583 s — is
+    /// 0.008 frames short of it, and flooring lost the frame (productad1 encoded 119 of 120 per part). A twentieth
+    /// still leaves a <c>.98</c> end well clear of the next frame, so parts ending there do not overlap at a join.
+    /// </summary>
+    private const double FrameSnap = 0.05;
+
     private readonly MotionToolkit? motion;
     private readonly string? projectRoot;
     private readonly double[] view;
@@ -965,7 +984,7 @@ public sealed class MotionComposition : MotionLayerList
         for (var i = 0; ; i++)
         {
             var t = from + i / fps;
-            if (t > to + 1e-9) break;
+            if (t > to + FrameSnap / fps) break;
             using var frame = Render(t);
             motion.FrameAt(frame, (int)Math.Round(t * Fps), t);
             count++;
@@ -1028,8 +1047,8 @@ public sealed class MotionComposition : MotionLayerList
         if (fps <= 0) throw new ArgumentException("comp.saveVideo: fps must be positive.");
         if (to < from) throw new ArgumentException($"comp.saveVideo: to ({to}) is before from ({from}).");
 
-        // Both ends included, as capture does.
-        var count = (int)Math.Floor((to - from) * fps + 1e-9) + 1;
+        // Both ends included, as capture does, with an end within FrameSnap of a frame counted as that frame.
+        var count = (int)Math.Floor((to - from) * fps + FrameSnap) + 1;
         IEnumerable<SKBitmap> Frames()
         {
             for (var i = 0; i < count; i++)
@@ -1228,7 +1247,7 @@ internal abstract class MotionLayer
     /// <summary>The <c>blend_method</c> written: the layer's blend, unless the layer composites some other way.</summary>
     protected virtual int SifBlendMethod => Blend.Synfig;
 
-    protected double AmountAt(double time) => Math.Clamp(Amount.Evaluate(time)[0], 0, 1);
+    protected internal double AmountAt(double time) => Math.Clamp(Amount.Evaluate(time)[0], 0, 1);
 
     protected static string P(SKPoint p) => $"{SvgAnimationWriter.N(p.X)} {SvgAnimationWriter.N(p.Y)}";
 

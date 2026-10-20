@@ -51,7 +51,8 @@ the film's:
    brands that skew 35 and over), say so to the director in Q1: one of the two is wrong for this product.
 2. **The product's buyers there, less its buyers anywhere.** For each audience, `insights` for `artist` and for
    `brand` with the comparables as the signal and the audience's place and age; once for the whole set, the same
-   with no audience. What an audience's list holds that the global one does not is **what is local about this
+   with no audience. **Give every answer a label of its own** — 'audience A buyers: brand', never a label that
+   another merely extends — and use `Taste.get(id)` where it matters. What an audience's list holds that the global one does not is **what is local about this
    product's buyers** — the strongest evidence a product has:
 
    ```
@@ -68,7 +69,11 @@ the film's:
    across cities. When they do, say so and keep the difference where the evidence has one; do not invent one.
 3. **Brand tags are the visual register.** Brands carry design-language tags no film has — "Minimalist Typography",
    "Clean Lines", "Neutral Color Palette", "Heritage-Inspired". **Read them in a script**,
-   `Taste.find('audience A buyers: brand').entities`: the tool's reply shows only the first eight tags of each. When
+   `Taste.find('audience A buyers: brand').entities`: the tool's reply shows only the first eight tags of each, and
+   a brand carries forty or more. **Each tag is `{ id, name, type }`**, not a string. The design ones are
+   `type: 'urn:tag:aesthetic_property:qloo'` — Minimalist, Clean Typography, Neutral Palette, Clean Packaging; count
+   `tag.name` over those. Two more kinds serve a product: `urn:tag:emotional_tone:qloo` (Sophisticated) for the
+   voice, and `urn:tag:packaging_format:qloo` (Can) for what the category's packshot holds. When
    every audience's brands carry the same ones, they are the **category's** look — cite them as that, for the shared
    system, and not as a difference between audiences.
 4. **The setting comes from local places**, `insights` with `type: 'place'`, the comparables as signal, and
@@ -109,6 +114,10 @@ and place it as given. **With none**, make one: the model generates the vessel, 
      comparables are signals, never imagery.
    - The same descriptor and options are served from the cache for nothing, so a later script asks again rather
      than storing the sheet. One generation from the run's asset budget; a regeneration is another.
+   - **A cell is only as large as the sheet allows.** Three views share one generated image, so each came back
+     about 220 × 390 px whatever `size` asked — soft once a can stands 700 px tall in a 1080p frame. When the
+     product is large on screen, ask once more for the front alone, shown the sheet so it stays the same can:
+     `Assets.cutout(descriptor, { reference: pack.cell('front'), size: 1024 })` — one more generation.
 3. **Look before using it.** Draw the cells side by side on one canvas and write it as `artifacts/00_packshot_sheet.png`
    — and peek at it. Check that it is the same can in every view, that no lettering crept onto it, that `cell.holes` is near
    zero (a can has no holes), and that `pack.warnings` names no cell. On a failure, change the descriptor once and

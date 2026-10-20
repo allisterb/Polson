@@ -116,6 +116,28 @@ public class TastePaceTests : TestsRuntime
         Assert.Throws<System.ArgumentException>(() => taste.ComparePaceAll([Lean("alone", 3, 3)]));
     }
 
+    /// <summary>
+    /// productad1: 'audience A places' came after the profile 'audience A', <c>find</c> returned the places, and
+    /// <c>pace()</c> read 0 / 0 for every city — a false "no measurable difference". The exact label wins now.
+    /// </summary>
+    [Fact]
+    public void FindPrefersTheExactLabelOverALaterOneThatContainsIt()
+    {
+        var registry = new TasteRegistry();
+        registry.Add(id => new TasteResult
+        {
+            Id = id, Op = "profile", Label = "audience A", Ok = true,
+            Entities = [.. Films("fast", 15, "Fast paced"), .. Films("slow", 6, "Slow burn")],
+        });
+        registry.Add(id => new TasteResult { Id = id, Op = "insights", Label = "audience A places", Ok = true, Entities = [] });
+        var taste = new TasteToolkit(registry);
+
+        Assert.Equal(15, taste.Find("audience a")!.Pace()["fast"]);
+        Assert.Equal(15, taste.Find("  audience A ")!.Pace()["fast"]);
+        Assert.Equal("audience A places", taste.Find("places")!.Label);   // containment still finds by purpose
+        Assert.Null(taste.Find("audience B"));
+    }
+
     private static TasteResult Lean(string label, int fast, int slow) =>
         Profile(label, [.. Films($"{label}-fast", fast, "Fast paced"), .. Films($"{label}-slow", slow, "Slow burn")]);
 
