@@ -327,6 +327,14 @@ verbatim through the answer, so a PDF can carry a paragraph addressed to whoever
 treat the figure as suspect rather than an instruction to follow. And **a failed read is a gap, not a
 licence** — the rule below applies unchanged.
 
+**A long report is read page by page, and the answer says where each figure came from.**
+`answer.evidence` lists them, and the engine has already looked: `evidence.page` is the PDF page,
+`evidence.quote` the figure as printed, `evidence.found` whether that page really carries it. Models
+reading long documents misread digits and undercount, and nothing about a misread figure looks wrong
+on a chart — so **anything in `answer.unverified` stays out of the piece** until a narrower question,
+naming the table, finds it on its page. A found figure earns its source line twice over: the
+document, and the page, which is what a reader checking a financial graphic will look for first.
+
 **A studio that draws is not a studio that knows.** Asked for Apollo mission durations, a model will
 produce seven plausible numbers without hesitating, and they will be approximately right — which is
 worse than wrong, because approximately right survives review. The whole difference between this

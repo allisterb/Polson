@@ -247,6 +247,38 @@ internal static class ProjectGenerator
                       + "       configurations only. Generate it managed, or use 'agy' for a standalone project.");
         }
 
+        // Every document is checked before anything is written, so a typo in the third path does not leave a project
+        // generated around the first two.
+        var documents = new List<(string Source, string Target)>();
+        foreach (var given in opts.Documents)
+        {
+            var source = Path.GetFullPath(given);
+            if (!File.Exists(source)) return Fail($"--document {given}: no such file.");
+
+            var name = Path.GetFileName(source);
+            var extension = Path.GetExtension(name);
+            if (!Polson.ExtendedMind.DocumentProcessing.Documents.MimeTypes.ContainsKey(extension))
+            {
+                return Fail($"--document {given}: '{extension}' is not a type Documents.ask can read, so the agent would see it "
+                          + $"and could not open it. Known: {string.Join(", ", Polson.ExtendedMind.DocumentProcessing.Documents.MimeTypes.Keys)}.");
+            }
+            if (new FileInfo(source).Length > Polson.ExtendedMind.DocumentProcessing.Documents.MaxInlineBytes)
+            {
+                return Fail($"--document {given}: larger than the {Polson.ExtendedMind.DocumentProcessing.Documents.MaxInlineBytes / (1024 * 1024)} MB "
+                          + "a document read accepts. Give the pages the work needs instead.");
+            }
+            if (documents.Any(d => string.Equals(Path.GetFileName(d.Target), name, StringComparison.OrdinalIgnoreCase)))
+                return Fail($"--document: two files are called {name}; rename one of them.");
+
+            // Refused rather than overwritten: two different files of one name is a mistake about which was wanted, and
+            // keeping the second silently would be found later, in a figure. The same file again (a --reset) is fine.
+            var target = Path.Combine(dir, "documents", name);
+            if (File.Exists(target) && !File.ReadAllBytes(target).AsSpan().SequenceEqual(File.ReadAllBytes(source)))
+                return Fail($"--document {given}: documents/{name} already exists with different contents; rename one of them.");
+
+            documents.Add((source, target));
+        }
+
         if (Directory.Exists(dir) && Directory.EnumerateFileSystemEntries(dir).Any() && !opts.Force && !opts.Reset)
         {
             return Fail($"Directory is not empty: {dir}\n"
@@ -339,6 +371,14 @@ internal static class ProjectGenerator
 
         WriteDocumentsReadme(Path.Combine(dir, "documents", "README.md"));
 
+        // Copied rather than referenced: the engine reads a document from inside the project or not at all, and a path
+        // outside it would work on this machine and nowhere the project is taken.
+        foreach (var (source, target) in documents)
+        {
+            if (!File.Exists(target)) File.Copy(source, target);
+            AnsiConsole.MarkupLine($"  Placed [bold]documents/{Markup.Escape(Path.GetFileName(target))}[/]");
+        }
+
         // Claude Code takes the judgment manuals as imported files; anything else, or no manuals at all, takes back
         // whatever an earlier generation of this project wrote there.
         var importManuals = opts.ManualsInlined && sdk == "claude";
@@ -362,7 +402,7 @@ internal static class ProjectGenerator
             // The judgment manuals, inlined rather than pointed at — by default, since a pointer has never reliably
             // produced a read; `--no-inline-manuals` leaves them out. Imported files arrive just as complete under
             // Claude Code, without one oversized CLAUDE.md — see `ImportedManuals`.
-            ["MANUALS"] = importManuals ? ImportedManuals(dir, workflow) : opts.ManualsInlined ? InlinedManuals(workflow) : "",
+            ["MANUALS"] = importManuals ? ImportedManuals(dir, workflow, type) : opts.ManualsInlined ? InlinedManuals(workflow, type) : "",
 
             // Stay in the project directory. Shared because it is true of every workflow, and stated
             // as a prompt rule because that is what has actually worked: the engine-only guardrail
@@ -1384,8 +1424,8 @@ internal static class ProjectGenerator
     };
 
     /// <summary>The judgment manuals for one workflow, in full, as one Markdown block, or empty.</summary>
-    static string InlinedManuals(string workflow) =>
-        ManualsBlock(JudgmentManualsFor(workflow), ManualText, note: null);
+    static string InlinedManuals(string workflow, string type = "") =>
+        ManualsBlock(JudgmentManualsFor(workflow, type), ManualText, note: null);
 
     /// <summary>
     /// The judgment manuals as files under <c>manuals/</c>, and the block of <c>@</c> imports that pulls them into
@@ -1408,9 +1448,9 @@ internal static class ProjectGenerator
     /// so to either an <c>@</c> line is a pointer, which is the thing measured not to work. They keep the inline block.
     /// </para>
     /// </remarks>
-    static string ImportedManuals(string dir, string workflow)
+    static string ImportedManuals(string dir, string workflow, string type = "")
     {
-        var manuals = JudgmentManualsFor(workflow);
+        var manuals = JudgmentManualsFor(workflow, type);
         SyncManualFiles(dir, manuals);
         return ManualsBlock(manuals, m => [$"@{ManualFile(m)}", ""],
             note: "Each is a file in `manuals/`, imported below, so it is already in front of you — there is no "
@@ -1421,10 +1461,24 @@ internal static class ProjectGenerator
     /// The workflow's judgment manuals. One that cannot be found is skipped rather than thrown on: a missing manual
     /// should not stop a project being generated, and the omission is visible in the file.
     /// </summary>
-    static StudioManual[] JudgmentManualsFor(string workflow) =>
-        JudgmentManuals.TryGetValue(workflow, out var ids)
-            ? [.. ids.Select(PolsonManuals.Find).OfType<StudioManual>()]
-            : [];
+    static StudioManual[] JudgmentManualsFor(string workflow, string type = "")
+    {
+        IEnumerable<string> ids = JudgmentManuals.TryGetValue(workflow, out var forWorkflow) ? forWorkflow : [];
+        if (type.Length > 0 && TypeManuals.TryGetValue($"{workflow}.{type}", out var forType)) ids = ids.Concat(forType);
+        return [.. ids.Distinct().Select(PolsonManuals.Find).OfType<StudioManual>()];
+    }
+
+    /// <summary>
+    /// Manuals a type adds to its workflow's, keyed <c>workflow.type</c>: a type can change what the craft is.
+    /// </summary>
+    /// <remarks>
+    /// A report explainer is a trailer whose subject is figures, so the data-encoding manual's integrity rules — where
+    /// a number comes from, bars from zero, one scale for things compared — are the craft, not a reference to look up.
+    /// </remarks>
+    static readonly Dictionary<string, string[]> TypeManuals = new()
+    {
+        ["trailer.report"] = ["13"],
+    };
 
     /// <summary>The judgment manuals' preamble, then one entry per manual, or empty when there are none.</summary>
     /// <remarks>

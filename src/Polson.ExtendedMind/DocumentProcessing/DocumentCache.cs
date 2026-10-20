@@ -124,4 +124,12 @@ public sealed record CachedAnswer
 
     /// <summary>What the original read cost. A hit costs nothing and does not add to this.</summary>
     public long TokensSpent { get; init; }
+
+    public IReadOnlyList<DocumentEvidence> Evidence { get; init; } = [];
+
+    public string Route { get; init; } = "inline";
+
+    public int Pages { get; init; }
+
+    public string? Fallback { get; init; }
 }

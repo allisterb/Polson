@@ -238,17 +238,27 @@ internal class Program : Runtime
         // director clearing a project should not leave its answers behind.
         var cacheDir = Setting("Documents:CacheDir") ?? Path.Combine(projectDir, ".polson", "documents");
 
-        JsDrawingEngine.Documents = new DocumentProcessor(
-            apiKey, new DocumentBudget(budget), projectDir, model, new DocumentCache(cacheDir));
+        // PDFs and text go to Nemotron on Token Factory, read as page text with their evidence checked; images,
+        // clips and anything Nemotron cannot answer go to Gemini whole. Either key alone is enough to read.
+        var nebiusKey = Setting("ApiKeys:NebiusTokenFactory");
+        var nebiusBase = Setting("NebiusTokenFactory:BaseUrl");
+        var nemotron = Setting("Documents:NemotronModel") ?? VideoReader.DefaultVideoModel;
+        var pages = new DocumentPages(Path.Combine(cacheDir, "pages"), Setting("Tools:Mutool"), Setting("Tools:Tesseract"));
 
-        if (string.IsNullOrWhiteSpace(apiKey))
+        var processor = new NemotronDocumentProcessor(apiKey, nebiusKey, nebiusBase, new DocumentBudget(budget),
+            projectDir, pages, model, nemotron, new DocumentCache(cacheDir));
+        JsDrawingEngine.Documents = processor;
+
+        if (!processor.IsAvailable)
         {
-            Warn("Document reading disabled: no ApiKeys:GoogleAgentPlatform in {0}.",
+            Warn("Document reading disabled: neither ApiKeys:GoogleAgentPlatform nor ApiKeys:NebiusTokenFactory is in {0}.",
                 Path.Combine(AssemblyLocation, "appsettings.json"));
         }
         else
         {
-            Info("Document reading enabled (model: {0}, budget: {1} reads).", model, budget);
+            Info("Document reading enabled (first choice: {0}; fallback: {1}; PDF text: {2}; OCR: {3}; budget: {4} reads).",
+                processor.Model, string.IsNullOrWhiteSpace(apiKey) ? "none" : model,
+                pages.Mutool ?? "no mutool", pages.Tesseract ?? "no tesseract", budget);
         }
     }
 

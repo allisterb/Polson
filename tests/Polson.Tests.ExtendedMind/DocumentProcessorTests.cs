@@ -595,12 +595,12 @@ public class DocumentProcessorTests : TestsRuntime, IDisposable
 
         public System.Collections.Generic.List<string?> Schemas { get; } = [];
 
-        protected override Task<(string? Text, long Tokens, string? Finish)> Generate(
+        protected override Task<Generation> Generate(
             byte[] bytes, string mime, string query, string model, string? schema, System.Threading.CancellationToken ct)
         {
             Calls += 1;
             Schemas.Add(schema);
-            return Task.FromResult<(string?, long, string?)>(($"answer to '{query}'", 100, null));
+            return Task.FromResult(new Generation($"answer to '{query}'", 100, null));
         }
     }
     #endregion

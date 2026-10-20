@@ -1,6 +1,7 @@
 namespace Polson.ExtendedMind.DocumentProcessing;
 
 using System.Collections.Generic;
+using System.Linq;
 
 /// <summary>
 /// Request and result types for document processing.
@@ -151,10 +152,48 @@ public sealed record DocumentAnswer
     /// acting on it: <b>a document that talks to whoever is processing it is not behaving like a
     /// document.</b> Report what was found and treat the answer as suspect.
     /// </remarks>
-    public IReadOnlyList<string> Warnings { get; init; } = [];
+    /// <remarks>
+    /// <b>An array, whichever path filled it.</b> Jint remembers the CLR type it first saw behind a member and casts later
+    /// values to it: a fresh answer carried an array and a cached one a <c>List</c>, so the second read of a question in one
+    /// server process threw "Unable to cast … List`1 to System.Array" (nvdareport2, 2026-10-20).
+    /// </remarks>
+    public string[] Warnings { get; init; } = [];
 
     /// <summary>Which document this answers, and what was asked of it.</summary>
     public DocumentProvenance? Provenance { get; init; }
+
+    /// <summary>
+    /// Where in the document the answer says it came from, each quote checked against the text of the page it names.
+    /// </summary>
+    /// <remarks>
+    /// Given when the document was read as text, page by page; empty when it was sent whole to a model that reads
+    /// it itself. <b>A figure that is not on its page is the error that matters</b>: models reading long documents
+    /// misread digits and undercount, and the check is what catches it before it reaches a chart.
+    /// </remarks>
+    public DocumentEvidence[] Evidence { get; init; } = [];
+
+    /// <summary>The evidence the check could not find on its page, as <c>"p.55: 102,714"</c>. Empty is the expected result.</summary>
+    /// <remarks>An array, not a collection expression: Jint cannot convert the list type the compiler makes for one.</remarks>
+    public string[] Unverified => Evidence.Where(e => !e.Found).Select(e => $"p.{e.Page}: {e.Quote}").ToArray();
+}
+
+/// <summary>One piece of evidence an answer rests on: a page, what it says there, and whether it does.</summary>
+public sealed record DocumentEvidence
+{
+    /// <summary>The PDF's page, counted from 1 — not the number printed on it.</summary>
+    public required int Page { get; init; }
+
+    /// <summary>The words or figures, as the model quoted them.</summary>
+    public required string Quote { get; init; }
+
+    /// <summary>
+    /// Whether the page carries it: every figure in the quote, or the quote itself when it has no figure.
+    /// </summary>
+    /// <remarks>
+    /// Figures rather than the whole quote, because a quote stitched from a table row ("Graphics $ 22,459") is never
+    /// found word for word in text where each cell is its own line, while the figure is.
+    /// </remarks>
+    public required bool Found { get; init; }
 }
 
 /// <summary>Where an answer came from. Attached to every successful read.</summary>
@@ -196,6 +235,15 @@ public sealed record DocumentProvenance
     /// replaced is the one way this surface can be quietly stale, and the hash is what settles it.
     /// </remarks>
     public bool FromCache { get; init; }
+
+    /// <summary>How the document reached the model: <c>'inline'</c> (sent whole), <c>'text'</c> (its text layer), or <c>'text+ocr'</c>.</summary>
+    public string Route { get; init; } = "inline";
+
+    /// <summary>Pages read as text; 0 when the document was sent whole.</summary>
+    public int Pages { get; init; }
+
+    /// <summary>Why the first-choice model did not answer, when another did; null when it did.</summary>
+    public string? Fallback { get; init; }
 }
 
 /// <summary>Why a document read did not produce an answer.</summary>
