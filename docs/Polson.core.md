@@ -4365,6 +4365,11 @@ Requisitions **raw material** from a cloud image model: flat tiling textures, ba
 > colour all stay with your code, which is the whole of what makes a composition yours. Requisition
 > the parts of a picture; never the picture.
 >
+> **So a finished advertising piece is refused before the network** — a descriptor naming an
+> advertisement, an ad, a billboard, a flyer, a leaflet or a brochure comes back `InvalidRequest`, spending
+> nothing. A product ad's packshot is a cutout of **the product** (`'a matte black aluminium can, plain
+> cream band, no text'`); its name, the claim and the layout are yours.
+>
 > **Use it where a matte cannot reach, not instead of one.** A matte's own prompt forbids interior
 > detail and it is thresholded on luminance, so a head comes back as a blank head-shaped blob — right
 > for a figure against the sky, useless for a face. If a silhouette would do, a silhouette is

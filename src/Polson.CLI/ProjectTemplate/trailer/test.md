@@ -23,6 +23,9 @@ Answer these in `findings.md`:
   difference? Did the places come back in the right city, and which mood tags did you use? Quote the claim as it
   appears on screen, and name anything you wanted to say about the product that the brief did not give you. Qloo
   requests spent, from `status`.
+- **The packshot** (product ad without a supplied shot). Was it one generation, and was it the same can in every
+  view? Did lettering appear on it anyway? Did your label read on the band, and on the three-quarter view? If a
+  product shot was supplied, what did `Documents.ask` tell you about it, and what did you take from it?
 - **Text animators.** Did the *Type* section give you what you needed to build a cascade? Quote the
   animator you used for the title, and say whether it did what you expected the first time. Name any
   property or selector option you wanted and did not find.
