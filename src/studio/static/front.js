@@ -766,7 +766,8 @@
     'research.completed': function (e) { row('tool', 'Research done', e.ts, e.description || ''); },
     'asset.requisition': function (e) { row('tool', 'Requested', e.ts, e.description || e.prompt || e.artifact || 'an image'); },
     'asset.refused': function (e) { row('failed', 'Refused', e.ts, e.reason || e.description || ''); },
-    'document.read': function (e) { row('look', 'Read', e.ts, line(e.path || e.document || '', 'fr-spec')); },
+    'document.read': function (e) { row('look', 'Read', e.ts, line(e.descriptor || e.path || e.document || '', 'fr-spec')); },
+    'video.read': function (e) { row('look', 'Watched', e.ts, line(e.descriptor || '', 'fr-spec')); },
     // Dropped calls and dropped starts need not number the same, so nothing after a gap can be paired.
     'stream.truncated': function (e) { unpaired = true; row('meta', 'Earlier', e.ts, (e.dropped || 'Some') + ' earlier events are not shown.'); },
     'run.error': function (e) { row('failed', 'Error', e.ts, String(e.error || '').split('\n')[0], 'is-clamped'); },

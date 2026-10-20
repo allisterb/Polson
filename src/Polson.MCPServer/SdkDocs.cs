@@ -62,6 +62,7 @@ public static class SdkDocs
         // find out what exists did not mention them. Found while wiring characters, whose whole
         // route runs through Face, Mesh and Character.
         new("Documents", ["Documents", "document", "pdf"], "Documents (Reading What the Director Supplied)"),
+        new("Video", ["Video", "video", "watch", "clip"], "Video (Watching a Clip)"),
         new("Research", ["Research", "research", "citation"], "Research (Sourced Data & Provenance)"),
         new("Face", ["Face", "face", "landmarks"], "Face (Landmarks From an Image)"),
         new("Mesh", ["Mesh", "mesh", "pose", "rig"], "Mesh (A Face as a Textured Surface)"),

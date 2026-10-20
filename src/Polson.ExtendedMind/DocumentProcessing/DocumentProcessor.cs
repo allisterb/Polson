@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -71,7 +72,16 @@ public class DocumentProcessor : Runtime, IDisposable
     public DocumentBudget Budget => budget;
 
     /// <summary>Whether a key is configured at all. False means every call will refuse.</summary>
-    public bool IsAvailable => client is not null;
+    public virtual bool IsAvailable => client is not null;
+
+    /// <summary>What the run record files a read under: <c>document</c> here, <c>video</c> for <see cref="VideoReader"/>.</summary>
+    protected virtual string Kind => "document";
+
+    /// <summary>The extensions this surface reads, and what each is sent as.</summary>
+    protected virtual IReadOnlyDictionary<string, string> Types => Documents.MimeTypes;
+
+    /// <summary>Largest file sent inline, in bytes.</summary>
+    protected virtual int MaxBytes => Documents.MaxInlineBytes;
     #endregion
 
     #region Methods
@@ -98,7 +108,7 @@ public class DocumentProcessor : Runtime, IDisposable
         if (!Directory.Exists(folder)) return [];
 
         return [.. Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories)
-            .Where(f => Documents.MimeTypes.ContainsKey(Path.GetExtension(f)))
+            .Where(f => Types.ContainsKey(Path.GetExtension(f)))
             // The folder's own README is ours, not the director's. Listing it would offer the agent
             // a document whose only content is instructions about documents — and an agent that
             // spent a metered read on it would be right to be confused.
@@ -110,7 +120,7 @@ public class DocumentProcessor : Runtime, IDisposable
                 Path = Path.GetRelativePath(projectRoot, f).Replace('\\', '/'),
                 Name = Path.GetFileName(f),
                 Bytes = (int)Math.Min(int.MaxValue, new FileInfo(f).Length),
-                MimeType = Documents.MimeTypes[Path.GetExtension(f)],
+                MimeType = Types[Path.GetExtension(f)],
             })
             .OrderBy(e => e.Path, StringComparer.Ordinal)];
     }
@@ -131,8 +141,18 @@ public class DocumentProcessor : Runtime, IDisposable
     {
         var opts = options ?? new DocumentOptions();
 
-        if (client is null) return Refused(DocumentFailure.NotConfigured, "No API key is configured.");
+        if (!IsAvailable) return Refused(DocumentFailure.NotConfigured, "No API key is configured.");
         if (string.IsNullOrWhiteSpace(query)) return Refused(DocumentFailure.NoQuery, "The query was empty.");
+
+        string? schema;
+        try
+        {
+            schema = SchemaJson(opts.Schema);
+        }
+        catch (Exception ex) when (ex is JsonException or NotSupportedException)
+        {
+            return Refused(DocumentFailure.InvalidRequest, $"The schema is not a JSON Schema object: {ex.Message}");
+        }
 
         byte[] bytes;
         string mime;
@@ -147,26 +167,29 @@ public class DocumentProcessor : Runtime, IDisposable
             return Refused(refusal.Failure, refusal.Message, Describe(source));
         }
 
-        if (bytes.Length > Documents.MaxInlineBytes)
+        if (bytes.Length > MaxBytes)
         {
             return Refused(DocumentFailure.TooLarge,
-                $"{named} is {bytes.Length / (1024 * 1024)} MB against a {Documents.MaxInlineBytes / (1024 * 1024)} MB inline limit.",
+                $"{named} is {bytes.Length / (1024 * 1024)} MB against a {MaxBytes / (1024 * 1024)} MB inline limit.",
                 named);
         }
 
         var useModel = opts.Model ?? Model;
         var hash = Convert.ToHexString(SHA256.HashData(bytes))[..16];
 
+        // The cache key carries everything that changes the answer, and a schema reshapes it.
+        var keyQuery = schema is null ? query : query + "\nschema:" + schema;
+
         // Before the budget check, not after — a hit costs nothing, so it must still be served when
         // the allowance is spent. Checking affordability first would refuse a read that was free.
         if (cache is not null)
         {
-            var key = DocumentCache.KeyOf(hash, query, useModel, mime);
+            var key = DocumentCache.KeyOf(hash, keyQuery, useModel, mime);
             if (await cache.Get(key) is { } hit)
             {
                 budget.CacheHits += 1;
                 RequisitionScope.Record(new RequisitionRecord(
-                    "document", named, Success: true, Failure: null,
+                    Kind, named, Success: true, Failure: null,
                     Reason: hit.Warnings.Count == 0 ? null : string.Join("; ", hit.Warnings),
                     Model: useModel, FromCache: true, Refused: false));
                 RecordBudgetState();
@@ -197,14 +220,14 @@ public class DocumentProcessor : Runtime, IDisposable
         if (!budget.CanAfford())
         {
             return Refused(DocumentFailure.BudgetExhausted,
-                $"{budget.Spent} of {budget.Total} document reads already spent.", named);
+                $"{budget.Spent} of {budget.Total} {Kind} reads already spent.", named);
         }
 
         budget.Spent += 1;
 
         try
         {
-            var (text, tokens, finish) = await Generate(bytes, mime, query, useModel, ct);
+            var (text, tokens, finish) = await Generate(bytes, mime, query, useModel, schema, ct);
 
             // A 200 carrying no text is not an empty answer. Reporting it as success with an empty
             // string would let "" propagate into a caption and read as a deliberate blank.
@@ -221,7 +244,7 @@ public class DocumentProcessor : Runtime, IDisposable
             var warnings = Scan(text);
             if (warnings.Count > 0)
             {
-                Warn("Document '{0}' produced an answer carrying {1} scan finding(s).", named, warnings.Count);
+                Warn("{0} '{1}' produced an answer carrying {2} scan finding(s).", Kind, named, warnings.Count);
             }
 
             // The successful read, in the record. `Reason` carries the scan verdict rather than
@@ -229,7 +252,7 @@ public class DocumentProcessor : Runtime, IDisposable
             // a reader most needs to find afterwards, and it would otherwise live only in the
             // answer the script received and did not keep.
             RequisitionScope.Record(new RequisitionRecord(
-                "document", named, Success: true,
+                Kind, named, Success: true,
                 Failure: null,
                 Reason: warnings.Count == 0 ? null : string.Join("; ", warnings),
                 Model: useModel, FromCache: false, Refused: false));
@@ -247,7 +270,7 @@ public class DocumentProcessor : Runtime, IDisposable
                 // Stored after scanning, so a hit and a miss deliver the same thing. Awaited rather
                 // than fired and forgotten: a write that loses the race with the next identical call
                 // would make the cache look broken in exactly the loop it exists for.
-                await cache.Put(DocumentCache.KeyOf(hash, query, useModel, mime), new CachedAnswer
+                await cache.Put(DocumentCache.KeyOf(hash, keyQuery, useModel, mime), new CachedAnswer
                 {
                     Text = sanitised,
                     Warnings = warnings,
@@ -297,8 +320,9 @@ public class DocumentProcessor : Runtime, IDisposable
     /// ordering, the budget, the scan and the cache. Without some seam the cache could not be tested
     /// at all, which is worse than a protected method.
     /// </remarks>
+    /// <param name="schema">A JSON Schema the answer must follow, as JSON text; null for prose.</param>
     protected virtual async Task<(string? Text, long Tokens, string? Finish)> Generate(
-        byte[] bytes, string mime, string query, string model, CancellationToken ct)
+        byte[] bytes, string mime, string query, string model, string? schema, CancellationToken ct)
     {
         var parts = new List<Part>
         {
@@ -306,8 +330,14 @@ public class DocumentProcessor : Runtime, IDisposable
             new() { Text = query },
         };
 
+        var config = schema is null ? null : new GenerateContentConfig
+        {
+            ResponseMimeType = "application/json",
+            ResponseJsonSchema = JsonDocument.Parse(schema).RootElement.Clone(),
+        };
+
         var response = await client!.Models.GenerateContentAsync(
-            model, [new Content { Role = "user", Parts = parts }], config: null, ct);
+            model, [new Content { Role = "user", Parts = parts }], config, ct);
 
         var text = string.Concat(response.Candidates?
             .SelectMany(c => c.Content?.Parts ?? [])
@@ -321,8 +351,13 @@ public class DocumentProcessor : Runtime, IDisposable
     /// <summary>Releases the client. Host lifetime, not something a script calls.</summary>
     public void Dispose()
     {
-        client?.Dispose();
+        Dispose(true);
         GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (disposing) client?.Dispose();
     }
     #endregion
 
@@ -382,11 +417,25 @@ public class DocumentProcessor : Runtime, IDisposable
         }
     }
 
-    private static string MimeFor(string extension) =>
-        Documents.MimeTypes.TryGetValue(extension, out var mime)
+    private string MimeFor(string extension) =>
+        Types.TryGetValue(extension, out var mime)
             ? mime
             : throw new DocumentRefusal(DocumentFailure.UnsupportedType,
-                $"No MIME type is known for '{extension}'. Known: {string.Join(", ", Documents.MimeTypes.Keys)}.");
+                $"No MIME type is known for '{extension}'. Known: {string.Join(", ", Types.Keys)}.");
+
+    /// <summary>A script's schema as JSON text, or null for none.</summary>
+    /// <remarks>
+    /// A JS object arrives as a dictionary and serialises as one; a string is taken to be JSON already and is
+    /// parsed here, so a malformed one is refused before anything is spent rather than by the service after.
+    /// </remarks>
+    private static string? SchemaJson(object? schema) => schema switch
+    {
+        null => null,
+        string text => JsonDocument.Parse(text).RootElement.ValueKind == JsonValueKind.Object
+            ? text
+            : throw new JsonException("expected an object"),
+        _ => JsonSerializer.Serialize(schema),
+    };
 
     /// <summary>
     /// What the scan found in an answer, in the same wording research findings use.
@@ -436,7 +485,7 @@ public class DocumentProcessor : Runtime, IDisposable
     private DocumentAnswer Refused(DocumentFailure failure, string error, string? descriptor = null)
     {
         RequisitionScope.Record(new RequisitionRecord(
-            "document", descriptor ?? "(none)", Success: false,
+            Kind, descriptor ?? "(none)", Success: false,
             Failure: failure.ToString(), Reason: error, Model: null,
             FromCache: false, Refused: true));
         RecordBudgetState();
@@ -455,7 +504,7 @@ public class DocumentProcessor : Runtime, IDisposable
     private DocumentAnswer Attempted(DocumentFailure failure, string error, string descriptor, string model)
     {
         RequisitionScope.Record(new RequisitionRecord(
-            "document", descriptor, Success: false,
+            Kind, descriptor, Success: false,
             Failure: failure.ToString(), Reason: error, Model: model,
             FromCache: false, Refused: false));
         RecordBudgetState();

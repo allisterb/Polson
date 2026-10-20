@@ -43,6 +43,12 @@ foreach ($s in 'polson-agent-key', 'polson-parallel-key', 'polson-qloo-key', 'po
 
 (Copy each value to the clipboard before its turn of the loop, or run the two lines once per secret.)
 
+**Optional — `Video.ask`.** Watching a clip runs on Nebius Token Factory, not Google. Without its key the
+surface refuses every call with `NotConfigured` and nothing else changes. To turn it on, create a
+`polson-nebius-key` secret the same way, add `POLSON_NEBIUS_KEY=polson-nebius-key:latest` to `--set-secrets`
+below, and add `POLSON_NEBIUS_BASE_URL=https://api.tokenfactory.us-north1.nebius.com/v1` (or your region's
+URL) to `--set-env-vars`.
+
 ## 4. The bucket
 
 Bucket names are global, so the current one cannot be reused:

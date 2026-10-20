@@ -343,6 +343,25 @@ class FrontRoutingTests(unittest.TestCase):
         self.assertEqual(record["title"], "Autumn menu poster")
         self.assertEqual(record["files"], ["menu notes.txt"])
 
+    def test_a_reference_video_is_staged_and_named_apart_in_the_brief(self):
+        handed, patch = self.fake_create()
+        with patch:
+            reply = self.client.post("/requests", data=self.compose(),
+                                     files=[("files", ("menu notes.txt", b"pumpkin soup", "text/plain")),
+                                            ("files", ("rival spot.mp4", b"\x00\x00\x00\x18ftyp", "video/mp4"))],
+                                     follow_redirects=False)
+
+        self.assertEqual(reply.status_code, 303)
+        self.assertIn("- Files supplied, in documents/: menu notes.txt\n", handed["brief"])
+        self.assertIn("- Reference video, in documents/ (watch with Video.ask): rival spot.mp4", handed["brief"])
+        made = self.root / "autumn-menu-poster"
+        self.assertTrue((made / "documents" / "rival spot.mp4").is_file())
+
+    def test_the_composer_offers_mp4_among_the_files_it_takes(self):
+        page = self.client.get("/compose/poster")
+        self.assertIn(".mp4", page.text)
+        self.assertIn("reference video (MP4)", page.text)
+
     def test_a_second_request_of_the_same_name_gets_its_own_directory(self):
         _, patch = self.fake_create()
         with patch:

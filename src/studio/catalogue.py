@@ -267,8 +267,12 @@ class Commission:
         lines += ["- Sizes: " + "; ".join(f"{s.label} {s.detail}" for s in self.sizes),
                   "- Formats: " + ", ".join(f.ext for f in self.formats)]
         lines += [f"- {label}: {value}" for label, value in self.extras]
-        if files:
-            lines.append("- Files supplied, in documents/: " + ", ".join(files))
+        clips = [f for f in files if f.lower().endswith(".mp4")]
+        others = [f for f in files if f not in clips]
+        if others:
+            lines.append("- Files supplied, in documents/: " + ", ".join(others))
+        if clips:
+            lines.append("- Reference video, in documents/ (watch with Video.ask): " + ", ".join(clips))
         return "\n".join(lines) + "\n"
 
     def record(self) -> dict:
