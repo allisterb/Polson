@@ -396,12 +396,14 @@ public class CanvasRenderingContext2D
     {
         using var paint = _currentState.CreateFillPaint();
         Canvas.SkCanvas.DrawRect(SKRect.Create(x, y, width, height), paint);
+        RecordBox(SKRect.Create(x, y, width, height), round: false, paint);
     }
 
     public void StrokeRect(float x, float y, float width, float height)
     {
         using var paint = _currentState.CreateStrokePaint();
         Canvas.SkCanvas.DrawRect(SKRect.Create(x, y, width, height), paint);
+        RecordBox(SKRect.Create(x, y, width, height), round: false, paint);
     }
 
     public void ClearRect(float x, float y, float width, float height)
@@ -520,6 +522,7 @@ public class CanvasRenderingContext2D
         {
             using var paint = _currentState.CreateFillPaint();
             Canvas.SkCanvas.DrawPath(path, paint);
+            RecordPath(path, paint);
         }
         finally
         {
@@ -532,6 +535,7 @@ public class CanvasRenderingContext2D
         var p = path != null ? path.Path : _currentPath.Path;
         using var paint = _currentState.CreateStrokePaint();
         Canvas.SkCanvas.DrawPath(p, paint);
+        RecordPath(p, paint);
     }
 
     public void Clip(object? pathOrFillRule = null, object? fillRule = null)
@@ -822,7 +826,79 @@ public class CanvasRenderingContext2D
             _ => x
         };
 
-        TextShaper.Draw(Canvas.SkCanvas, line, font, startX, ResolveBaselineY(y, metrics), paint);
+        var baseline = ResolveBaselineY(y, metrics);
+        TextShaper.Draw(Canvas.SkCanvas, line, font, startX, baseline, paint);
+
+        // Where the line landed, for the layout audit: ascent to descent over its advance, through the current transform.
+        if (paint.Color.Alpha > 0 || paint.Shader is not null)
+        {
+            var m = Canvas.SkCanvas.TotalMatrix;
+            var box = m.MapRect(new SKRect(startX, baseline + metrics.Ascent, startX + line.Width, baseline + metrics.Descent));
+            var scale = MathF.Sqrt(MathF.Abs(m.ScaleX * m.ScaleY - m.SkewX * m.SkewY));
+            Canvas.RecordText(text, box, font.Size * scale, MathF.Abs(m.SkewX) < 1e-4f && MathF.Abs(m.SkewY) < 1e-4f);
+        }
+    }
+
+    /// <summary>A drawn rectangle or oval, for the layout audit, through the current transform.</summary>
+    private void RecordBox(SKRect local, bool round, SKPaint paint)
+    {
+        if (paint.Color.Alpha == 0 && paint.Shader is null) return;
+        Canvas.RecordShape(new LayoutShape(round ? "ellipse" : "rectangle", Canvas.SkCanvas.TotalMatrix.MapRect(local), round));
+    }
+
+    /// <summary>A drawn path the audit can place exactly — a rectangle, an oval, a straight line — and nothing else.</summary>
+    private void RecordPath(SKPath path, SKPaint paint)
+    {
+        if (paint.Color.Alpha == 0 && paint.Shader is null) return;
+        if (path.IsRect || path.IsRoundRect)
+        {
+            RecordBox(path.Bounds, round: false, paint);
+        }
+        else if (path.IsOval)
+        {
+            RecordBox(path.Bounds, round: true, paint);
+        }
+        else if (paint.Style == SKPaintStyle.Stroke)
+        {
+            // Each straight contour of a stroke is a divider: column rules are often one path of several
+            // moveTo/lineTo pairs and a single stroke() (nemologo4), which is no one line.
+            var m = Canvas.SkCanvas.TotalMatrix;
+            using var iterator = path.CreateRawIterator();
+            var points = new SKPoint[4];
+            SKPoint? start = null;
+            SKPoint? end = null;
+            var segments = 0;
+            void Flush()
+            {
+                if (start is { } s && end is { } e && segments == 1)
+                {
+                    var (from, to) = (m.MapPoint(s), m.MapPoint(e));
+                    Canvas.RecordShape(new LayoutShape("line", SKRect.Create(MathF.Min(from.X, to.X), MathF.Min(from.Y, to.Y),
+                        MathF.Abs(to.X - from.X), MathF.Abs(to.Y - from.Y)), false, from, to));
+                }
+                (start, end, segments) = (null, null, 0);
+            }
+            SKPathVerb verb;
+            while ((verb = iterator.Next(points)) != SKPathVerb.Done)
+            {
+                switch (verb)
+                {
+                    case SKPathVerb.Move: Flush(); start = points[0]; break;
+                    case SKPathVerb.Line: end = points[1]; segments++; break;
+                    case SKPathVerb.Close: break;
+                    default: segments += 2; break;   // a curve: not a straight divider
+                }
+            }
+            Flush();
+        }
+        else
+        {
+            // Any other filled outline — a pie, a mark — by its own area, in canvas pixels.
+            var outline = new SKPath(path);
+            outline.Transform(Canvas.SkCanvas.TotalMatrix);
+            if (!outline.Bounds.IsEmpty) Canvas.RecordShape(new LayoutShape("shape", outline.Bounds, false, Outline: outline));
+            else outline.Dispose();
+        }
     }
 
     /// <summary>
