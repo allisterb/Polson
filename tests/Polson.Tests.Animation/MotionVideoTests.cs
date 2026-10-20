@@ -601,5 +601,24 @@ public class MotionVideoTests : TestsRuntime, IDisposable
         }
         finally { FFmpeg.ExecutableOverride = was; }
     }
+
+    /// <summary>
+    /// An end written to three places counts as the frame it names. productad1 ended each 5 s part at 4.958 — frame 119 of
+    /// a 24 fps film is at 4.9583 s — and got 119 frames: 4.958 × 24 = 118.99 was floored. A <c>.98</c> end must still
+    /// stop short of the next part's first frame, or the join repeats it.
+    /// </summary>
+    [Theory]
+    [InlineData(4.958, 120)]
+    [InlineData(4.98, 120)]
+    [InlineData(5.0, 121)]
+    [InlineData(4.9, 118)]
+    public void TestAnEndAThousandthShortOfAFrameStillIncludesIt(double to, int frames)
+    {
+        var motion = new MotionToolkit(root);
+        var comp = motion.Composition(Opts(("width", 16d), ("height", 16d), ("fps", 24d), ("duration", 6d)));
+        Assert.Equal(frames, comp.Capture(Opts(("to", to))));
+        if (!FFmpeg.Available) return;
+        Assert.Equal(frames, comp.SaveVideo("span.mp4", Opts(("to", to)))["frames"]);
+    }
     #endregion
 }

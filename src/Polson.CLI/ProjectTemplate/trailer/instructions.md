@@ -197,6 +197,8 @@ A trailer is short enough to plan in full before any key is set. Write the beats
 - **Motion arrives and then holds.** Text is read after it stops moving: give a line at least as long
   still as its arrival took, and the title longer.
 - **Cut or move, not both at once**, unless the cut is the point.
+- **A dissolve fades the incoming scene in over the outgoing one, held at full.** Fading both at once dips
+  through whatever lies beneath — a grey frame in the middle of the dissolve, visible only on the half-second sheet.
 - The first frame is the thumbnail; it should not be empty.
 
 ---

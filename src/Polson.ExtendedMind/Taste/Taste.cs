@@ -201,11 +201,22 @@ public sealed class TasteToolkit
     /// <summary>The answer with this id (<c>'t3'</c>), or null.</summary>
     public TasteResult? Get(string id) => registry.Get(id);
 
-    /// <summary>The latest answer whose label contains <paramref name="text"/>, or null.</summary>
-    public TasteResult? Find(string text) =>
-        string.IsNullOrWhiteSpace(text)
-            ? null
-            : registry.All.LastOrDefault(r => r.Label.Contains(text, StringComparison.OrdinalIgnoreCase));
+    /// <summary>
+    /// The latest answer labelled exactly <paramref name="text"/>; failing that, the latest whose label contains it; or null.
+    /// Case-insensitive.
+    /// </summary>
+    /// <remarks>
+    /// <b>The exact label wins.</b> Containment alone let a later 'audience A places' shadow the profile labelled
+    /// 'audience A', and <c>pace()</c> over the places answer read 0 fast, 0 slow for every city: a run reported "no
+    /// measurable difference" from the wrong evidence (productad1, 2026-10-19).
+    /// </remarks>
+    public TasteResult? Find(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        var wanted = text.Trim();
+        return registry.All.LastOrDefault(r => string.Equals(r.Label.Trim(), wanted, StringComparison.OrdinalIgnoreCase))
+            ?? registry.All.LastOrDefault(r => r.Label.Contains(wanted, StringComparison.OrdinalIgnoreCase));
+    }
 
     /// <summary>
     /// Two answers' pace side by side — two audiences' profiles — with Fisher's exact test on their fast and slow counts:

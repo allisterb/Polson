@@ -91,7 +91,7 @@ public sealed class MotionText
     /// before anything changes again (or the film's end); null when it is never visible and unchanged across a frame step.
     /// The layer's <c>amount</c> counts: a text faded out by it is not visible. <c>options</c>:
     /// <c>{ frame? }</c> as <see cref="BoundsAt"/>, true to count a text still only when it is still on screen, as a text in
-    /// a moving group is not.
+    /// a moving group is not — and visible only while every group above shows it, their <c>amount</c>s included.
     /// </summary>
     /// <remarks>
     /// The reading-time check: trailer4 found when its tagline came to rest by diffing <c>boundsAt</c> and
@@ -139,8 +139,13 @@ public sealed class MotionText
 
         var (space, local, own, visible) = stack.SpaceAt(time);
         if (!visible || stack is MotionGroup g && !g.Layer.Shows(own, layer)) return [];
+        // A group above fades its text as surely as the text's own amount does: a scene cut away by its group's amount
+        // going to 0 took its name with it, and productad1's reading-time check still read the name as held to the end.
+        var above = stack.AmountAbove(time);
+        if (above <= 0) return [];
         var matrix = SKMatrix.Concat(stack.Root?.ViewMatrix() ?? SKMatrix.Identity, space.Plane);
-        return [.. layer.Letters(stack.TimeFor(layer, local)).Select(l => l with { Ink = matrix.MapRect(l.Ink) })];
+        return [.. layer.Letters(stack.TimeFor(layer, local))
+            .Select(l => l with { Ink = matrix.MapRect(l.Ink), Opacity = l.Opacity * above })];
     }
 
     private static Dictionary<string, object?> Box(SKRect r) => new()

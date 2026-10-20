@@ -326,6 +326,28 @@ public class MotionTextTests(ITestOutputHelper output) : TestsRuntime
         Assert.Null(riding.SettledAt(0, Opts(("frame", true))));
     }
 
+    /// <summary>
+    /// productad1 cut each scene away by its group's <c>amount</c> going to 0; the name inside was reported held to the
+    /// film's end (10 s against 2 s true). In frame mode a group above fades its text as the text's own amount does.
+    /// </summary>
+    [Fact]
+    public void SettledAtOnTheFrameEndsWhenAGroupAboveFadesOut()
+    {
+        if (!Installed("Arial")) return;
+        var motion = new MotionToolkit();
+        var comp = motion.Composition(Opts(("width", 300d), ("height", 160d), ("fps", 24d), ("duration", 4d)));
+        var scene = comp.Group(Opts(("amount", motion.Nodes.Animated("real", new object[]
+            { Opts(("time", 1.95d), ("value", 1d)), Opts(("time", 2d), ("value", 0d)) }))));
+        var name = scene.Text(Opts(("text", "NAME"), ("family", "Arial"), ("size", 40d), ("origin", new[] { 150d, 80d })));
+
+        var own = name.SettledAt()!;
+        Assert.Equal(4d, (double)own["until"]!, 3);                   // in its own stack nothing changes
+
+        var shown = name.SettledAt(0, Opts(("frame", true)))!;
+        Assert.Equal(0d, (double)shown["at"]!);
+        Assert.InRange((double)shown["until"]!, 1.9, 1.96);          // the scene's fade ends the hold
+    }
+
     [Fact]
     public void ARandomizedSelectorIsSeededAndRepeatable()
     {
