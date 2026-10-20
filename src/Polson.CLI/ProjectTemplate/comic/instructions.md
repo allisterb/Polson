@@ -197,3 +197,5 @@ In this directory:
 
 Query them rather than recalling from memory. The API is large and specific, and a call invented from
 memory that happens to sound plausible fails in ways that cost more than the lookup.
+
+{{MANUALS}}

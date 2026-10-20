@@ -341,7 +341,7 @@ internal static class ProjectGenerator
 
         // Claude Code takes the judgment manuals as imported files; anything else, or no manuals at all, takes back
         // whatever an earlier generation of this project wrote there.
-        var importManuals = opts.InlineManuals && sdk == "claude";
+        var importManuals = opts.ManualsInlined && sdk == "claude";
         if (!importManuals) SyncManualFiles(dir, []);
 
         var tokens = new Dictionary<string, string>
@@ -359,9 +359,10 @@ internal static class ProjectGenerator
             // workflow: it carries no instructions.md, which is the only thing discovery looks for.
             ["ENGINE_ONLY"] = Render("_shared", "engine_only.md", []),
 
-            // The judgment manuals, inlined rather than pointed at. Empty unless asked for. Imported files arrive just
-            // as complete under Claude Code, without one oversized CLAUDE.md — see `ImportedManuals`.
-            ["MANUALS"] = importManuals ? ImportedManuals(dir, workflow) : opts.InlineManuals ? InlinedManuals(workflow) : "",
+            // The judgment manuals, inlined rather than pointed at — by default, since a pointer has never reliably
+            // produced a read; `--no-inline-manuals` leaves them out. Imported files arrive just as complete under
+            // Claude Code, without one oversized CLAUDE.md — see `ImportedManuals`.
+            ["MANUALS"] = importManuals ? ImportedManuals(dir, workflow) : opts.ManualsInlined ? InlinedManuals(workflow) : "",
 
             // Stay in the project directory. Shared because it is true of every workflow, and stated
             // as a prompt rule because that is what has actually worked: the engine-only guardrail

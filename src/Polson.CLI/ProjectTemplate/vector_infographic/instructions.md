@@ -952,3 +952,5 @@ beautiful and overstates its numbers has failed the more important half.
 
 Query them rather than recalling from memory. The API is large and specific, and a call invented
 from memory that happens to sound right will fail in ways that cost more than the lookup.
+
+{{MANUALS}}

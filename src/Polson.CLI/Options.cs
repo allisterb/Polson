@@ -103,8 +103,14 @@ public class CreateProjectOptions : Options
     [Option("test", Required = false, HelpText = "Run this workflow as an evaluation of the framework as well as a commission: the agent reports friction, errors and gaps in findings.md, and reading Polson's own source is denied so the run can say whether the published API was sufficient. Applies to any workflow, each of which exercises a different part of the stack.")]
     public bool Test { get; set; }
 
-    [Option("inline-manuals", Required = false, HelpText = "Write the workflow's judgment manuals into the instructions file instead of leaving them to be searched for — for Claude Code as files under manuals/ that CLAUDE.md imports, which load just as completely. Costs tokens on every turn — roughly 15k for `drawing` — but they are a stable prefix, so a host that caches pays a fraction of that after the first turn. Worth it in managed mode, where the host's own subscription covers the spend; think harder about it on a metered deployment. Measured: pointing at a manual has never reliably produced a read, and `polson://manual/index` was never opened in any run.")]
+    [Option("inline-manuals", Required = false, HelpText = "The default, and kept so that commands which ask for it still parse: the workflow's judgment manuals are written into the instructions file — for Claude Code as files under manuals/ that CLAUDE.md imports. See --no-inline-manuals.")]
     public bool InlineManuals { get; set; }
+
+    [Option("no-inline-manuals", Required = false, HelpText = "Leave the workflow's judgment manuals to be searched for instead of writing them into the instructions file. Inlining is the default since 2026-10-20: pointing at a manual has never reliably produced a read — `polson://manual/index` was never opened in any run, and a Gemini logo run read none of its manuals — while an open model given them inline began critiquing and reworking in their terms. They cost tokens on every turn, but they are a stable prefix, so a host that caches pays a fraction after the first turn.")]
+    public bool NoInlineManuals { get; set; }
+
+    /// <summary>Whether the judgment manuals go into the instructions: unless `--no-inline-manuals` says otherwise.</summary>
+    public bool ManualsInlined => InlineManuals || !NoInlineManuals;
 
     [Option("standalone", Required = false, HelpText = "Also generate what the Polson orchestrator needs to host the agent itself. Without it the project is managed by a desktop or IDE host.")]
     public bool Standalone { get; set; }

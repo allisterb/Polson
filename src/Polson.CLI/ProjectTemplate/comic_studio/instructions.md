@@ -165,3 +165,5 @@ In this directory:
    found, and what it changed. Write it as you go.
 5. **`findings.md`** — only on a `--test` run, which says what it wants. A commission does
    not owe anyone a developer-experience report.
+
+{{MANUALS}}
