@@ -335,6 +335,13 @@ on a chart — so **anything in `answer.unverified` stays out of the piece** unt
 naming the table, finds it on its page. A found figure earns its source line twice over: the
 document, and the page, which is what a reader checking a financial graphic will look for first.
 
+**A figure read off someone else's chart is a reading, not a fact.** A PDF's chart and diagram pages go
+to the model as pictures too, and what it read there is listed in `answer.fromImages` — `evidence.from`
+is `'image'`. The engine can confirm the number is printed on the page, never that it belongs to the bar
+or the quarter the model says, so a reading stays labelled as one until the director confirms it. A
+re-drawn chart is a new claim about the old one; it inherits the old chart's honesty only if every bar
+went across with the right label.
+
 **A studio that draws is not a studio that knows.** Asked for Apollo mission durations, a model will
 produce seven plausible numbers without hesitating, and they will be approximately right — which is
 worse than wrong, because approximately right survives review. The whole difference between this

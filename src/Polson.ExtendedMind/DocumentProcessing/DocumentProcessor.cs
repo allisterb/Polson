@@ -82,6 +82,13 @@ public class DocumentProcessor : Runtime, IDisposable
 
     /// <summary>Largest file sent inline, in bytes.</summary>
     protected virtual int MaxBytes => Documents.MaxInlineBytes;
+
+    /// <summary>
+    /// How long <c>ask</c> waits for a read before answering <c>Pending</c> and letting it finish into the cache; 0 waits
+    /// to the end. Set from the server's script limit, less room for the script's own work. Internal: a script that could
+    /// set it could make a read hold the script to the end of its time.
+    /// </summary>
+    internal double WaitSeconds { get; set; } = 20;
     #endregion
 
     #region Methods
@@ -178,7 +185,9 @@ public class DocumentProcessor : Runtime, IDisposable
         var hash = Convert.ToHexString(SHA256.HashData(bytes))[..16];
 
         // The cache key carries everything that changes the answer, and a schema reshapes it.
-        var keyQuery = schema is null ? query : query + "\nschema:" + schema;
+        var images = opts.Images ?? true;
+        var keyQuery = (schema is null ? query : query + "\nschema:" + schema) + (images ? "\nimages:on" : "\nimages:off");
+        // Both ways named, so an answer cached before page images existed is never served as one made with them.
 
         // Before the budget check, not after — a hit costs nothing, so it must still be served when
         // the allowance is spent. Checking affordability first would refuse a read that was free.
@@ -216,10 +225,14 @@ public class DocumentProcessor : Runtime, IDisposable
                         Route = hit.Route,
                         Pages = hit.Pages,
                         Fallback = hit.Fallback,
+                        ImagePages = [.. hit.ImagePages],
                     },
                 };
             }
         }
+
+        var readKey = DocumentCache.KeyOf(hash, keyQuery, useModel, mime);
+        if (inFlight.TryGetValue(readKey, out var running)) return await WaitFor(running, named, useModel, ct);
 
         if (!budget.CanAfford())
         {
@@ -229,9 +242,34 @@ public class DocumentProcessor : Runtime, IDisposable
 
         budget.Spent += 1;
 
+        // The read is its own task, not the script's: a long document can take longer than a script has (one took 28 s
+        // and another 31 s of a 30 s limit, 2026-10-20). Waited on for `WaitSeconds`; past that the script is told it is
+        // pending, and the read finishes into the cache for the next run. Never cancelled by the script's end for that reason.
+        var reading = Read(bytes, mime, query, useModel, schema, images, hash, keyQuery, named);
+        if (cache is null || WaitSeconds <= 0) return await reading;
+        inFlight[readKey] = reading;
+        _ = reading.ContinueWith(_ => inFlight.TryRemove(readKey, out var _), TaskScheduler.Default);
+        return await WaitFor(reading, named, useModel, ct);
+    }
+
+    /// <summary>The read waited on for <see cref="WaitSeconds"/>; past that, <c>Pending</c>, and it carries on into the cache.</summary>
+    private async Task<DocumentAnswer> WaitFor(Task<DocumentAnswer> reading, string named, string model, CancellationToken ct)
+    {
+        var done = await Task.WhenAny(reading, Task.Delay(TimeSpan.FromSeconds(WaitSeconds), ct));
+        if (done == reading) return await reading;
+        return Attempted(DocumentFailure.Pending,
+            $"Still reading after {WaitSeconds:0} s. The read carries on and its answer is kept; ask the same question again.",
+            named, model);
+    }
+
+    /// <summary>One read, from the service to the cache: the part of <c>ask</c> that may outlive the script that started it.</summary>
+    private async Task<DocumentAnswer> Read(byte[] bytes, string mime, string query, string useModel, string? schema, bool images,
+        string hash, string keyQuery, string named)
+    {
+        var ct = CancellationToken.None;
         try
         {
-            var generated = await Generate(bytes, mime, query, useModel, schema, ct);
+            var generated = await Generate(bytes, mime, query, useModel, schema, images, ct);
             var (text, tokens, finish) = (generated.Text, generated.Tokens, generated.Finish);
             var answeredBy = generated.Model ?? useModel;
 
@@ -290,6 +328,7 @@ public class DocumentProcessor : Runtime, IDisposable
                     Route = generated.Route,
                     Pages = generated.Pages,
                     Fallback = generated.Fallback,
+                    ImagePages = [.. generated.ImagePages],
                 });
             }
 
@@ -313,6 +352,7 @@ public class DocumentProcessor : Runtime, IDisposable
                     Route = generated.Route,
                     Pages = generated.Pages,
                     Fallback = generated.Fallback,
+                    ImagePages = [.. generated.ImagePages],
                 },
             };
         }
@@ -338,8 +378,9 @@ public class DocumentProcessor : Runtime, IDisposable
     /// at all, which is worse than a protected method.
     /// </remarks>
     /// <param name="schema">A JSON Schema the answer must follow, as JSON text; null for prose.</param>
+    /// <param name="images">Whether pictures may go to the model as page images; a model sent the whole file sees them anyway.</param>
     protected virtual Task<Generation> Generate(
-        byte[] bytes, string mime, string query, string model, string? schema, CancellationToken ct) =>
+        byte[] bytes, string mime, string query, string model, string? schema, bool images, CancellationToken ct) =>
         GenerateInline(bytes, mime, query, model, schema, ct);
 
     /// <summary>The document sent whole to Gemini, which reads it itself. Overridable for tests.</summary>
@@ -563,6 +604,7 @@ public class DocumentProcessor : Runtime, IDisposable
     #endregion
 
     #region Fields
+    readonly System.Collections.Concurrent.ConcurrentDictionary<string, Task<DocumentAnswer>> inFlight = new();
     readonly Client? client;
     readonly DocumentBudget budget;
     readonly DocumentCache? cache;
@@ -586,6 +628,8 @@ public class DocumentProcessor : Runtime, IDisposable
         public int Pages { get; init; }
 
         public string? Fallback { get; init; }
+
+        public int[] ImagePages { get; init; } = [];
     }
 
     /// <summary>A local refusal, carrying the failure it should be reported as.</summary>

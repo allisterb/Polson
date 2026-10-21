@@ -14,6 +14,7 @@
          *not* fire on — "Art Deco", "Golden Gate Bridge", an anonymous figure — which cost a
          network call each to exercise through the public call. -->
     <InternalsVisibleTo Include="Polson.Tests.ExtendedMind" />
+    <InternalsVisibleTo Include="Polson.CLI" />
   </ItemGroup>
 
   <ItemGroup>

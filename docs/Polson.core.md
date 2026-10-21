@@ -4837,6 +4837,21 @@ if (answer.unverified.length) error('Not on their pages: ' + answer.unverified.j
 > they agree. A quote stitched from a table row (`Graphics $ 22,459`) is checked by its figures, so it is found.
 
 > [!IMPORTANT]
+> **A PDF's charts, diagrams and photos go along as images.** When the document is read, each page is drawn small
+> without its text and measured: a page with enough non-text ink in enough colours — a chart, a map, a diagram, a
+> photo, not a table's grey shading — is kept as a 150 dpi image, at most 8 (Token Factory's limit), and sent with the
+> text. `provenance.imagePages` lists them and `provenance.route` ends `+images`. `{ images: false }` sends text only.
+>
+> **What the model read from a picture is listed in `answer.fromImages`, and is not checked**, even when
+> `evidence.found` is true: the engine can confirm a figure is in the page's text, not that it belongs to the bar,
+> quarter or site the model says. Measured on a shareholder letter: from the page image it paired a chart's margins
+> with their quarters correctly (and from the scrambled text alone too); on its capacity map it called Minnesota and
+> Kansas City 1 GW sites — wrong — and that evidence was "found", because "1GW" is printed on the page. **Treat each
+> as a reading of a picture**: say so where it is used, and have the director confirm it before it is a fact. Fine
+> symbols — a map's ring sizes, a small legend — are beyond it; a question that needs them deserves the answer "the
+> image does not let me tell".
+
+> [!IMPORTANT]
 > **Start with `Documents.list()`, not with a guessed filename.** Nothing else on either side of the
 > boundary enumerates the project — `read_file` opens a path it is given and no MCP tool lists a
 > directory — so a brief saying "the figures are in the attached report" is unanswerable without it.
@@ -4863,7 +4878,7 @@ if (answer.unverified.length) error('Not on their pages: ' + answer.unverified.j
 ## `Documents`
 
 - `Documents.list()` → `DocumentEntry[]` — What the project holds, from its `documents/` folder. **Free, offline, unmetered, and works with no key** — finding out what exists must never cost what reading it costs. Files of a type this surface cannot declare are omitted rather than listed then refused, and the folder's own `README.md` is not listed.
-- `Documents.ask(source: string | byte[], query: string, options?: object)` → `Promise<DocumentAnswer>` — Reads the document and answers the question. `source` is a **project-relative path**, contained exactly as `outFile` is, or the bytes themselves. `options`: `{ model?: string, mimeType?: string, schema?: object }`. A path that is not there comes back naming **what is**, so a near-miss costs one turn rather than several. With `schema` (a JSON Schema object), **`answer.text` is JSON in that shape** — `JSON.parse(answer.text)` — and the schema is part of the cache key.
+- `Documents.ask(source: string | byte[], query: string, options?: object)` → `Promise<DocumentAnswer>` — Reads the document and answers the question. `source` is a **project-relative path**, contained exactly as `outFile` is, or the bytes themselves. `options`: `{ model?: string, mimeType?: string, schema?: object, images?: boolean }`. A path that is not there comes back naming **what is**, so a near-miss costs one turn rather than several. With `schema` (a JSON Schema object), **`answer.text` is JSON in that shape** — `JSON.parse(answer.text)` — and the schema is part of the cache key.
 - `Documents.budget` → `DocumentBudget` — Remaining allowance. **Check before a run of reads.**
 - `Documents.model` → `string` — The first-choice model: Nemotron 3.5 Super VL when Token Factory is configured, else Gemini. `options.model` naming a `gemini-…` model sends the document whole to Gemini.
 - `Documents.isAvailable` → `boolean` — Whether a key is configured. `false` means every call refuses.
@@ -4912,10 +4927,18 @@ Deliberately not the contents: listing is free and reading is metered, so you ca
 - `answer.warnings` → `string[]` — What the scan found. **Empty is the expected result**; see the CAUTION above.
 - `answer.provenance` → `DocumentProvenance?` — Null when the read failed.
 - `answer.evidence` → `DocumentEvidence[]` — The pages and figures the answer rests on, each checked. Empty when Gemini read the document whole.
+- `answer.fromImages` → `string[]` — The evidence read from a page image (`evidence.from === 'image'`), as `'p.2: Q2'2026 50%'`. **Unchecked, whether found or not** — see above.
 - `answer.unverified` → `string[]` — The evidence not found on its page, as `'p.55: 102,714'`. **Empty is the expected result**; anything here stays out of the piece.
 - `answer.failure` → the same value as a number; prefer `failureName`.
 
-`failureName` is one of: `'None'`, `'NotConfigured'`, `'BudgetExhausted'`, `'NotFound'`, `'TooLarge'`, `'UnsupportedType'`, `'NoQuery'`, `'SafetyBlocked'`, `'NoAnswer'`, `'RateLimited'`, `'Network'`, `'Timeout'`, `'Auth'`, `'ServiceError'`, `'InvalidRequest'`, `'Cancelled'`.
+`failureName` is one of: `'None'`, `'NotConfigured'`, `'BudgetExhausted'`, `'NotFound'`, `'TooLarge'`, `'UnsupportedType'`, `'NoQuery'`, `'SafetyBlocked'`, `'NoAnswer'`, `'RateLimited'`, `'Network'`, `'Timeout'`, `'Auth'`, `'ServiceError'`, `'InvalidRequest'`, `'Cancelled'`, `'Pending'`.
+
+> [!IMPORTANT]
+> **`'Pending'` means the read is still running, not that it failed.** A long document can take longer than a script
+> has — a 13-page letter's four questions took 14–31 s on the same day — so `ask` waits for most of the script's time
+> and then answers `Pending` while the read carries on and lands in the cache. **Run the same script again** half a
+> minute later and the same question is answered from the cache, charged once. Asking again while it is still running
+> waits on the same read; **rewording the question starts a new one**. `Video.ask` works the same way.
 
 > [!TIP]
 > **Only transport faults are worth repeating.** `retryable` is true for `RateLimited`, `Network`,
@@ -4932,6 +4955,7 @@ What the answer rests on, so a figure drawn from a document traces back to the d
 - `provenance.query` → `string` — The question, verbatim.
 - `provenance.readUtc` → `Date` · `provenance.tokensSpent` → `number`
 - `provenance.fromCache` → `boolean` — True when the answer was served from cache and nothing was spent. **`readUtc` and `tokensSpent` then describe the original read**, not this call, so together they say how old the answer you are using actually is.
+- `provenance.imagePages` → `number[]` — The pages also sent as images: the chart, diagram and photo pages, at most 8.
 - `provenance.route` → `string` — `'text'` (the PDF's text layer, page by page), `'text+ocr'` (some pages read by OCR) or `'inline'` (sent whole).
 - `provenance.pages` → `number` — Pages read as text; `0` when sent whole.
 - `provenance.fallback` → `string?` — Why the first-choice model did not answer, when another did: `'nvidia/…: Token Factory answered 404 …'`, `'… 12 of 40 pages are scans …'`. Null when it did.
@@ -4940,6 +4964,7 @@ What the answer rests on, so a figure drawn from a document traces back to the d
 
 - `evidence.page` → `number` — The PDF's page, from 1.
 - `evidence.quote` → `string` — The words or figures, as the model quoted them.
+- `evidence.from` → `string` — `'text'`, or `'image'` when the model read it from the page's image.
 - `evidence.found` → `boolean` — Whether that page carries it: every figure in the quote, or the words when it has none.
 
 > [!TIP]

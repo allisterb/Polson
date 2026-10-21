@@ -199,6 +199,58 @@ public class DocumentProcessorTests : TestsRuntime, IDisposable
     }
     #endregion
 
+    #region Pending Tests
+    /// <summary>
+    /// A read slower than the wait answers Pending, is charged once, and finishes into the cache for the next ask.
+    /// </summary>
+    /// <remarks>
+    /// nbisreport1 (2026-10-20): one reading took 28.1 s and a follow-up 31.6 s of a 30 s script limit; with page images
+    /// the same reading timed out twice. The read is no longer the script's to lose.
+    /// </remarks>
+    [Fact]
+    public async Task ASlowReadAnswersPendingAndFinishesIntoTheCache()
+    {
+        var budget = new DocumentBudget(5);
+        var gate = new TaskCompletionSource();
+        var processor = new SlowProcessor(budget, root, new DocumentCache(Path.Combine(root, "cache")), gate.Task) { WaitSeconds = 0.2 };
+        File.WriteAllText(Path.Combine(root, "a.txt"), "hello");
+
+        var first = await processor.Ask("a.txt", "what does it say");
+        var again = await processor.Ask("a.txt", "what does it say");
+
+        Assert.Equal("Pending", first.FailureName);
+        Assert.True(first.Retryable);
+        Assert.Contains("run the script again", first.Remedy);
+        Assert.Equal("Pending", again.FailureName);
+        Assert.Equal(1, processor.Calls);       // the second ask waited on the same read
+        Assert.Equal(1, budget.Spent);          // and was not charged
+
+        gate.SetResult();
+        for (var i = 0; i < 50 && (await processor.Ask("a.txt", "what does it say")) is { Success: false }; i++) await Task.Delay(20);
+
+        var later = await processor.Ask("a.txt", "what does it say");
+        Assert.True(later.Success, later.Error);
+        Assert.True(later.Provenance!.FromCache);
+        Assert.Equal(1, processor.Calls);
+        Assert.Equal(1, budget.Spent);
+    }
+
+    /// <summary>A read inside the wait answers in the same call, as before.</summary>
+    [Fact]
+    public async Task AReadInsideTheWaitAnswersAtOnce()
+    {
+        var gate = new TaskCompletionSource();
+        gate.SetResult();
+        var processor = new SlowProcessor(new DocumentBudget(5), root, new DocumentCache(Path.Combine(root, "cache")), gate.Task);
+        File.WriteAllText(Path.Combine(root, "a.txt"), "hello");
+
+        var answer = await processor.Ask("a.txt", "what does it say");
+
+        Assert.True(answer.Success, answer.Error);
+        Assert.False(answer.Provenance!.FromCache);
+    }
+    #endregion
+
     #region Cache Tests
     /// <summary>
     /// The same question of the same document costs once.
@@ -581,6 +633,22 @@ public class DocumentProcessorTests : TestsRuntime, IDisposable
     #endregion
 
     #region Types
+    /// <summary>A processor whose service answers only when <paramref name="gate"/> opens.</summary>
+    private sealed class SlowProcessor(DocumentBudget budget, string? root, DocumentCache? cache, Task gate)
+        : DocumentProcessor("test-key", budget, root, "fake-model", cache)
+    {
+        public int Calls { get; private set; }
+
+        protected override async Task<Generation> Generate(
+            byte[] bytes, string mime, string query, string model, string? schema, bool images,
+            System.Threading.CancellationToken ct)
+        {
+            Calls += 1;
+            await gate;
+            return new Generation($"answer to '{query}'", 100, null);
+        }
+    }
+
     /// <summary>
     /// A processor that answers without a network, so the surrounding behaviour can be tested.
     /// </summary>
@@ -596,7 +664,8 @@ public class DocumentProcessorTests : TestsRuntime, IDisposable
         public System.Collections.Generic.List<string?> Schemas { get; } = [];
 
         protected override Task<Generation> Generate(
-            byte[] bytes, string mime, string query, string model, string? schema, System.Threading.CancellationToken ct)
+            byte[] bytes, string mime, string query, string model, string? schema, bool images,
+            System.Threading.CancellationToken ct)
         {
             Calls += 1;
             Schemas.Add(schema);
