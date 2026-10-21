@@ -43,11 +43,18 @@ foreach ($s in 'polson-agent-key', 'polson-parallel-key', 'polson-qloo-key', 'po
 
 (Copy each value to the clipboard before its turn of the loop, or run the two lines once per secret.)
 
-**Optional — `Video.ask`.** Watching a clip runs on Nebius Token Factory, not Google. Without its key the
-surface refuses every call with `NotConfigured` and nothing else changes. To turn it on, create a
-`polson-nebius-key` secret the same way, add `POLSON_NEBIUS_KEY=polson-nebius-key:latest` to `--set-secrets`
-below, and add `POLSON_NEBIUS_BASE_URL=https://api.tokenfactory.us-north1.nebius.com/v1` (or your region's
-URL) to `--set-env-vars`.
+**Optional — Nemotron, for `Video.ask` and the first reading of `Documents.ask`.** Nemotron 3.5 Super VL runs on
+NVIDIA's NIM API or Nebius Token Factory, not Google. With neither key, `Video.ask` refuses every call with
+`NotConfigured`, `Documents.ask` reads with Gemini alone, and nothing else changes. Either key turns both on; with
+both, the preferred service is tried first and the other is its backup.
+
+- **NIM** (preferred by default): create a `polson-nvidia-nim-key` secret the same way and add
+  `POLSON_NVIDIA_NIM_KEY=polson-nvidia-nim-key:latest` to `--set-secrets` below. Its base URL defaults to
+  `https://integrate.api.nvidia.com/v1`.
+- **Token Factory**: create a `polson-nebius-key` secret, add `POLSON_NEBIUS_KEY=polson-nebius-key:latest` to
+  `--set-secrets`, and add `POLSON_NEBIUS_BASE_URL=https://api.tokenfactory.us-north1.nebius.com/v1` (or your
+  region's URL) to `--set-env-vars` — it has no default, because the host is regional.
+- **To prefer Token Factory**, add `POLSON_NEMOTRON_PREFER=nebius` to `--set-env-vars`.
 
 ## 4. The bucket
 

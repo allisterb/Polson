@@ -54,8 +54,8 @@ public class DocumentPages : Runtime
     /// <summary>Whether a PDF can be read as text at all.</summary>
     public bool IsAvailable => Mutool is not null;
 
-    /// <summary>Most pages rendered as images: Token Factory takes at most 8 images a request.</summary>
-    public const int MaxImagePages = 8;
+    /// <summary>Most pages rendered as images: what every Nemotron endpoint takes in one request.</summary>
+    public const int MaxImagePages = NemotronChat.MaxImagesPerRequest;
 
     /// <summary>A page image's resolution: legible chart labels at about 3k tokens a page.</summary>
     public const int ImageDpi = 150;

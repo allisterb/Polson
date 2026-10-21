@@ -45,6 +45,13 @@ ENGINE_KEYS = {
     "Qloo:MonthlyReserve",
     "Qloo:CacheDir",
     "Server:DefaultTimeoutSeconds",
+    "Nemotron:Prefer",
+    "ApiKeys:NvidiaNIM",
+    "NvidiaNIM:BaseUrl",
+    "NvidiaNIM:NemotronModel",
+    "ApiKeys:NebiusTokenFactory",
+    "NebiusTokenFactory:BaseUrl",
+    "NebiusTokenFactory:NemotronModel",
 }
 
 

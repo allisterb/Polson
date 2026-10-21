@@ -262,6 +262,9 @@ public sealed record DocumentProvenance
     /// <summary>Why the first-choice model did not answer, when another did; null when it did.</summary>
     public string? Fallback { get; init; }
 
+    /// <summary>Which service served Nemotron: <c>'nim'</c> or <c>'nebius'</c>; null when Nemotron did not answer.</summary>
+    public string? Endpoint { get; init; }
+
     /// <summary>The pages also sent as images: the PDF's chart, diagram and photo pages, at most 8.</summary>
     public int[] ImagePages { get; init; } = [];
 }

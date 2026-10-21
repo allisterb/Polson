@@ -225,6 +225,7 @@ public class DocumentProcessor : Runtime, IDisposable
                         Route = hit.Route,
                         Pages = hit.Pages,
                         Fallback = hit.Fallback,
+                        Endpoint = hit.Endpoint,
                         ImagePages = [.. hit.ImagePages],
                     },
                 };
@@ -328,6 +329,7 @@ public class DocumentProcessor : Runtime, IDisposable
                     Route = generated.Route,
                     Pages = generated.Pages,
                     Fallback = generated.Fallback,
+                    Endpoint = generated.Endpoint,
                     ImagePages = [.. generated.ImagePages],
                 });
             }
@@ -352,6 +354,7 @@ public class DocumentProcessor : Runtime, IDisposable
                     Route = generated.Route,
                     Pages = generated.Pages,
                     Fallback = generated.Fallback,
+                    Endpoint = generated.Endpoint,
                     ImagePages = [.. generated.ImagePages],
                 },
             };
@@ -628,6 +631,9 @@ public class DocumentProcessor : Runtime, IDisposable
         public int Pages { get; init; }
 
         public string? Fallback { get; init; }
+
+        /// <summary>Which <see cref="NemotronEndpoint"/> served it; null when no Nemotron endpoint did.</summary>
+        public string? Endpoint { get; init; }
 
         public int[] ImagePages { get; init; } = [];
     }

@@ -14,7 +14,7 @@ using Polson.ExtendedMind.DocumentProcessing;
 using Xunit;
 
 /// <summary>
-/// <c>Video.ask</c> without a network: the request Token Factory is sent, and what comes back.
+/// <c>Video.ask</c> without a network: the request a Nemotron endpoint is sent, and what comes back.
 /// </summary>
 /// <remarks>
 /// Containment, the budget, the cache and the scan are <see cref="DocumentProcessor"/>'s and are proven in
@@ -43,8 +43,11 @@ public class VideoReaderTests : TestsRuntime, IDisposable
         GC.SuppressFinalize(this);
     }
 
+    private static NemotronEndpoint Endpoint(string? key = Key, string? baseUrl = Base) =>
+        new(NemotronEndpoint.Nebius, baseUrl, key, NemotronEndpoint.NebiusModel);
+
     private VideoReader Reader(Handler handler, DocumentBudget? budget = null) =>
-        new(Key, Base, budget ?? new DocumentBudget(5), root, cache: null, http: new HttpClient(handler));
+        new([Endpoint()], budget ?? new DocumentBudget(5), root, cache: null, http: new HttpClient(handler));
 
     private static string Reply(string content, long tokens = 3000) =>
         new JsonObject
@@ -69,11 +72,12 @@ public class VideoReaderTests : TestsRuntime, IDisposable
         Assert.Equal("Three shots.", answer.Text);
         Assert.Equal(3000, answer.Provenance!.TokensSpent);
         Assert.Equal("video/mp4", answer.Provenance.MimeType);
+        Assert.Equal(NemotronEndpoint.Nebius, answer.Provenance.Endpoint);
 
         Assert.Equal("https://tokenfactory.example/v1/chat/completions", handler.Uri);
         Assert.Equal($"Bearer {Key}", handler.Authorization);
         var body = JsonNode.Parse(handler.Body!)!;
-        Assert.Equal(VideoReader.DefaultVideoModel, body["model"]!.GetValue<string>());
+        Assert.Equal(NemotronEndpoint.NebiusModel, body["model"]!.GetValue<string>());
         var content = body["messages"]![0]!["content"]!.AsArray();
         Assert.Equal("List the shots.", content[0]!["text"]!.GetValue<string>());
         Assert.Equal("video_url", content[1]!["type"]!.GetValue<string>());
@@ -131,8 +135,8 @@ public class VideoReaderTests : TestsRuntime, IDisposable
     public async Task TestWithoutAKeyOrABaseUrlNothingIsSent()
     {
         var handler = new Handler(HttpStatusCode.OK, Reply("x"));
-        using var noKey = new VideoReader(null, Base, new DocumentBudget(5), root, http: new HttpClient(handler));
-        using var noBase = new VideoReader(Key, null, new DocumentBudget(5), root, http: new HttpClient(handler));
+        using var noKey = new VideoReader([Endpoint(key: null)], new DocumentBudget(5), root, http: new HttpClient(handler));
+        using var noBase = new VideoReader([Endpoint(baseUrl: null)], new DocumentBudget(5), root, http: new HttpClient(handler));
 
         Assert.False(noKey.IsAvailable);
         Assert.Equal("NotConfigured", (await noKey.Ask("documents/spot.mp4", "q")).FailureName);
