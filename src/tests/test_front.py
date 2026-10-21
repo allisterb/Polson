@@ -146,6 +146,17 @@ class CatalogueTests(unittest.TestCase):
             self.assertIn(line, text)
         self.assertNotIn("per audience", text)
 
+    def test_a_report_explainers_long_fields_keep_one_question_a_line(self):
+        c = catalogue.parse("report-explainer", "NVIDIA explained", "0", "", ["1920x1080"], "", [".mp4"],
+                            {"viewer": "Retail investors\nwho know the products", "questions": "How big was revenue?\n\nWhere did it come from?\n"},
+                            "Explain the annual report.", [], [])
+        text = c.brief_text(["nvda-10k.pdf"])
+        self.assertIn("- Who is watching: Retail investors who know the products", text)
+        self.assertIn("- Their questions:\n  1. How big was revenue?\n  2. Where did it come from?", text)
+        with self.assertRaisesRegex(StudioError, "keep it under 2000"):
+            catalogue.parse("report-explainer", "Long", "0", "", ["1920x1080"], "", [".mp4"],
+                            {"questions": "Why? " * 500}, "Explain.", [], [])
+
     def test_a_report_explainer_needs_its_pdf(self):
         card = catalogue.BY_SLUG["report-explainer"]
         with self.assertRaisesRegex(StudioError, "attach the PDF"):
@@ -375,6 +386,15 @@ class FrontRoutingTests(unittest.TestCase):
         self.assertIn("- Reference video, in documents/ (watch with Video.ask): rival spot.mp4", handed["brief"])
         made = self.root / "autumn-menu-poster"
         self.assertTrue((made / "documents" / "rival spot.mp4").is_file())
+
+    def test_the_report_explainers_long_fields_are_text_boxes_after_the_brief(self):
+        page = self.client.get("/compose/report-explainer").text
+        brief = page.index('id="brief"')
+        for key in ("viewer", "questions"):
+            box = page.index(f'<textarea id="x_{key}" name="x_{key}"')
+            self.assertGreater(box, brief, f"{key} should come after the brief")
+            self.assertNotIn(f'<input class="fr-inline" name="x_{key}"', page)
+        self.assertIn('name="x_duration"', page[:brief])      # a choice stays in the header
 
     def test_the_composer_offers_mp4_among_the_files_it_takes(self):
         page = self.client.get("/compose/poster")
