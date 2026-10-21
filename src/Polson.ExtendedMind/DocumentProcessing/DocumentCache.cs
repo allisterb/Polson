@@ -133,5 +133,7 @@ public sealed record CachedAnswer
 
     public string? Fallback { get; init; }
 
+    public string? Endpoint { get; init; }
+
     public int[] ImagePages { get; init; } = [];
 }

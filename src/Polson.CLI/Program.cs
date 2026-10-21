@@ -238,32 +238,29 @@ internal class Program : Runtime
         // director clearing a project should not leave its answers behind.
         var cacheDir = Setting("Documents:CacheDir") ?? Path.Combine(projectDir, ".polson", "documents");
 
-        // PDFs and text go to Nemotron on Token Factory, read as page text with their evidence checked; images,
-        // clips and anything Nemotron cannot answer go to Gemini whole. Either key alone is enough to read.
-        var nebiusKey = Setting("ApiKeys:NebiusTokenFactory");
-        var nebiusBase = Setting("NebiusTokenFactory:BaseUrl");
-        var nemotron = Setting("Documents:NemotronModel") ?? VideoReader.DefaultVideoModel;
+        // PDFs and text go to Nemotron, read as page text with their evidence checked; images, clips and anything
+        // Nemotron cannot answer go to Gemini whole. Either a Nemotron endpoint or the Gemini key is enough to read.
         var pages = new DocumentPages(Path.Combine(cacheDir, "pages"), Setting("Tools:Mutool"), Setting("Tools:Tesseract"));
 
-        var processor = new NemotronDocumentProcessor(apiKey, nebiusKey, nebiusBase, new DocumentBudget(budget),
-            projectDir, pages, model, nemotron, new DocumentCache(cacheDir));
+        var processor = new NemotronDocumentProcessor(apiKey, NemotronEndpoints(), new DocumentBudget(budget),
+            projectDir, pages, model, cache: new DocumentCache(cacheDir));
         JsDrawingEngine.Documents = processor;
 
         if (!processor.IsAvailable)
         {
-            Warn("Document reading disabled: neither ApiKeys:GoogleAgentPlatform nor ApiKeys:NebiusTokenFactory is in {0}.",
-                Path.Combine(AssemblyLocation, "appsettings.json"));
+            Warn("Document reading disabled: neither ApiKeys:GoogleAgentPlatform nor a Nemotron key (ApiKeys:NvidiaNIM, "
+                + "ApiKeys:NebiusTokenFactory) is in {0}.", Path.Combine(AssemblyLocation, "appsettings.json"));
         }
         else
         {
-            Info("Document reading enabled (first choice: {0}; fallback: {1}; PDF text: {2}; OCR: {3}; budget: {4} reads).",
-                processor.Model, string.IsNullOrWhiteSpace(apiKey) ? "none" : model,
+            Info("Document reading enabled (first choice: {0}{1}; fallback: {2}; PDF text: {3}; OCR: {4}; budget: {5} reads).",
+                processor.Model, Served(processor.Endpoints), string.IsNullOrWhiteSpace(apiKey) ? "none" : model,
                 pages.Mutool ?? "no mutool", pages.Tesseract ?? "no tesseract", budget);
         }
     }
 
     /// <summary>
-    /// Wires watching a clip, served by Nebius Token Factory whatever model the agent runs on.
+    /// Wires watching a clip, served by Nemotron whatever model the agent runs on.
     /// </summary>
     /// <remarks>
     /// The same containment and the same reasoning about the cache as <see cref="ConfigureDocuments"/>; the
@@ -271,25 +268,49 @@ internal class Program : Runtime
     /// </remarks>
     static void ConfigureVideo(string projectDir)
     {
-        var apiKey = Setting("ApiKeys:NebiusTokenFactory");
-        var baseUrl = Setting("NebiusTokenFactory:BaseUrl");
-        var model = Setting("Video:Model") ?? VideoReader.DefaultVideoModel;
         var budget = ResolveDocumentBudget(Setting("Video:Budget"), DefaultVideoBudget, "Video:Budget");
         var cacheDir = Setting("Video:CacheDir") ?? Path.Combine(projectDir, ".polson", "video");
 
-        JsDrawingEngine.Video = new VideoReader(
-            apiKey, baseUrl, new DocumentBudget(budget), projectDir, model, new DocumentCache(cacheDir));
+        var reader = new VideoReader(NemotronEndpoints(), new DocumentBudget(budget), projectDir, cache: new DocumentCache(cacheDir));
+        JsDrawingEngine.Video = reader;
 
-        if (string.IsNullOrWhiteSpace(apiKey) || string.IsNullOrWhiteSpace(baseUrl))
+        if (!reader.IsAvailable)
         {
-            Warn("Video watching disabled: ApiKeys:NebiusTokenFactory or NebiusTokenFactory:BaseUrl is missing in {0}.",
+            Warn("Video watching disabled: no Nemotron endpoint is configured — ApiKeys:NvidiaNIM, or "
+                + "ApiKeys:NebiusTokenFactory with NebiusTokenFactory:BaseUrl, in {0}.",
                 Path.Combine(AssemblyLocation, "appsettings.json"));
         }
         else
         {
-            Info("Video watching enabled (model: {0}, budget: {1} clips).", model, budget);
+            Info("Video watching enabled (model: {0}{1}; budget: {2} clips).", reader.Model, Served(reader.Endpoints), budget);
         }
     }
+
+    /// <summary>
+    /// The services that serve Nemotron, in the order <c>Nemotron:Prefer</c> gives: <c>nim</c> (the default) or
+    /// <c>nebius</c> first, the other as its backup. Each is left out by the reader while it has no key.
+    /// </summary>
+    static IReadOnlyList<NemotronEndpoint> NemotronEndpoints() => ResolveNemotronEndpoints(
+        Setting("Nemotron:Prefer"),
+        new NemotronEndpoint(NemotronEndpoint.Nim, Setting("NvidiaNIM:BaseUrl") ?? NemotronEndpoint.NimBaseUrl,
+            Setting("ApiKeys:NvidiaNIM"), Setting("NvidiaNIM:NemotronModel") ?? NemotronEndpoint.NimModel),
+        // No default base URL: an account's Token Factory host is regional.
+        new NemotronEndpoint(NemotronEndpoint.Nebius, Setting("NebiusTokenFactory:BaseUrl"),
+            Setting("ApiKeys:NebiusTokenFactory"), Setting("NebiusTokenFactory:NemotronModel") ?? NemotronEndpoint.NebiusModel));
+
+    /// <summary>Orders the endpoints by <paramref name="prefer"/>; a value that names neither is reported and the default used.</summary>
+    internal static IReadOnlyList<NemotronEndpoint> ResolveNemotronEndpoints(string? prefer, NemotronEndpoint nim, NemotronEndpoint nebius)
+    {
+        if (NemotronEndpoint.InOrder(prefer, nim, nebius) is { } ordered) return ordered;
+
+        Warn("Ignoring Nemotron:Prefer='{0}': it must be '{1}' or '{2}'. Using '{3}'.",
+            prefer!, NemotronEndpoint.Nim, NemotronEndpoint.Nebius, NemotronEndpoint.DefaultPrefer);
+        return NemotronEndpoint.InOrder(null, nim, nebius)!;
+    }
+
+    /// <summary>" via nim, then nebius" — for the startup line; empty when no endpoint is configured.</summary>
+    static string Served(IReadOnlyList<NemotronEndpoint> endpoints) =>
+        endpoints.Count == 0 ? "" : " via " + string.Join(", then ", endpoints.Select(e => e.Name));
 
     internal static int ResolveDocumentBudget(string? configured) =>
         ResolveDocumentBudget(configured, DefaultDocumentBudget, "Documents:Budget");

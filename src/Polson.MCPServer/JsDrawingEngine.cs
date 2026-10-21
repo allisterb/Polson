@@ -80,7 +80,7 @@ public partial class JsDrawingEngine : Runtime
     public static DocumentProcessor? Documents { get; set; }
 
     /// <summary>
-    /// Watching a clip, configured once at startup from Nebius Token Factory. Registered on the same terms
+    /// Watching a clip, configured once at startup from the Nemotron endpoints. Registered on the same terms
     /// as <see cref="Documents"/>: unconfigured, it refuses with a remedy rather than being absent.
     /// </summary>
     public static VideoReader? Video { get; set; }
@@ -493,7 +493,7 @@ public partial class JsDrawingEngine : Runtime
             // Reading a supplied document. Same terms again: an unconfigured surface refuses with a
             // remedy rather than being absent.
             engine.SetValue("Documents", Documents ?? new DocumentProcessor(null, new DocumentBudget(0)));
-            engine.SetValue("Video", Video ?? new VideoReader(null, null, new DocumentBudget(0)));
+            engine.SetValue("Video", Video ?? new VideoReader([], new DocumentBudget(0)));
 
             // Sourced research, read-only. Commissioning is the Research MCP tool's job because a run
             // takes far longer than ScriptTimeoutSeconds allows; by the time a script sees a task the

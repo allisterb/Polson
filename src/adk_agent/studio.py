@@ -818,46 +818,6 @@ RETRY_MAX_DELAY = 60.0
 RETRY_STATUS_CODES = [429, 500, 502, 503, 504]
 
 
-# --------------------------------------------------------------------------------------------
-# Models served through LiteLLM (Nebius Token Factory).
-# --------------------------------------------------------------------------------------------
-#
-# **A Gemini model stays a string**, exactly as before: ADK resolves it, and nothing here imports LiteLLM. A
-# model named with a LiteLLM provider prefix becomes ADK's `LiteLlm`, which speaks the OpenAI-compatible API — the
-# route Nebius's own cookbook uses (token-factory-cookbook, agents/google-adk-tool-calling). It needs the
-# `python-nebius-adk/` venv (`requirements-nebius.txt`); the Qloo runtime on `python-adk/` never reaches this.
-#
-# Measured on Nemotron 3.5 Super VL (2026-10-19): it reasons at length before answering — 1,300-3,200 reasoning
-# tokens for one image question — and with a 4,000-token ceiling the reasoning used all of it and no answer came.
-
-#: Provider prefixes that mean "not Gemini: go through LiteLLM".
-LITELLM_PREFIXES: tuple[str, ...] = ("nebius/",)
-
-#: Output allowance per turn for a LiteLLM model, reasoning included. Gemini keeps its own default.
-LITELLM_MAX_OUTPUT_TOKENS = int(os.environ.get("POLSON_MAX_OUTPUT_TOKENS", "32768"))
-
-
-def is_litellm(model: str) -> bool:
-    return model.startswith(LITELLM_PREFIXES)
-
-
-def model_for(name: str):
-    """What an `Agent` is given as its model: the name itself for Gemini, a `LiteLlm` for a prefixed name.
-
-    **LiteLLM fetches its price list from GitHub at import** unless told not to, so the flag is set before the
-    import (measured under an audit hook: with it, importing LiteLLM opens no connection and starts no process).
-    The key is `NEBIUS_API_KEY`, which LiteLLM's `nebius/` provider reads itself, and the endpoint
-    `NEBIUS_API_BASE`: an account's Token Factory host is regional, so the provider's built-in default may not be it.
-    """
-    if not is_litellm(name):
-        return name
-    os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
-    from google.adk.models.lite_llm import LiteLlm               # noqa: PLC0415 - deliberately late
-
-    base = os.environ.get("NEBIUS_API_BASE", "").strip()
-    return LiteLlm(model=name, **({"api_base": base} if base else {}))
-
-
 #: The first segment of a name that is the JavaScript SDK's, not a tool: `Stage.begin`, `Snap(...)`.
 _SDK_GLOBALS = frozenset({
     "Stage", "Snap", "Skia", "Motion", "Taste", "Documents", "Video", "Assets", "Drawing", "Session", "Scene", "Photo",
@@ -897,15 +857,9 @@ def _unknown_tool(tool, args, tool_context, error):
     }
 
 
-def _retry_config(model: str | None = None) -> types.GenerateContentConfig:
-    """Client-side backoff and thought summaries, applied to every agent this module builds.
-
-    For a LiteLLM model the same object is read differently: ADK's adapter takes the retry count as `num_retries`
-    and `max_output_tokens` as `max_completion_tokens`, and ignores the thinking config, which is Gemini's. So the
-    one addition is the output allowance, which a reasoning model needs and Gemini's default already gives.
-    """
+def _retry_config() -> types.GenerateContentConfig:
+    """Client-side backoff and thought summaries, applied to every agent this module builds."""
     return types.GenerateContentConfig(
-        max_output_tokens=LITELLM_MAX_OUTPUT_TOKENS if model and is_litellm(model) else None,
         # **Thinking is billed whether or not it is returned, and it was being billed silently.**
         # Gemini emits a thought *part* only when summaries are asked for; without this the model
         # reasons, `thoughts_token_count` climbs, and `part.thought` is never true — so the
@@ -1824,12 +1778,12 @@ that is not working is the usual way a deadline is missed.
 def advisor_for(project: Path, model: str, perception: list) -> Agent:
     """The agent behind `ask_facilitator`. Looking tools only — deliberately no drawing."""
     return Agent(
-        model=model_for(model),
+        model=model,
         name=ADVISOR_NAME,
         description=ADVISOR_DESCRIPTION,
         instruction=Verbatim(ADVISOR_INSTRUCTION),
         tools=perception,
-        generate_content_config=_retry_config(model),
+        generate_content_config=_retry_config(),
         on_tool_error_callback=_unknown_tool,
         before_model_callback=_make_attach_peeks(project),
     )
@@ -1963,12 +1917,12 @@ def build(
 
     sub_agents = [
         Agent(
-            model=model_for(chosen_model),
+            model=chosen_model,
             name=name,
             description=description,
             instruction=Verbatim(prompt + role_deadline_note(plan.get(name), allowance)),
             tools=[toolset, *perception, *advice],
-            generate_content_config=_retry_config(chosen_model),
+            generate_content_config=_retry_config(),
             on_tool_error_callback=_unknown_tool,
             before_model_callback=[_make_attach_peeks(project),
                                    _make_before_model(plan.get(name), cap, token_cap, raw_cap)],
@@ -1979,7 +1933,7 @@ def build(
     ]
 
     return Agent(
-        model=model_for(chosen_model),
+        model=chosen_model,
         name=root_name,
         description=(
             "Coordinates a multi-agent design studio." if sub_agents else
@@ -1991,7 +1945,7 @@ def build(
         # multi-agent case the Facilitator still needs to look at what the roles produced. `asking`
         # is here and nowhere else — see where it is built.
         tools=[toolset, *perception, *asking],
-        generate_content_config=_retry_config(chosen_model),
+        generate_content_config=_retry_config(),
         on_tool_error_callback=_unknown_tool,
         before_model_callback=[_make_attach_peeks(project),
                                _make_before_model(plan.get(root_name), cap, token_cap, raw_cap)],

@@ -20,7 +20,7 @@ using Xunit;
 /// to Gemini.
 /// </summary>
 /// <remarks>
-/// Token Factory is a fake handler and Gemini a fake <c>GenerateInline</c>. The PDF tests build their PDFs with Skia
+/// The Nemotron endpoints are fake handlers and Gemini a fake <c>GenerateInline</c>. The PDF tests build their PDFs with Skia
 /// and need <c>mutool</c> (in <c>bin/</c> here, on the PATH in the container); the OCR test needs Tesseract too. Each
 /// returns early, passing, where its tool is missing, and says so in the log.
 /// </remarks>
@@ -29,6 +29,7 @@ public class NemotronDocumentProcessorTests : TestsRuntime, IDisposable
     #region Fields
     private const string Key = "test-nebius-key";
     private const string Base = "https://tokenfactory.example/v1";
+    private const string NimBase = "https://nim.example/v1";
     private readonly string root = Path.Combine(Path.GetTempPath(), "polson-nemodoc-" + Guid.NewGuid().ToString("N"));
     #endregion
 
@@ -42,8 +43,15 @@ public class NemotronDocumentProcessorTests : TestsRuntime, IDisposable
     }
 
     private Reader Make(Handler handler, string? gemini = "gemini-key", string? nebius = Key) =>
-        new(gemini, nebius, new DocumentBudget(10), root, new DocumentPages(Path.Combine(root, "pages")),
+        MakeWith(handler, nebius is null ? [] : [Nebius(nebius)], gemini);
+
+    private Reader MakeWith(HttpMessageHandler handler, NemotronEndpoint[] nemotron, string? gemini = "gemini-key") =>
+        new(gemini, nemotron, new DocumentBudget(10), root, new DocumentPages(Path.Combine(root, "pages")),
             new HttpClient(handler));
+
+    private static NemotronEndpoint Nebius(string key = Key) => new(NemotronEndpoint.Nebius, Base, key, NemotronEndpoint.NebiusModel);
+
+    private static NemotronEndpoint Nim(string key = Key) => new(NemotronEndpoint.Nim, NimBase, key, NemotronEndpoint.NimModel);
 
     private static string Reply(string answer, params (int Page, string Quote)[] evidence) =>
         new JsonObject
@@ -192,7 +200,7 @@ public class NemotronDocumentProcessorTests : TestsRuntime, IDisposable
     [InlineData(HttpStatusCode.NotFound)]
     [InlineData(HttpStatusCode.InternalServerError)]
     [InlineData(HttpStatusCode.TooManyRequests)]
-    public async Task TestWhenTokenFactoryFailsGeminiAnswersAndSaysWhy(HttpStatusCode status)
+    public async Task TestWhenNemotronFailsGeminiAnswersAndSaysWhy(HttpStatusCode status)
     {
         File.WriteAllText(Path.Combine(root, "documents", "notes.txt"), "Revenue was 215,938.");
         using var reader = Make(new Handler(status, """{"detail":"no"}"""));
@@ -218,6 +226,51 @@ public class NemotronDocumentProcessorTests : TestsRuntime, IDisposable
         Assert.False(answer.Success);
         Assert.Equal("RateLimited", answer.FailureName);
         Assert.Equal(0, reader.InlineCalls);
+    }
+
+    [Fact]
+    public async Task TestWhenThePreferredEndpointFailsTheOtherAnswersWithItsEvidenceChecked()
+    {
+        File.WriteAllText(Path.Combine(root, "documents", "notes.txt"), "Revenue was 215,938 in millions.");
+        var handler = new Routed
+        {
+            ["nim.example"] = (HttpStatusCode.InternalServerError, """{"detail":"down"}"""),
+            ["tokenfactory.example"] = (HttpStatusCode.OK, Reply("215,938", (1, "Revenue was 215,938"))),
+        };
+        using var reader = MakeWith(handler, [Nim(), Nebius()]);
+
+        var answer = await reader.Ask("documents/notes.txt", "What was revenue?");
+
+        Assert.True(answer.Success, answer.Error);
+        Assert.Equal("215,938", answer.Text);
+        Assert.Equal(VideoReader.DefaultVideoModel, answer.Provenance!.Model);   // the model's name, whoever served it
+        Assert.Equal(NemotronEndpoint.Nebius, answer.Provenance.Endpoint);
+        Assert.Null(answer.Provenance.Fallback);                                   // still Nemotron: nothing fell back
+        Assert.True(Assert.Single(answer.Evidence).Found);
+        Assert.Equal(0, reader.InlineCalls);
+        Assert.Equal(["nim.example", "tokenfactory.example"], handler.Hosts);
+        Assert.Equal([NemotronEndpoint.NimModel, NemotronEndpoint.NebiusModel], handler.Models);
+    }
+
+    [Fact]
+    public async Task TestWhenEveryEndpointFailsGeminiAnswersAndTheFallbackNamesEach()
+    {
+        File.WriteAllText(Path.Combine(root, "documents", "notes.txt"), "Revenue was 215,938.");
+        var handler = new Routed
+        {
+            ["nim.example"] = (HttpStatusCode.InternalServerError, """{"detail":"down"}"""),
+            ["tokenfactory.example"] = (HttpStatusCode.TooManyRequests, """{"detail":"slow down"}"""),
+        };
+        using var reader = MakeWith(handler, [Nim(), Nebius()]);
+
+        var answer = await reader.Ask("documents/notes.txt", "What was revenue?");
+
+        Assert.True(answer.Success, answer.Error);
+        Assert.Equal("gemini answer", answer.Text);
+        Assert.Null(answer.Provenance!.Endpoint);
+        Assert.Contains("nim answered 500", answer.Provenance.Fallback);
+        Assert.Contains("nebius answered 429", answer.Provenance.Fallback);
+        Assert.Equal(1, reader.InlineCalls);
     }
 
     [Fact]
@@ -362,7 +415,7 @@ public class NemotronDocumentProcessorTests : TestsRuntime, IDisposable
     }
 
     [Fact]
-    public async Task TestWithoutTokenFactoryGeminiIsTheFirstChoice()
+    public async Task TestWithoutANemotronEndpointGeminiIsTheFirstChoice()
     {
         File.WriteAllText(Path.Combine(root, "documents", "notes.txt"), "Revenue was 215,938.");
         using var reader = Make(new Handler(HttpStatusCode.OK, Reply("unused")), nebius: null);
@@ -376,8 +429,8 @@ public class NemotronDocumentProcessorTests : TestsRuntime, IDisposable
 
     #region Types
     /// <summary>The reader with Gemini faked: it answers "gemini answer" and counts the calls.</summary>
-    private sealed class Reader(string? gemini, string? nebius, DocumentBudget budget, string root, DocumentPages pages, HttpClient http)
-        : NemotronDocumentProcessor(gemini, nebius, Base, budget, root, pages, http: http)
+    private sealed class Reader(string? gemini, NemotronEndpoint[] nemotron, DocumentBudget budget, string root, DocumentPages pages, HttpClient http)
+        : NemotronDocumentProcessor(gemini, nemotron, budget, root, pages, http: http)
     {
         public int InlineCalls { get; private set; }
 
@@ -387,6 +440,31 @@ public class NemotronDocumentProcessorTests : TestsRuntime, IDisposable
             InlineCalls += 1;
             return Task.FromResult(new Generation("gemini answer", 50, "STOP") { Model = model });
         }
+    }
+
+    /// <summary>Answers each host with its own canned response, and keeps the hosts and models it was sent, in order.</summary>
+    private sealed class Routed : HttpMessageHandler
+    {
+        public (HttpStatusCode Status, string Body) this[string host]
+        {
+            get => routes[host];
+            set => routes[host] = value;
+        }
+
+        public List<string> Hosts { get; } = [];
+
+        public List<string> Models { get; } = [];
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            var host = request.RequestUri!.Host;
+            Hosts.Add(host);
+            Models.Add(JsonNode.Parse(await request.Content!.ReadAsStringAsync(ct))!["model"]!.GetValue<string>());
+            var (status, body) = routes[host];
+            return new HttpResponseMessage(status) { Content = new System.Net.Http.StringContent(body) };
+        }
+
+        private readonly Dictionary<string, (HttpStatusCode Status, string Body)> routes = [];
     }
 
     /// <summary>Answers every request with one canned response, and keeps every body it was sent.</summary>

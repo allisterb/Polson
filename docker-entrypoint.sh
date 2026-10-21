@@ -40,7 +40,7 @@ CLI_SETTINGS="/app/bin/cli/appsettings.json"
 #
 # All whitespace rather than just the trailing newline: an API key contains none, so this also
 # covers a CRLF from a Windows-written file and a stray leading space from a copy-paste.
-for _credential in POLSON_AGENT_PLATFORM_KEY POLSON_PARALLEL_KEY POLSON_QLOO_KEY POLSON_NEBIUS_KEY; do
+for _credential in POLSON_AGENT_PLATFORM_KEY POLSON_PARALLEL_KEY POLSON_QLOO_KEY POLSON_NEBIUS_KEY POLSON_NVIDIA_NIM_KEY; do
     eval "_value=\${$_credential:-}"
     [ -n "$_value" ] || continue
 
@@ -87,7 +87,6 @@ SETTINGS = [
     ("POLSON_ASSETS_BUDGET",          "Assets:Budget",               int),
     ("POLSON_ASSETS_CACHE_DIR",       "Assets:CacheDir",             str),
     ("POLSON_DOCUMENTS_MODEL",        "Documents:Model",             str),
-    ("POLSON_DOCUMENTS_NEMOTRON_MODEL", "Documents:NemotronModel",   str),
     ("POLSON_DOCUMENTS_BUDGET",       "Documents:Budget",            int),
     ("POLSON_DOCUMENTS_CACHE_DIR",    "Documents:CacheDir",          str),
     ("POLSON_PHOTOS_BUDGET",          "Photos:Budget",               int),
@@ -103,7 +102,11 @@ SETTINGS = [
     ("POLSON_QLOO_CACHE_DIR",         "Qloo:CacheDir",               str),
     ("POLSON_NEBIUS_KEY",             "ApiKeys:NebiusTokenFactory",  str),
     ("POLSON_NEBIUS_BASE_URL",        "NebiusTokenFactory:BaseUrl",  str),
-    ("POLSON_VIDEO_MODEL",            "Video:Model",                 str),
+    ("POLSON_NEBIUS_NEMOTRON_MODEL",  "NebiusTokenFactory:NemotronModel", str),
+    ("POLSON_NVIDIA_NIM_KEY",         "ApiKeys:NvidiaNIM",           str),
+    ("POLSON_NVIDIA_NIM_BASE_URL",    "NvidiaNIM:BaseUrl",           str),
+    ("POLSON_NVIDIA_NIM_NEMOTRON_MODEL", "NvidiaNIM:NemotronModel",  str),
+    ("POLSON_NEMOTRON_PREFER",        "Nemotron:Prefer",             str),
     ("POLSON_VIDEO_BUDGET",           "Video:Budget",                int),
     ("POLSON_VIDEO_CACHE_DIR",        "Video:CacheDir",              str),
     ("POLSON_SERVER_TIMEOUT_SECONDS", "Server:DefaultTimeoutSeconds", int),

@@ -30,17 +30,18 @@ using System.Threading.Tasks;
 /// rather than trusting the model's word.
 /// </para>
 /// <para>
-/// <b>Falls back to Gemini</b> when Token Factory is not configured or does not answer (404, 5xx, network, quota),
-/// when <c>mutool</c> is missing, and when a PDF has more scanned pages than OCR can read inside a script. Images
-/// and clips always go to Gemini whole. <c>provenance.fallback</c> says why, and <c>provenance.model</c> who answered.
+/// <b>Nemotron is served by NVIDIA's NIM API or Nebius Token Factory</b>, whichever is preferred, and the other when
+/// that one fails (<see cref="NemotronChat"/>). <b>Falls back to Gemini</b> when neither is configured or neither
+/// answers (404, 5xx, network, quota), when <c>mutool</c> is missing, and when a PDF has more scanned pages than OCR can
+/// read inside a script. Images and clips always go to Gemini whole. <c>provenance.fallback</c> says why,
+/// <c>provenance.model</c> who answered, and <c>provenance.endpoint</c> where.
 /// </para>
 /// </remarks>
 public class NemotronDocumentProcessor : DocumentProcessor
 {
     #region Constructors
     /// <param name="geminiKey">From <c>ApiKeys:GoogleAgentPlatform</c>: the fallback, and the reader for images and clips.</param>
-    /// <param name="nebiusKey">From <c>ApiKeys:NebiusTokenFactory</c>.</param>
-    /// <param name="nebiusBaseUrl">From <c>NebiusTokenFactory:BaseUrl</c>.</param>
+    /// <param name="nemotron">The services that serve Nemotron, in order of preference.</param>
     /// <param name="budget">Reads allowed this session, whichever model answers.</param>
     /// <param name="projectRoot">Documents are read from inside this directory and nowhere else.</param>
     /// <param name="pages">Turns a PDF into page text; null leaves PDFs to Gemini.</param>
@@ -48,15 +49,14 @@ public class NemotronDocumentProcessor : DocumentProcessor
     /// <param name="nemotronModel">The first choice for PDFs and text.</param>
     /// <param name="cache">Where repeated answers are held.</param>
     /// <param name="http">For tests.</param>
-    public NemotronDocumentProcessor(string? geminiKey, string? nebiusKey, string? nebiusBaseUrl, DocumentBudget budget,
+    public NemotronDocumentProcessor(string? geminiKey, IEnumerable<NemotronEndpoint> nemotron, DocumentBudget budget,
         string? projectRoot = null, DocumentPages? pages = null, string geminiModel = DefaultModel,
-        string nemotronModel = VideoReader.DefaultVideoModel, DocumentCache? cache = null, HttpClient? http = null)
-        : this(new TokenFactoryChat(nebiusKey, nebiusBaseUrl, http), geminiKey, budget, projectRoot, pages, geminiModel,
-               nemotronModel, cache)
+        string nemotronModel = NemotronChat.DefaultModel, DocumentCache? cache = null, HttpClient? http = null)
+        : this(new NemotronChat(nemotron, http), geminiKey, budget, projectRoot, pages, geminiModel, nemotronModel, cache)
     {
     }
 
-    private NemotronDocumentProcessor(TokenFactoryChat chat, string? geminiKey, DocumentBudget budget, string? projectRoot,
+    private NemotronDocumentProcessor(NemotronChat chat, string? geminiKey, DocumentBudget budget, string? projectRoot,
         DocumentPages? pages, string geminiModel, string nemotronModel, DocumentCache? cache)
         : base(geminiKey, budget, projectRoot, chat.IsAvailable ? nemotronModel : geminiModel, cache)
     {
@@ -75,6 +75,9 @@ public class NemotronDocumentProcessor : DocumentProcessor
 
     /// <summary>What a PDF or text answer that fell back is read with.</summary>
     public string GeminiModel { get; }
+
+    /// <summary>The configured services that serve Nemotron, in the order they are tried. Not for scripts: <c>provenance.endpoint</c> says which answered.</summary>
+    internal IReadOnlyList<NemotronEndpoint> Endpoints => chat.Endpoints;
 
     public override bool IsAvailable => chat.IsAvailable || CanReadInline;
 
@@ -122,7 +125,8 @@ public class NemotronDocumentProcessor : DocumentProcessor
         {
             failure = ex;
             why = $"{model}: {ex.Message}";
-            if (why.Length > 300) why = why[..300] + "…";
+            // Room for every endpoint's reason, each body already cut short by NemotronChat.
+            if (why.Length > 600) why = why[..600] + "…";
             Warn("Documents.ask fell back to {0}: {1}", GeminiModel, why);
         }
 
@@ -181,11 +185,12 @@ public class NemotronDocumentProcessor : DocumentProcessor
             });
         }
 
-        var (text, tokens, finish) = await chat.Ask(model, content, wrapper.ToJsonString(), ct);
+        var (text, tokens, finish, endpoint) = await chat.Ask(model, content, wrapper.ToJsonString(), ct);
         var route = (paged.OcrPages.Count > 0 ? "text+ocr" : "text") + (pictures.Length > 0 ? "+images" : "");
         int[] shown = [.. pictures.Select(p => p.Page)];
         if (string.IsNullOrWhiteSpace(text))
-            return new Generation(text, tokens, finish) { Model = model, Route = route, Pages = paged.Pages.Count, ImagePages = shown };
+            return new Generation(text, tokens, finish)
+                { Model = model, Route = route, Pages = paged.Pages.Count, ImagePages = shown, Endpoint = endpoint };
 
         string answer;
         var evidence = new List<DocumentEvidence>();
@@ -211,7 +216,7 @@ public class NemotronDocumentProcessor : DocumentProcessor
         }
 
         return new Generation(answer, tokens, finish)
-            { Model = model, Evidence = evidence, Route = route, Pages = paged.Pages.Count, ImagePages = shown };
+            { Model = model, Evidence = evidence, Route = route, Pages = paged.Pages.Count, ImagePages = shown, Endpoint = endpoint };
     }
 
     /// <summary>Whether page <paramref name="page"/> carries the quote: every figure in it, or the words when it has none.</summary>
@@ -251,7 +256,7 @@ public class NemotronDocumentProcessor : DocumentProcessor
 
     private static readonly Regex Figure = new(@"\d[\d,]*(?:\.\d+)?", RegexOptions.Compiled);
     private static readonly Regex Space = new(@"\s+", RegexOptions.Compiled);
-    readonly TokenFactoryChat chat;
+    readonly NemotronChat chat;
     readonly DocumentPages? pages;
     #endregion
 }

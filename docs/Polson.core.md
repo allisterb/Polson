@@ -4819,17 +4819,18 @@ if (answer.unverified.length) error('Not on their pages: ' + answer.unverified.j
 ```
 
 > [!IMPORTANT]
-> **Which model reads it, and how.** A PDF or a text file is read by **Nemotron 3.5 Super VL** (Nebius Token
-> Factory) as **text, page by page** — the PDF's own text layer, or OCR at 300 dpi for a page that is a scan —
+> **Which model reads it, and how.** A PDF or a text file is read by **Nemotron 3.5 Super VL** (NVIDIA's NIM API,
+> or Nebius Token Factory; whichever the studio prefers, with the other as its backup) as **text, page by page** — the PDF's own text layer, or OCR at 300 dpi for a page that is a scan —
 > and the answer comes back with **`evidence`**: the page and the exact figures it used. **The engine then looks
 > for every figure on the page it names**, and lists any it cannot find in **`answer.unverified`**. Measured on
 > NVIDIA's 93-page FY2026 10-K: ten analyst questions in one call, 10/10, about 20 s. Read from page images instead,
 > the same model turned 102,718 into 102,714 — the error this check exists for.
 >
 > **Gemini answers instead** — the file sent whole, with no `evidence` — for images and clips, and whenever Nemotron
-> cannot: no Token Factory key, the service failing, no `mutool`, or a PDF with more than 8 scanned pages (OCR is
+> cannot: no Nemotron key, both services failing, no `mutool`, or a PDF with more than 8 scanned pages (OCR is
 > about two seconds a page, and a script has a minute). **`provenance.model` says who answered** and
-> **`provenance.fallback` why the first choice did not**. A figure from a Gemini answer is unchecked: say so, or
+> **`provenance.fallback` why the first choice did not**. A read the backup service served is still Nemotron's, with
+> its `evidence` checked: `provenance.endpoint` says which, and `fallback` stays null. A figure from a Gemini answer is unchecked: say so, or
 > find it again in a read that has evidence.
 >
 > **A figure in `unverified` does not go into a piece.** Ask again, more narrowly, naming the table or the page.
@@ -4880,7 +4881,7 @@ if (answer.unverified.length) error('Not on their pages: ' + answer.unverified.j
 - `Documents.list()` → `DocumentEntry[]` — What the project holds, from its `documents/` folder. **Free, offline, unmetered, and works with no key** — finding out what exists must never cost what reading it costs. Files of a type this surface cannot declare are omitted rather than listed then refused, and the folder's own `README.md` is not listed.
 - `Documents.ask(source: string | byte[], query: string, options?: object)` → `Promise<DocumentAnswer>` — Reads the document and answers the question. `source` is a **project-relative path**, contained exactly as `outFile` is, or the bytes themselves. `options`: `{ model?: string, mimeType?: string, schema?: object, images?: boolean }`. A path that is not there comes back naming **what is**, so a near-miss costs one turn rather than several. With `schema` (a JSON Schema object), **`answer.text` is JSON in that shape** — `JSON.parse(answer.text)` — and the schema is part of the cache key.
 - `Documents.budget` → `DocumentBudget` — Remaining allowance. **Check before a run of reads.**
-- `Documents.model` → `string` — The first-choice model: Nemotron 3.5 Super VL when Token Factory is configured, else Gemini. `options.model` naming a `gemini-…` model sends the document whole to Gemini.
+- `Documents.model` → `string` — The first-choice model: Nemotron 3.5 Super VL when a Nemotron service is configured, else Gemini. `options.model` naming a `gemini-…` model sends the document whole to Gemini.
 - `Documents.isAvailable` → `boolean` — Whether a key is configured. `false` means every call refuses.
 
 > [!NOTE]
@@ -4958,7 +4959,8 @@ What the answer rests on, so a figure drawn from a document traces back to the d
 - `provenance.imagePages` → `number[]` — The pages also sent as images: the chart, diagram and photo pages, at most 8.
 - `provenance.route` → `string` — `'text'` (the PDF's text layer, page by page), `'text+ocr'` (some pages read by OCR) or `'inline'` (sent whole).
 - `provenance.pages` → `number` — Pages read as text; `0` when sent whole.
-- `provenance.fallback` → `string?` — Why the first-choice model did not answer, when another did: `'nvidia/…: Token Factory answered 404 …'`, `'… 12 of 40 pages are scans …'`. Null when it did.
+- `provenance.fallback` → `string?` — Why the first-choice model did not answer, when another did: `'nvidia/…: Nemotron on nim answered 500 …; Nemotron on nebius answered 429 …'`, `'… 12 of 40 pages are scans …'`. Null when it did.
+- `provenance.endpoint` → `string?` — Which service served Nemotron: `'nim'` (NVIDIA's NIM API) or `'nebius'` (Token Factory). Null when Nemotron did not answer.
 
 ## `DocumentEvidence`
 
@@ -4984,7 +4986,7 @@ What the answer rests on, so a figure drawn from a document traces back to the d
 Answers a question about a **video in the project** — a reference spot the director supplied in
 `documents/`, or one of your own renders in `artifacts/`. It is `Documents.ask` for something that
 moves: the same path rules, the same answer, the same budget, cache and scan. The clip is watched by
-Nemotron 3.5 Super VL on Nebius Token Factory, whatever model you are.
+Nemotron 3.5 Super VL — on NVIDIA's NIM API or Nebius Token Factory, the other as backup — whatever model you are.
 
 ```javascript
 for (const v of Video.list()) log(`${v.path}  ${v.bytes}B`);   // the director's clips, free

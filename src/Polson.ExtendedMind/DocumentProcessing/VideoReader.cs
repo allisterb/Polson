@@ -15,8 +15,10 @@ using System.Threading.Tasks;
 /// <b>A document read whose document moves.</b> Everything around the call — containment, the type
 /// allowlist, the size check, the budget, the content-addressed cache, the scan for text addressed to
 /// the reader, provenance and the run record — is <see cref="DocumentProcessor"/>'s, unchanged. Only the
-/// service differs: Nemotron 3.5 Super VL on Nebius Token Factory (<see cref="TokenFactoryChat"/>), which takes the
-/// clip as a <c>video_url</c> data URI. It is chosen whatever model the agent runs on.
+/// service differs: Nemotron 3.5 Super VL on NVIDIA's NIM API or Nebius Token Factory, the preferred one first
+/// (<see cref="NemotronChat"/>), which takes the clip as a <c>video_url</c> data URI. It is chosen whatever model the
+/// agent runs on. NIM measured 2026-10-21: a 45 s render was about 2,600 prompt tokens, sampled about once a second,
+/// and read in 35–40 s; one request in four answered 500.
 /// </para>
 /// <para>
 /// <b>What it is good for, measured 2026-10-20 on our own renders.</b> It describes what happens and in
@@ -29,24 +31,26 @@ using System.Threading.Tasks;
 public class VideoReader : DocumentProcessor
 {
     #region Constructors
-    /// <param name="apiKey">Read from <c>ApiKeys:NebiusTokenFactory</c>. Sent as a bearer token, never logged.</param>
-    /// <param name="baseUrl">Read from <c>NebiusTokenFactory:BaseUrl</c>, e.g. <c>https://api.tokenfactory.us-north1.nebius.com/v1</c>.</param>
+    /// <param name="endpoints">The services that serve Nemotron, in order of preference.</param>
     /// <param name="budget">Reads allowed this session.</param>
     /// <param name="projectRoot">Clips are read from inside this directory and nowhere else.</param>
     /// <param name="model">Default model. Overridable per call.</param>
     /// <param name="cache">Where repeated answers are held. Null disables caching.</param>
     /// <param name="http">For tests. The reader owns one otherwise.</param>
-    public VideoReader(string? apiKey, string? baseUrl, DocumentBudget budget, string? projectRoot = null,
+    public VideoReader(IEnumerable<NemotronEndpoint> endpoints, DocumentBudget budget, string? projectRoot = null,
         string model = DefaultVideoModel, DocumentCache? cache = null, HttpClient? http = null)
         : base(null, budget, projectRoot, model, cache)
     {
-        chat = new TokenFactoryChat(apiKey, baseUrl, http);
+        chat = new NemotronChat(endpoints, http);
     }
     #endregion
 
     #region Properties
-    /// <summary>Default model: Nemotron 3.5 Super VL, Token Factory's vision model.</summary>
-    public const string DefaultVideoModel = "nvidia/Nemotron-3.5-Super-VL";
+    /// <summary>Default model: Nemotron 3.5 Super VL, by the name <see cref="NemotronChat"/> sends as each endpoint's own id.</summary>
+    public const string DefaultVideoModel = NemotronChat.DefaultModel;
+
+    /// <summary>The configured services that serve Nemotron, in the order they are tried. Not for scripts: <c>provenance.endpoint</c> says which answered.</summary>
+    internal IReadOnlyList<NemotronEndpoint> Endpoints => chat.Endpoints;
 
     /// <summary>What a clip may be. MP4 is the one verified against the service; it is what <c>Motion</c> saves.</summary>
     public static readonly IReadOnlyDictionary<string, string> VideoTypes = new Dictionary<string, string>(
@@ -79,8 +83,8 @@ public class VideoReader : DocumentProcessor
                 ["type"] = "video_url",
                 ["video_url"] = new JsonObject { ["url"] = $"data:{mime};base64,{Convert.ToBase64String(bytes)}" },
             });
-        var (text, tokens, finish) = await chat.Ask(model, content, schema, ct);
-        return new Generation(text, tokens, finish) { Model = model };
+        var (text, tokens, finish, endpoint) = await chat.Ask(model, content, schema, ct);
+        return new Generation(text, tokens, finish) { Model = model, Endpoint = endpoint };
     }
 
     protected override void Dispose(bool disposing)
@@ -91,6 +95,6 @@ public class VideoReader : DocumentProcessor
     #endregion
 
     #region Fields
-    readonly TokenFactoryChat chat;
+    readonly NemotronChat chat;
     #endregion
 }
