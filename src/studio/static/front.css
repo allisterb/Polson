@@ -75,6 +75,8 @@ label.ps-otile { box-sizing: border-box; }
 .fr-titles em { font-style: italic; color: var(--ink); }
 .fr-pieces { margin-bottom: var(--space-3); }
 .fr-compose-body { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(0, 2fr); gap: var(--space-8); max-width: 1200px; margin: 0 auto; padding: var(--space-8) var(--space-6) 0; box-sizing: border-box; }
+/* The brief and the card's long fields (a report's audience and questions), one column under one another. */
+.fr-compose-main { display: grid; gap: var(--space-6); align-content: start; min-width: 0; }
 .fr-assets { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-3); }
 .fr-assets .ps-asset { width: 148px; }
 label.ps-asset-upload { box-sizing: border-box; width: 148px; }

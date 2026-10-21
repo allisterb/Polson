@@ -27,6 +27,9 @@ MAX_TITLE = 80
 #: A free-text extra (a headline, an author) is a line, not a brief.
 MAX_EXTRA = 200
 
+#: A long extra (an audience's questions) is a paragraph, drawn as a box under the brief; still far short of a brief.
+MAX_LONG_EXTRA = 2000
+
 #: Largest custom dimension, in pixels. Past this the engine's own canvas caps would refuse it later.
 MAX_SIDE = 8192
 
@@ -85,6 +88,8 @@ class Extra:
     options: tuple[str, ...] = ()
     default: str = ""
     placeholder: str = ""
+    #: A paragraph rather than a line: drawn as a text box under the brief, line breaks kept.
+    long: bool = False
 
 
 @dataclass(frozen=True)
@@ -173,8 +178,8 @@ CARDS: tuple[Card, ...] = (
     # on screen is one the engine found on its page. No audience fields: who is watching is said in words.
     Card("report-explainer", "Report explainer", "video", "Video · 45 seconds, questions answered from a report",
          (Route("trailer", "Motion graphics explainer"),),
-         extras=(Extra("viewer", "Who is watching", placeholder="Who they are, and what they already know"),
-                 Extra("questions", "Their questions", placeholder="Up to five, separated by semicolons"),
+         extras=(Extra("viewer", "Who is watching", placeholder="Who they are, and what they already know", long=True),
+                 Extra("questions", "Their questions", placeholder="One question a line, up to five", long=True),
                  Extra("duration", "Duration", ("45 seconds", "60 seconds"), "45 seconds")),
          types=("report",), needs=".pdf"),
     Card("motion-graphic", "Motion graphic", "motion", "Animation · one action, keyed",
@@ -284,7 +289,7 @@ class Commission:
                   "- Formats: " + ", ".join(f.ext for f in self.formats)]
         for label, value in self.extras:
             asked = [q.strip() for q in re.split(r"[;\n]", value) if q.strip()] if label == "Their questions" else []
-            lines += [f"- {label}:"] + [f"  {i}. {q}" for i, q in enumerate(asked, 1)] if asked else [f"- {label}: {value}"]
+            lines += [f"- {label}:"] + [f"  {i}. {q}" for i, q in enumerate(asked, 1)] if asked else [f"- {label}: {' '.join(value.split())}"]
         clips = [f for f in files if f.lower().endswith(".mp4")]
         others = [f for f in files if f not in clips]
         if others:
@@ -369,11 +374,15 @@ def parse(card_slug: str, title: str, route: str, kind: str, sizes: list[str], c
 
     pairs = []
     for extra in card.extras:
-        value = " ".join((extras.get(extra.key) or extra.default).split())
+        raw = extras.get(extra.key) or extra.default
+        # A long field keeps its lines (one question a line); each line, and a short field, is one run of words.
+        value = ("\n".join(" ".join(line.split()) for line in raw.splitlines() if line.strip()) if extra.long
+                 else " ".join(raw.split()))
+        limit = MAX_LONG_EXTRA if extra.long else MAX_EXTRA
         if extra.options and value not in extra.options:
             raise StudioError(f"Choose a {extra.label.lower()} from the list.")
-        if len(value) > MAX_EXTRA:
-            raise StudioError(f"{extra.label} is {len(value)} characters; keep it under {MAX_EXTRA}.")
+        if len(value) > limit:
+            raise StudioError(f"{extra.label} is {len(value)} characters; keep it under {limit}.")
         if value:
             pairs.append((extra.label, value))
 

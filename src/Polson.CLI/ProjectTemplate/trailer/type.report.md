@@ -36,7 +36,9 @@ served from the cache for nothing, so every later run asks again rather than cop
 ```javascript
 const REPORT = 'documents/<the file>.pdf';
 const ASK = 'For a viewer who <who is watching>, answer each question from this document. For each figure, give it as '
-    + 'printed in the document, with its unit as the document states it (e.g. "USD millions") and the period it covers.\n'
+    + 'printed in the document, with its unit as the document states it (e.g. "USD millions") and the period it covers. '
+    + 'List only figures the document gives: leave out anything it does not, and say so in the headline instead — never '
+    + 'a sentence such as "not stated" in place of a figure.\n'
     + '1. <question one>\n2. <question two>\n3. <question three>';
 const SHAPE = { type: 'object', required: ['answers'], properties: { answers: { type: 'array', items: {
     type: 'object', required: ['n', 'answerable', 'headline', 'figures'], properties: {
@@ -56,11 +58,15 @@ const answers = JSON.parse(read.text).answers;
 // separately: "$40.4 billion (282 million shares)" is two numbers, and gluing their digits makes one on no page.
 const numbersIn = s => (String(s).match(/\d[\d,]*(?:\.\d+)?/g) || []).map(n => n.replace(/,/g, ''));
 const onPage = new Set(read.evidence.filter(e => e.found).flatMap(e => numbersIn(e.quote)));
-// A figure that is a name rather than a number (a place, a segment) is usable when a found quote carries it.
+// A figure that is a name rather than a number (a place, a segment) is usable when a found quote carries it. A name is
+// a few words: a whole sentence in place of a figure ("not printed in the document") is the model saying it has none,
+// and a found quote can contain that sentence too — so it never counts as found.
 const quoted = read.evidence.filter(e => e.found).map(e => e.quote.toLowerCase());
+const isName = s => String(s).trim().split(/\s+/).length <= 5;
 for (const a of answers) for (const f of a.figures) {
     const nums = numbersIn(f.printed);
-    f.found = nums.length > 0 ? nums.every(n => onPage.has(n)) : quoted.some(q => q.includes(String(f.printed).toLowerCase()));
+    f.found = nums.length > 0 ? nums.every(n => onPage.has(n))
+        : isName(f.printed) && quoted.some(q => q.includes(String(f.printed).toLowerCase()));
 }
 log(`${read.provenance.model} via ${read.provenance.route}, ${read.provenance.pages} pages; unverified: ${JSON.stringify(read.unverified)}`);
 ```
