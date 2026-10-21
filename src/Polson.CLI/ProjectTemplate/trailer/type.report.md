@@ -47,6 +47,7 @@ const SHAPE = { type: 'object', required: ['answers'], properties: { answers: { 
             label: { type: 'string' }, printed: { type: 'string' }, unit: { type: 'string' }, period: { type: 'string' } } } } } } } } };
 
 const read = await Documents.ask(REPORT, ASK, { schema: SHAPE });
+// 'Pending': the read outlived this script and is finishing into the cache. Run the script again, unchanged.
 if (!read.success) { error(read.remedy); exit(read.failureName); }
 if (read.warnings.length) for (const w of read.warnings) error('SCAN: ' + w);
 const answers = JSON.parse(read.text).answers;
@@ -55,13 +56,17 @@ const answers = JSON.parse(read.text).answers;
 // separately: "$40.4 billion (282 million shares)" is two numbers, and gluing their digits makes one on no page.
 const numbersIn = s => (String(s).match(/\d[\d,]*(?:\.\d+)?/g) || []).map(n => n.replace(/,/g, ''));
 const onPage = new Set(read.evidence.filter(e => e.found).flatMap(e => numbersIn(e.quote)));
+// A figure that is a name rather than a number (a place, a segment) is usable when a found quote carries it.
+const quoted = read.evidence.filter(e => e.found).map(e => e.quote.toLowerCase());
 for (const a of answers) for (const f of a.figures) {
     const nums = numbersIn(f.printed);
-    f.found = nums.length > 0 && nums.every(n => onPage.has(n));
+    f.found = nums.length > 0 ? nums.every(n => onPage.has(n)) : quoted.some(q => q.includes(String(f.printed).toLowerCase()));
 }
 log(`${read.provenance.model} via ${read.provenance.route}, ${read.provenance.pages} pages; unverified: ${JSON.stringify(read.unverified)}`);
 ```
 
+- **The check reads digits, not signs.** "$(21.0) million" and "21.0" match. A figure printed in parentheses or with
+  a minus is negative: carry the sign over as printed, and compare it with the page yourself.
 - **Find a figure by its question and its place in the answer, never by its label.** Two readings of the same question
   word a label differently ("Data Center, fiscal 2026", then "Data Center revenue, fiscal 2026"), and a lookup by exact
   label breaks the first time the question is re-asked.
@@ -72,6 +77,12 @@ log(`${read.provenance.model} via ${read.provenance.route}, ${read.provenance.pa
   *"In the Consolidated Statements of Cash Flows, net cash provided by operating activities for fiscal 2026, as
   printed"* — one figure a call. Measured on a 93-page 10-K, the text read 10/10; read from page images, the same
   model turned 102,718 into 102,714. That is the error this guards against, and nothing about it looks wrong on a chart.
+- **A reading of a picture is not a checked figure.** A PDF's chart, diagram and photo pages go to the model as
+  images too (`read.provenance.imagePages`), and what it read from them is in `read.fromImages` — **unchecked even
+  when found**: the number may be on the page while the bar, quarter or site it is paired with is wrong. Put each in
+  Q1 for the director to confirm, label it in `direction.md` as *read from the chart on p. N*, and never let it
+  stand as checked. A map's fine symbols (ring sizes, small legends) are beyond the model: a question that needs them
+  gets the honest scene, not a guess.
 - **A question the document does not answer gets a scene that says so**, in one plain sentence ("The report does
   not break revenue out by country beyond these four"). An honest gap is a result; a plausible figure is the failure.
 - **Record it**: `Stage.check('every figure on screen was found on its page', …, 'N found, M computed, K left out')`.
@@ -117,7 +128,8 @@ The film is **title → one scene per question → end card**:
 2. **Each question** (8–12 s): the question first, in the audience's words, held long enough to read; then the
    answer — the figure arriving large, or bars growing (a `comp.rectangle` with one corner keyed — the three
    growing bars in the SDK reference's *Vector animation* section); then the headline sentence; then the **source line**, small and steady: *"Form 10-K,
-   p. 51"*. **The source line is a claim too**: name the statement or table as the document titles it ("Revenue by
+   p. 51"*, **at 32 px or more at 1080p** — the read-back's watcher misread 26–30 px muted lines ("2026" as "2025") and
+   could not read the page numbers at all. **The source line is a claim too**: name the statement or table as the document titles it ("Revenue by
    End Market", not your question's "revenue by market platform") — the title is in the evidence, or ask for it — and
    never an Item number or section you did not read there. The page is `evidence.page`, the PDF's page; where the printed page number differs, give the printed one
    and say which in `direction.md`.

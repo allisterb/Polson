@@ -218,7 +218,8 @@ public class DocumentInteropTests : TestsRuntime, IDisposable
         : DocumentProcessor("test-key", budget, root, "fake-model", cache)
     {
         protected override Task<Generation> Generate(
-            byte[] bytes, string mime, string query, string model, string? schema, System.Threading.CancellationToken ct) =>
+            byte[] bytes, string mime, string query, string model, string? schema, bool images,
+            System.Threading.CancellationToken ct) =>
             Task.FromResult(new Generation("215,938", 10, null));
     }
     #endregion

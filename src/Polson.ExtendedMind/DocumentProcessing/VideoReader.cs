@@ -70,7 +70,7 @@ public class VideoReader : DocumentProcessor
     #region Methods
     /// <summary>One chat completion with the clip attached as a <c>video_url</c> data URI.</summary>
     protected override async Task<Generation> Generate(
-        byte[] bytes, string mime, string query, string model, string? schema, CancellationToken ct)
+        byte[] bytes, string mime, string query, string model, string? schema, bool images, CancellationToken ct)
     {
         var content = new JsonArray(
             new JsonObject { ["type"] = "text", ["text"] = query },

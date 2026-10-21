@@ -53,6 +53,18 @@ public class DocumentPages : Runtime
 
     /// <summary>Whether a PDF can be read as text at all.</summary>
     public bool IsAvailable => Mutool is not null;
+
+    /// <summary>Most pages rendered as images: Token Factory takes at most 8 images a request.</summary>
+    public const int MaxImagePages = 8;
+
+    /// <summary>A page image's resolution: legible chart labels at about 3k tokens a page.</summary>
+    public const int ImageDpi = 150;
+
+    /// <summary>A page is visual from this share of non-text ink...</summary>
+    public const double VisualInkShare = 0.02;
+
+    /// <summary>...in at least this many colours. Grey table shading has 3–7; charts, diagrams and photos 19 and up.</summary>
+    public const int VisualColours = 12;
     #endregion
 
     #region Methods
@@ -72,7 +84,9 @@ public class DocumentPages : Runtime
         {
             try
             {
-                if (JsonSerializer.Deserialize<PagedText>(await File.ReadAllTextAsync(manifest, ct)) is { Pages.Count: > 0 } cached)
+                // An entry from before page images were kept has no `VisualPages`, and is read again.
+                if (JsonSerializer.Deserialize<PagedText>(await File.ReadAllTextAsync(manifest, ct)) is { Pages.Count: > 0, VisualPages: { } visual } cached
+                    && visual.All(p => File.Exists(ImagePath(dir, p))))
                     return cached;
             }
             catch (JsonException ex)
@@ -110,7 +124,11 @@ public class DocumentPages : Runtime
                 File.Delete(image);
             }
 
-            var read = new PagedText { Pages = pages, OcrPages = [.. scanned.Select(i => i + 1)] };
+            var visual = await VisualPages(source, dir, ct);
+            foreach (var p in visual)
+                await Run(Mutool, ["draw", "-q", "-r", ImageDpi.ToString(), "-o", ImagePath(dir, p), source, p.ToString()], TextTimeout, ct);
+
+            var read = new PagedText { Pages = pages, OcrPages = [.. scanned.Select(i => i + 1)], VisualPages = visual };
             await File.WriteAllTextAsync(manifest, JsonSerializer.Serialize(read), ct);
             return read;
         }
@@ -121,9 +139,88 @@ public class DocumentPages : Runtime
             File.Delete(source);
         }
     }
+
+    /// <summary>A visual page's image, as kept when the document was read; null when it is not one.</summary>
+    public byte[]? ImageOf(string hash, int page)
+    {
+        var path = ImagePath(Path.Combine(directory, hash), page);
+        return File.Exists(path) ? File.ReadAllBytes(path) : null;
+    }
     #endregion
 
     #region Methods (private)
+    private static string ImagePath(string dir, int page) => Path.Combine(dir, $"image{page:0000}.png");
+
+    /// <summary>
+    /// The pages whose pictures carry something their text does not, most ink first, at most <see cref="MaxImagePages"/>.
+    /// </summary>
+    /// <remarks>
+    /// Each page is drawn at 24 dpi <b>without its text</b> (<c>mutool draw -K</c>) and measured: the share of pixels away
+    /// from the page's own background, and how many colours they come in. Calibrated 2026-10-20 on two documents: a
+    /// 10-K's statements score high on ink from grey row shading but in only 3–7 colours, and its one chart (the stock
+    /// performance graph) in 36; a shareholder letter's dashboard, diagram and photo pages in 28–78. Half a second for
+    /// 93 pages.
+    /// </remarks>
+    private async Task<int[]> VisualPages(string source, string dir, CancellationToken ct)
+    {
+        await Run(Mutool!, ["draw", "-q", "-K", "-r", "24", "-c", "rgb", "-F", "ppm", "-o", Path.Combine(dir, "v%04d.ppm"), source], TextTimeout, ct);
+        var scored = new List<(int Page, double Ink)>();
+        foreach (var file in Directory.GetFiles(dir, "v*.ppm"))
+        {
+            var page = int.Parse(Path.GetFileNameWithoutExtension(file)[1..]);
+            var (ink, colours) = Measure(await File.ReadAllBytesAsync(file, ct));
+            File.Delete(file);
+            if (ink >= VisualInkShare && colours >= VisualColours) scored.Add((page, ink));
+        }
+        return [.. scored.OrderByDescending(s => s.Ink).Take(MaxImagePages).Select(s => s.Page).Order()];
+    }
+
+    /// <summary>A binary PPM's share of pixels away from its commonest colour, and how many colours those are in.</summary>
+    internal static (double Ink, int Colours) Measure(byte[] ppm)
+    {
+        // P6, width, height, maxval, each a whitespace-separated token, then one whitespace and the pixels.
+        var at = 0;
+        string Token()
+        {
+            while (at < ppm.Length && (char.IsWhiteSpace((char)ppm[at]) || ppm[at] == '#'))
+            {
+                if (ppm[at] == '#') while (at < ppm.Length && ppm[at] != '\n') at++;
+                else at++;
+            }
+            var start = at;
+            while (at < ppm.Length && !char.IsWhiteSpace((char)ppm[at])) at++;
+            return System.Text.Encoding.ASCII.GetString(ppm, start, at - start);
+        }
+        if (Token() != "P6") throw new InvalidOperationException("Not a binary PPM.");
+        int w = int.Parse(Token()), h = int.Parse(Token());
+        Token();
+        at++;
+        var n = w * h;
+        if (n == 0 || at + n * 3 > ppm.Length) return (0, 0);
+
+        var counts = new Dictionary<int, int>();
+        for (var i = 0; i < n; i++)
+        {
+            var o = at + i * 3;
+            var key = (ppm[o] << 16) | (ppm[o + 1] << 8) | ppm[o + 2];
+            counts[key] = counts.GetValueOrDefault(key) + 1;
+        }
+        var bg = counts.MaxBy(c => c.Value).Key;
+        var (br, bgn, bb) = ((bg >> 16) & 255, (bg >> 8) & 255, bg & 255);
+
+        var ink = 0;
+        var buckets = new HashSet<int>();
+        for (var i = 0; i < n; i++)
+        {
+            var o = at + i * 3;
+            int r = ppm[o], g = ppm[o + 1], b = ppm[o + 2];
+            if (Math.Max(Math.Abs(r - br), Math.Max(Math.Abs(g - bgn), Math.Abs(b - bb))) <= 12) continue;
+            ink++;
+            buckets.Add(((r >> 5) << 6) | ((g >> 5) << 3) | (b >> 5));
+        }
+        return (ink / (double)n, buckets.Count);
+    }
+
     private static async Task Run(string exe, string[] args, TimeSpan timeout, CancellationToken ct)
     {
         var start = new ProcessStartInfo(exe)
@@ -195,6 +292,9 @@ public sealed record PagedText
 
     /// <summary>Pages, counted from 1, whose text came from OCR rather than the text layer.</summary>
     public IReadOnlyList<int> OcrPages { get; init; } = [];
+
+    /// <summary>Pages, counted from 1, whose pictures are kept as images for the model; null in an entry from before them.</summary>
+    public int[]? VisualPages { get; init; }
 }
 
 /// <summary>Too many scanned pages to OCR inside one script; the document goes whole to a model that reads scans.</summary>

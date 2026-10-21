@@ -726,6 +726,12 @@ internal class Program : Runtime
         ConfigureAssetRequisition(projectDir);
         ConfigureDocuments(projectDir);
         ConfigureVideo(projectDir);
+
+        // A read waits for most of a script's time and then answers Pending, finishing into the cache: ten seconds are
+        // left for the script's own work, and the read never decides whether the script lives.
+        var wait = Math.Max(5, JsDrawingEngine.ScriptTimeoutSeconds - 10);
+        if (JsDrawingEngine.Documents is { } documents) documents.WaitSeconds = wait;
+        if (JsDrawingEngine.Video is { } video) video.WaitSeconds = wait;
         ConfigurePhotos();
         ConfigureResearch(projectDir);
         ConfigureTaste();

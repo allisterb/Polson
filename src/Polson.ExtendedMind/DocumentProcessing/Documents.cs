@@ -96,6 +96,9 @@ public sealed record DocumentOptions
     /// <summary>A JSON Schema the answer must follow — an object, or its JSON text. The answer is then JSON.</summary>
     /// <remarks>Part of the cache key: the same question in a different shape is a different answer.</remarks>
     public object? Schema { get; init; }
+
+    /// <summary>Whether a PDF's chart, diagram and photo pages go to the model as images too; true unless set false.</summary>
+    public bool? Images { get; init; }
 }
 
 #endregion
@@ -139,7 +142,7 @@ public sealed record DocumentAnswer
 
     /// <summary>Whether repeating the identical request could succeed.</summary>
     public bool Retryable => Failure is DocumentFailure.RateLimited or DocumentFailure.Network
-        or DocumentFailure.Timeout or DocumentFailure.ServiceError;
+        or DocumentFailure.Timeout or DocumentFailure.ServiceError or DocumentFailure.Pending;
 
     /// <summary>The underlying message, when there was one.</summary>
     public string? Error { get; init; }
@@ -174,7 +177,18 @@ public sealed record DocumentAnswer
 
     /// <summary>The evidence the check could not find on its page, as <c>"p.55: 102,714"</c>. Empty is the expected result.</summary>
     /// <remarks>An array, not a collection expression: Jint cannot convert the list type the compiler makes for one.</remarks>
-    public string[] Unverified => Evidence.Where(e => !e.Found).Select(e => $"p.{e.Page}: {e.Quote}").ToArray();
+    public string[] Unverified => Evidence.Where(e => !e.Found && e.From != "image").Select(e => $"p.{e.Page}: {e.Quote}").ToArray();
+
+    /// <summary>
+    /// What the answer read from a page image — a chart's bars, a map, a diagram — as <c>"p.2: Q2'2026 50%"</c>.
+    /// </summary>
+    /// <remarks>
+    /// Not a failure, and <b>not checked, even when <c>found</c></b>: the engine can confirm a figure is in the page's
+    /// text, not that it belongs to the bar, quarter or site the model says. On a shareholder letter's map, "1GW sites at
+    /// Minnesota, Kansas City and Pennsylvania" was found — the digits are on the page — and two of the three were wrong.
+    /// Treat each as a reading of a picture: say so where it is used, and have the director confirm it.
+    /// </remarks>
+    public string[] FromImages => Evidence.Where(e => e.From == "image").Select(e => $"p.{e.Page}: {e.Quote}").ToArray();
 }
 
 /// <summary>One piece of evidence an answer rests on: a page, what it says there, and whether it does.</summary>
@@ -194,6 +208,9 @@ public sealed record DocumentEvidence
     /// found word for word in text where each cell is its own line, while the figure is.
     /// </remarks>
     public required bool Found { get; init; }
+
+    /// <summary><c>'text'</c>, or <c>'image'</c> when the model read it from the page's image rather than its text.</summary>
+    public string From { get; init; } = "text";
 }
 
 /// <summary>Where an answer came from. Attached to every successful read.</summary>
@@ -244,6 +261,9 @@ public sealed record DocumentProvenance
 
     /// <summary>Why the first-choice model did not answer, when another did; null when it did.</summary>
     public string? Fallback { get; init; }
+
+    /// <summary>The pages also sent as images: the PDF's chart, diagram and photo pages, at most 8.</summary>
+    public int[] ImagePages { get; init; } = [];
 }
 
 /// <summary>Why a document read did not produce an answer.</summary>
@@ -282,6 +302,9 @@ public enum DocumentFailure
     ServiceError = 13,
     InvalidRequest = 14,
     Cancelled = 15,
+
+    /// <summary>Still being read when the wait ran out; the answer is on its way to the cache.</summary>
+    Pending = 16,
 }
 
 /// <summary>What to do about each failure, in words the agent can act on.</summary>
@@ -320,6 +343,10 @@ internal static class DocumentRemedy
         DocumentFailure.ServiceError => "The service returned an error. Retrying is reasonable.",
         DocumentFailure.InvalidRequest => "The request was malformed. Read the error and change the call.",
         DocumentFailure.Cancelled => "Cancelled before it finished.",
+        DocumentFailure.Pending =>
+            "Still reading: a long document can take longer than a script has. The read carries on and its answer is "
+            + "kept — run the script again in half a minute and the same question is answered from the cache, at no "
+            + "further cost. Do not reword the question meanwhile: a different question is a new read.",
         _ => "Unrecognised failure.",
     };
 }
