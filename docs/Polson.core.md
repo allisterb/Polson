@@ -5039,22 +5039,25 @@ The answer is a `DocumentAnswer`, with the same `failureName` values, `remedy`, 
 
 ---
 
-# Verify (Checking a Film Against Its Sources)
+# Verify (Checking a Film or an Image Against Its Sources)
 
-Checks a finished film three ways, and only one of them is a model's:
-- **What the film shows** is read from the composition (`comp.texts()`): every text, and the seconds it is on screen.
+Checks a finished film (`Verify.film`) or a still (`Verify.image`) three ways, and only one of them is a model's:
+- **What the piece shows** is read from the piece itself. For a film, that is the composition (`comp.texts()`): every text, and the seconds it is on screen. For a still, it is every line of text the canvas or paper drew, and its box.
 - **Where each text came from** is looked up, not asked:
   - **`brief`**: the text is in `brief.md`;
   - **`document`**: its figures are on a page of a document `Documents.ask` read, given as `documents/x.pdf p. 51`;
   - **`qloo`**: a title a Taste answer returned;
   - **`research`**: in a completed research result;
   - **`computed`**: a figure you computed, which you pass with its working;
+  - **`scale`**: an axis label you declare, such as a tick or a scale's end (`scale: ['0%', '1,000%']`). It marks a ruler, not a claim;
   - **`own words`**: anything else.
 
-  Own words with a figure in them is an **`unsourced figure`**, and fails the check.
-- **What a viewer sees** is a model's reading. `Video.ask` transcribes the encoded film, and the transcription is compared with what the film set.
+  **A text with figures is sourced figure by figure.** A line can carry a document's figure and one you computed, so each figure is looked for on its own: on the documents' pages first, then among the figures of your `computed` keys, then in research and the brief. `detail` names where each was found. A figure found nowhere makes the text an **`unsourced figure`**, with `detail` naming it, and fails the check.
 
-This is how a Polson film differs from a generated one: every word and number on screen has a source, and an independent watcher read it.
+  **`computed` is for arithmetic, not citations.** An entry whose working shows no arithmetic (a digit and an operator) is set aside, and the summary names it. A live run passed `'2016': 'Period covered from FT methodology'` and `'20': 'FT rank 20'`. A figure from a document is found on its page without help, and a label claiming it would have sourced "Across 20 American Countries" from Qloo's peer ranked 20th. The figure check cannot tell what a figure is said to mean. That the article's 20 countries were *eligible*, not represented, is for you to read.
+- **What a viewer sees** is a model's reading. Nemotron (the reader behind `Video.ask`) transcribes the encoded film or the rendered image, and the transcription is compared with what the piece set.
+
+This is how a Polson piece differs from a generated one: every word and number on it has a source, and an independent reader read it.
 
 ```js
 // After the film is encoded, in a script that rebuilds the composition (MODE 'checks').
@@ -5062,30 +5065,63 @@ const v = await Verify.film(comp, 'output.mp4', { computed: { '+454%': '582.3 / 
 if (!v.ok) exit(v.remedy);                        // 'Pending': the watcher is still reading — run it again, unchanged
 log(v.summary);
 for (const s of v.strays) log(`stray ${s.n}: read "${s.read}" at ${s.at} s — look at ${s.frame}`);
-Stage.check('every text on screen has a source and was read as set', v.passed, v.summary, { judged: true });
 ```
+
+**The check records its own verdict.** Each run of it, and each stray settled, records a judged `check` with the claim `Read-back of <film or image>: every text has a source and was read as set` and `v.summary` as its detail. `Stage.check` refuses a claim beginning `Read-back of`. Do not write a verdict for it: a live run dropped its `Verify.image` call and wrote the claim as passed, over a check that had failed.
 
 > [!IMPORTANT]
 > **A stray is a reading of text the film never set, and it is not a finding until you have looked at its frame.**
 >
-> The watcher misreads: it read $974M as $744M on a report film whose frame said $974M. So each stray's frame is saved as `artifacts/verify/stray-n.png`. **Look at it** (with `Skia.Image.load` in a script that returns it, or your host's image reader), then settle the stray:
+> The watcher misreads: it read $974M as $744M on a report film whose frame said $974M. So each stray's frame is saved as `artifacts/verify/stray-n.png`. **Look at it** (`return Skia.Image.load('artifacts/verify/stray-1.png')` from a script, or your host's image reader), then settle the stray **in a later script**. `Verify.stray` refuses in the script that ran the check, because nothing has been looked at yet:
 > - **`Verify.stray(n, 'misread')`**: the frame shows what the film set.
 > - **`Verify.stray(n, 'real')`**: the frame shows what was read, so it is a fault in the film, such as a half-drawn figure or a frame from the wrong scene. Fix it and encode again.
 >
-> A stray of kind `'different figure'` is a line the film did set, read with another number. That is the case to look at most carefully. The studio shows a stray only once it is settled.
+> A stray of kind `'different figure'` is a line the film did set, read with another number. That is the case to look at most carefully. The studio shows a stray only once it is settled. **Checking the same bytes again keeps the verdicts already given**, so re-running an unchanged final render does not reopen its strays; a changed one is read afresh.
 >
 > **A text that is `missed`** was set but not read. Usually it was on screen too briefly (the watcher samples about once a second) or set too small: look at its `seconds` and its size before you blame the watcher.
 
+**A still** is checked from the script that draws it, once everything is drawn: the pixels read are the canvas's as they stand.
+
+```js
+const canvas = createCanvas(400, 200);
+const ctx = canvas.getContext('2d');
+ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, 400, 200);
+ctx.fillStyle = '#111111'; ctx.font = '28px Arial';
+ctx.fillText('+454%', 20, 60);
+const v = await Verify.image(canvas, { computed: { '+454%': '582.3 / 105.1 − 1 = 4.540' }, name: 'final' });
+if (!v.ok) exit(v.remedy);                        // 'Pending': the reader is still reading — run the script again, unchanged
+log(v.summary);
+for (const s of v.strays) log(`stray ${s.n}: read "${s.read}" — look at ${s.frame}`);
+return canvas;
+```
+
+> [!IMPORTANT]
+> **The record is what the canvas drew, so draw every word on it.** Lettering inside a pasted image, or type drawn on a second canvas and composited in, is not in the record and reads as a stray of kind `'never set'`. A line drawn and then painted over is in the record and comes back `missed`, which is the point: no reader can see it.
+>
+> A stray's `frame` is a crop of the image around the line it resembles, `artifacts/verify/<name>-stray-n.png`, or the whole read image when it resembles none. Look at it before you settle it. A line repeated across the piece (an axis label on each small multiple) is one item, with its `count`, and needs reading once.
+>
+> **A reading that runs several drawn lines together is not a stray.** The reader reads a table row across its columns ("#18 Fair Price Properties Property • US +2,587.2%"). Every line it contains was drawn, so it explains itself. It is a stray only if it carries a figure that none of those lines has.
+>
+> **A missed text carries `closest`**: the reading holding most of its words. "ORORO Heated Apparel" read as "OROO Heated Apparel" was drawn at 12 px; that is a size fault, not an absence.
+
 ## `Verify`
 
-- `Verify.film(comp: MotionComposition, video: string, options?: { computed?: object })` → `Promise<object>` — The film checked: `{ ok, passed, items, strays, counts, summary, model }`, or `{ ok: false, failureName, error, remedy }` when the watcher could not watch. `video` is project-relative.
+- `Verify.film(comp: MotionComposition, video: string, options?: { computed?: object, scale?: string[] })` → `Promise<object>` — The film checked: `{ ok, passed, items, strays, counts, summary, model }`, or `{ ok: false, failureName, error, remedy }` when the watcher could not watch. `video` is project-relative.
   - `items`: one per text set, each `{ text, from, to, seconds, source, detail, seen, readAs, readAt, status }`, `status` one of `'seen'`, `'missed'` or `'never shown'`.
   - `strays`: one per reading of text the film never set, each `{ n, read, at, frame, near, kind, verdict, note }`, `kind` either `'different figure'` or `'never set'`.
   - `passed`: no unsourced figure, no stray still to look at, and no stray found real.
-  - `computed`: maps a text exactly as set to its working, `{ '+454%': '582.3 / 105.1 − 1' }`.
+  - `scale`: the axis labels exactly as set, sourced as `scale`.
+  - `computed`: maps a text exactly as set to its working, `{ '+454%': '582.3 / 105.1 − 1' }`. A key's figures also source those figures wherever else they are set: `{ 'Top 4.4%': '22 / 500' }` sources 4.4 inside a longer line.
 
-  Recorded as `film.verify`, which the studio's Verification view draws. The latest check is held for `Verify.stray`.
-- `Verify.stray(n: number, verdict: 'misread' | 'real', note?: string)` → `object` — Settles stray `n` of the latest check after you have looked at its frame, recorded as `film.stray`. Returns the check as it now stands, with a fresh `summary` and `passed`.
+  Recorded as `film.verify`, which the studio's Verification view draws, and as a judged `check` (see above). The latest check is held for `Verify.stray`.
+- `Verify.image(source: SkiaCanvas | CanvasRenderingContext2D | SnapPaper, options?: { computed?: object, scale?: string[], name?: string })` → `Promise<object>` — The still checked: `{ ok, passed, image, items, strays, counts, summary, model }`, or `{ ok: false, failureName, error, remedy }` when the reader could not read. Pass the canvas, its context, or the paper, after everything is drawn.
+  - The pixels read are saved as `artifacts/verify/<name>.png` (`name` defaults to `'image'`; letters, digits, `-` and `_`), over white where the canvas is transparent; `image` is that path.
+  - `items`: one per distinct text drawn, each `{ text, count, box, boxes, size, source, detail, seen, readAs, closest, status }`. `box` is `[x, y, width, height]` in pixels of the first place it was drawn, `boxes` up to twelve of them, and `size` its type size in pixels. `status` is `'seen'`, `'missed'`, or `'off the canvas'` for text drawn wholly outside it. `closest` is set on a missed text: the reading holding at least half its words, or null.
+  - `strays`: as for a film, with `at` null and `frame` the crop to look at.
+  - `passed`, `computed`, `scale`: as for a film.
+
+  Recorded as `image.verify`, which the studio's Verification view draws over the image, and as a judged `check`. The latest check, film or image, is held for `Verify.stray`.
+- `Verify.stray(n: number, verdict: 'misread' | 'real', note?: string)` → `object` — Settles stray `n` of the latest check, film or image, after you have looked at its frame or crop, recorded as `film.stray` or `image.stray` and as the check's updated verdict. Returns the check as it now stands, with a fresh `summary` and `passed`. Throws in the script that ran the check.
 
 ---
 

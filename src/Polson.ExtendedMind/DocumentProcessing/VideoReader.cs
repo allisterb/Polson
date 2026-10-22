@@ -72,16 +72,20 @@ public class VideoReader : DocumentProcessor
     #endregion
 
     #region Methods
-    /// <summary>One chat completion with the clip attached as a <c>video_url</c> data URI.</summary>
+    /// <summary>
+    /// One chat completion with the clip attached as a <c>video_url</c> data URI — or, for a still passed as bytes with an
+    /// <c>image/*</c> type (<c>Verify.image</c>'s read-back), as an <c>image_url</c>.
+    /// </summary>
     protected override async Task<Generation> Generate(
         byte[] bytes, string mime, string query, string model, string? schema, bool images, CancellationToken ct)
     {
+        var kind = mime.StartsWith("image/", StringComparison.OrdinalIgnoreCase) ? "image_url" : "video_url";
         var content = new JsonArray(
             new JsonObject { ["type"] = "text", ["text"] = query },
             new JsonObject
             {
-                ["type"] = "video_url",
-                ["video_url"] = new JsonObject { ["url"] = $"data:{mime};base64,{Convert.ToBase64String(bytes)}" },
+                ["type"] = kind,
+                [kind] = new JsonObject { ["url"] = $"data:{mime};base64,{Convert.ToBase64String(bytes)}" },
             });
         var (text, tokens, finish, endpoint) = await chat.Ask(model, content, schema, ct);
         return new Generation(text, tokens, finish) { Model = model, Endpoint = endpoint };

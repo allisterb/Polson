@@ -62,6 +62,16 @@ public class ExpectationRecordingTests : TestsRuntime, IDisposable
         Assert.Equal("measured 22.5%", e.GetProperty("detail").GetString());
     }
 
+    /// <summary>A read-back's verdict is recorded by Verify; a script writing the claim itself is refused.</summary>
+    [Fact]
+    public async Task TestAReadBacksClaimCannotBeWrittenByHand()
+    {
+        var result = await Run("Stage.check('Read-back of artifacts/verify/image.png: every text has a source and was read as set', true);");
+
+        Assert.False(result.Success);
+        Assert.Contains("recorded by Verify.image", result.Error);
+    }
+
     /// <summary>The verdict comes back, so the call reads as the test it is.</summary>
     [Fact]
     public async Task TestCheckReturnsTheVerdict()

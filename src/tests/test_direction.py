@@ -218,6 +218,18 @@ class VerificationTests(unittest.TestCase):
         films = direction.verification([self.FILM, again], None)["films"]
         self.assertEqual((len(films), films[0]["pending"]), (1, 0))
 
+    def test_an_image_check_is_drawn_like_a_films_with_its_size_and_crops(self):
+        image = {"type": "image.verify", "image": "artifacts/verify/final.png", "source": "canvas", "width": 1200,
+                 "height": 1600, "model": "nemotron",
+                 "items": [{"text": "2,205.8%", "box": [40, 80, 120, 30], "source": "document", "status": "seen"}],
+                 "strays": [{"n": 1, "read": "2,206.8%", "frame": "artifacts/verify/final-stray-1.png", "kind": "different figure"}]}
+        before = direction.verification([image], None)["images"][0]
+        self.assertEqual((before["width"], before["height"], before["strays"], before["pending"]), (1200, 1600, [], 1))
+        after = direction.verification([image, {"type": "image.stray", "image": "artifacts/verify/final.png", "n": 1,
+                                                "verdict": "misread"}], None)
+        self.assertEqual([s["frame"] for s in after["images"][0]["strays"]], ["artifacts/verify/final-stray-1.png"])
+        self.assertEqual(after["films"], [])
+
     def test_the_latest_verdict_per_claim_and_the_documents_read(self):
         events = [{"type": "check", "claim": "reading time", "passed": False, "detail": "title 1.1 s"},
                   {"type": "check", "claim": "reading time", "passed": True, "detail": "title 2.2 s"},

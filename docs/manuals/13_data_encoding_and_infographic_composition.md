@@ -780,6 +780,22 @@ Then the three that need eyes:
   visual identity yet.
 - **Are all four corners doing the same amount of work?** Then there is no focal point.
 
+### 8a. Reading the piece back
+
+> **Implemented by**: `Verify.image(...)`, `Verify.stray(...)`.
+
+Every test above asks the drawing about itself. None asks whether a reader will read what you set, or whether what you set is true. That takes a third reader with nothing invested in the piece.
+
+- **The ground truth is what the canvas drew.** Every `ctx.fillText`, `strokeText` and wrapped paragraph, or every `<text>` on a paper, is recorded as it is drawn, with its box.
+- **`Verify.image(canvas, { computed })`** sends the finished pixels to a separate model to transcribe. It holds the transcription against that record and looks up where each figure came from, one figure at a time: the brief, a document's page, a Qloo answer, research, or a figure you computed and pass with its working. It records its own verdict as a judged check, which nobody writes by hand.
+
+It finds three things:
+- **A text drawn but not read.** It was too small, too faint, or painted over by something drawn later. Its `size` and `box` say where to look, and it is a legibility fault before it is the reader's.
+- **A reading of something never drawn: a stray.** It may be the reader's misreading or a real fault. Look at the crop it saved beside the line it resembles, then call `Verify.stray(n, 'misread' | 'real')` in a later script. A `'different figure'` stray is the one that matters most: it is a number on your chart read as another number. A table row read across its columns is not a stray, since every line in it was drawn.
+- **A figure with no source.** It comes off the canvas until you find it in a document or the brief, or give its working.
+
+Text the record cannot see reads as a stray: lettering inside a pasted image, or type drawn on a second canvas and composited in. Draw every word and number on the canvas you verify, so each one has a source.
+
 ---
 
 ## 9. Symbol → SDK Parameter Map

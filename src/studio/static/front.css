@@ -330,6 +330,7 @@ details.fr-more > summary { cursor: pointer; font: 600 13px/18px var(--font-sans
 .vt-src-computed { --vt: var(--attention); }
 .vt-src-qloo { --vt: #7a4fd1; }
 .vt-src-research { --vt: var(--done); }
+.vt-src-scale { --vt: var(--line-control); }
 .vt-src-own-words { --vt: var(--ink-muted); }
 .vt-src-unsourced-figure { --vt: var(--failed); }
 .fr-vkey[class*="vt-src-"] { border-color: var(--vt); background: color-mix(in srgb, var(--vt) 16%, transparent); }
@@ -344,6 +345,10 @@ details.fr-more > summary { cursor: pointer; font: 600 13px/18px var(--font-sans
 .fr-vtl .vt-stray.vt-real circle { fill: var(--failed); }
 .fr-vtl .vt-stray.vt-misread line { stroke: var(--ink-muted); }
 .fr-vtl .vt-stray.vt-misread circle { fill: none; stroke: var(--ink-muted); stroke-width: 1.5; }
+.fr-vimg { display: block; width: 100%; max-height: 80vh; height: auto; border-radius: var(--radius-md); background: var(--surface-sunken); }
+.fr-vimg .vt-bar rect { fill: color-mix(in srgb, var(--vt) 12%, transparent); stroke: var(--vt); }
+.fr-vimg .vt-bar.vt-missed rect { stroke-dasharray: 6 4; fill: none; }
+.fr-vimg .vt-bar:hover rect { fill: color-mix(in srgb, var(--vt) 30%, transparent); }
 .fr-vtable { width: 100%; border-collapse: collapse; font: 400 13px/18px var(--font-sans); }
 .fr-vtable th { text-align: left; padding: var(--space-1) var(--space-2); border-bottom: 1px solid var(--line); font: 600 11px/16px var(--font-sans); color: var(--ink-muted); text-transform: uppercase; letter-spacing: .04em; }
 .fr-vtable td { padding: var(--space-1) var(--space-2); border-bottom: 1px solid var(--line); vertical-align: top; color: var(--ink); }

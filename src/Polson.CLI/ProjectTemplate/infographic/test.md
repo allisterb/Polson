@@ -34,3 +34,9 @@ Answer these in `findings.md`:
   you — reasoning, confidence, citations — and whether it was enough to caption a figure without
   going back. **If the brief was thin, say what you had to infer** and whether the instructions made
   it clear that inferring was allowed and recording it was required.
+- **`Documents.ask`, then `Verify.image`.** If the brief came with a document, did one aimed question
+  get every figure you needed? Then, at the end: what did the read-back report? Give its summary
+  line. List each stray, what its crop showed, and the verdict you gave it. List each missed text and
+  why you think the reader missed it. Did any figure come back `unsourced figure`, and was that a real
+  gap or a `computed` working you had not passed? Was the instruction to look at the crop before
+  settling clear, and did you do it?

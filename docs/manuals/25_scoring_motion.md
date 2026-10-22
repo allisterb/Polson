@@ -144,7 +144,7 @@ What comes back is three findings:
 - **A reading of something never set** may be the watcher's misreading or a real fault, such as a figure caught half-drawn or a frame of the wrong scene. You cannot tell which from the words. Look at the frame it saved, then `Verify.stray(n, 'misread' | 'real')`.
 - **A figure with no source** has no business on screen until you find it in a document or the brief, or give its working.
 
-The watching is a judgment, so record it as one.
+The watching is a judgment, and the check records it as one itself. Settle a stray in a later script than the check, after you have looked at its frame.
 
 ---
 
