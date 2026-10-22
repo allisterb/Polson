@@ -108,6 +108,9 @@ public class ManualCoverageTests : TestsRuntime
 
         // Documents' members on another service, documented as it was built (2026-10-20).
         ["Video"] = 100,
+
+        // The film's read-back against its sources, documented as it was built (2026-10-22); Manual 25 §4 names it.
+        ["Verify"] = 100,
         ["Snap"] = 82,
         ["Canvas2D"] = 75,
         ["VectorLogo"] = 74,

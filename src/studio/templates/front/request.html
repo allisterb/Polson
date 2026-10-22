@@ -41,6 +41,7 @@
     <button class="ps-tab" type="button" role="tab" id="tab-audiences" aria-controls="panel-audiences" aria-selected="false" tabindex="-1" data-view="audiences" hidden>Audiences</button>
     <button class="ps-tab" type="button" role="tab" id="tab-contrast" aria-controls="panel-contrast" aria-selected="false" tabindex="-1" data-view="contrast" hidden>Contrast</button>
     <button class="ps-tab" type="button" role="tab" id="tab-choices" aria-controls="panel-choices" aria-selected="false" tabindex="-1" data-view="choices" hidden>Choices</button>
+    <button class="ps-tab" type="button" role="tab" id="tab-verification" aria-controls="panel-verification" aria-selected="false" tabindex="-1" data-view="verification" hidden>Verification</button>
   </nav>
   {% endif %}
 
@@ -152,6 +153,13 @@
       checked</span>. Hover or focus a box to follow its path.</p>
     <p class="fr-small" data-choices-check></p>
     <div class="fr-evscroll"><svg class="fr-evmap" data-evmap role="img" aria-label="Evidence map: Qloo queries, the references they returned, and the choices they drove"></svg></div>
+  </section>
+  <section class="fr-taste" id="panel-verification" role="tabpanel" aria-labelledby="tab-verification" hidden>
+    <p class="fr-small fr-taste-lead">How the studio checked what it put on screen. Every word and number in the film is
+      listed with the seconds it shows and where it came from — the brief, a page of a document, a Qloo result, research,
+      or a figure computed from those — and a separate model watched the finished film to read it back. A reading of
+      something the film never set is shown only after the studio has looked at that frame.</p>
+    <div class="fr-taste-body" data-verification></div>
   </section>
   {% endif %}
 </main>

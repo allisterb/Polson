@@ -91,6 +91,32 @@ public static class FFmpeg
     }
 
     /// <summary>
+    /// One frame of <paramref name="video"/> at <paramref name="seconds"/>, written as the PNG <paramref name="png"/>; null when
+    /// it was written, else why not. What <c>Verify.film</c> shows the agent where the read-back read something the film
+    /// never set, so it looks at the frame before calling it a misread or a fault.
+    /// </summary>
+    public static string? Frame(string video, double seconds, string png)
+    {
+        if (Executable is not { } exe) return $"no 'ffmpeg' was found: {Install}.";
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(png))!);
+            var info = Info(exe, "-hide_banner", "-loglevel", "error", "-y", "-ss",
+                Math.Max(0, seconds).ToString("0.###", CultureInfo.InvariantCulture), "-i", video, "-frames:v", "1", png);
+            using var process = Process.Start(info);
+            if (process is null) return "ffmpeg did not start.";
+            var error = process.StandardError.ReadToEndAsync();
+            process.StandardOutput.ReadToEnd();
+            if (!process.WaitForExit(30_000)) { process.Kill(true); return "ffmpeg took more than 30 s for one frame."; }
+            return process.ExitCode == 0 && File.Exists(png) ? null : $"ffmpeg failed: {error.Result.Trim()}";
+        }
+        catch (Exception ex) when (ex is IOException or System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            return ex.Message;
+        }
+    }
+
+    /// <summary>
     /// Encodes <paramref name="frames"/>, each <paramref name="width"/>×<paramref name="height"/>, at
     /// <paramref name="fps"/>, mixing <paramref name="tracks"/> in at their offsets, into <paramref name="output"/>.
     /// </summary>

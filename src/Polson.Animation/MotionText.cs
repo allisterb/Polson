@@ -48,11 +48,15 @@ public sealed class MotionText
     #region Fields
     private readonly MotionTextLayer layer;
     private readonly MotionLayerList stack;
+    private static readonly Hashtable FrameOn = new() { ["frame"] = true };
     #endregion
 
     #region Properties
     /// <summary>The words, as given.</summary>
     public string Text => layer.Words;
+
+    /// <summary>The text's <c>desc</c>, as given, or null.</summary>
+    internal string? Desc => layer.Desc;
     #endregion
 
     #region Methods
@@ -128,6 +132,9 @@ public sealed class MotionText
                 && Math.Abs(p.First.Ink.Right - p.Second.Ink.Right) < 0.01 && Math.Abs(p.First.Ink.Bottom - p.Second.Ink.Bottom) < 0.01
                 && Math.Abs(p.First.Opacity - p.Second.Opacity) < 0.002);
     }
+
+    /// <summary>Whether any letter is visible on the frame at the film's <paramref name="time"/>: <c>comp.texts()</c>'s test.</summary>
+    internal bool VisibleOnFrame(double time) => Letters(time, FrameOn, "texts").Count > 0;
 
     /// <summary>
     /// The letters at a time in the stack's own terms, or carried out to the frame: each group above, outermost first,

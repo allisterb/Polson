@@ -198,6 +198,40 @@ class EvidenceMapTests(unittest.TestCase):
         self.assertEqual(direction.ref_key("The Long Quiet"), direction.ref_key("long quiet"))
 
 
+class VerificationTests(unittest.TestCase):
+    """What the Verification view draws: each film's check, its strays as settled, the run's checks and its documents."""
+
+    FILM = {"type": "film.verify", "ts": "2026-10-22T10:00:00Z", "video": "output.mp4", "duration": 9, "model": "nemotron",
+            "items": [{"text": "BE COOL", "from": 0, "to": 3, "source": "brief", "status": "seen"}],
+            "strays": [{"n": 1, "read": "$744M", "at": 4.2, "frame": "artifacts/verify/stray-1.png", "kind": "different figure"},
+                       {"n": 2, "read": "GHOST", "at": 6.0, "frame": "artifacts/verify/stray-2.png", "kind": "never set"}]}
+
+    def test_a_stray_is_shown_once_settled_and_only_counted_before(self):
+        events = [self.FILM, {"type": "film.stray", "video": "output.mp4", "n": 1, "verdict": "misread", "note": "the frame says $974M"}]
+        film = direction.verification(events, None)["films"][0]
+        self.assertEqual([(s["n"], s["verdict"]) for s in film["strays"]], [(1, "misread")])
+        self.assertEqual(film["pending"], 1)                          # GHOST: not looked at, so not shown
+        self.assertNotIn("GHOST", json.dumps(film["strays"]))
+
+    def test_a_new_check_of_the_same_film_replaces_the_old(self):
+        again = dict(self.FILM, ts="2026-10-22T11:00:00Z", strays=[])
+        films = direction.verification([self.FILM, again], None)["films"]
+        self.assertEqual((len(films), films[0]["pending"]), (1, 0))
+
+    def test_the_latest_verdict_per_claim_and_the_documents_read(self):
+        events = [{"type": "check", "claim": "reading time", "passed": False, "detail": "title 1.1 s"},
+                  {"type": "check", "claim": "reading time", "passed": True, "detail": "title 2.2 s"},
+                  {"type": "check", "claim": "every text has a source", "passed": True, "judged": True},
+                  {"type": "document.read", "descriptor": "documents/x.pdf", "model": "nemotron", "success": True},
+                  {"type": "document.read", "descriptor": "documents/x.pdf", "model": "nemotron", "success": False}]
+        v = direction.verification(events, {"passed": True, "checked": 3, "unverified": 0})
+        self.assertEqual([(c["claim"], c["passed"]) for c in v["checks"]],
+                         [("reading time", True), ("every text has a source", True)])
+        self.assertTrue(v["checks"][1]["judged"])
+        self.assertEqual(v["documents"], [{"document": "documents/x.pdf", "model": "nemotron", "reads": 1}])
+        self.assertTrue(v["references"]["passed"])
+
+
 class ReferenceCheckTests(unittest.TestCase):
     """`Taste.checkReferences()` laid onto the rows: verified, unverified with what is missing, or unchecked."""
 

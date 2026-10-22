@@ -131,6 +131,21 @@ Then two different artifacts, for two different readers:
 
 `Motion.count` reports how many frames are held and `Motion.clear()` discards them, which matters because frames are uncompressed bitmaps and a long capture at full size will reach the ceiling.
 
+### Reading the film back
+
+> **Implemented by**: `comp.texts()`, `Verify.film(...)`, `Verify.stray(...)`.
+
+A contact sheet shows you the film; it does not tell you whether a viewer will read what you set, or whether what you set is true. That takes a third reader with nothing invested in the film.
+- **`comp.texts()`** lists every text the composition shows and the seconds it is on screen, read from the composition itself. That is the ground truth.
+- **`Verify.film(comp, 'output.mp4')`** has a separate model watch the *encoded* film and transcribe it, holds the transcription against that list, and looks up where each text came from: the brief, a document's page, a Qloo answer, research, or a figure you say you computed.
+
+What comes back is three findings:
+- **A text set but not read** usually held too briefly or was set too small. That is a reading-time fault before it is the watcher's.
+- **A reading of something never set** may be the watcher's misreading or a real fault, such as a figure caught half-drawn or a frame of the wrong scene. You cannot tell which from the words. Look at the frame it saved, then `Verify.stray(n, 'misread' | 'real')`.
+- **A figure with no source** has no business on screen until you find it in a document or the brief, or give its working.
+
+The watching is a judgment, so record it as one.
+
 ---
 
 ## 5. Timing Craft
