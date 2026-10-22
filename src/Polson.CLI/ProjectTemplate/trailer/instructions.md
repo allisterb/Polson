@@ -129,6 +129,11 @@ any film is planned, and the shared parts are shared on purpose.
 - **Fetch every audience's profile first**, each with its own label (`'audience A'`, `'audience B'`, …), and
   compare their pace before writing any beats — `comparePace` for two, `comparePaceAll` for more. That result
   decides which films pace differently at all.
+- **Then contrast them**: `Taste.contrast(tA, tB)` for a pair; for three or more, each pair whose films you will
+  claim differ. It splits the two profiles' distinctive titles into **shared** (what the set has in common: evidence
+  for the template) and **only A / only B** (each film's own evidence), with the tags that lean each way and their
+  counts. The studio's Contrast view draws it, so call it once the profiles are final. Two audiences that come out
+  alike is an answer to report, not a reason to invent a difference.
 - **Each audience's motion comes from its own evidence, drafted before you look back at the others'.** The
   holds, the grade and the transitions of each later film are worked out from its own profile, not
   adjusted from an earlier one. The poster workflow's first pairs came out as one poster twice because the second
@@ -156,7 +161,14 @@ any film is planned, and the shared parts are shared on purpose.
   own script, so each has the whole script limit.
 - **`direction.md` has a section per audience** (its beats and its choices, each with its evidence), then
   **"Between the audiences"**: the pace comparison's summary, what the set shares and why, and what differs and
-  the evidence for each difference.
+  the evidence for each difference. Its table carries the contrast as Qloo rows, written so the reference check
+  can find them:
+
+  | Choice | Evidence | Kind |
+  | :-- | :-- | :-- |
+  | What the set shares: *the template* | shared: *Title*, *Title* (t1 rank 3 / t2 rank 5) | Qloo (t1, t2) |
+  | What only A's film draws on | only A: *Title*, *Title*; "Tag" (item 3 of A's titles) | Qloo (t1) |
+  | What only B's film draws on | only B: *Title*, *Title* | Qloo (t2) |
 - **Budget the time for every film.** One film took about a quarter of a 60-minute run. The deadline already
   counts the size of the set, so each film has about the same time a pair's would — not a pair's time shared.
 

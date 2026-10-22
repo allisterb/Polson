@@ -464,6 +464,33 @@ class FrontRoutingTests(unittest.TestCase):
         self.assertIn("data-agent-log", page)
         self.assertRegex(page, r'id="panel-progress" role="tabpanel"')
 
+    def test_a_request_with_a_record_has_the_qloo_views_hidden_until_there_is_something_to_show(self):
+        p = project_dir(self.root, "harbour", workflow="poster")
+        events(p, {"type": "run.start"})
+        page = self.client.get("/requests/harbour").text
+        for view in ("audiences", "contrast", "choices"):
+            self.assertRegex(page, rf'id="tab-{view}"[^>]*\bhidden\b', view)
+            self.assertIn(f'id="panel-{view}"', page)
+        self.assertIn("data-evmap", page)
+
+    def test_the_taste_route_serves_profiles_contrasts_and_the_map_without_a_request_line(self):
+        p = project_dir(self.root, "pair", workflow="poster")
+        (p / "direction.md").write_text(
+            "## Between the audiences\n\n| Choice | Evidence | Kind |\n| :-- | :-- | :-- |\n"
+            "| What only A draws on | only A: *The Long Quiet* | Qloo (t1) |\n", encoding="utf-8")
+        profile = {"type": "taste.query", "op": "profile", "label": "audience A", "request": "/v2/insights?x=1",
+                   "audience": {"place": "Tokyo", "age": "45_to_54"}, "pace": {"fast": 1, "slow": 2, "n": 5},
+                   "domains": [{"type": "urn:entity:movie", "n": 3, "top": [{"name": "The Long Quiet", "rank": 1}]}]}
+        events(p, dict(profile, id="t1"), dict(profile, id="t1"),       # fetched twice: one audience, the latest
+               {"type": "taste.contrast", "a": {"id": "t1", "label": "audience A"}, "b": {"id": "t2", "label": "audience B"},
+                "domains": [], "summary": "movie: 0 shared"})
+        data = self.client.get("/requests/pair/taste").json()
+        self.assertEqual([a["label"] for a in data["audiences"]], ["audience A"])
+        self.assertEqual(data["audiences"][0]["domains"][0]["top"][0]["name"], "The Long Quiet")
+        self.assertEqual(len(data["contrasts"]), 1)
+        self.assertEqual([c["text"] for c in data["map"]["choices"]], ["What only A draws on"])
+        self.assertNotIn("/v2/insights", json.dumps(data))
+
     def test_a_draft_has_no_agent_view_to_show(self):
         project_dir(self.root, "fresh", workflow="drawing")
         page = self.client.get("/requests/fresh").text

@@ -370,6 +370,40 @@ def evidence_map(sections: list[dict[str, Any]], known: dict[str, dict[str, Any]
     }
 
 
+def taste_views(text: str, events: Iterable[dict[str, Any]], since: str | None = None) -> dict[str, Any]:
+    """What the studio's Audiences, Contrast and Choices views draw, from the run record and `direction.md`.
+
+    **audiences**: each profile the run fetched, as its `taste.query` event records it: label, who and where, the top
+    of each domain's distinctive list with ranks and pace, and the pace counts. A run from before profiles recorded
+    these has only the label and counts, and the view says so.
+    **contrasts**: each `Taste.contrast` the run made, the latest per pair.
+    **map** and **referenceCheck**: the evidence map and the reference check, as the run page has them.
+
+    The titles here are results the run used as evidence, shown with their source, as Qloo's hackathon kit asks
+    (`docs/SAFE_USE.md`); the run record lives in the project, never the repository. No request line, key or raw
+    payload.
+    """
+    events = list(events)
+    scoped = [e for e in events if not (since and (e.get("ts") or "") < since)]
+    # The latest profile per label: a session that restarts fetches its audiences again (free, from the cache), and
+    # each fetch is recorded — one audience, not two.
+    latest: dict[str, dict[str, Any]] = {}
+    for e in scoped:
+        if e.get("type") == "taste.query" and e.get("op") == "profile":
+            latest.pop(str(e.get("label") or e.get("id")), None)
+            latest[str(e.get("label") or e.get("id"))] = {
+                k: e.get(k) for k in ("id", "label", "audience", "domains", "pace", "distinctive", "fromCache")}
+    audiences = list(latest.values())
+    contrasts: dict[tuple[str, str], dict[str, Any]] = {}
+    for e in scoped:
+        if e.get("type") == "taste.contrast" and isinstance(e.get("a"), dict) and isinstance(e.get("b"), dict):
+            contrasts[(str(e["a"].get("id")), str(e["b"].get("id")))] = {
+                k: e.get(k) for k in ("a", "b", "domains", "pace", "summary")}
+    explained = explain(text, events, since) if text else {"map": None, "referenceCheck": None}
+    return {"audiences": audiences, "contrasts": list(contrasts.values()),
+            "map": explained["map"], "referenceCheck": explained["referenceCheck"]}
+
+
 def _key(section: str, choice: str) -> tuple[str, str]:
     """A row as both sides name it: the engine strips `*` from the choice and the heading; this strips the rest of
     the inline marks too, from both, so the two always compare alike."""

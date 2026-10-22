@@ -429,6 +429,19 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
                     learned=learned_from(project, run, row["events"]),
                     notice=notices.pop(name, ""))
 
+    @app.get("/requests/{name}/taste")
+    async def taste(request: Request, name: str) -> Any:
+        """The Audiences, Contrast and Choices views' data: profiles, contrasts and the evidence map, as JSON."""
+        await run_in_threadpool(rebuild_request, Path(request.app.state.root), name)
+        project = project_dir(request, name)
+        row = describe(project, request.app.state.registry)
+        try:
+            text = (project / "direction.md").read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            text = ""
+        run = row["run"]
+        return direction_mod.taste_views(text, row["events"], run.since if run else None)
+
     @app.get("/requests/{name}/learned", response_class=HTMLResponse)
     async def learned(request: Request, name: str) -> Any:
         """The learned panel alone, for the page to swap in once a run has written its direction."""

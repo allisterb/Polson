@@ -282,12 +282,39 @@ public partial class DrawingMcpTools
             notes.Add("A domain has nothing distinctive: this audience's list matches its place's. Say so rather than read a difference into it.");
 
         var result = registry.Add(id => TasteObjects.ProfileResult(id, label, profile, responses, [.. distinctiveAll], placeTags, locality, notes));
+
+        // What the studio's Audiences view draws: who, where, the top of each distinctive list and its pace. Titles
+        // and ranks the run used as evidence — the run record lives in the project, never the repository (Qloo's
+        // terms forbid storing responses in a public one) — and no request line, key or raw payload.
+        var pace = result.Pace();
+        var (fastTitles, slowTitles) = (((string[])pace["fastTitles"]!).ToHashSet(), ((string[])pace["slowTitles"]!).ToHashSet());
         Events.Append(result.Ok ? "taste.query" : "taste.failed", session.Stage, null, new Dictionary<string, object?>
         {
             ["id"] = result.Id, ["op"] = "profile", ["label"] = label, ["requests"] = responses.Count,
             ["fromCache"] = result.FromCache, ["distinctive"] = distinctiveAll.Count, ["placeTags"] = placeTags.Length,
             ["failure"] = result.Ok ? null : responses.First(r => !r.Success).Failure.ToString(),
             ["spent"] = registry.Budget.Spent, ["remaining"] = registry.Budget.Remaining, ["monthlyRemaining"] = registry.Budget.MonthlyRemaining,
+            ["audience"] = new Dictionary<string, object?>
+            {
+                ["place"] = locality?.Name ?? template[place] as string, ["age"] = template["signal.demographics.age"] as string,
+                ["gender"] = template["signal.demographics.gender"] as string,
+            },
+            ["domains"] = domainNodes.Cast<Dictionary<string, object?>>().Select(d => (object?)new Dictionary<string, object?>
+            {
+                ["type"] = d["type"],
+                ["n"] = ((object?[])d["distinctive"]!).Length,
+                ["shared"] = ((object?[])d["shared"]!).Length,
+                ["top"] = ((object?[])d["distinctive"]!).Take(12).Cast<Dictionary<string, object?>>().Select(e =>
+                {
+                    var name = e["name"] as string ?? "?";
+                    return (object?)new Dictionary<string, object?>
+                    {
+                        ["name"] = name, ["rank"] = e["audienceRank"],
+                        ["pace"] = fastTitles.Contains(name) ? "fast" : slowTitles.Contains(name) ? "slow" : null,
+                    };
+                }).ToArray(),
+            }).ToArray(),
+            ["pace"] = new Dictionary<string, object?> { ["fast"] = pace["fast"], ["slow"] = pace["slow"], ["n"] = pace["n"], ["fastShare"] = pace["fastShare"] },
         });
 
         var reply = new JsonObject

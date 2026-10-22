@@ -252,6 +252,18 @@ public sealed class TasteToolkit
     }
 
     /// <summary>
+    /// What separates two audiences' profiles — shared titles, each one's own, the tags that lean each way and their pace
+    /// — with no further Qloo call: <c>{ a, b, domains, pace, summary }</c>. See <see cref="TasteContrast"/>. Recorded as
+    /// <c>taste.contrast</c>, which the studio's Contrast view draws.
+    /// </summary>
+    public Dictionary<string, object?> Contrast(TasteResult a, TasteResult b)
+    {
+        var contrast = TasteContrast.Compare(a, b);
+        record?.Invoke("taste.contrast", contrast);
+        return contrast;
+    }
+
+    /// <summary>
     /// Every title and tag a <c>direction.md</c>'s Qloo rows cite, checked against the answers this session received:
     /// <c>{ passed, rows, unverified, checked, summary }</c>. See <see cref="TasteReferences"/>.
     /// </summary>
