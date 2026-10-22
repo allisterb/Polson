@@ -119,8 +119,20 @@ log(`${read.provenance.model} via ${read.provenance.route}, ${read.provenance.pa
   there are more than a few points. Parts of a whole — a stacked bar, or a pie only with fewer than six slices. One
   figure — no chart.
 - **Colour means one thing for the whole film.** If the accent marks the answer in scene one, it marks the answer in
-  every scene; if green means up, red means down everywhere. **Never colour alone**: an arrow or a sign goes with it,
-  for viewers who cannot tell the two apart.
+  every scene.
+- **Never red and green for up and down — and a loss is never red.** Colour on a figure is not neutral. In eight
+  experiments (1,451 people), showing US investors their losses in red rather than black cut their risk-taking by
+  about 15–30% and lowered what they expected stocks to return. Blue and yellow did not do this, and colourblind
+  people showed no effect (Bazley, Cronqvist & Mormann 2021, *Management Science* 67(9):5616–5641, §1, §5.1, §5.3). A
+  red loss therefore steers the viewer, which an explanation that recommends nothing must not do. Which colour
+  means a rise is also a market's convention, not a fact about colour: Western displays show a gain in green, while
+  "in the Chinese stock market, red stands for a rise" (Zhang & Han 2014, *PLoS ONE* 9(2):e89193). Among Chinese
+  participants red's effect on expected returns was not significant, about half the US estimate (Bazley et al., §5.2,
+  Table 9). Elsewhere in East Asia the convention varies. A film made in one convention reads backwards in the other,
+  and viewers who cannot tell red from green get neither. So **direction is carried by sign and shape**: "+46%" and
+  "−20%" as printed, an arrow, a bar rising from zero, with a gain and a loss in the same text colour. Colour is kept
+  for the answer, in the accent. If the brief asks for direction colours, use the audience's own convention, and
+  record it in `direction.md` with the brief as its evidence.
 - **Say what moved it, if the document does.** A large change the filing explains — a charge that cut a margin, a
   product transition — gets its reason in the company's words, attributed. Leaving it out makes the figure look
   better or worse than the filing does.
@@ -226,3 +238,15 @@ The document (file, company, form, period, pages), **who read it** (`provenance.
 then **one section per question**: the question as asked, the headline, every figure with its page and the quote it
 was found in, every computed value with its working, and anything left out and why. Then the shared system — type,
 palette, the chart style — with its reasons. The read-back's result goes last.
+
+**The audience gets a section of its own, before the questions**, so whoever watches the film can see why it looks
+the way it does for these viewers. Say who is watching and where, as the brief has it. Then add one row per choice
+made for them, in the `Choice | Evidence | Kind` table the instructions describe, with each kind kept apart:
+- **Brief**: what the brief asked for.
+- **Qloo**: the pace and grade, from a profile, when the brief gives a place and an age band.
+- **Research**: a checked source, such as Bazley et al. and Zhang & Han for direction colours.
+- **Rule**: this type's rules, such as no red and green for direction and figures arriving whole.
+- **Assumed**: anything decided without evidence, such as pace with no profile.
+
+A choice the audience did not change says so — *"no red/green: a rule, whatever the place"* — so the reader can
+tell a rule from a reading of these viewers.
