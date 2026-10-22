@@ -48,13 +48,32 @@ NVIDIA's NIM API or Nebius Token Factory, not Google. With neither key, `Video.a
 `NotConfigured`, `Documents.ask` reads with Gemini alone, and nothing else changes. Either key turns both on; with
 both, the preferred service is tried first and the other is its backup.
 
-- **NIM** (preferred by default): create a `polson-nvidia-nim-key` secret the same way and add
-  `POLSON_NVIDIA_NIM_KEY=polson-nvidia-nim-key:latest` to `--set-secrets` below. Its base URL defaults to
-  `https://integrate.api.nvidia.com/v1`.
+**A deployment uses Token Factory, not NIM.** The engine prefers NIM by default, which suits local development, but
+NIM's free tier is governed by the [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf)
+(v. September 19, 2025, read 2026-10-21), and a deployed service is outside them:
+
+- §1.2 and §1.4: trial use only — "internal testing and evaluation purposes, not in production" — without a paid
+  subscription.
+- §4.2: the API Service and its Generated Content may not be made available to others, which is what a service that
+  judges or the public can drive does.
+- §3.3(iv): NVIDIA may use what is sent and returned to improve its products, AI models included, so a supplied
+  document that is confidential must never reach it. §2.6(a) and §4.3 exclude confidential, personal and regulated data
+  outright.
+- The rate limit is unpublished and the responses carry no rate-limit headers; developer-forum reports put it at
+  40 requests a minute per key, shared by every visitor.
+
+So on Cloud Run:
+
 - **Token Factory**: create a `polson-nebius-key` secret, add `POLSON_NEBIUS_KEY=polson-nebius-key:latest` to
   `--set-secrets`, and add `POLSON_NEBIUS_BASE_URL=https://api.tokenfactory.us-north1.nebius.com/v1` (or your
-  region's URL) to `--set-env-vars` — it has no default, because the host is regional.
-- **To prefer Token Factory**, add `POLSON_NEMOTRON_PREFER=nebius` to `--set-env-vars`.
+  region's URL) **and `POLSON_NEMOTRON_PREFER=nebius`** to `--set-env-vars`. The base URL has no default, because the
+  host is regional.
+- **Leave `POLSON_NVIDIA_NIM_KEY` unset.** Kept as the backup, NIM would serve every read Token Factory failed — the
+  same terms, reached whenever the paid service has a bad minute. With no backup, a failed Token Factory read falls
+  back to Gemini for documents, and `Video.ask` answers with the failure.
+- NIM on a deployment only under a paid NVIDIA subscription: then create a `polson-nvidia-nim-key` secret the same
+  way and add `POLSON_NVIDIA_NIM_KEY=polson-nvidia-nim-key:latest` to `--set-secrets`. Its base URL defaults to
+  `https://integrate.api.nvidia.com/v1`.
 
 ## 4. The bucket
 
