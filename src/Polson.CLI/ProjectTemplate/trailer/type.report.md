@@ -210,19 +210,18 @@ exactly as the instructions above say.
 
 ### The read-back — after delivery
 
-The checks above measure the film; this one reads it the way a viewer does. **`Video.ask` watches `output.mp4` and
-transcribes every number on screen**, and you compare its list with the figures you set:
-
-```javascript
-const seen = await Video.ask('output.mp4',
-    'List every number shown on screen, exactly as shown, with the words beside it and the second it first appears.');
-if (seen.success) log(seen.text);
-```
-
-- **Every number it reads must be one you put there.** One you did not set is a problem in the film — a stray digit,
-  a half-drawn figure caught mid-animation. One you set that it missed may simply have been on screen too briefly for
-  a watcher sampling twice a second: check that figure's hold on the half-second sheet.
-- Record it with `Stage.check(..., { judged: true })` — a model read it, nothing measured it.
+The checks above measure the film; this one reads it the way a viewer does. **`Verify.film(comp, 'output.mp4', {
+computed })`** is the instructions' read-back, and for a report it carries the most weight:
+- **Every figure on screen must come back with a source.** For `document`, its digits are on a page of the filing,
+  named with the page. For `computed`, pass each derived value with its working, exactly as set:
+  `{ computed: { '+454%': '582.3 / 105.1 − 1 = 4.540', '$399.0M': '981.3 − 582.3' } }`. An `unsourced figure`
+  comes off the screen.
+- **A `'different figure'` stray is a line you set, read with another number.** It is exactly the error the report
+  exists to prevent, so look at its frame before deciding. The watcher once read $974M as $744M with $974M plainly on
+  the frame; and a figure caught mid-animation is a real fault.
+- **A missed figure** was probably on screen too briefly for a watcher sampling about once a second: check its hold.
+- Record it with `Stage.check(..., { judged: true })`. A model read the film; the sources and the ground truth were
+  looked up.
 
 ### Questions, for a report
 

@@ -118,6 +118,8 @@ public static class JsSurface
 
         new("Video", typeof(VideoReader), "Video", false),
 
+        new("Verify", typeof(VerifyToolkit), "Verify", false),
+
         new("Photo", typeof(PhotoToolkit), "Photo", false),
         new("photo", typeof(PhotoAsset), "Photo", true),
         new("subject", typeof(SubjectMatch), "Photo", true),

@@ -495,6 +495,11 @@ public partial class JsDrawingEngine : Runtime
             engine.SetValue("Documents", Documents ?? new DocumentProcessor(null, new DocumentBudget(0)));
             engine.SetValue("Video", Video ?? new VideoReader([], new DocumentBudget(0)));
 
+            // A finished film against what it set and where that came from; its verdicts are recorded for the studio.
+            var verifyEvents = Events;
+            engine.SetValue("Verify", new VerifyToolkit(Video, ProjectRoot, session,
+                (type, fields) => verifyEvents?.Append(type, session?.Stage, executionId, fields)));
+
             // Sourced research, read-only. Commissioning is the Research MCP tool's job because a run
             // takes far longer than ScriptTimeoutSeconds allows; by the time a script sees a task the
             // waiting is done, so every member here is a plain read.

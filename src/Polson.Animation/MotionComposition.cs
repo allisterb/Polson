@@ -381,7 +381,9 @@ public abstract class MotionLayerList
             "compress", "vcompress", "kerning", "invert", "animators", "amount", "blend", "desc");
         var layer = new MotionTextLayer(o, Root?.YDown ?? true, Root);
         layers.Add(layer);
-        return new MotionText(layer, this);
+        var handle = new MotionText(layer, this);
+        Root?.TextHandles.Add(handle);
+        return handle;
     }
 
     /// <summary>
@@ -841,9 +843,48 @@ public sealed class MotionComposition : MotionLayerList
 
     /// <summary>Whether y grows down the screen in the units layers use: the view's top is above its bottom.</summary>
     internal bool YDown => view[3] > view[1];
+
+    /// <summary>Every text added anywhere in this composition, groups included, in the order added.</summary>
+    internal List<MotionText> TextHandles { get; } = [];
     #endregion
 
     #region Methods
+    /// <summary>
+    /// Every text the film shows and when: <c>[{ text, desc, from, to, seconds, intervals }]</c> in the order the texts were
+    /// added. <c>intervals</c> are the spans of film seconds in which any of its letters is visible on the frame — every
+    /// group above, its clock, switch and <c>amount</c> counted — sampled twelve times a second; <c>from</c> and <c>to</c> are
+    /// the first and last of them, <c>seconds</c> their total. A text never visible has no intervals and null times.
+    /// </summary>
+    /// <remarks>What the film sets, read from the composition itself: the ground truth a read-back of the encoded film is
+    /// compared with (<c>Verify.film</c>), and a list a script need not keep by hand.</remarks>
+    public object?[] Texts()
+    {
+        var step = Math.Max(1, (int)Math.Round(Fps / 12));
+        var frames = Enumerable.Range(0, FrameCount).Where(f => f % step == 0 || f == FrameCount - 1).ToArray();
+        return [.. TextHandles.Select(t =>
+        {
+            var spans = new List<object?>();
+            double? start = null, last = null;
+            foreach (var f in frames)
+            {
+                var time = f / Fps;
+                if (t.VisibleOnFrame(time)) { start ??= time; last = time; }
+                else if (start is not null) { spans.Add(new[] { start.Value, last!.Value }); start = null; }
+            }
+            if (start is not null) spans.Add(new[] { start.Value, last!.Value });
+            var intervals = spans.Cast<double[]>().ToArray();
+            return (object?)new Dictionary<string, object?>
+            {
+                ["text"] = t.Text,
+                ["desc"] = t.Desc,
+                ["from"] = intervals.Length == 0 ? null : intervals[0][0],
+                ["to"] = intervals.Length == 0 ? null : intervals[^1][1],
+                ["seconds"] = Math.Round(intervals.Sum(i => i[1] - i[0] + step / Fps), 3),
+                ["intervals"] = intervals.Select(i => (object?)i).ToArray(),
+            };
+        })];
+    }
+
     /// <summary>
     /// A bone of the composition's skeleton:
     /// <c>{ name?, parent?, from, to, turn?, stretch?, width?, tipwidth? }</c>, or Synfig's own fields

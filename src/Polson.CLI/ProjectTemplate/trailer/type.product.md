@@ -34,7 +34,9 @@ in place of the film ones, and ask for what is missing:
 - **Claims come only from the brief.** No health, nutrition, environmental or performance claim, no "best", "#1" or
   comparison with a named brand, no price or offer, no testimonial, rating, award or certification unless the brief
   or a document gives it in those words. A claim in an ad is a statement about the world that someone answers for;
-  an invented one is the festival-laurel failure in a place where it is also against the law.
+  an invented one is the festival-laurel failure in a place where it is also against the law. **The read-back holds
+  you to it**: in `Verify.film`, the claim's text must come back with source `brief` (or `document`), word for word.
+  A claim that comes back as `own words` was reworded, so restore the brief's wording.
 - **The product's own assets are used as given.** A logo in `documents/` is placed, not redrawn or recoloured. A
   product shot is placed with `Skia.Image.load('documents/<file>')` and `comp.image({ image, tl, br })`; one with its
   own background is shown as a framed photograph rather than cut out by hand. With no shot, make a packshot

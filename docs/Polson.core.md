@@ -5039,6 +5039,56 @@ The answer is a `DocumentAnswer`, with the same `failureName` values, `remedy`, 
 
 ---
 
+# Verify (Checking a Film Against Its Sources)
+
+Checks a finished film three ways, and only one of them is a model's:
+- **What the film shows** is read from the composition (`comp.texts()`): every text, and the seconds it is on screen.
+- **Where each text came from** is looked up, not asked:
+  - **`brief`**: the text is in `brief.md`;
+  - **`document`**: its figures are on a page of a document `Documents.ask` read, given as `documents/x.pdf p. 51`;
+  - **`qloo`**: a title a Taste answer returned;
+  - **`research`**: in a completed research result;
+  - **`computed`**: a figure you computed, which you pass with its working;
+  - **`own words`**: anything else.
+
+  Own words with a figure in them is an **`unsourced figure`**, and fails the check.
+- **What a viewer sees** is a model's reading. `Video.ask` transcribes the encoded film, and the transcription is compared with what the film set.
+
+This is how a Polson film differs from a generated one: every word and number on screen has a source, and an independent watcher read it.
+
+```js
+// After the film is encoded, in a script that rebuilds the composition (MODE 'checks').
+const v = await Verify.film(comp, 'output.mp4', { computed: { '+454%': '582.3 / 105.1 − 1 = 4.540' } });
+if (!v.ok) exit(v.remedy);                        // 'Pending': the watcher is still reading — run it again, unchanged
+log(v.summary);
+for (const s of v.strays) log(`stray ${s.n}: read "${s.read}" at ${s.at} s — look at ${s.frame}`);
+Stage.check('every text on screen has a source and was read as set', v.passed, v.summary, { judged: true });
+```
+
+> [!IMPORTANT]
+> **A stray is a reading of text the film never set, and it is not a finding until you have looked at its frame.**
+>
+> The watcher misreads: it read $974M as $744M on a report film whose frame said $974M. So each stray's frame is saved as `artifacts/verify/stray-n.png`. **Look at it** (with `Skia.Image.load` in a script that returns it, or your host's image reader), then settle the stray:
+> - **`Verify.stray(n, 'misread')`**: the frame shows what the film set.
+> - **`Verify.stray(n, 'real')`**: the frame shows what was read, so it is a fault in the film, such as a half-drawn figure or a frame from the wrong scene. Fix it and encode again.
+>
+> A stray of kind `'different figure'` is a line the film did set, read with another number. That is the case to look at most carefully. The studio shows a stray only once it is settled.
+>
+> **A text that is `missed`** was set but not read. Usually it was on screen too briefly (the watcher samples about once a second) or set too small: look at its `seconds` and its size before you blame the watcher.
+
+## `Verify`
+
+- `Verify.film(comp: MotionComposition, video: string, options?: { computed?: object })` → `Promise<object>` — The film checked: `{ ok, passed, items, strays, counts, summary, model }`, or `{ ok: false, failureName, error, remedy }` when the watcher could not watch. `video` is project-relative.
+  - `items`: one per text set, each `{ text, from, to, seconds, source, detail, seen, readAs, readAt, status }`, `status` one of `'seen'`, `'missed'` or `'never shown'`.
+  - `strays`: one per reading of text the film never set, each `{ n, read, at, frame, near, kind, verdict, note }`, `kind` either `'different figure'` or `'never set'`.
+  - `passed`: no unsourced figure, no stray still to look at, and no stray found real.
+  - `computed`: maps a text exactly as set to its working, `{ '+454%': '582.3 / 105.1 − 1' }`.
+
+  Recorded as `film.verify`, which the studio's Verification view draws. The latest check is held for `Verify.stray`.
+- `Verify.stray(n: number, verdict: 'misread' | 'real', note?: string)` → `object` — Settles stray `n` of the latest check after you have looked at its frame, recorded as `film.stray`. Returns the check as it now stands, with a fresh `summary` and `passed`.
+
+---
+
 # Research (Sourced Data & Provenance)
 
 Facts commissioned from the web, with a citation and a confidence for **every field**. Read-only here: a task is started and waited for by the `Research` **tool**, and by the time a script sees one the waiting is done.
@@ -5609,6 +5659,8 @@ The selector parameters and property values are nodes, so they key, link and loo
 - `text.lettersAt(t, { frame? })` → `[{ text, x, y, width, height, opacity, index, word, line }]` — each visible letter's box and what the selectors count it as. Spaces have no ink and are left out, as is a letter at zero opacity; the layer's own `amount` counts, so a text faded out by it has no letters.
 - `text.settledAt(from?, { frame? })` → `{ at, until, seconds }` or `null` — **when the text stops moving**: from `from` seconds (0) on, the first frame from which no visible letter's box or opacity changes, and how long it then holds (`until` is the last frame before anything changes again, or the film's end). `null` when it is never visible and still. The reading-time check is `text.settledAt(arrival).seconds`. Pass `{ frame: true }` for a text in a moving group: it is still in its own stack, but not on screen. On the frame, **a group above fading out ends the hold too** — a scene cut away by its group's `amount` takes its text with it.
 - `text.text` — the words, as given.
+
+**Every text the film shows, and when:** `comp.texts()` → `[{ text, desc, from, to, seconds, intervals }]`, in the order the texts were added, groups included. `intervals` are the spans of film seconds in which any of a text's letters shows **on the frame**, with every group above, its clock, switch and `amount` counted, sampled twelve times a second. `from` and `to` are the first and last of them, and `seconds` their total. A text never shown has no intervals and null times. This is what the film sets, read from the composition rather than kept by hand, and `Verify.film` holds the encoded film against it.
 
 Boxes are in the units of the stack the text was added to, and `t` is that stack's time — what you want for placing a thing on a word in the same group. **`{ frame: true }` gives the rendered frame's pixels at the film's time instead**, carried out through every group above it — each one's transform, its `timeOffset` and `timeDilation`, and a switch, which hides a text it is not showing (`null`) — and through the composition's `view`. At the top level of a composition whose `view` is its pixels the two agree. **This is the title-safe check**, with `{ frame: true }` whenever the title sits in a group (a camera move, a card in a switch) — the ink against the central 90% of the frame — and where a thing is placed on a word:
 

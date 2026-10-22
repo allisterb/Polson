@@ -370,6 +370,24 @@ set's own check from *More than one audience*:
 
 - **`comp.saveVideo('output.mp4')`** — read its `warnings`. With several audiences, each film to its own
   `artifacts/final_a.mp4`, `final_b.mp4`…, one script each.
+- **Then read each film back against its sources**, in a script that rebuilds the composition (`MODE = 'checks'`):
+  ```javascript
+  const v = await Verify.film(comp, 'output.mp4', { computed: { /* 'text as set': 'its working' */ } });
+  if (!v.ok) exit(v.remedy);          // 'Pending': the watcher is still reading — run the same script again
+  log(v.summary);
+  Stage.check('every text on screen has a source and was read as set', v.passed, v.summary, { judged: true });
+  ```
+  A separate model watches the encoded film. Its transcription is held against every text the composition sets
+  (`comp.texts()`), and each text's source is looked up: the brief, a document's page, a Qloo title, research, or a
+  figure you computed, which you pass with its working. What comes back:
+  - **An unsourced figure** comes out of the film until you find its source.
+  - **A missed text** is a reading-time or size fault until you show otherwise: look at its `seconds`.
+  - **A stray** is a reading of text you never set. Look at the frame it saved, `artifacts/verify/stray-n.png`,
+    before you call it anything, then `Verify.stray(n, 'misread')` or `Verify.stray(n, 'real')`. A real one is a
+    fault: fix it, encode again, and read back again.
+
+  The studio's Verification view shows this check to the people judging the film: every word and number on screen,
+  where it came from, and whether a viewer read it. One film's check a script; with several films, one call per film.
 - **A silent film is also delivered as a looping WebP**, for the pages that show images and not video:
   `Motion.videoToWebp('output.mp4', 'output.webp')`, or `artifacts/final_a.webp` beside `final_a.mp4`, each in a
   script of its own after any join. Keep its default width (960 or less): measured on fifteen-second films, 7–9 s

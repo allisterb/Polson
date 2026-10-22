@@ -401,7 +401,48 @@ def taste_views(text: str, events: Iterable[dict[str, Any]], since: str | None =
                 k: e.get(k) for k in ("a", "b", "domains", "pace", "summary")}
     explained = explain(text, events, since) if text else {"map": None, "referenceCheck": None}
     return {"audiences": audiences, "contrasts": list(contrasts.values()),
-            "map": explained["map"], "referenceCheck": explained["referenceCheck"]}
+            "map": explained["map"], "referenceCheck": explained["referenceCheck"],
+            "verification": verification(scoped, explained["referenceCheck"])}
+
+
+def verification(events: list[dict[str, Any]], reference_check: dict[str, Any] | None) -> dict[str, Any]:
+    """What the studio's Verification view draws: how the run checked what it put on screen.
+
+    **films**: each film's latest `Verify.film` — every text it set, the seconds it was on screen, where it came from and
+    whether the watcher read it — with its strays as the agent settled them after looking at their frames. **A stray not
+    yet looked at is counted, never shown**: the watcher misreads, and a reading is not a finding until its frame has
+    been seen. **checks**: the run's `Stage.check`s, the latest per claim. **references**: the Qloo reference check.
+    **documents**: the documents the run read, and with which model.
+    """
+    films: dict[str, dict[str, Any]] = {}
+    for e in events:
+        if e.get("type") == "film.verify" and e.get("video"):
+            films[e["video"]] = {"video": e["video"], "duration": e.get("duration"), "model": e.get("model"),
+                                 "items": e.get("items") or [], "ts": e.get("ts"),
+                                 "strays": {s.get("n"): dict(s) for s in e.get("strays") or [] if isinstance(s, dict)}}
+        elif e.get("type") == "film.stray" and e.get("video") in films:
+            stray = films[e["video"]]["strays"].get(e.get("n"))
+            if stray is not None:
+                stray.update(verdict=e.get("verdict"), note=e.get("note"))
+    for film in films.values():
+        strays = list(film.pop("strays").values())
+        film["strays"] = [s for s in strays if s.get("verdict") in ("misread", "real")]
+        film["pending"] = sum(1 for s in strays if s.get("verdict") not in ("misread", "real"))
+
+    checks: dict[str, dict[str, Any]] = {}
+    for e in events:
+        if e.get("type") == "check" and e.get("claim"):
+            checks.pop(e["claim"], None)
+            checks[e["claim"]] = {k: e.get(k) for k in ("claim", "passed", "detail", "judged", "accepted", "reason", "stage")}
+
+    documents: dict[str, dict[str, Any]] = {}
+    for e in events:
+        if e.get("type") == "document.read" and e.get("success") and e.get("descriptor"):
+            documents[e["descriptor"]] = {"document": e["descriptor"], "model": e.get("model"),
+                                          "reads": documents.get(e["descriptor"], {}).get("reads", 0) + 1}
+
+    return {"films": list(films.values()), "checks": list(checks.values()), "references": reference_check,
+            "documents": list(documents.values())}
 
 
 def _key(section: str, choice: str) -> tuple[str, str]:

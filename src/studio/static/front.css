@@ -316,3 +316,52 @@ details.fr-more > summary { cursor: pointer; font: 600 13px/18px var(--font-sans
   .fr-venn > div:nth-child(2) { padding: var(--space-2) 0; border: 0; border-top: 2px solid var(--accent); border-bottom: 2px solid var(--accent); }
   .fr-lean-row { grid-template-columns: minmax(0, 1fr) minmax(6rem, 8rem) minmax(0, 1fr); }
 }
+
+/* ── Verification: the film's texts, their sources and the read-back ──────────────────────────────────────── */
+.fr-verify { display: grid; gap: var(--space-3); }
+.fr-verify h3 { margin: 0; overflow-wrap: anywhere; }
+.fr-verify > .fr-small { margin: 0; }
+.fr-vlegend { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.fr-vkey { display: inline-block; padding: 0 var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-pill); font: 500 12px/20px var(--font-sans); color: var(--ink); background: var(--surface-sunken); white-space: nowrap; }
+.fr-vkey-missed { border-style: dashed; background: none; color: var(--ink-muted); }
+/* One colour per kind of source, the chip and the bar alike. */
+.vt-src-brief { --vt: var(--accent); }
+.vt-src-document { --vt: var(--running); }
+.vt-src-computed { --vt: var(--attention); }
+.vt-src-qloo { --vt: #7a4fd1; }
+.vt-src-research { --vt: var(--done); }
+.vt-src-own-words { --vt: var(--ink-muted); }
+.vt-src-unsourced-figure { --vt: var(--failed); }
+.fr-vkey[class*="vt-src-"] { border-color: var(--vt); background: color-mix(in srgb, var(--vt) 16%, transparent); }
+.fr-vtl { display: block; width: 100%; min-width: 640px; height: auto; font: 11px/1 var(--font-sans); }
+.fr-vtl .vt-grid { stroke: var(--line); stroke-width: 1; }
+.fr-vtl .vt-tick { fill: var(--ink-muted); font-size: 10px; }
+.fr-vtl .vt-bar rect { fill: color-mix(in srgb, var(--vt) 22%, var(--surface-raised)); stroke: var(--vt); stroke-width: 1.2; }
+.fr-vtl .vt-bar text { fill: var(--ink); pointer-events: none; }
+.fr-vtl .vt-bar.vt-missed rect { stroke-dasharray: 4 3; fill-opacity: .35; }
+.fr-vtl .vt-stray line { stroke-width: 2; stroke-dasharray: 3 2; }
+.fr-vtl .vt-stray.vt-real line { stroke: var(--failed); }
+.fr-vtl .vt-stray.vt-real circle { fill: var(--failed); }
+.fr-vtl .vt-stray.vt-misread line { stroke: var(--ink-muted); }
+.fr-vtl .vt-stray.vt-misread circle { fill: none; stroke: var(--ink-muted); stroke-width: 1.5; }
+.fr-vtable { width: 100%; border-collapse: collapse; font: 400 13px/18px var(--font-sans); }
+.fr-vtable th { text-align: left; padding: var(--space-1) var(--space-2); border-bottom: 1px solid var(--line); font: 600 11px/16px var(--font-sans); color: var(--ink-muted); text-transform: uppercase; letter-spacing: .04em; }
+.fr-vtable td { padding: var(--space-1) var(--space-2); border-bottom: 1px solid var(--line); vertical-align: top; color: var(--ink); }
+.fr-vtable tr.is-flag td { background: var(--failed-soft); }
+.fr-vtext { overflow-wrap: anywhere; }
+.fr-vstrays { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--space-3); }
+.fr-vstray { margin: 0; padding: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-md); }
+.fr-vstray.vt-real { border-color: var(--failed); }
+.fr-vstray img { display: block; width: 100%; height: auto; border-radius: var(--radius-sm); margin-bottom: var(--space-2); }
+.fr-vchecks { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.fr-vchecks li { display: flex; gap: var(--space-3); align-items: flex-start; font: 400 14px/20px var(--font-sans); color: var(--ink); }
+.fr-vchecks details { margin-top: 2px; }
+.fr-vchecks details p { margin: var(--space-1) 0 0; overflow-wrap: anywhere; }
+.fr-vcheck { flex: none; min-width: 3.2rem; text-align: center; padding: 0 var(--space-2); border-radius: var(--radius-pill); font: 600 12px/20px var(--font-sans); }
+.fr-vcheck.is-pass { background: var(--done-soft); color: var(--done); }
+.fr-vcheck.is-fail { background: var(--failed-soft); color: var(--failed); }
+.fr-vcheck.is-kept { background: var(--attention-soft); color: var(--attention); }
+.fr-vjudged { margin-left: var(--space-2); padding: 0 var(--space-2); border: 1px dashed var(--line-control); border-radius: var(--radius-pill); font: 500 11px/18px var(--font-sans); color: var(--ink-muted); }
+@media (max-width: 720px) {
+  .fr-vtable th:nth-child(2), .fr-vtable td:nth-child(2) { display: none; }
+}

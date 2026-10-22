@@ -515,7 +515,7 @@
       document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
     });
     if (view === 'agent' && log) log.scrollTop = log.scrollHeight;
-    if (view === 'audiences' || view === 'contrast' || view === 'choices') loadTaste();
+    if (view === 'audiences' || view === 'contrast' || view === 'choices' || view === 'verification') loadTaste();
     try { history.replaceState(null, '', view !== 'progress' ? '#' + view : location.pathname + location.search); } catch (err) { /* a view, not state */ }
   }
   // A view named in the address, if the page has that tab.
@@ -925,6 +925,154 @@
     });
   }
 
+  // ── Verification: what the film shows, where each came from, and whether a watcher read it ──
+  var SOURCE = { brief: 'Brief', document: 'Document', computed: 'Computed', qloo: 'Qloo', research: 'Research',
+                 'own words': 'Own words', 'unsourced figure': 'No source' };
+  function srcKey(s) { return String(s || 'own words').replace(/\s+/g, '-'); }
+  var SVGNS = 'http://www.w3.org/2000/svg';
+  function svgEl(name, attrs, parent) {
+    var n = document.createElementNS(SVGNS, name);
+    Object.keys(attrs || {}).forEach(function (k) { n.setAttribute(k, String(attrs[k])); });
+    if (parent) parent.appendChild(n);
+    return n;
+  }
+
+  // The film as a strip of time: each text a bar across the seconds it shows, coloured by its source and outlined by
+  // whether the watcher read it; a settled stray a mark at its second. Built with DOM calls: every label is film text.
+  function filmTimeline(film) {
+    var items = (film.items || []).filter(function (i) { return i.from != null; });
+    var duration = film.duration || items.reduce(function (m, i) { return Math.max(m, i.to || 0); }, 1);
+    var W = 1000, barH = 18, gap = 4, axis = 22;
+    var lanes = [];
+    var placed = items.slice().sort(function (a, b) { return a.from - b.from; }).map(function (it) {
+      var lane = 0;
+      while (lanes[lane] != null && lanes[lane] > it.from - 0.05) lane++;
+      lanes[lane] = it.to;
+      return { it: it, lane: lane };
+    });
+    var height = axis + Math.max(lanes.length, 1) * (barH + gap) + 18;
+    var svg = svgEl('svg', { viewBox: '0 0 ' + W + ' ' + height, 'class': 'fr-vtl', role: 'img',
+                              'aria-label': 'Every text on screen across the film, coloured by its source' });
+    var x = function (t) { return Math.max(0, Math.min(W, t / duration * W)); };
+    var tick = duration > 40 ? 10 : duration > 12 ? 5 : 1;
+    for (var t = 0; t <= duration + 1e-6; t += tick) {
+      svgEl('line', { x1: x(t), x2: x(t), y1: axis - 6, y2: height - 4, 'class': 'vt-grid' }, svg);
+      svgEl('text', { x: x(t) + 2, y: 12, 'class': 'vt-tick' }, svg).textContent = t + ' s';
+    }
+    placed.forEach(function (p) {
+      var it = p.it, y = axis + p.lane * (barH + gap);
+      var w = Math.max(x(it.to + 1 / 12) - x(it.from), 3);
+      var g = svgEl('g', { 'class': 'vt-bar vt-src-' + srcKey(it.source) + (it.status === 'missed' ? ' vt-missed' : '') }, svg);
+      svgEl('title', {}, g).textContent = it.text.replace(/\n/g, ' ') + ' — on screen ' + it.from.toFixed(1) + '–' + it.to.toFixed(1) + ' s · '
+        + (SOURCE[it.source] || it.source) + (it.detail ? ' (' + it.detail + ')' : '') + ' · '
+        + (it.status === 'seen' ? 'read by the watcher' + (it.readAs && it.readAs !== it.text ? ' as “' + it.readAs + '”' : '') : 'not read by the watcher');
+      svgEl('rect', { x: x(it.from), y: y, width: w, height: barH, rx: 3 }, g);
+      if (w > 34) svgEl('text', { x: x(it.from) + 4, y: y + 13 }, g).textContent = clipText(it.text.replace(/\n/g, ' '), Math.floor(w / 6.2));
+    });
+    (film.strays || []).forEach(function (s) {
+      if (s.at == null) return;
+      var g = svgEl('g', { 'class': 'vt-stray vt-' + s.verdict }, svg);
+      svgEl('title', {}, g).textContent = 'Read “' + s.read + '” at ' + s.at + ' s' + (s.near ? ' (the film set “' + s.near + '”)' : '')
+        + ' — ' + (s.verdict === 'real' ? 'a fault in the film' : 'the watcher misread it') + (s.note ? ': ' + s.note : '');
+      svgEl('line', { x1: x(s.at), x2: x(s.at), y1: axis - 4, y2: height - 4 }, g);
+      svgEl('circle', { cx: x(s.at), cy: height - 10, r: 5 }, g);
+    });
+    return svg;
+  }
+  function clipText(s, n) { return s.length > n ? s.slice(0, Math.max(n - 1, 1)) + '…' : s; }
+
+  function renderVerification(box, v) {
+    box.textContent = '';
+    (v.films || []).forEach(function (film) {
+      var items = film.items || [];
+      var seen = items.filter(function (i) { return i.status === 'seen'; }).length;
+      var unsourced = items.filter(function (i) { return i.source === 'unsourced figure'; }).length;
+      var real = (film.strays || []).filter(function (s) { return s.verdict === 'real'; }).length;
+      var card = el('section', 'fr-card fr-verify');
+      card.appendChild(el('h3', 'fr-heading', film.video));
+      card.appendChild(el('p', 'fr-small', items.length + ' texts on screen · ' + seen + ' read back as set by an independent watcher'
+        + (film.model ? ' (' + film.model + ')' : '') + ' · ' + (unsourced ? unsourced + ' figure' + (unsourced === 1 ? '' : 's') + ' with no source' : 'every figure sourced')
+        + (real ? ' · ' + real + ' fault' + (real === 1 ? '' : 's') + ' found' : '')
+        + (film.pending ? ' · ' + film.pending + ' reading' + (film.pending === 1 ? '' : 's') + ' still to be looked at' : '')));
+      var legend = el('div', 'fr-vlegend');
+      Object.keys(SOURCE).forEach(function (k) {
+        if (!items.some(function (i) { return (i.source || 'own words') === k; })) return;
+        legend.appendChild(el('span', 'fr-vkey vt-src-' + srcKey(k), SOURCE[k]));
+      });
+      legend.appendChild(el('span', 'fr-vkey fr-vkey-missed', 'not read back'));
+      card.appendChild(legend);
+      var scroll = el('div', 'fr-evscroll'); scroll.appendChild(filmTimeline(film)); card.appendChild(scroll);
+
+      var table = el('table', 'fr-vtable');
+      var head = el('tr');
+      ['Text on screen', 'Seconds', 'Source', 'Read back'].forEach(function (h) { head.appendChild(el('th', '', h)); });
+      table.appendChild(head);
+      items.forEach(function (it) {
+        var tr = el('tr', it.source === 'unsourced figure' ? 'is-flag' : '');
+        tr.appendChild(el('td', 'fr-vtext', it.text.replace(/\n/g, ' / ')));
+        tr.appendChild(el('td', 'fr-spec', it.from == null ? 'never shown' : it.from.toFixed(1) + '–' + it.to.toFixed(1)));
+        var src = el('td'); src.appendChild(el('span', 'fr-vkey vt-src-' + srcKey(it.source), SOURCE[it.source] || it.source));
+        if (it.detail) src.appendChild(el('span', 'fr-small', ' ' + it.detail));
+        tr.appendChild(src);
+        tr.appendChild(el('td', '', it.status === 'seen' ? (it.readAs && it.readAs.replace(/\s+/g, ' ') !== it.text.replace(/\s+/g, ' ') ? '✓ as “' + it.readAs + '”' : '✓ as set')
+          : it.status === 'missed' ? 'not read (' + (it.seconds || 0).toFixed(1) + ' s on screen)' : '—'));
+        table.appendChild(tr);
+      });
+      card.appendChild(table);
+
+      if ((film.strays || []).length) {
+        card.appendChild(el('p', 'ps-label', 'Readings of text the film never set, after looking at the frame'));
+        var list = el('div', 'fr-vstrays');
+        film.strays.forEach(function (s) {
+          var row = el('figure', 'fr-vstray vt-' + s.verdict);
+          if (s.frame) { var img = el('img'); img.loading = 'lazy'; img.alt = 'The frame at ' + s.at + ' s'; img.src = base + '/runs/' + run + '/artifact/' + s.frame; row.appendChild(img); }
+          var cap = el('figcaption', 'fr-small');
+          cap.textContent = 'Read “' + s.read + '” at ' + s.at + ' s' + (s.near ? '; the film set “' + s.near + '”' : '') + '. '
+            + (s.verdict === 'real' ? 'A fault in the film.' : 'The frame shows what the film set: the watcher misread it.') + (s.note ? ' ' + s.note : '');
+          row.appendChild(cap);
+          list.appendChild(row);
+        });
+        card.appendChild(list);
+      }
+      box.appendChild(card);
+    });
+
+    if ((v.checks || []).length) {
+      var cc = el('section', 'fr-card fr-verify');
+      cc.appendChild(el('h3', 'fr-heading', 'Checks the studio ran'));
+      var ul = el('ul', 'fr-vchecks');
+      v.checks.forEach(function (c) {
+        var li = el('li');
+        li.appendChild(el('span', 'fr-vcheck ' + (c.passed ? 'is-pass' : c.accepted ? 'is-kept' : 'is-fail'), c.passed ? 'Pass' : c.accepted ? 'Kept' : 'Fail'));
+        var body = el('div');
+        body.appendChild(el('span', '', c.claim));
+        if (c.judged) body.appendChild(el('span', 'fr-vjudged', 'judged by a model'));
+        if (c.detail || c.reason) {
+          var d = el('details'); d.appendChild(el('summary', 'fr-small', 'what was measured'));
+          d.appendChild(el('p', 'fr-small', (c.detail || '') + (c.reason ? ' — kept because: ' + c.reason : ''))); body.appendChild(d);
+        }
+        li.appendChild(body); ul.appendChild(li);
+      });
+      cc.appendChild(ul);
+      box.appendChild(cc);
+    }
+
+    var rc = v.references, docs = v.documents || [];
+    if (rc || docs.length) {
+      var sc = el('section', 'fr-card fr-verify');
+      sc.appendChild(el('h3', 'fr-heading', 'Sources'));
+      if (rc) {
+        var p = el('p', 'fr-small', rc.passed ? 'All ' + rc.checked + ' Qloo references in the direction were returned by the queries they cite. '
+          : rc.unverified + ' Qloo reference' + (rc.unverified === 1 ? ' was' : 's were') + ' not found in the query cited. ');
+        var link = el('button', 'ps-btn ps-btn-quiet ps-btn-sm', 'See the evidence map'); link.type = 'button';
+        link.addEventListener('click', function () { select('choices'); });
+        p.appendChild(link); sc.appendChild(p);
+      }
+      docs.forEach(function (d) { sc.appendChild(el('p', 'fr-small', d.document + ' — read by ' + (d.model || 'a model') + ', every figure checked against its page')); });
+      box.appendChild(sc);
+    }
+  }
+
   var tasteLoading = null;
   function loadTaste() {
     if (tasteLoading) return tasteLoading;
@@ -935,13 +1083,15 @@
         var shown = {
           audiences: (data.audiences || []).length > 0,
           contrast: (data.contrasts || []).length > 0,
-          choices: !!(data.map && (data.map.choices || []).length)
+          choices: !!(data.map && (data.map.choices || []).length),
+          verification: !!(data.verification && ((data.verification.films || []).length || (data.verification.checks || []).length))
         };
         Object.keys(shown).forEach(function (v) {
           var tab = views.querySelector('.ps-tab[data-view="' + v + '"]'); if (tab) tab.hidden = !shown[v];
         });
         if (shown.audiences) renderAudiences(page.querySelector('[data-audiences]'), data.audiences);
         if (shown.contrast) renderContrast(page.querySelector('[data-contrast]'), data.contrasts, data.audiences || []);
+        if (shown.verification) renderVerification(page.querySelector('[data-verification]'), data.verification);
         if (shown.choices) {
           R.evidenceMap(page.querySelector('[data-evmap]'), data.map);
           var rc = data.referenceCheck, note = page.querySelector('[data-choices-check]');
@@ -959,7 +1109,7 @@
   }
   // As the run fetches, contrasts and checks, the views follow — a moment after, so a burst refetches once.
   var tasteTimer = null;
-  ['taste.query', 'taste.contrast', 'taste.check'].forEach(function (kind) {
+  ['taste.query', 'taste.contrast', 'taste.check', 'film.verify', 'film.stray', 'check'].forEach(function (kind) {
     on(kind, function () { clearTimeout(tasteTimer); tasteTimer = setTimeout(loadTaste, 800); });
   });
   if (views) loadTaste();

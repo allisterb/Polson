@@ -348,6 +348,37 @@ public class MotionTextTests(ITestOutputHelper output) : TestsRuntime
         Assert.InRange((double)shown["until"]!, 1.9, 1.96);          // the scene's fade ends the hold
     }
 
+    /// <summary>
+    /// <c>comp.texts()</c>: every text the film sets and the seconds it is on the frame — groups included, a scene cut away
+    /// by its group's amount ending its interval, a text faded in partway starting late, one never shown with no times.
+    /// The ground truth <c>Verify.film</c> holds a read-back against.
+    /// </summary>
+    [Fact]
+    public void TextsListsEveryTextAndWhenItIsOnTheFrame()
+    {
+        if (!Installed("Arial")) return;
+        var motion = new MotionToolkit();
+        var comp = motion.Composition(Opts(("width", 300d), ("height", 160d), ("fps", 24d), ("duration", 4d)));
+        comp.Text(Opts(("text", "TITLE"), ("family", "Arial"), ("size", 40d), ("origin", new[] { 150d, 40d }), ("desc", "title")));
+        var scene = comp.Group(Opts(("amount", motion.Nodes.Animated("real", new object[]
+            { Opts(("time", 1.95d), ("value", 1d)), Opts(("time", 2d), ("value", 0d)) }))));
+        scene.Text(Opts(("text", "$40.4B"), ("family", "Arial"), ("size", 30d), ("origin", new[] { 150d, 90d })));
+        comp.Text(Opts(("text", "LATE"), ("family", "Arial"), ("size", 30d), ("origin", new[] { 150d, 130d }),
+            ("amount", motion.Nodes.Animated("real", new object[] { Opts(("time", 2.95d), ("value", 0d)), Opts(("time", 3d), ("value", 1d)) }))));
+        comp.Text(Opts(("text", "NEVER"), ("family", "Arial"), ("size", 30d), ("origin", new[] { 150d, 150d }), ("amount", 0d)));
+
+        var texts = comp.Texts().Cast<System.Collections.Generic.Dictionary<string, object?>>().ToArray();
+
+        Assert.Equal(["TITLE", "$40.4B", "LATE", "NEVER"], texts.Select(t => (string)t["text"]!));
+        Assert.Equal("title", texts[0]["desc"]);
+        Assert.Equal((0d, 4d), ((double)texts[0]["from"]!, (double)texts[0]["to"]!));
+        Assert.Equal(0d, (double)texts[1]["from"]!);
+        Assert.InRange((double)texts[1]["to"]!, 1.8, 1.96);                   // the scene's fade ends it on the frame
+        Assert.InRange((double)texts[2]["from"]!, 2.95, 3.05);
+        Assert.Null(texts[3]["from"]);
+        Assert.Empty((object?[])texts[3]["intervals"]!);
+    }
+
     [Fact]
     public void ARandomizedSelectorIsSeededAndRepeatable()
     {
