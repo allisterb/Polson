@@ -2,6 +2,7 @@ namespace Polson.ExtendedMind.Taste;
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text.Json;
 
@@ -184,7 +185,16 @@ public sealed class TasteRegistry
 public sealed class TasteToolkit
 {
     #region Constructors
-    public TasteToolkit(TasteRegistry registry) => this.registry = registry;
+    /// <param name="registry">This session's answers.</param>
+    /// <param name="projectRoot">Where <see cref="CheckReferences"/> reads from; nothing outside it is read.</param>
+    /// <param name="record">Records a run event — <c>taste.check</c> — when given.</param>
+    public TasteToolkit(TasteRegistry registry, string? projectRoot = null,
+        Action<string, IReadOnlyDictionary<string, object?>>? record = null)
+    {
+        this.registry = registry;
+        this.projectRoot = projectRoot;
+        this.record = record;
+    }
     #endregion
 
     #region Properties
@@ -241,11 +251,37 @@ public sealed class TasteToolkit
         return TastePace.CompareAll([.. results.Select(r => (r.Pace(), Named(r)))]);
     }
 
+    /// <summary>
+    /// Every title and tag a <c>direction.md</c>'s Qloo rows cite, checked against the answers this session received:
+    /// <c>{ passed, rows, unverified, checked, summary }</c>. See <see cref="TasteReferences"/>.
+    /// </summary>
+    /// <param name="path">Project-relative; <c>direction.md</c> by default.</param>
+    public Dictionary<string, object?> CheckReferences(string? path = null)
+    {
+        var name = string.IsNullOrWhiteSpace(path) ? "direction.md" : path;
+        var full = ProjectPath.Resolve(projectRoot, name, "path", "Read");
+        if (!File.Exists(full))
+            throw new FileNotFoundException($"Taste.checkReferences: '{name}' is not in the project. Write direction.md first.", full);
+
+        var check = TasteReferences.Check(File.ReadAllText(full), registry.All);
+        check["path"] = name;
+
+        // The agent's own words and the verdicts only: no Qloo response reaches the run record.
+        record?.Invoke("taste.check", new Dictionary<string, object?>
+        {
+            ["path"] = name, ["passed"] = check["passed"], ["checked"] = check["checked"],
+            ["unverified"] = check["unverified"], ["rows"] = check["rows"],
+        });
+        return check;
+    }
+
     private static string Named(TasteResult r) => string.IsNullOrWhiteSpace(r.Label) ? r.Id : $"{r.Id} ({r.Label})";
     #endregion
 
     #region Fields
     private readonly TasteRegistry registry;
+    private readonly string? projectRoot;
+    private readonly Action<string, IReadOnlyDictionary<string, object?>>? record;
     #endregion
 }
 

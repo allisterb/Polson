@@ -502,8 +502,11 @@ public partial class JsDrawingEngine : Runtime
 
             // Qloo answers, read-only, for the same reason: the agent fetches them with the Taste tool so it
             // can reason with them, and a script reads them back to cite what a mark rests on.
+            // checkReferences reads direction.md inside the project and records its verdicts as `taste.check`.
+            var tasteEvents = Events;
             engine.SetValue("Taste", new Polson.ExtendedMind.Taste.TasteToolkit(
-                session?.Taste ?? new Polson.ExtendedMind.Taste.TasteRegistry()));
+                session?.Taste ?? new Polson.ExtendedMind.Taste.TasteRegistry(), ProjectRoot,
+                (type, fields) => tasteEvents?.Append(type, session?.Stage, executionId, fields)));
 
             // Global logging & exit helpers
             engine.SetValue("log", new Action<string>(msg =>

@@ -370,7 +370,11 @@ set's own check from *More than one audience*:
   the choice came from the poster, cited to its line and kind. The columns are `Choice | Evidence | Kind`,
   as for the poster: the run page shows this file to the people judging the film. The pace, the eases,
   the transitions and the grade each have a line, and pace and grade cite this audience's profile — pace by
-  its `pace()` counts and titles.
+  its `pace()` counts and titles. Qloo lines carry their handle, titles in *italics* and tags in quotes with
+  their item number, and are checked before delivery:
+  `const r = Taste.checkReferences(); Stage.check('every Qloo reference was returned by its query', r.passed, r.summary);`
+  A title or tag in `r.unverified` is found in an answer and cited to it, or taken out of `direction.md` and the
+  film. Run it in the session that fetched the answers; a profile the poster fetched is re-asked free from the cache.
 - **`findings.md`**: what the motion added to the poster, what the checks changed, and what you would
   do with more time.
 

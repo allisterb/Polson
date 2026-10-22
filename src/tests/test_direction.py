@@ -122,6 +122,126 @@ class ParseTests(unittest.TestCase):
         self.assertEqual(direction.refs("t2026 is a year, at5 is not a handle, (t7) is"), ["t7"])
 
 
+class EvidenceMapTests(unittest.TestCase):
+    """Query → reference → choice → what it is for, each edge in the state the reference check left it."""
+
+    TEXT = """# Direction
+
+## Film A: Tokyo
+
+### Choices
+
+| Choice | Evidence | Kind |
+| :-- | :-- | :-- |
+| **Pace:** long holds | `pace()` on t1: slow titles *The Long Quiet*, *Amélie's Garden (2019)* | Qloo (t1) |
+| Grade | t5 over *Long Quiet*: **"Dreamlike Visuals"** (item 1), "Neon Noir" (item 4) | Qloo (t5) |
+| Headline | all capitals slow reading (*Typographic Design*, p. 79) | Research |
+
+## Film B: Mumbai
+
+| Choice | Evidence | Kind |
+| :-- | :-- | :-- |
+| Arrivals land harder | the fast lean | Qloo (t2) |
+"""
+
+    EVENTS = [
+        {"type": "taste.query", "id": "t1", "op": "profile", "label": "audience A"},
+        {"type": "taste.query", "id": "t2", "op": "profile", "label": "audience B"},
+        {"type": "taste.query", "id": "t5", "op": "describe", "label": "grade A"},
+        {"type": "taste.check", "path": "direction.md", "passed": False, "checked": 5, "unverified": ['"Neon Noir"'],
+         "rows": [
+             {"section": "Choices", "choice": "Pace: long holds", "handles": ["t1"], "problems": [], "tags": [],
+              "titles": [{"title": "The Long Quiet", "found": True, "in": "t1"},
+                         {"title": "Amélie's Garden (2019)", "found": True, "in": "t1"}]},
+             {"section": "Choices", "choice": "Grade", "handles": ["t5"], "problems": [],
+              "titles": [{"title": "Long Quiet", "found": True, "in": "t5"}],
+              "tags": [{"tag": "Dreamlike Visuals", "found": True, "in": "t5"},
+                       {"tag": "Neon Noir", "found": False, "in": None}]},
+         ]},
+    ]
+
+    def setUp(self) -> None:
+        self.map = direction.explain(self.TEXT, self.EVENTS)["map"]
+        self.ids = {n["text"]: n["id"] for n in self.map["refs"]} | {c["text"]: c["id"] for c in self.map["choices"]}
+        self.edges = {(e["from"], e["to"]): e["state"] for e in self.map["edges"]}
+
+    def test_a_subsection_carries_its_parent_heading(self):
+        self.assertEqual([(p["parent"], p["title"]) for p in self.map["pieces"]],
+                         [("Film A: Tokyo", "Choices"), ("", "Film B: Mumbai")])
+
+    def test_only_qloo_rows_are_choices_and_each_reference_appears_once(self):
+        self.assertEqual([c["text"] for c in self.map["choices"]],
+                         ["**Pace:** long holds", "Grade", "Arrivals land harder"])
+        # *The Long Quiet* and *Long Quiet* are one title; a Research row's italics are not Qloo references.
+        self.assertEqual([(r["kind"], r["text"]) for r in self.map["refs"]],
+                         [("title", "The Long Quiet"), ("title", "Amélie's Garden (2019)"),
+                          ("tag", "Dreamlike Visuals"), ("tag", "Neon Noir")])
+        self.assertEqual([q["id"] for q in self.map["queries"]], ["t1", "t2", "t5"])
+
+    def test_edges_carry_the_checks_verdicts(self):
+        quiet, neon = self.ids["The Long Quiet"], self.ids["Neon Noir"]
+        pace, grade = self.ids["**Pace:** long holds"], self.ids["Grade"]
+        self.assertEqual(self.edges[("t1", quiet)], "verified")
+        self.assertEqual(self.edges[("t5", quiet)], "verified")       # the describe was asked about it
+        self.assertEqual(self.edges[(quiet, pace)], "verified")
+        self.assertEqual(self.edges[("t5", neon)], "unverified")      # not returned: hangs from the query cited
+        self.assertEqual(self.edges[(neon, grade)], "unverified")
+        self.assertEqual(self.edges[(grade, "s0")], "unverified")
+
+    def test_a_row_with_no_references_links_its_query_straight_to_the_choice_unchecked(self):
+        harder = self.ids["Arrivals land harder"]
+        self.assertEqual(self.edges[("t2", harder)], "unchecked")
+        self.assertEqual(self.edges[(harder, "s1")], "unchecked")
+
+    def test_names_compare_as_the_engine_compares_them(self):
+        self.assertEqual(direction.ref_key("Amélie’s Garden (2019)"), "amelie s garden")
+        self.assertEqual(direction.ref_key("The Long Quiet"), direction.ref_key("long quiet"))
+
+
+class ReferenceCheckTests(unittest.TestCase):
+    """`Taste.checkReferences()` laid onto the rows: verified, unverified with what is missing, or unchecked."""
+
+    #: As the engine records it: the agent's own words and the verdicts, never a raw Qloo payload.
+    CHECK = {
+        "type": "taste.check", "ts": "2026-10-16T10:05:00Z", "path": "direction.md", "passed": False, "checked": 3,
+        "unverified": ["*Remembered Film*"],
+        "rows": [
+            {"section": "Shared — the film and the system", "choice": "Comparables as signals only",
+             "handles": ["t1", "t3"], "titles": [{"title": "Arrival", "found": True, "in": "t1"}], "tags": [],
+             "problems": []},
+            {"section": "Audience A — Lagos, 24 and younger", "choice": "Halftone head", "handles": ["t5"],
+             "titles": [{"title": "Spider-Verse", "found": True, "in": "t5"},
+                        {"title": "Remembered Film", "found": False, "in": None, "elsewhere": None}],
+             "tags": [], "problems": []},
+        ],
+    }
+
+    def test_each_qloo_row_gets_its_verdict(self):
+        payload = direction.explain(DIRECTION, EVENTS + [self.CHECK])
+        shared, audience = payload["sections"][0], payload["sections"][1]
+        self.assertEqual(shared["rows"][1]["check"]["state"], "verified")
+        bad = audience["rows"][0]["check"]
+        self.assertEqual(bad["state"], "unverified")
+        self.assertEqual(bad["missing"], ["*Remembered Film*"])
+        self.assertNotIn("check", audience["rows"][1])                   # a Research row is not a Qloo row
+        self.assertEqual(payload["referenceCheck"], {"passed": False, "checked": 3, "unverified": 1,
+                                                     "ts": "2026-10-16T10:05:00Z"})
+
+    def test_a_row_written_after_the_check_is_unchecked_not_inherited(self):
+        edited = DIRECTION.replace("| Halftone head |", "| Halftone head, reworded |")
+        row = direction.explain(edited, EVENTS + [self.CHECK])["sections"][1]["rows"][0]
+        self.assertEqual(row["check"]["state"], "unchecked")
+
+    def test_the_latest_check_of_this_run_wins_and_none_means_none(self):
+        later = dict(self.CHECK, ts="2026-10-16T11:00:00Z", passed=True, unverified=[],
+                     rows=[dict(r, titles=[dict(t, found=True) for t in r["titles"]]) for r in self.CHECK["rows"]])
+        payload = direction.explain(DIRECTION, EVENTS + [self.CHECK, later])
+        self.assertTrue(payload["referenceCheck"]["passed"])
+        self.assertEqual(payload["sections"][1]["rows"][0]["check"]["state"], "verified")
+        self.assertIsNone(direction.explain(DIRECTION, EVENTS)["referenceCheck"])
+        self.assertIsNone(direction.explain(DIRECTION, EVENTS + [self.CHECK], since="2026-10-16T10:30:00Z")["referenceCheck"])
+
+
 class WhyRouteTests(unittest.TestCase):
     """`/runs/{id}/why`: one fixed file, through the same containment as every deliverable."""
 

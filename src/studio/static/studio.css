@@ -478,7 +478,41 @@ label.modebox .swatch { width: 9px; height: 9px; border-radius: 2px; display: in
 .direction .kind.k-research { color: #fff; background: var(--good); border-color: var(--good); }
 .direction .kind.k-brief { color: var(--ink); border-color: var(--ink); }
 .direction .kind.k-assumed { color: #7a5410; background: #fbf0d9; border-color: #e0c27f; }
+.direction .kind.k-verified { color: var(--good); border-color: var(--good); }
+.direction .kind.k-unverified { color: #fff; background: #b3412e; border-color: #b3412e; }
+.direction .kind.k-unchecked { color: var(--dim); border-style: dashed; }
+.direction .checknote { color: #b3412e; font-size: .8rem; }
 .direction code { font-family: var(--mono); font-size: .82em; }
+
+/* The evidence map: query → reference → choice → what it is for. Edges coloured by the reference check; a
+   hovered or focused box lights its whole path and dims the rest. */
+.direction .evmap { margin: .6rem 0 1rem; }
+.direction .evmap figcaption { max-width: 60rem; line-height: 1.5; margin-bottom: .4rem; }
+.direction .evscroll { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 3px; padding: .5rem; }
+.direction #whymapsvg { display: block; width: 100%; height: auto; font: 11px/1 system-ui, sans-serif; }
+.direction .evhead { fill: var(--dim); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
+.direction .evnode rect { fill: var(--ground); stroke: var(--line); }
+.direction .evnode text { fill: var(--ink); pointer-events: none; }
+.direction .evnode.ev-queries rect { fill: #e8f2f6; stroke: var(--accent); }
+.direction .evnode.ev-queries text { fill: var(--accent); font-family: var(--mono); }
+.direction .evnode.ev-refs text { font-style: italic; }
+.direction .evnode.ev-tag text { font-style: normal; }
+.direction .evnode.ev-pieces rect { fill: var(--ink); stroke: var(--ink); }
+.direction .evnode.ev-pieces text { fill: #fff; font-weight: 600; }
+.direction .evnode { cursor: default; outline: none; }
+.direction .evnode:focus rect { stroke-width: 2; }
+.direction .evedge { fill: none; stroke-width: 1.3; opacity: .5; }
+.direction .evedge.ev-verified { stroke: var(--good); }
+.direction .evedge.ev-unverified { stroke: var(--warn); stroke-width: 2; opacity: .85; }
+.direction .evedge.ev-unchecked { stroke: var(--dim); stroke-dasharray: 4 3; }
+.direction #whymapsvg.evfocus .evnode:not(.on) { opacity: .25; }
+.direction #whymapsvg.evfocus .evedge:not(.on) { opacity: .06; }
+.direction #whymapsvg.evfocus .evedge.on { opacity: 1; stroke-width: 2; }
+.direction .evkey { white-space: nowrap; padding-left: 1.4rem; position: relative; margin-right: .6rem; }
+.direction .evkey::before { content: ""; position: absolute; left: 0; top: .55em; width: 1.1rem; border-top: 2px solid; }
+.direction .evkey.ev-verified::before { border-color: var(--good); }
+.direction .evkey.ev-unverified::before { border-color: var(--warn); }
+.direction .evkey.ev-unchecked::before { border-color: var(--dim); border-top-style: dashed; }
 
 /* A Taste reference opens in place: what the query was for, then the request itself. */
 .direction details.tq { display: inline-block; margin: .15rem .25rem 0 0; vertical-align: top; }
