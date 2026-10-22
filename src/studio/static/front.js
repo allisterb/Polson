@@ -515,7 +515,13 @@
       document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
     });
     if (view === 'agent' && log) log.scrollTop = log.scrollHeight;
-    try { history.replaceState(null, '', view === 'agent' ? '#agent' : location.pathname + location.search); } catch (err) { /* a view, not state */ }
+    if (view === 'audiences' || view === 'contrast' || view === 'choices') loadTaste();
+    try { history.replaceState(null, '', view !== 'progress' ? '#' + view : location.pathname + location.search); } catch (err) { /* a view, not state */ }
+  }
+  // A view named in the address, if the page has that tab.
+  function viewFromHash() {
+    var v = location.hash.slice(1);
+    return views && views.querySelector('.ps-tab[data-view="' + v.replace(/[^a-z]/g, '') + '"]') ? v : 'progress';
   }
   if (views) {
     views.addEventListener('click', function (ev) { var t = ev.target.closest('.ps-tab'); if (t) select(t.dataset.view); });
@@ -528,7 +534,7 @@
     });
     if (location.hash === '#agent') select('agent');
     // A link to #agent from this same page is a hash change, not a load.
-    window.addEventListener('hashchange', function () { select(location.hash === '#agent' ? 'agent' : 'progress'); });
+    window.addEventListener('hashchange', function () { select(viewFromHash()); });
   }
 
   // Minutes and seconds since the first thing the record says, as the progress list counts them.
@@ -780,6 +786,183 @@
     }
   };
   if (log) Object.keys(AGENT).forEach(function (kind) { on(kind, AGENT[kind]); });
+  // endregion
+
+  // region Qloo views: Audiences, Contrast, Choices
+  // From /requests/<name>/taste (studio.direction.taste_views): the profiles the run fetched, its contrasts, and the
+  // evidence map. Every label is a Qloo title or the agent's words, so everything is built with textContent.
+  var DOMAIN = { 'urn:entity:movie': 'Films', 'urn:entity:tv_show': 'TV', 'urn:entity:artist': 'Music',
+                 'urn:entity:book': 'Books', 'urn:entity:brand': 'Brands', 'urn:entity:place': 'Places',
+                 'urn:entity:podcast': 'Podcasts', 'urn:entity:video_game': 'Games', 'urn:entity:destination': 'Destinations',
+                 'urn:entity:person': 'People' };
+  function domainName(type) { return DOMAIN[type] || String(type || '').replace('urn:entity:', ''); }
+  function ageName(age) {
+    if (!age) return '';
+    var m = /^(\d+)_to_(\d+)$/.exec(age);
+    return m ? m[1] + '–' + m[2] : String(age).replace(/_/g, ' ');
+  }
+  function audienceName(a) {
+    var who = a && a.audience || {};
+    var bits = [who.place, ageName(who.age), who.gender].filter(Boolean);
+    return (a.label ? a.label.charAt(0).toUpperCase() + a.label.slice(1) : a.id) + (bits.length ? ' — ' + bits.join(', ') : '');
+  }
+  function pct(x) { return Math.round(x * 100) + '%'; }
+
+  // A ranked list of titles: Qloo's rank, the title, and its pace where Qloo's tags give one.
+  function ranked(items, limit) {
+    var ol = el('ol', 'fr-ranked');
+    (items || []).slice(0, limit || 10).forEach(function (t) {
+      var li = el('li');
+      li.appendChild(el('span', 'fr-rank', t.rank != null ? String(t.rank) : (t.rankA != null ? t.rankA + '·' + t.rankB : '')));
+      li.appendChild(el('em', '', t.name));
+      if (t.pace) li.appendChild(el('span', 'fr-pace-tag fr-pace-' + t.pace, t.pace === 'fast' ? 'fast-paced' : 'slow-paced'));
+      ol.appendChild(li);
+    });
+    if (!ol.children.length) ol.appendChild(el('li', 'fr-small', 'None.'));
+    return ol;
+  }
+
+  // Fast against slow among an audience's films and shows, by Qloo's own tags, as one bar.
+  function paceBar(p, caption) {
+    var box = el('div', 'fr-pacebar');
+    var decided = (p.fast || 0) + (p.slow || 0);
+    box.appendChild(el('p', 'fr-small', caption || (decided
+      ? p.fast + ' fast-paced and ' + p.slow + ' slow-paced of ' + p.n + ' films and shows'
+      : 'No pace tags among ' + (p.n || 0) + ' films and shows')));
+    if (decided) {
+      var bar = el('div', 'fr-bar');
+      var f = el('span', 'fr-bar-fast'); f.style.width = pct(p.fast / Math.max(p.n, 1)); f.title = p.fast + ' fast-paced';
+      var s = el('span', 'fr-bar-slow'); s.style.width = pct(p.slow / Math.max(p.n, 1)); s.title = p.slow + ' slow-paced';
+      bar.appendChild(f); bar.appendChild(s); box.appendChild(bar);
+    }
+    return box;
+  }
+
+  function renderAudiences(box, audiences) {
+    box.textContent = '';
+    audiences.forEach(function (a) {
+      var card = el('section', 'fr-card fr-aud');
+      card.appendChild(el('h3', 'fr-heading', audienceName(a)));
+      card.appendChild(el('p', 'fr-small', 'Profile ' + a.id + (a.distinctive != null ? ' · ' + a.distinctive + ' distinctive titles' : '') + ' · source: Qloo'));
+      if (a.pace && a.pace.n) card.appendChild(paceBar(a.pace));
+      if (!a.domains || !a.domains.length) {
+        card.appendChild(el('p', 'fr-small', 'This run recorded the counts only; runs from now on record the titles too.'));
+      } else {
+        var grid = el('div', 'fr-aud-domains');
+        a.domains.forEach(function (d) {
+          var col = el('div');
+          col.appendChild(el('p', 'ps-label', domainName(d.type) + ' (' + d.n + ' distinctive)'));
+          col.appendChild(ranked(d.top, 12));
+          grid.appendChild(col);
+        });
+        card.appendChild(grid);
+      }
+      box.appendChild(card);
+    });
+  }
+
+  // Tags that lean one way, as a back-to-back bar per tag: the share of each side's own titles that carry it.
+  function leanChart(d, nameA, nameB) {
+    var rows = [];
+    (d.tagsA || []).forEach(function (t) { rows.push({ tag: t.tag, a: t.a, b: t.b, titles: t.titles }); });
+    (d.tagsB || []).forEach(function (t) { rows.push({ tag: t.tag, a: t.b, b: t.a, titles: t.titles }); });
+    if (!rows.length) return el('p', 'fr-small', 'No tag leans either way on two or more titles.');
+    var onlyA = (d.onlyA || []).length || 1, onlyB = (d.onlyB || []).length || 1;
+    var chart = el('div', 'fr-lean');
+    var head = el('div', 'fr-lean-row fr-lean-head');
+    head.appendChild(el('span', '', nameA)); head.appendChild(el('span', '', 'Tag')); head.appendChild(el('span', '', nameB));
+    chart.appendChild(head);
+    rows.forEach(function (r) {
+      var row = el('div', 'fr-lean-row');
+      row.title = 'On ' + r.a + ' of ' + nameA + "'s own titles and " + r.b + ' of ' + nameB + "'s, e.g. " + (r.titles || []).join(', ');
+      var left = el('span', 'fr-lean-a'), right = el('span', 'fr-lean-b');
+      var la = el('i'); la.style.width = pct(Math.min(r.a / onlyA, 1)); left.appendChild(el('b', '', String(r.a))); left.appendChild(la);
+      var rb = el('i'); rb.style.width = pct(Math.min(r.b / onlyB, 1)); right.appendChild(rb); right.appendChild(el('b', '', String(r.b)));
+      row.appendChild(left); row.appendChild(el('span', 'fr-lean-tag', r.tag)); row.appendChild(right);
+      chart.appendChild(row);
+    });
+    return chart;
+  }
+
+  function renderContrast(box, contrasts, audiences) {
+    box.textContent = '';
+    var byId = {};
+    audiences.forEach(function (a) { byId[a.id] = a; });
+    contrasts.forEach(function (c) {
+      var nameA = byId[c.a.id] ? audienceName(byId[c.a.id]).split(' — ')[0] : (c.a.label || c.a.id);
+      var nameB = byId[c.b.id] ? audienceName(byId[c.b.id]).split(' — ')[0] : (c.b.label || c.b.id);
+      var card = el('section', 'fr-card fr-contrast');
+      card.appendChild(el('h3', 'fr-heading', nameA + ' and ' + nameB));
+      card.appendChild(el('p', 'fr-small', 'Profiles ' + c.a.id + ' and ' + c.b.id + ' · source: Qloo'));
+      if (c.pace && c.pace.a && c.pace.b) {
+        var pace = el('div', 'fr-contrast-pace');
+        pace.appendChild(paceBar(c.pace.a, nameA + ': ' + c.pace.a.fast + ' fast, ' + c.pace.a.slow + ' slow'));
+        pace.appendChild(paceBar(c.pace.b, nameB + ': ' + c.pace.b.fast + ' fast, ' + c.pace.b.slow + ' slow'));
+        card.appendChild(pace);
+        if (c.pace.summary) card.appendChild(el('p', 'fr-quote', c.pace.summary));
+      }
+      (c.domains || []).forEach(function (d) {
+        var sec = el('div', 'fr-contrast-domain');
+        var shared = (d.shared || []).length, union = shared + (d.onlyA || []).length + (d.onlyB || []).length;
+        sec.appendChild(el('p', 'ps-label', domainName(d.type) + ': ' + shared + ' in common of ' + union + ' distinctive titles'
+          + (d.overlap != null ? ' (' + pct(d.overlap) + ')' : '')));
+        var meter = el('div', 'fr-bar fr-overlap');
+        var o = el('span', 'fr-bar-shared'); o.style.width = pct(d.overlap || 0); meter.appendChild(o);
+        sec.appendChild(meter);
+        var cols = el('div', 'fr-venn');
+        [['Only ' + nameA, d.onlyA], ['Both', d.shared], ['Only ' + nameB, d.onlyB]].forEach(function (pair) {
+          var col = el('div');
+          col.appendChild(el('p', 'ps-label', pair[0] + ' (' + (pair[1] || []).length + ')'));
+          col.appendChild(ranked(pair[1], 10));
+          cols.appendChild(col);
+        });
+        sec.appendChild(cols);
+        sec.appendChild(el('p', 'ps-label', 'Tags that lean one way'));
+        sec.appendChild(leanChart(d, nameA, nameB));
+        card.appendChild(sec);
+      });
+      box.appendChild(card);
+    });
+  }
+
+  var tasteLoading = null;
+  function loadTaste() {
+    if (tasteLoading) return tasteLoading;
+    tasteLoading = fetch(base + '/requests/' + encodeURIComponent(page.dataset.name) + '/taste')
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (!data || !views) return;
+        var shown = {
+          audiences: (data.audiences || []).length > 0,
+          contrast: (data.contrasts || []).length > 0,
+          choices: !!(data.map && (data.map.choices || []).length)
+        };
+        Object.keys(shown).forEach(function (v) {
+          var tab = views.querySelector('.ps-tab[data-view="' + v + '"]'); if (tab) tab.hidden = !shown[v];
+        });
+        if (shown.audiences) renderAudiences(page.querySelector('[data-audiences]'), data.audiences);
+        if (shown.contrast) renderContrast(page.querySelector('[data-contrast]'), data.contrasts, data.audiences || []);
+        if (shown.choices) {
+          R.evidenceMap(page.querySelector('[data-evmap]'), data.map);
+          var rc = data.referenceCheck, note = page.querySelector('[data-choices-check]');
+          note.textContent = !rc ? 'The run has not checked its references yet.'
+            : rc.passed ? 'Every one of the ' + rc.checked + ' Qloo references was returned by the query it cites.'
+            : rc.unverified + ' Qloo reference' + (rc.unverified === 1 ? ' was' : 's were') + ' not found in the query cited.';
+        }
+        // A link to #contrast and the like opens once its tab exists.
+        var wanted = viewFromHash();
+        if (wanted !== 'progress' && shown[wanted] && views.querySelector('[aria-selected="true"]').dataset.view !== wanted) select(wanted);
+      })
+      .catch(function () { /* the views stay as they were */ })
+      .then(function () { tasteLoading = null; });
+    return tasteLoading;
+  }
+  // As the run fetches, contrasts and checks, the views follow — a moment after, so a burst refetches once.
+  var tasteTimer = null;
+  ['taste.query', 'taste.contrast', 'taste.check'].forEach(function (kind) {
+    on(kind, function () { clearTimeout(tasteTimer); tasteTimer = setTimeout(loadTaste, 800); });
+  });
+  if (views) loadTaste();
   // endregion
   later();
   if (page.dataset.status === 'delivered' || page.dataset.status === 'stopped') {

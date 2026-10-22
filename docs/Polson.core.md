@@ -5182,6 +5182,13 @@ ctx.fillText(p.cite(), 24, H - 18);                     // "Qloo Insights API, /
   Six audiences make fifteen pairs, and unadjusted one in twenty would come out "different" by chance; `differ` uses
   `pAdjusted` < 0.05, so a difference here is one to build on. `differ` at the top is whether any pair does. Pass the
   profiles as an array, `[t1, t2, t3, t4]`. With two audiences it gives the same p as `comparePace`.
+- `Taste.contrast(a: TasteResult, b: TasteResult)` → `{ a, b, domains, pace, summary }` — **what separates two audiences**, from their two **profiles**, with no further Qloo call. Per domain (`domains`, each `{ type, nA, nB, shared, onlyA, onlyB, overlap, tagsA, tagsB }`):
+  - `shared`: titles distinctive to **both** audiences, each `{ id, name, rankA, rankB }`. These are what a set of pieces has in common, so they belong in the set's template.
+  - `onlyA` / `onlyB`: titles distinctive to **one** audience, each `{ id, name, rank }` in that audience's rank order. These are each piece's own evidence.
+  - `overlap`: shared over all titles, 0–1.
+  - `tagsA` / `tagsB`: the tags one side's own titles carry more often than the other's do, on at least two titles, each `{ tag, a, b, titles }` with the counts. Tags are **weak evidence**: give the counts and the titles when you cite one.
+
+  It compares **which titles are on the lists, and their ranks, never affinity**: each profile is its own query, and Qloo's affinity saturates near the top of a list. `pace` is `comparePace` on the two. **Two audiences that come out alike is an answer**: say so rather than inventing a difference. Recorded as `taste.contrast`, which the studio's Contrast view draws, so call it once the two profiles are final. Cite what you use from it as Qloo, by the profiles' handles: `*Title*` from `onlyA` cites the first profile.
 - `Taste.checkReferences(path?: string)` → `{ passed, rows, unverified, checked, summary, path }` — **every title and tag your `direction.md` cites as Qloo evidence, checked against the answers this session actually received** — the Qloo counterpart of `Documents.ask`'s figure-on-its-page check. `path` is project-relative, `'direction.md'` by default. It reads every table whose last column is *Kind*, and of those the rows whose kind names Qloo. In each row:
   - **handles**: the `t5` handles the row cites, or, with none in the row, those in its section's first paragraph;
   - **titles**: written in *italics*;

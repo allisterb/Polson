@@ -89,6 +89,11 @@ Taste({ op: 'profile', audience: '{"location":"Mexico City","age":"55_and_older"
   tags. Explore with it; never rest a direction on it.
 - **Before leaning hard on one reference**, `demographics` on it confirms it really skews to this
   audience.
+- **With two or more audiences, contrast them** once their profiles are final, in a script:
+  `Taste.contrast(Taste.find('audience A'), Taste.find('audience B'))`. Its **shared** titles are evidence for what
+  the series holds in common; **only A / only B** are each poster's own; its tags lean each way with their counts.
+  Write it into `direction.md` as Qloo rows (*titles* in italics, the profiles' handles cited) so the reference check
+  covers it; the studio's Contrast view draws it. Two audiences that come out alike is an answer to report.
 - **It is metered.** A profile is about seven requests; another audience in the same place reuses the
   cached baseline. A set of six is about forty for its profiles, plus one `compare` per audience.
   `Taste` op `status` is free. Ask the same thing the same way and it costs nothing.

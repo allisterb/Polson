@@ -246,8 +246,101 @@
   }
   // endregion
 
+  // region Evidence map
+  // Query → reference → choice → what it is for, from studio.direction.evidence_map, drawn into an <svg>. Built with
+  // DOM calls rather than markup, because every label is agent-written and textContent cannot become markup. Each
+  // edge carries the reference check's verdict; hovering or focusing a box lights its whole path.
+  var SVG_NS = 'http://www.w3.org/2000/svg';
+
+  function svgEl(name, attrs, parent) {
+    var el = document.createElementNS(SVG_NS, name);
+    Object.keys(attrs || {}).forEach(function (k) { el.setAttribute(k, String(attrs[k])); });
+    if (parent) parent.appendChild(el);
+    return el;
+  }
+
+  // The agent's inline marks stripped for a label: `code`, **bold**, *italic*.
+  function plain(s) { return String(s || '').replace(/[`*_]/g, '').replace(/\s+/g, ' ').trim(); }
+  function clip(s, n) { return s.length > n ? s.slice(0, n - 1).replace(/\s+$/, '') + '…' : s; }
+
+  function evidenceMap(svg, map) {
+    var cols = [
+      { key: 'queries', head: 'Qloo query', w: 220 },
+      { key: 'refs', head: 'Reference', w: 230 },
+      { key: 'choices', head: 'Choice', w: 240 },
+      { key: 'pieces', head: 'For', w: 200 }
+    ];
+    var gap = 70, boxH = 20, step = 26, top = 30;
+    var n = Math.max.apply(null, cols.map(function (c) { return (map[c.key] || []).length; }).concat([1]));
+    var height = top + n * step + 8, x = 0;
+    cols.forEach(function (c) { c.x = x; x += c.w + gap; });
+    var width = x - gap;
+    svg.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
+    svg.style.minWidth = Math.round(width * 0.75) + 'px';
+    Array.prototype.slice.call(svg.querySelectorAll(':scope > g')).forEach(function (g) { g.remove(); });
+
+    var label = {
+      queries: function (q) { return [q.id + ' · ' + (q.op || 'taste') + (q.label ? ' — ' + q.label : ''), q.known ? '' : ' (not in this run’s record)']; },
+      refs: function (r) { return r.kind === 'tag' ? ['“' + r.text + '”', ' (a Qloo tag)'] : [r.text, ' (a title Qloo returned)']; },
+      choices: function (c) { return [plain(c.text), '']; },
+      // `### Choices` under `## Film A: Tokyo` reads as Film A's: the parent heading first when there is one.
+      pieces: function (p) { return [p.parent ? plain(p.parent) + ' · ' + plain(p.title) : plain(p.title), '']; }
+    };
+
+    // Each column spread over the full height, so a short column sits beside the middle of a long one.
+    var pos = {};
+    var gEdges = svgEl('g', { 'class': 'evedges' }, svg);
+    var gNodes = svgEl('g', { 'class': 'evnodes' }, svg);
+    cols.forEach(function (c) {
+      svgEl('text', { x: c.x, y: 14, 'class': 'evhead' }, gNodes).textContent = c.head;
+      var items = map[c.key] || [];
+      var band = (height - top - 8) / Math.max(items.length, 1);
+      items.forEach(function (item, i) {
+        var y = top + band * (i + 0.5) - boxH / 2;
+        pos[item.id] = { x: c.x, y: y, w: c.w };
+        var parts = label[c.key](item);
+        var g = svgEl('g', { 'class': 'evnode ev-' + c.key + (item.kind === 'tag' ? ' ev-tag' : ''), tabindex: 0, 'data-id': item.id }, gNodes);
+        svgEl('title', {}, g).textContent = parts[0] + parts[1] + (item.state ? ' — ' + item.state : '');
+        svgEl('rect', { x: c.x, y: y, width: c.w, height: boxH, rx: 3 }, g);
+        svgEl('text', { x: c.x + 7, y: y + 14 }, g).textContent = clip(parts[0], Math.floor(c.w / 6.4));
+      });
+    });
+
+    var links = (map.edges || []).filter(function (e) { return pos[e.from] && pos[e.to]; });
+    var paths = links.map(function (e) {
+      var a = pos[e.from], b = pos[e.to];
+      var x1 = a.x + a.w, y1 = a.y + boxH / 2, x2 = b.x, y2 = b.y + boxH / 2, mid = (x1 + x2) / 2;
+      return svgEl('path', { d: 'M' + x1 + ',' + y1 + ' C' + mid + ',' + y1 + ' ' + mid + ',' + y2 + ' ' + x2 + ',' + y2,
+                             'class': 'evedge ev-' + e.state, 'data-from': e.from, 'data-to': e.to }, gEdges);
+    });
+
+    // Hover or focus a box: its whole path lit — everything it rests on, and everything that rests on it.
+    var down = {}, up = {};
+    links.forEach(function (e) { (down[e.from] = down[e.from] || []).push(e.to); (up[e.to] = up[e.to] || []).push(e.from); });
+    function reach(start, next, seen) {
+      var todo = [start];
+      seen[start] = true;
+      while (todo.length) (next[todo.pop()] || []).forEach(function (m) { if (!seen[m]) { seen[m] = true; todo.push(m); } });
+      return seen;
+    }
+    function light(id) {
+      var on = id ? reach(id, up, reach(id, down, {})) : null;
+      svg.classList.toggle('evfocus', !!on);
+      Array.prototype.forEach.call(gNodes.querySelectorAll('.evnode'), function (g) { g.classList.toggle('on', !!on && !!on[g.dataset.id]); });
+      paths.forEach(function (p) { p.classList.toggle('on', !!on && !!on[p.dataset.from] && !!on[p.dataset.to]); });
+    }
+    Array.prototype.forEach.call(gNodes.querySelectorAll('.evnode'), function (g) {
+      g.addEventListener('mouseenter', function () { light(g.dataset.id); });
+      g.addEventListener('focus', function () { light(g.dataset.id); });
+      g.addEventListener('mouseleave', function () { light(null); });
+      g.addEventListener('blur', function () { light(null); });
+    });
+  }
+  // endregion
+
   window.PolsonRecord = {
     esc: esc, inline: inline, markdown: markdown, motionNote: motionNote,
-    toolParts: toolParts, toolDetail: toolDetail, runEnd: runEnd, detail: detail
+    toolParts: toolParts, toolDetail: toolDetail, runEnd: runEnd, detail: detail,
+    evidenceMap: evidenceMap, plain: plain
   };
 })();
