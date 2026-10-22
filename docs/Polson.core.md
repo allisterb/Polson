@@ -5182,6 +5182,12 @@ ctx.fillText(p.cite(), 24, H - 18);                     // "Qloo Insights API, /
   Six audiences make fifteen pairs, and unadjusted one in twenty would come out "different" by chance; `differ` uses
   `pAdjusted` < 0.05, so a difference here is one to build on. `differ` at the top is whether any pair does. Pass the
   profiles as an array, `[t1, t2, t3, t4]`. With two audiences it gives the same p as `comparePace`.
+- `Taste.checkReferences(path?: string)` → `{ passed, rows, unverified, checked, summary, path }` — **every title and tag your `direction.md` cites as Qloo evidence, checked against the answers this session actually received** — the Qloo counterpart of `Documents.ask`'s figure-on-its-page check. `path` is project-relative, `'direction.md'` by default. It reads every table whose last column is *Kind*, and of those the rows whose kind names Qloo. In each row:
+  - **handles**: the `t5` handles the row cites, or, with none in the row, those in its section's first paragraph;
+  - **titles**: written in *italics*;
+  - **tags**: written in quotes with their item number, `"Glitzy" (item 10)`, or bold, `**"Glitzy"**`.
+
+  A title is found when a handle the row cites returned it, or when its id is in that handle's request (how a `describe` names the films it was asked about). A tag is found when a cited handle returned it. Matching ignores case, accents, punctuation, a leading article and a trailing year. `unverified` lists everything else: a title no query returned, a title another handle returned (*"(returned by t3, not by t1)"*), a tag the cited query did not return, a handle that is not this session's or failed, and a Qloo row with no handle. **A reference in `unverified` does not go into the piece**: find it in an answer, cite the right handle, or drop it. Each row in `rows` is `{ section, choice, handles, titles, tags, problems }`, each title `{ title, found, in, elsewhere }`, each tag `{ tag, found, in }`. Handles belong to this session, so run it in the session that fetched the answers; re-asking is free from the cache. The verdicts are recorded as `taste.check`, and the run page marks each Qloo row with them.
 - `Taste.budget` → `QlooBudget` — What remains of this session's allowance, and the key's month.
 
 ## `TasteResult`

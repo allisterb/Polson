@@ -261,7 +261,7 @@ DIRECTION = """# Direction: two trailers
 
 
 class LearnedTests(unittest.TestCase):
-    """What the request page says the studio learned: summaries and titles, never a Qloo request or response."""
+    """What the request page says the studio learned: summaries and titles in plain words, no request line or payload."""
 
     EVENTS = [{"ts": "2026-10-18T03:45:37Z", "type": "taste.query", "id": "t1", "op": "profile", "label": "audience A",
                "distinctive": 82, "request": "/v2/insights?secret-looking=1"},

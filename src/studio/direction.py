@@ -13,6 +13,7 @@ come back as plain strings, and the page escapes them before it formats anything
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections.abc import Iterable
 from typing import Any
 
@@ -81,13 +82,19 @@ def parse(text: str) -> list[dict[str, Any]]:
     Tables without a *Kind* column, and bullet lists, are left to the document itself, which the page links.
     """
     sections: list[dict[str, Any]] = []
-    title, lead, lead_open = "", "", True
+    title, parent, lead, lead_open = "", "", "", True
+    # The headings above the current one, by level: a `### Choices` under `## Film A: Tokyo` is Film A's choices.
+    above: dict[int, str] = {}
     lines = text.splitlines()
     i = 0
     while i < len(lines):
         line = lines[i]
         heading = _HEADING.match(line)
         if heading:
+            level = len(heading.group(1))
+            above = {k: v for k, v in above.items() if k < level}
+            parent = above[max(above)] if above else ""
+            above[level] = heading.group(2)
             title, lead, lead_open = heading.group(2), "", True
             i += 1
             continue
@@ -103,8 +110,8 @@ def parse(text: str) -> list[dict[str, Any]]:
             if len(header) >= 3 and header[-1] == "kind":
                 rows = [_row(r) for r in body if len(r) >= 2 and any(r)]
                 if rows:
-                    sections.append({"title": title, "lead": lead, "leadRefs": refs(lead),
-                                     "columns": header[:-1], "rows": rows})
+                    sections.append({"title": title, "parent": parent if title else "", "lead": lead,
+                                     "leadRefs": refs(lead), "columns": header[:-1], "rows": rows})
             continue
 
         stripped = line.strip()
@@ -119,7 +126,8 @@ def parse(text: str) -> list[dict[str, Any]]:
 def _row(cells_: list[str]) -> dict[str, Any]:
     choice, kind = cells_[0], cells_[-1] if len(cells_) >= 3 else ""
     evidence = " — ".join(c for c in cells_[1:-1] if c) if len(cells_) >= 3 else cells_[1]
-    return {"choice": choice, "evidence": evidence, "kinds": kinds(kind), "refs": refs(f"{choice} {evidence}")}
+    # Handles from the kind cell too — "Qloo (t2, t6)" is how agents often cite — as the engine's check reads them.
+    return {"choice": choice, "evidence": evidence, "kinds": kinds(kind), "refs": refs(f"{choice} {evidence} {kind}")}
 
 
 def refs(text: str) -> list[str]:
@@ -170,9 +178,10 @@ def learned(text: str, events: Iterable[dict[str, Any]], since: str | None = Non
 
     Three things and nothing else: the profiles fetched (label and how many distinctive titles each had), the
     `comparePace` summary from "Between the audiences", and the titles each audience's pace rests on from its
-    **Pace** row. **Never a Qloo request or response** — the hackathon's rule — which is why the profiles come
-    from counts on `taste.query` events rather than from what they returned, and titles only as the agent wrote
-    them into `direction.md`.
+    **Pace** row. Plain words for a client, so no request line and no raw payload: the profiles come from counts on
+    `taste.query` events rather than from what they returned, and titles only as the agent wrote them into
+    `direction.md`. (Qloo's terms forbid *storing* responses in a public repository; showing a run's results as
+    evidence, with their source and limits, is what the hackathon kit asks for — `docs/SAFE_USE.md`.)
     """
     text = text[:MAX_DIRECTION]
     profiles = [{"label": e.get("label") or e.get("id") or "", "distinctive": e.get("distinctive")}
@@ -237,13 +246,185 @@ def _titles_after(cell: str, label: str) -> list[str]:
 
 
 def explain(text: str, events: Iterable[dict[str, Any]], since: str | None = None) -> dict[str, Any]:
-    """The panel's whole payload: sections, the queries their rows cite, and whether the file was cut short."""
+    """The panel's whole payload: sections, the queries their rows cite, the reference check, and whether the file
+    was cut short."""
+    events = list(events)
     truncated = len(text) > MAX_DIRECTION
     sections = parse(text[:MAX_DIRECTION])
     cited = {h for s in sections for r in s["rows"] for h in r["refs"]} | {h for s in sections for h in s["leadRefs"]}
     known = queries(events, since)
+    check = attach_check(sections, events, since)
     return {
         "sections": sections,
         "queries": {h: q for h, q in known.items() if h in cited},
+        "referenceCheck": check,
+        "map": evidence_map(sections, known),
         "truncated": truncated,
     }
+
+
+#: A tag as the workflows write it: `**"Glitzy"**`, or `"Glitzy" (item 10)` / `(10)` / `(t6 item 10)`, bold or not.
+#: The same pattern as the engine's `TasteReferences.TagRef`, so the map and the check see the same tags.
+_TAG_REF = re.compile(r'\*\*["“]([^"”\n]{1,40})["”]\*\*|["“]([^"”\n]{1,40})["”]\**\s*\((?:t\d{1,3},?\s*)?(?:item\s*)?\d+\)')
+
+_TRAILING_YEAR = re.compile(r"\s*\((?:19|20)\d{2}\)\s*$")
+
+
+def ref_key(name: Any) -> str:
+    """A title or tag as compared: no accents, case, punctuation, leading article or trailing year — the engine's
+    `TasteReferences.Key`, so a verdict recorded there finds its reference here."""
+    text = _TRAILING_YEAR.sub("", str(name or "").strip())
+    text = "".join(c for c in unicodedata.normalize("NFD", text) if unicodedata.category(c) != "Mn")
+    key = " ".join("".join(c.lower() if c.isalnum() else " " for c in text).split())
+    return re.sub(r"^(?:the|a|an)\s+", "", key)
+
+
+def row_references(row: dict[str, Any]) -> list[dict[str, str]]:
+    """The titles (in italics, in the choice or the evidence) and tags (quoted with an item number, in the evidence)
+    a row cites, in order, each once — read as `Taste.checkReferences()` reads them."""
+    found: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for match in _ITALIC.finditer(f"{row['choice']} {row['evidence']}"):
+        title = match.group(1).strip()
+        if title and title[0] not in "\"“'‘" and any(c.isalpha() for c in title):
+            key = f"title:{ref_key(title)}"
+            if key not in seen:
+                seen.add(key)
+                found.append({"kind": "title", "text": title, "key": key})
+    for match in _TAG_REF.finditer(row["evidence"]):
+        tag = (match.group(1) or match.group(2) or "").strip()
+        key = f"tag:{ref_key(tag)}"
+        if tag and key not in seen:
+            seen.add(key)
+            found.append({"kind": "tag", "text": tag, "key": key})
+    return found
+
+
+#: Worst first: an edge that two rows reach in different states shows the worse one.
+_SEVERITY = {"unverified": 0, "unchecked": 1, "verified": 2}
+
+
+def evidence_map(sections: list[dict[str, Any]], known: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """How the run used Qloo, as a graph: query → reference → choice → the piece it is for.
+
+    Built from the Qloo rows of `direction.md` (the references the agent cited, in its words), the `taste.query`
+    events (each query's op and label) and the reference check (whether each reference was returned by the query
+    it cites). Never a raw Qloo payload. Every edge carries a state — **verified**, **unverified** or
+    **unchecked** — so the picture shows what the check showed. A reference found in another query than the row
+    cites hangs from the query that returned it; one never found hangs from the queries the row cites.
+    """
+    queries: dict[str, dict[str, Any]] = {}
+    refs: dict[str, dict[str, Any]] = {}
+    choices: list[dict[str, Any]] = []
+    pieces: list[dict[str, Any]] = []
+    edges: dict[tuple[str, str], str] = {}
+
+    def edge(a: str, b: str, state: str) -> None:
+        old = edges.get((a, b))
+        if old is None or _SEVERITY[state] < _SEVERITY[old]:
+            edges[(a, b)] = state
+
+    def query(handle: str) -> str:
+        if handle not in queries:
+            q = known.get(handle) or {}
+            queries[handle] = {"id": handle, "op": q.get("op") or "", "label": q.get("label") or "",
+                               "known": handle in known}
+        return handle
+
+    for si, section in enumerate(sections):
+        piece_id = f"s{si}"
+        rows = [r for r in section["rows"] if any(k["key"] == "qloo" for k in r["kinds"])]
+        if not rows:
+            continue
+        pieces.append({"id": piece_id, "title": section["title"] or "Direction", "parent": section.get("parent") or ""})
+        for row in rows:
+            check = row.get("check") or {}
+            state = check.get("state") or "unchecked"
+            choice_id = f"c{len(choices)}"
+            choices.append({"id": choice_id, "text": row["choice"], "piece": piece_id, "state": state})
+            edge(choice_id, piece_id, state)
+            handles = row["refs"] or section["leadRefs"]
+
+            cited = row_references(row)
+            if not cited:
+                for h in handles:
+                    edge(query(h), choice_id, state)
+                continue
+            for ref in cited:
+                verdict = (check.get("refs") or {}).get(ref["key"])
+                ref_state = ("verified" if verdict["found"] else "unverified") if verdict else \
+                            ("unverified" if state == "unverified" and check.get("problems") else "unchecked")
+                ref_id = refs.setdefault(ref["key"], {"id": f"r{len(refs)}", "kind": ref["kind"], "text": ref["text"]})["id"]
+                edge(ref_id, choice_id, ref_state)
+                sources = [verdict["in"]] if verdict and verdict.get("found") and verdict.get("in") else handles
+                for h in sources:
+                    edge(query(h), ref_id, ref_state)
+
+    order = sorted(queries, key=lambda h: int(h[1:]))
+    return {
+        "queries": [queries[h] for h in order],
+        "refs": list(refs.values()),
+        "choices": choices,
+        "pieces": pieces,
+        "edges": [{"from": a, "to": b, "state": s} for (a, b), s in edges.items()],
+    }
+
+
+def _key(section: str, choice: str) -> tuple[str, str]:
+    """A row as both sides name it: the engine strips `*` from the choice and the heading; this strips the rest of
+    the inline marks too, from both, so the two always compare alike."""
+    def norm(s: str) -> str:
+        return " ".join(re.sub(r"[*_`]", "", s or "").split()).lower()
+    return norm(section), norm(choice)
+
+
+def attach_check(sections: list[dict[str, Any]], events: Iterable[dict[str, Any]],
+                 since: str | None = None) -> dict[str, Any] | None:
+    """The latest `Taste.checkReferences()` of `direction.md`, laid onto the rows it checked.
+
+    Each Qloo row gets `check`: **verified** (every title and tag in it was returned by the query it cites),
+    **unverified** (with what was not found and why), or **unchecked** — a row the check never saw, because it was
+    written or reworded after the check ran, so an edit cannot inherit an earlier tick. The event holds only the
+    agent's own words and the verdicts, never a raw Qloo payload: the run record is a file that could be committed,
+    and Qloo's terms forbid storing responses in a public repository.
+    Returns the check's totals for the panel's tally, or None when the run never ran one.
+    """
+    latest = None
+    for event in events:
+        if event.get("type") != "taste.check" or (event.get("path") or "direction.md") != "direction.md":
+            continue
+        if since and (event.get("ts") or "") < since:
+            continue
+        latest = event
+    if latest is None:
+        return None
+
+    verdicts: dict[tuple[str, str], dict[str, Any]] = {}
+    for row in latest.get("rows") or []:
+        if not isinstance(row, dict):
+            continue
+        missing = [f"*{t.get('title')}*" + (f" (returned by {t['elsewhere']})" if t.get("elsewhere") else "")
+                   for t in row.get("titles") or [] if isinstance(t, dict) and not t.get("found")]
+        missing += [f"\"{t.get('tag')}\"" for t in row.get("tags") or [] if isinstance(t, dict) and not t.get("found")]
+        problems = [str(p) for p in row.get("problems") or []]
+        refs = {f"title:{ref_key(t.get('title'))}": {"found": bool(t.get("found")), "in": t.get("in")}
+                for t in row.get("titles") or [] if isinstance(t, dict)}
+        refs |= {f"tag:{ref_key(t.get('tag'))}": {"found": bool(t.get("found")), "in": t.get("in")}
+                 for t in row.get("tags") or [] if isinstance(t, dict)}
+        verdicts[_key(str(row.get("section") or ""), str(row.get("choice") or ""))] = {
+            "state": "unverified" if missing or problems else "verified",
+            "missing": missing,
+            "problems": problems,
+            "checked": len(row.get("titles") or []) + len(row.get("tags") or []),
+            "refs": refs,
+        }
+
+    for section in sections:
+        for row in section["rows"]:
+            if any(k["key"] == "qloo" for k in row["kinds"]):
+                row["check"] = verdicts.get(_key(section["title"], row["choice"]),
+                                            {"state": "unchecked", "missing": [], "problems": [], "checked": 0,
+                                             "refs": {}})
+
+    return {"passed": bool(latest.get("passed")), "checked": latest.get("checked") or 0,
+            "unverified": len(latest.get("unverified") or []), "ts": latest.get("ts")}

@@ -182,6 +182,13 @@
       — open a <code>t</code> reference for the request that produced it. <b>Research</b> lines cite a source;
       <b>assumed</b> lines are answers the agent proposed and the director let stand. Qloo's results are aggregate
       tastes of a place and an age band, never facts about a person.</p>
+    <figure class="evmap" id="whymap" hidden>
+      <figcaption class="hint">How this run used Qloo: each query, the references it returned that the direction
+        cites, the choice each one drove, and what the choice is for. <span class="evkey ev-verified">found in the
+        query's answer</span> <span class="evkey ev-unverified">not found</span> <span class="evkey ev-unchecked">not
+        checked</span> — by <code>Taste.checkReferences()</code>. Hover or focus a box to follow its path.</figcaption>
+      <div class="evscroll"><svg id="whymapsvg" role="img" aria-labelledby="whymaptitle"><title id="whymaptitle">Evidence map: Qloo queries, the references they returned, and the choices they drove</title></svg></div>
+    </figure>
     <div id="whybody"></div>
   </section>
 </main>
@@ -1218,6 +1225,116 @@
       (q.request ? `<code>${esc(q.request)}</code>` : '') + `</span></details>`;
   }
 
+  // A Qloo row's reference check (Taste.checkReferences): every title and tag in it returned by the query it
+  // cites, or what was not, or a row the check never saw because it was written after the check ran.
+  function checkBadge(c) {
+    if (!c) return '';
+    if (c.state === 'verified')
+      return `<span class="kind k-verified" title="Every title and tag in this row (${c.checked}) was returned by the Qloo query it cites">✓ checked</span>`;
+    if (c.state === 'unverified')
+      return `<span class="kind k-unverified" title="Not all of this row's references were returned by the query it cites">⚠ not found</span>`;
+    return `<span class="kind k-unchecked" title="Written or changed after the last reference check">not checked</span>`;
+  }
+
+  function checkNote(c) {
+    if (!c || c.state !== 'unverified') return '';
+    const items = [...(c.missing || []), ...(c.problems || [])];
+    return `<br><span class="checknote">Not returned by the query cited: ${items.map((s) => inline(s)).join('; ')}</span>`;
+  }
+
+  // ── the evidence map ───────────────────────────────────────────────────────────────────────
+  // Query → reference → choice → what it is for, from the server's `map` (studio.direction.evidence_map). Built
+  // with DOM calls rather than markup, because every label is agent-written; textContent cannot become markup.
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  const whyMap = document.getElementById('whymap');
+  const whyMapSvg = document.getElementById('whymapsvg');
+
+  function svgEl(name, attrs, parent) {
+    const el = document.createElementNS(SVG_NS, name);
+    for (const [k, v] of Object.entries(attrs || {})) el.setAttribute(k, String(v));
+    if (parent) parent.appendChild(el);
+    return el;
+  }
+
+  // The agent's inline marks stripped for a label: `code`, **bold**, *italic*.
+  const plain = (s) => String(s || '').replace(/[`*_]/g, '').replace(/\s+/g, ' ').trim();
+  const clip = (s, n) => (s.length > n ? s.slice(0, n - 1).trimEnd() + '…' : s);
+
+  function drawMap(map) {
+    const cols = [
+      { key: 'queries', head: 'Qloo query', w: 220 },
+      { key: 'refs', head: 'Reference', w: 230 },
+      { key: 'choices', head: 'Choice', w: 240 },
+      { key: 'pieces', head: 'For', w: 200 },
+    ];
+    const gap = 70, step = 26, boxH = 20, top = 30;
+    const n = Math.max(...cols.map((c) => (map[c.key] || []).length), 1);
+    const height = top + n * step + 8;
+    let x = 0;
+    cols.forEach((c) => { c.x = x; x += c.w + gap; });
+    const width = x - gap;
+    whyMapSvg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+    whyMapSvg.style.minWidth = `${Math.round(width * 0.75)}px`;
+    [...whyMapSvg.querySelectorAll(':scope > g')].forEach((g) => g.remove());
+
+    const label = {
+      queries: (q) => [`${q.id} · ${q.op || 'taste'}${q.label ? ' — ' + q.label : ''}`, q.known ? '' : ' (not in this run’s record)'],
+      refs: (r) => [r.kind === 'tag' ? `“${r.text}”` : r.text, r.kind === 'tag' ? ' (a Qloo tag)' : ' (a title Qloo returned)'],
+      choices: (c) => [plain(c.text), ''],
+      // `### Choices` under `## Film A: Tokyo` reads as Film A's: the parent heading first when there is one.
+      pieces: (p) => [p.parent ? `${plain(p.parent)} · ${plain(p.title)}` : plain(p.title), ''],
+    };
+
+    // Each column spread over the full height, so a short column sits beside the middle of a long one.
+    const pos = {};
+    const gNodes = svgEl('g', { class: 'evnodes' });
+    const gEdges = svgEl('g', { class: 'evedges' }, whyMapSvg);
+    whyMapSvg.appendChild(gNodes);
+    cols.forEach((c) => {
+      svgEl('text', { x: c.x, y: 14, class: 'evhead' }, gNodes).textContent = c.head;
+      const items = map[c.key] || [];
+      const band = (height - top - 8) / Math.max(items.length, 1);
+      items.forEach((item, i) => {
+        const y = top + band * (i + 0.5) - boxH / 2;
+        pos[item.id] = { x: c.x, y, w: c.w };
+        const [text, note] = label[c.key](item);
+        const g = svgEl('g', { class: `evnode ev-${c.key}${item.kind === 'tag' ? ' ev-tag' : ''}`, tabindex: 0, 'data-id': item.id }, gNodes);
+        svgEl('title', {}, g).textContent = text + note + (item.state ? ` — ${item.state}` : '');
+        svgEl('rect', { x: c.x, y, width: c.w, height: boxH, rx: 3 }, g);
+        svgEl('text', { x: c.x + 7, y: y + 14 }, g).textContent = clip(text, Math.floor(c.w / 6.4));
+      });
+    });
+
+    const links = (map.edges || []).filter((e) => pos[e.from] && pos[e.to]);
+    const paths = links.map((e) => {
+      const a = pos[e.from], b = pos[e.to];
+      const x1 = a.x + a.w, y1 = a.y + boxH / 2, x2 = b.x, y2 = b.y + boxH / 2, mid = (x1 + x2) / 2;
+      return svgEl('path', { d: `M${x1},${y1} C${mid},${y1} ${mid},${y2} ${x2},${y2}`, class: `evedge ev-${e.state}`,
+                             'data-from': e.from, 'data-to': e.to }, gEdges);
+    });
+
+    // Hover or focus a box: its whole path lit — everything it rests on, and everything that rests on it.
+    const down = {}, up = {};
+    links.forEach((e) => { (down[e.from] = down[e.from] || []).push(e.to); (up[e.to] = up[e.to] || []).push(e.from); });
+    const reach = (start, next) => {
+      const seen = new Set([start]), todo = [start];
+      while (todo.length) for (const n of next[todo.pop()] || []) if (!seen.has(n)) { seen.add(n); todo.push(n); }
+      return seen;
+    };
+    const light = (id) => {
+      const on = id ? new Set([...reach(id, down), ...reach(id, up)]) : null;
+      whyMapSvg.classList.toggle('evfocus', !!on);
+      gNodes.querySelectorAll('.evnode').forEach((g) => g.classList.toggle('on', !!on && on.has(g.dataset.id)));
+      paths.forEach((p) => p.classList.toggle('on', !!on && on.has(p.dataset.from) && on.has(p.dataset.to)));
+    };
+    gNodes.querySelectorAll('.evnode').forEach((g) => {
+      g.addEventListener('mouseenter', () => light(g.dataset.id));
+      g.addEventListener('focus', () => light(g.dataset.id));
+      g.addEventListener('mouseleave', () => light(null));
+      g.addEventListener('blur', () => light(null));
+    });
+  }
+
   async function loadWhy() {
     let data;
     try {
@@ -1229,6 +1346,10 @@
     }
     const sections = data.sections || [];
     if (!sections.length) { why.hidden = true; return; }
+
+    const map = data.map;
+    whyMap.hidden = !(map && (map.choices || []).length);
+    if (!whyMap.hidden) drawMap(map);
 
     // Leave a reference the reader opened open: the panel refreshes while the run is still writing its direction.
     const open = new Set([...whyBody.querySelectorAll('details.tq[open]')].map((d) => d.dataset.at));
@@ -1251,8 +1372,8 @@
         }).join('');
         const chips = r.refs.map((h) => tasteRef(h, data.queries || {})).join('');
         return `<li class="whyrow k-${esc(first)}"><span class="choice">${inline(r.choice)}</span>` +
-          `<span class="evidence">${inline(r.evidence)}${chips ? '<br>' + chips : ''}</span>` +
-          `<span class="kinds">${badges}</span></li>`;
+          `<span class="evidence">${inline(r.evidence)}${chips ? '<br>' + chips : ''}${checkNote(r.check)}</span>` +
+          `<span class="kinds">${badges}${checkBadge(r.check)}</span></li>`;
       }).join('');
       return `<section class="whysec"><h3>${inline(s.title || 'Direction')}</h3>${lead}` +
         `<ul class="whyrows">${items}</ul></section>`;
@@ -1265,8 +1386,10 @@
     });
 
     const order = ['qloo', 'research', 'brief', 'assumed', 'check', 'judgement', 'workaround', 'other'];
+    const rc = data.referenceCheck;
     whyTally.textContent = `${rows} choices — ` + order.filter((k) => tally[k])
-      .map((k) => `${tally[k]} ${k === 'other' ? 'other' : k}`).join(' · ');
+      .map((k) => `${tally[k]} ${k === 'other' ? 'other' : k}`).join(' · ') +
+      (rc ? ` — Qloo references: ${rc.passed ? `all ${rc.checked} returned by their queries` : `${rc.unverified} not found`}` : '');
     why.hidden = false;
   }
 

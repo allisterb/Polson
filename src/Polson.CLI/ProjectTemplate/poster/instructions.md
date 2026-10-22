@@ -151,7 +151,9 @@ One file, written before the comps and held to after. Each line is a choice and 
 
 - **Qloo lines** name the references and the result they came from (`t2`, item numbers). The colours of
   things an audience loves are *candidate* liked colours — Palmer & Schloss's ecological valence theory,
-  stated at its true strength: "motivated by", never "shown".
+  stated at its true strength: "motivated by", never "shown". **Write them so they can be checked**: the
+  handle in the row, each title in *italics*, each tag in quotes with its item number — `"Glitzy" (item 10)`.
+  `Taste.checkReferences()` looks for every one in the answer it cites (see *Before you finish*).
 - **Research lines** cite a source you were given or that `Research` returned and you checked. Do not
   cite from memory.
 - **Assumed answers** to the director's questions go here too, marked as such.
@@ -262,6 +264,10 @@ of a family's name — `'Franklin Gothic Heavy'` is `'Franklin Gothic'` at `font
   not overwrite comps. **Budget the clock per poster**: the deadline already counts the size of the set,
   so a set of four has more time than a pair, not the same time shared four ways.
 - `direction.md` complete: every choice, its evidence, and any warning you kept with the reason.
+- **Its Qloo references checked**, in the session that fetched them:
+  `const r = Taste.checkReferences(); Stage.check('every Qloo reference was returned by its query', r.passed, r.summary);`
+  A title or tag in `r.unverified` is found in an answer and cited to it, or taken out — of `direction.md` and
+  of the poster — before you deliver. A reference no answer returned is one you remembered, not one you measured.
 - `findings.md`: what the evidence changed, where it was thin, which questions you asked and which you
   assumed, and what you would do with more clock.
 - **The print file is RGB and screen-grade** — sized, bled and checked, but not CMYK or PDF/X. Say so
