@@ -411,23 +411,12 @@ def verification(events: list[dict[str, Any]], reference_check: dict[str, Any] |
     **films**: each film's latest `Verify.film` — every text it set, the seconds it was on screen, where it came from and
     whether the watcher read it — with its strays as the agent settled them after looking at their frames. **A stray not
     yet looked at is counted, never shown**: the watcher misreads, and a reading is not a finding until its frame has
-    been seen. **checks**: the run's `Stage.check`s, the latest per claim. **references**: the Qloo reference check.
-    **documents**: the documents the run read, and with which model.
+    been seen. **images**: each still's latest `Verify.image`, the same with each text's box on the image in place of
+    its seconds, and a crop in place of a frame. **checks**: the run's `Stage.check`s, the latest per claim.
+    **references**: the Qloo reference check. **documents**: the documents the run read, and with which model.
     """
-    films: dict[str, dict[str, Any]] = {}
-    for e in events:
-        if e.get("type") == "film.verify" and e.get("video"):
-            films[e["video"]] = {"video": e["video"], "duration": e.get("duration"), "model": e.get("model"),
-                                 "items": e.get("items") or [], "ts": e.get("ts"),
-                                 "strays": {s.get("n"): dict(s) for s in e.get("strays") or [] if isinstance(s, dict)}}
-        elif e.get("type") == "film.stray" and e.get("video") in films:
-            stray = films[e["video"]]["strays"].get(e.get("n"))
-            if stray is not None:
-                stray.update(verdict=e.get("verdict"), note=e.get("note"))
-    for film in films.values():
-        strays = list(film.pop("strays").values())
-        film["strays"] = [s for s in strays if s.get("verdict") in ("misread", "real")]
-        film["pending"] = sum(1 for s in strays if s.get("verdict") not in ("misread", "real"))
+    films = _read_backs(events, "film", "video", ("duration",))
+    images = _read_backs(events, "image", "image", ("source", "width", "height"))
 
     checks: dict[str, dict[str, Any]] = {}
     for e in events:
@@ -441,8 +430,28 @@ def verification(events: list[dict[str, Any]], reference_check: dict[str, Any] |
             documents[e["descriptor"]] = {"document": e["descriptor"], "model": e.get("model"),
                                           "reads": documents.get(e["descriptor"], {}).get("reads", 0) + 1}
 
-    return {"films": list(films.values()), "checks": list(checks.values()), "references": reference_check,
+    return {"films": films, "images": images, "checks": list(checks.values()), "references": reference_check,
             "documents": list(documents.values())}
+
+
+def _read_backs(events: list[dict[str, Any]], piece: str, key: str, fields: tuple[str, ...]) -> list[dict[str, Any]]:
+    """The latest `<piece>.verify` per film or image, with its strays as settled by `<piece>.stray`: settled ones shown,
+    pending ones only counted."""
+    checks: dict[str, dict[str, Any]] = {}
+    for e in events:
+        if e.get("type") == f"{piece}.verify" and e.get(key):
+            checks[e[key]] = {key: e[key], "model": e.get("model"), "items": e.get("items") or [], "ts": e.get("ts"),
+                              **{f: e.get(f) for f in fields},
+                              "strays": {s.get("n"): dict(s) for s in e.get("strays") or [] if isinstance(s, dict)}}
+        elif e.get("type") == f"{piece}.stray" and e.get(key) in checks:
+            stray = checks[e[key]]["strays"].get(e.get("n"))
+            if stray is not None:
+                stray.update(verdict=e.get("verdict"), note=e.get("note"))
+    for check in checks.values():
+        strays = list(check.pop("strays").values())
+        check["strays"] = [s for s in strays if s.get("verdict") in ("misread", "real")]
+        check["pending"] = sum(1 for s in strays if s.get("verdict") not in ("misread", "real"))
+    return list(checks.values())
 
 
 def _key(section: str, choice: str) -> tuple[str, str]:

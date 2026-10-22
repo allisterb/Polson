@@ -220,8 +220,8 @@ computed })`** is the instructions' read-back, and for a report it carries the m
   exists to prevent, so look at its frame before deciding. The watcher once read $974M as $744M with $974M plainly on
   the frame; and a figure caught mid-animation is a real fault.
 - **A missed figure** was probably on screen too briefly for a watcher sampling about once a second: check its hold.
-- Record it with `Stage.check(..., { judged: true })`. A model read the film; the sources and the ground truth were
-  looked up.
+- The check records its own verdict, judged: a model read the film, and the sources and the ground truth were
+  looked up. Do not write a verdict for it.
 
 ### Questions, for a report
 

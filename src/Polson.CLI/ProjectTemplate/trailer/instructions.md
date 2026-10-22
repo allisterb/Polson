@@ -375,15 +375,16 @@ set's own check from *More than one audience*:
   const v = await Verify.film(comp, 'output.mp4', { computed: { /* 'text as set': 'its working' */ } });
   if (!v.ok) exit(v.remedy);          // 'Pending': the watcher is still reading — run the same script again
   log(v.summary);
-  Stage.check('every text on screen has a source and was read as set', v.passed, v.summary, { judged: true });
   ```
+  The check records its own verdict as a judged check named `Read-back of …`. Do not write one for it;
+  `Stage.check` refuses the name.
   A separate model watches the encoded film. Its transcription is held against every text the composition sets
   (`comp.texts()`), and each text's source is looked up: the brief, a document's page, a Qloo title, research, or a
   figure you computed, which you pass with its working. What comes back:
   - **An unsourced figure** comes out of the film until you find its source.
   - **A missed text** is a reading-time or size fault until you show otherwise: look at its `seconds`.
   - **A stray** is a reading of text you never set. Look at the frame it saved, `artifacts/verify/stray-n.png`,
-    before you call it anything, then `Verify.stray(n, 'misread')` or `Verify.stray(n, 'real')`. A real one is a
+    before you call it anything, then, in a later script, `Verify.stray(n, 'misread')` or `Verify.stray(n, 'real')`. A real one is a
     fault: fix it, encode again, and read back again.
 
   The studio's Verification view shows this check to the people judging the film: every word and number on screen,

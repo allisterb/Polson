@@ -112,7 +112,20 @@ public class VerifyTests : TestsRuntime, IDisposable
         Assert.Equal(("computed", "582.3 / 399.0 − 1"), sources.Classify("+46%", computed));
         Assert.Equal(("qloo", "t1"), sources.Classify("Riverside Mukolitta", computed));
         Assert.Equal(("own words", null), sources.Classify("Coming soon", computed));
-        Assert.Equal(("unsourced figure", null), sources.Classify("$183.4B profit", computed));
+        Assert.Equal(("unsourced figure", "no source for 183.4"), sources.Classify("$183.4B profit", computed));
+    }
+
+    /// <summary>A sentence is sourced figure by figure: a document's figure and a computed one in one line, from two pages.</summary>
+    [Fact]
+    public void TestASentenceIsSourcedFigureByFigure()
+    {
+        var sources = new FilmSources(root, null);
+        var computed = new Dictionary<string, string> { ["Top 4.4%"] = "22 / 500" };
+
+        Assert.Equal(("computed", "documents/letter.pdf p. 2; 4.4 = 22 / 500"),
+            sources.Classify("Returned $974 million, the top 4.4%", computed));
+        Assert.Equal(("unsourced figure", "no source for 7"), sources.Classify("$974 million in 7 days", computed));
+        Assert.Equal(("scale", null), sources.Classify("1,000%", computed, new HashSet<string> { "1,000%" }));
     }
 
     /// <summary>
@@ -145,7 +158,8 @@ public class VerifyTests : TestsRuntime, IDisposable
         using var video = new VideoReader([new NemotronEndpoint(NemotronEndpoint.Nebius, "https://tf.example/v1", "k", NemotronEndpoint.NebiusModel)],
             new DocumentBudget(5), root, http: new HttpClient(new Answer(watched)));
         var recorded = new List<string>();
-        var verify = new VerifyToolkit(video, root, null, (type, _) => recorded.Add(type));
+        var session = new SessionContext();
+        var verify = new VerifyToolkit(video, root, session, (type, _) => recorded.Add(type));
 
         var result = await verify.Film(comp, "output.mp4");
 
@@ -159,13 +173,125 @@ public class VerifyTests : TestsRuntime, IDisposable
         Assert.False((bool)result["passed"]!);
         Assert.Contains("Verify.stray(n, 'misread' | 'real')", (string)result["summary"]!);
 
-        verify.Stray(1, "misread", "the frame shows $974 million");
-        var settled = verify.Stray(2, "real");
+        Assert.Throws<InvalidOperationException>(() => verify.Stray(1, "misread"));   // not in the script that ran it
+        var later = new VerifyToolkit(video, root, session, (type, _) => recorded.Add(type));
+        later.Stray(1, "misread", "the frame shows $974 million");
+        var settled = later.Stray(2, "real");
         Assert.False((bool)settled["passed"]!);                            // a real fault in the film still fails it
         Assert.Contains("1 confirmed fault", (string)settled["summary"]!);
-        Assert.Equal(["film.verify", "film.stray", "film.stray"], recorded);
-        Assert.Throws<ArgumentException>(() => verify.Stray(9, "misread"));
-        Assert.Throws<ArgumentException>(() => verify.Stray(1, "maybe"));
+        Assert.Equal(["film.verify", "check", "film.stray", "check", "film.stray", "check"], recorded);
+        Assert.Throws<ArgumentException>(() => later.Stray(9, "misread"));
+        Assert.Throws<ArgumentException>(() => later.Stray(1, "maybe"));
+    }
+    [Fact]
+    public void TestAStillsTextsAreReadOnceEachAndAWrappedReadingCoversItsLines()
+    {
+        string[] texts = ["Qloo", "2,205.8%", "Growth 2016-19", "Fastest-growing companies", "in the Americas"];
+        var (seen, _, strays) = ImageReadBack.Match(texts,
+            ["QLOO", "2,205.8%", "Growth 2016–19", "Fastest-growing companies in the Americas"]);
+
+        Assert.Equal(["QLOO", "2,205.8%", "Growth 2016–19", "Fastest-growing companies in the Americas", "Fastest-growing companies in the Americas"], seen.AsEnumerable());
+        Assert.Empty(strays);
+    }
+
+    /// <summary>A figure read differently is a stray beside the line it resembles, alone or inside a run-together reading.</summary>
+    [Fact]
+    public void TestAStillsFigureReadDifferentlyIsAStrayBesideItsLine()
+    {
+        var alone = ImageReadBack.Match(["Grew 2,205.8%", "Rank 22"], ["Grew 2,206.8%", "Rank 22", "Statista"]);
+        Assert.Equal([null, "Rank 22"], alone.Seen.AsEnumerable());
+        Assert.Equal([("different figure", "Grew 2,205.8%"), ("never set", null)], alone.Strays.Select(s => (s.Kind, s.Near)));
+
+        var together = ImageReadBack.Match(["Qloo", "Technology", "2,205.8%"], ["Qloo Technology 2,205.6%"]);
+        Assert.Equal(["Qloo Technology 2,205.6%", "Qloo Technology 2,205.6%", null], together.Seen.AsEnumerable());
+        Assert.Equal([("different figure", "2,205.8%")], together.Strays.Select(s => (s.Kind, s.Near)));
+    }
+
+    /// <summary>
+    /// qloo_among_the_fastest_growing: the reader listed each bar's figure on its own and again inside a table row read
+    /// across its columns. Every line in the row was drawn, so the row is explained, not a stray; a name read short is
+    /// missed, with the reading closest to it.
+    /// </summary>
+    [Fact]
+    public void TestATableRowReadAcrossItsColumnsIsNotAStray()
+    {
+        string[] texts = ["#18", "Fair Price Properties", "Property · US", "+2,587.2%", "#26", "ORORO Heated Apparel", "Fashion · US"];
+        var (seen, closest, strays) = ImageReadBack.Match(texts,
+            ["+2,587.2%", "Fair Price Properties", "#18 Fair Price Properties Property • US +2,587.2%",
+             "#26 OROO Heated Apparel Fashion • US"]);
+
+        Assert.Empty(strays);
+        Assert.Null(seen[5]);
+        Assert.Equal("#26 OROO Heated Apparel Fashion • US", closest[5]);
+    }
+
+    /// <summary>
+    /// End to end on a real canvas: one line read as set, one read with another figure, one painted over and so missed. The
+    /// still goes to the reader as an image; the stray's crop is saved and it stays pending until settled.
+    /// </summary>
+    [Fact]
+    public async Task TestAStillIsCheckedAndItsStraysWaitForTheirCrops()
+    {
+        var canvas = new global::Polson.Drawing.Skia.SkiaCanvas(400, 240);
+        var ctx = canvas.GetContext();
+        ctx.FillStyle = "#ffffff";
+        ctx.FillRect(0, 0, 400, 240);
+        ctx.FillStyle = "#111111";
+        ctx.Font = "28px Arial";
+        ctx.FillText("BE COOL", 20, 50);
+        ctx.FillText("Returned $974 million", 20, 110);
+        ctx.FillText("+46%", 20, 170);
+        ctx.FillText("Hidden note", 20, 220);
+        ctx.FillRect(0, 195, 400, 45);                // painted over: the reader cannot see it
+        ctx.FillText("Off the page", 900, 50);
+
+        var read = new JsonObject
+        {
+            ["items"] = new JsonArray(
+                new JsonObject { ["text"] = "BE COOL" },
+                new JsonObject { ["text"] = "Returned $744 million" },
+                new JsonObject { ["text"] = "+46%" }),
+        }.ToJsonString();
+        var answer = new Answer(read);
+        using var reader = new VideoReader([new NemotronEndpoint(NemotronEndpoint.Nebius, "https://tf.example/v1", "k", NemotronEndpoint.NebiusModel)],
+            new DocumentBudget(5), root, http: new HttpClient(answer));
+        var recorded = new List<string>();
+        var session = new SessionContext();
+        var verify = new VerifyToolkit(reader, root, session, (type, _) => recorded.Add(type));
+
+        var result = await verify.Image(ctx, new Dictionary<string, object?> { ["computed"] = new Dictionary<string, object?> { ["+46%"] = "582.3 / 399.0 − 1" } });
+
+        Assert.True((bool)result["ok"]!, result.GetValueOrDefault("error") as string);
+        Assert.Contains("\"image_url\"", answer.LastRequest);
+        Assert.True(File.Exists(Path.Combine(root, "artifacts", "verify", "image.png")));
+        var items = ((object?[])result["items"]!).Cast<Dictionary<string, object?>>().ToArray();
+        Assert.Equal(["BE COOL", "Returned $974 million", "+46%", "Hidden note", "Off the page"], items.Select(i => (string)i["text"]!));
+        Assert.Equal(["seen", "missed", "seen", "missed", "off the canvas"], items.Select(i => (string)i["status"]!));
+        Assert.Equal(["brief", "document", "computed", "own words", "own words"], items.Select(i => (string)i["source"]!));
+        var stray = Assert.Single(((object?[])result["strays"]!).Cast<Dictionary<string, object?>>());
+        Assert.Equal(("different figure", "Returned $974 million", "artifacts/verify/image-stray-1.png"), ((string)stray["kind"]!, (string)stray["near"]!, (string)stray["frame"]!));
+        Assert.True(File.Exists(Path.Combine(root, "artifacts", "verify", "image-stray-1.png")));
+        Assert.False((bool)result["passed"]!);
+        Assert.Contains("look at its crop", (string)result["summary"]!);
+
+        // A citation passed as computed is set aside: its working shows no arithmetic.
+        var cited = await new VerifyToolkit(reader, root, null).Image(canvas, new Dictionary<string, object?> { ["computed"] = new Dictionary<string, object?> { ["+46%"] = "from the letter" } });
+        Assert.Contains("1 computed entry was not used", (string)cited["summary"]!);
+        Assert.Equal("unsourced figure", ((object?[])cited["items"]!).Cast<Dictionary<string, object?>>().Single(i => (string)i["text"]! == "+46%")["source"]);
+
+        var refused = Assert.Throws<InvalidOperationException>(() => verify.Stray(1, "misread"));
+        Assert.Contains("artifacts/verify/image-stray-1.png", refused.Message);
+        var later = new VerifyToolkit(reader, root, session, (type, _) => recorded.Add(type));
+        var settled = later.Stray(1, "misread", "the crop shows $974 million");
+        Assert.True((bool)settled["passed"]!);
+        Assert.Equal(["image.verify", "check", "image.stray", "check"], recorded);
+
+        // The same pixels checked again keep the verdict already given; the check passes without settling again.
+        var again = await new VerifyToolkit(reader, root, session).Image(canvas, new Dictionary<string, object?> { ["computed"] = new Dictionary<string, object?> { ["+46%"] = "582.3 / 399.0 − 1" } });
+        Assert.True((bool)again["passed"]!, (string)again["summary"]!);
+
+        Assert.Throws<ArgumentException>(() => verify.Image(canvas, new Dictionary<string, object?> { ["name"] = "../x" }).GetAwaiter().GetResult());
+        Assert.Throws<ArgumentException>(() => verify.Image("artifacts/final.png").GetAwaiter().GetResult());
     }
     #endregion
 
@@ -173,15 +299,21 @@ public class VerifyTests : TestsRuntime, IDisposable
     /// <summary>The watcher: answers every request with one transcription, as a chat completion.</summary>
     private sealed class Answer(string content) : HttpMessageHandler
     {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct) =>
-            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+        /// <summary>The last request's body, to see how the piece was sent.</summary>
+        public string LastRequest { get; private set; } = "";
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            LastRequest = request.Content is null ? "" : await request.Content.ReadAsStringAsync(ct);
+            return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(new JsonObject
                 {
                     ["choices"] = new JsonArray(new JsonObject { ["message"] = new JsonObject { ["content"] = content }, ["finish_reason"] = "stop" }),
                     ["usage"] = new JsonObject { ["total_tokens"] = 100 },
                 }.ToJsonString()),
-            });
+            };
+        }
     }
     #endregion
 }

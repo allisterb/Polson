@@ -226,6 +226,12 @@ public sealed class StageApi
         var clean = Clean(claim, MaxNoteLength);
         if (clean.Length == 0) return passed;
 
+        // **A read-back's verdict is the read-back's to record.** A live run dropped its Verify.image call and wrote the
+        // claim itself as passed, over a check that had failed; the studio would have shown the pass.
+        if (clean.StartsWith(VerifyToolkit.ReadBackPrefix, StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException($"Stage.check: a claim beginning '{VerifyToolkit.ReadBackPrefix}' is recorded by Verify.image and "
+                + "Verify.film themselves, from what the reader read. Run the check; do not write its verdict.");
+
         // **A failure kept on purpose is its own state.** The finder that reports two fists on one rope is right;
         // the drawing wants them there. Without a third state the record showed a red check and the reason lived in
         // a note somewhere else, so a reader saw a failure the run had already decided about.

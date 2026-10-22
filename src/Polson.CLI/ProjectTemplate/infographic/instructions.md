@@ -342,6 +342,64 @@ cannot tell which of the two to believe.
 > monotonic scaling preserved"*. Every figure in that piece was correct and sourced. The check was
 > the only thing that was wrong, and it was wrong because it was never run.
 
+#### Then read it back — the last check, on the piece as delivered
+
+Everything above asks the drawing about itself. None of it asks whether a reader will read what you
+drew, or whether what you drew is true. **`Verify.image`** does both. A separate model transcribes
+your finished pixels, and the transcription is held against every line the canvas drew. Then each
+line's source is looked up, not asked: the brief, a page of a document you read, research, or a figure
+you computed, which you pass with its working. Manual 13 §8a explains it.
+
+Put it at the end of `artwork.js`, behind a switch. The check then reads exactly the pixels you
+deliver, and an ordinary render costs nothing:
+
+```javascript
+// … everything is drawn …
+if (ARGS.verify) {
+  const v = await Verify.image(canvas, { computed: { /* 'text exactly as drawn': 'its working' */ },
+                                         scale: [ /* every axis tick label, exactly as drawn */ ] });
+  if (!v.ok) exit(v.remedy);         // 'Pending': the reader is still reading — run the same call again, unchanged
+  log(v.summary);
+  for (const s of v.strays) log(`stray ${s.n}: read "${s.read}"${s.near ? ` near "${s.near}"` : ''} — look at ${s.frame}`);
+}
+return canvas;                       // a script that awaits must return what it renders
+```
+
+Run it as the final render: `ExecuteScript(scriptFile: 'artwork.js', args: '{"verify":true}', outFile:
+'artifacts/final.webp')`. **The check records its own verdict**, as a judged check named
+`Read-back of …`, after the reading and again after each stray you settle. Never write that verdict
+yourself, under that name or any other: `Stage.check` refuses the name. A run has already dropped its
+`Verify.image` call and recorded the claim as passed, over a check that had failed. Running an
+unchanged render again keeps the verdicts you have already given.
+
+**"No check is left failing" means fixing the piece, never the verdict.** If the read-back still fails
+when you deliver, deliver it failing and say why in a `Stage.note`: which figure has no source, and why
+you kept it. A failing read-back that is explained is a finding. One papered over is a false record.
+
+Then act on what comes back:
+
+- **An unsourced figure** comes off the canvas until you find its source; `detail` names the figure.
+  Each figure is looked up on its own, so a line may mix a document's figure with one you derived. A
+  derived figure is not unsourced: pass it in `computed` with the arithmetic from `brief.md`, keyed by
+  the text exactly as drawn, or by the figure alone so that it counts wherever it appears:
+  `{ '+454%': '582.3 / 105.1 − 1 = 4.540' }`. **Only arithmetic goes there.** A figure taken from the
+  document is found on its page without help. An entry whose working is a citation is set aside, and
+  the summary says so. **Axis ticks go in `scale`**, which marks them as a ruler rather than a claim:
+  collect them from `Scale.ticks` as you draw them, rather than typing them twice. A figure describing the piece is still a figure. A lie
+  factor in the colophon is `computed` from the value the check measured.
+- **A missed text** was drawn and not read. Look at its `size`, `box` and `closest` (what the reader
+  made of it, if anything) before you blame the reader. It may be too small at the delivered size, too
+  faint against its ground, or painted over by something drawn later.
+- **A stray** is a reading of text you never drew. **Look at its crop before you call it anything**:
+  `ExecuteScript(script: "return Skia.Image.load('artifacts/verify/image-stray-1.png');")`. Then
+  settle it in a later script, `Verify.stray(1, 'misread', 'the crop shows $974M')`. It is refused in
+  the script that ran the check, because nothing has been looked at yet. A `'different figure'` stray
+  is a number on your chart read as another number. It is the error this piece exists to prevent, so
+  look hardest at those. A `'real'` one is a fault: fix it, render again, and read back again.
+
+Draw every word and number on the canvas you verify. Lettering inside a pasted image, or type drawn on a
+second canvas and composited in, is not in the record and comes back as a stray.
+
 ---
 
 ## Verifying, rather than hoping
@@ -397,6 +455,9 @@ describe.
 7. **Every number printed on the canvas is computed**, including numbers about the graphic itself —
    a lie factor or an integrity stamp is rendered from the value that was measured, never typed.
 8. A final render in `artifacts/`, with `outSvg` alongside it if the piece is vector.
+9. **The final render has been read back with `Verify.image`, and the check passed.** Every figure has
+   a source, every stray was looked at and settled, and it is recorded as a judged `Stage.check`. A
+   missed text is made legible, or the note says why the reader missed it.
 
 A graphic that is accurate and looks like a dashboard has failed half the brief; one that is
 beautiful and overstates its numbers has failed the more important half.

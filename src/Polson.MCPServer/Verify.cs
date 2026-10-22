@@ -13,38 +13,44 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 using Polson.Animation;
+using Polson.Drawing.Skia;
+using Polson.Drawing.Svg;
 using Polson.ExtendedMind.DocumentProcessing;
+using SkiaSharp;
+using Svg;
 
 /// <summary>
-/// Checks a finished film against what it set and where that came from: <c>Verify.film(comp, video)</c>.
+/// Checks a finished piece against what it set and where that came from: <c>Verify.film(comp, video)</c> for a film,
+/// <c>Verify.image(canvas)</c> for a still.
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Three things, and only one is a model's.</b> What the film shows is read from the composition itself
-/// (<c>comp.texts()</c>): every text and the seconds it is on screen. Where each came from is looked up mechanically —
-/// the brief, the pages of the project's documents, the session's Qloo answers and research, or a figure the script says
-/// it computed. Only the watching is a model's: <c>Video.ask</c> transcribes the encoded film, and the transcription is
-/// compared with the ground truth. A text set but not read is <b>missed</b> — usually too brief or too small; a reading
-/// of something never set is a <b>stray</b>, either the watcher misreading or a real fault in the film (a half-drawn
-/// figure, a frame of the wrong scene).
+/// <b>Three things, and only one is a model's.</b> What the piece shows is read from the piece itself — every text a
+/// composition sets and the seconds it is on screen (<c>comp.texts()</c>), or every line a canvas or paper drew and where.
+/// Where each came from is looked up mechanically — the brief, the pages of the project's documents, the session's Qloo
+/// answers and research, or a figure the script says it computed. Only the reading is a model's: Nemotron transcribes the
+/// encoded film or the rendered image, and the transcription is compared with the ground truth. A text set but not read
+/// is <b>missed</b> — usually too brief or too small; a reading of something never set is a <b>stray</b>, either the
+/// watcher misreading or a real fault in the piece (a half-drawn figure, a frame of the wrong scene, a label painted over).
 /// </para>
 /// <para>
 /// <b>A stray is not reported until it has been looked at.</b> The watcher misread $974M as $744M on a report film, and
-/// the frame showed $974M. So each stray's frame is grabbed from the video, and the stray stays <i>pending</i> until the
-/// agent has looked and called it with <c>Verify.stray(n, 'misread' | 'real')</c>. The studio shows a stray only then.
+/// the frame showed $974M. So each stray's frame (or, on a still, a crop around the line it resembles) is saved, and the
+/// stray stays <i>pending</i> until the agent has looked and called it with <c>Verify.stray(n, 'misread' | 'real')</c>.
+/// The studio shows a stray only then.
 /// </para>
 /// <para>
 /// Exposed to the JavaScript sandbox. Members follow .NET naming here; Jint resolves the JS camelCase spelling onto them,
 /// so a script calling <c>Verify.film(...)</c> reaches <c>Film(...)</c>.
 /// </para>
 /// </remarks>
-public sealed class VerifyToolkit
+public sealed partial class VerifyToolkit
 {
     #region Constructors
-    /// <param name="video">The watcher; unconfigured, a film check answers why.</param>
-    /// <param name="projectRoot">Where the film, the brief and the documents are; nothing outside it is read or written.</param>
+    /// <param name="video">The watcher; unconfigured, a check answers why.</param>
+    /// <param name="projectRoot">Where the piece, the brief and the documents are; nothing outside it is read or written.</param>
     /// <param name="session">Holds the Qloo answers and research this session fetched, and the latest check for <see cref="Stray"/>.</param>
-    /// <param name="record">Records <c>film.verify</c> and <c>film.stray</c> for the studio's Verification view.</param>
+    /// <param name="record">Records <c>film.verify</c> / <c>image.verify</c> and their strays for the studio's Verification view.</param>
     public VerifyToolkit(VideoReader? video, string? projectRoot, SessionContext? session,
         Action<string, IReadOnlyDictionary<string, object?>>? record = null)
     {
@@ -66,7 +72,7 @@ public sealed class VerifyToolkit
     {
         ArgumentNullException.ThrowIfNull(comp);
         if (string.IsNullOrWhiteSpace(videoPath)) throw new ArgumentException("Verify.film needs the encoded film: Verify.film(comp, 'output.mp4').");
-        var computed = Computed(options);
+        var (computed, _, ignored, scale) = Options(options, "Verify.film", allowName: false);
         if (video is null || !video.IsAvailable)
             return Failed("NotConfigured", "No Nemotron endpoint is configured, so nothing can watch the film.", "Configure ApiKeys:NvidiaNIM or Token Factory.");
 
@@ -89,7 +95,7 @@ public sealed class VerifyToolkit
 
         var items = expected.Select((e, i) =>
         {
-            var source = sources.Classify(e.Text, computed);
+            var source = sources.Classify(e.Text, computed, scale);
             var seen = match.Seen[i];
             return new Dictionary<string, object?>
             {
@@ -111,54 +117,209 @@ public sealed class VerifyToolkit
             var at = Math.Clamp((s.Reading.From ?? 0) + 0.25, 0, comp.Duration);
             var frame = $"artifacts/verify/stray-{i + 1}.png";
             var error = FFmpeg.Frame(full, at, ProjectPath.Resolve(projectRoot, frame, "frame", "Write"));
-            return new FilmStray(i + 1, s.Reading.Text, s.Reading.From, error is null ? frame : null, error, s.Near, s.Kind);
+            return new ReadBackStray(i + 1, s.Reading.Text, s.Reading.From, error is null ? frame : null, error, s.Near, s.Kind);
         }).ToList();
 
-        var check = new FilmCheck(videoPath, comp.Duration, items, strays, answer.Provenance?.Model, answer.Provenance?.Endpoint);
-        if (session is not null) session.FilmCheck = check;
-        else last = check;
-        record?.Invoke("film.verify", check.Event());
-        return check.Result();
+        return Hold(new FilmCheck(videoPath, comp.Duration, items, strays, answer.Provenance?.Model, answer.Provenance?.Endpoint)
+            { Hash = Hash(full), Ignored = ignored });
     }
 
     /// <summary>
-    /// A stray settled after looking at its frame: <paramref name="verdict"/> <c>'misread'</c> (the frame shows what the film
-    /// set; the watcher misread it) or <c>'real'</c> (the frame shows what was read: a fault in the film). Returns the check
-    /// as it now stands.
+    /// A still checked the same way: every line of text <paramref name="source"/> drew (a canvas, its context, or a paper),
+    /// where each came from, and whether a reader of the rendered image read it as set. The image read is the source's
+    /// pixels now, saved as <c>artifacts/verify/&lt;name&gt;.png</c>; so check the piece as delivered, after everything is
+    /// drawn. <paramref name="options"/>: <c>{ computed?, name? }</c>, <c>name</c> defaulting to <c>'image'</c>.
+    /// </summary>
+    public async Task<Dictionary<string, object?>> Image(object source, object? options = null)
+    {
+        var (computed, name, ignored, scale) = Options(options, "Verify.image", allowName: true);
+        var still = Still.Of(source);
+        if (video is null || !video.IsAvailable)
+            return Failed("NotConfigured", "No Nemotron endpoint is configured, so nothing can read the image.", "Configure ApiKeys:NvidiaNIM or Token Factory.");
+
+        var imagePath = $"artifacts/verify/{name}.png";
+        var full = ProjectPath.Resolve(projectRoot, imagePath, "image", "Write");
+        Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+        using (var bitmap = still.Flattened())
+        using (var data = bitmap.Encode(SKEncodedImageFormat.Png, 100))
+            File.WriteAllBytes(full, data.ToArray());
+
+        var answer = await video.Ask(imagePath, ImageQuestion, new DocumentOptions { Schema = ImageSchema, MimeType = "image/png" });
+        if (!answer.Success)
+            return Failed(answer.FailureName, answer.Error, answer.FailureName == "Pending"
+                ? "The reader is still reading; it finishes into the cache. Run the same script again, unchanged."
+                : answer.Remedy);
+
+        var read = FilmReadBack.ParseReading(answer.Text).Select(r => r.Text).ToArray();
+        var page = SKRect.Create(0, 0, still.Width, still.Height);
+        var lines = still.Lines.Where(l => FilmReadBack.Normal(l.Text).Length > 0).ToArray();
+        var shown = lines.GroupBy(l => FilmReadBack.Normal(l.Text))
+            .Select(g => (Text: g.First().Text.Trim(), Lines: g.ToArray(), On: g.Where(l => l.Box.IntersectsWith(page)).ToArray()))
+            .ToArray();
+        var onCanvas = shown.Where(s => s.On.Length > 0).ToArray();
+        var match = ImageReadBack.Match([.. onCanvas.Select(s => s.Text)], read);
+        var seenOf = onCanvas.Select((s, i) => (s.Text, Seen: match.Seen[i], Closest: match.Closest[i])).ToDictionary(x => x.Text);
+        var sources = new FilmSources(projectRoot, session);
+
+        var items = shown.Select(s =>
+        {
+            var src = sources.Classify(s.Text, computed, scale);
+            var at = s.On.FirstOrDefault() ?? s.Lines[0];
+            var (_, seen, closest) = seenOf.GetValueOrDefault(s.Text);
+            return new Dictionary<string, object?>
+            {
+                ["text"] = s.Text,
+                ["count"] = s.Lines.Length,
+                ["box"] = Box(at.Box),
+                ["boxes"] = s.On.Take(MaxBoxes).Select(l => (object?)Box(l.Box)).ToArray(),
+                ["size"] = Math.Round(at.Size, 1),
+                ["source"] = src.Kind,
+                ["detail"] = src.Detail,
+                ["seen"] = seen is not null,
+                ["readAs"] = seen,
+                ["closest"] = seen is null ? closest : null,
+                ["status"] = s.On.Length == 0 ? "off the canvas" : seen is not null ? "seen" : "missed",
+            };
+        }).ToArray();
+
+        using var pixels = SKBitmap.Decode(File.ReadAllBytes(full));
+        var strays = match.Strays.Select((s, i) =>
+        {
+            // A crop around the line the reading resembles, where to look; otherwise the whole image is where.
+            var near = onCanvas.Where(o => o.Text == s.Near).SelectMany(o => o.On).FirstOrDefault();
+            if (near is null) return new ReadBackStray(i + 1, s.Reading.Text, null, imagePath, null, s.Near, s.Kind);
+            var crop = $"artifacts/verify/{name}-stray-{i + 1}.png";
+            var error = Crop(pixels, near.Box, ProjectPath.Resolve(projectRoot, crop, "crop", "Write"));
+            return new ReadBackStray(i + 1, s.Reading.Text, null, error is null ? crop : imagePath, error, s.Near, s.Kind);
+        }).ToList();
+
+        return Hold(new ImageCheck(imagePath, still.Kind, still.Width, still.Height, items, strays, answer.Provenance?.Model, answer.Provenance?.Endpoint)
+            { Hash = Hash(full), Ignored = ignored });
+    }
+
+    /// <summary>
+    /// A stray of the latest check settled after looking at its frame or crop: <paramref name="verdict"/> <c>'misread'</c>
+    /// (it shows what the piece set; the reader misread it) or <c>'real'</c> (it shows what was read: a fault in the piece).
+    /// Returns the check as it now stands. Refused in the script that ran the check: nothing has been looked at yet.
     /// </summary>
     public Dictionary<string, object?> Stray(int number, string verdict, string? note = null)
     {
-        var check = (session?.FilmCheck ?? last) ?? throw new InvalidOperationException("Verify.stray: run Verify.film first; there is no check to settle.");
+        var check = (session?.ReadBack ?? last) ?? throw new InvalidOperationException("Verify.stray: run Verify.film or Verify.image first; there is no check to settle.");
         var stray = check.Strays.FirstOrDefault(s => s.Number == number)
             ?? throw new ArgumentException($"Verify.stray: there is no stray {number}; the check has {check.Strays.Count}.");
+        if (ReferenceEquals(check, madeHere))
+            throw new InvalidOperationException($"Verify.stray: look at the {check.Evidence} first. A stray is settled in a later script than the check, "
+                + $"after you have seen {stray.Frame ?? check.Name} (return Skia.Image.load('{stray.Frame ?? check.Name}') from a script to see it).");
         var v = verdict?.Trim().ToLowerInvariant();
         if (v is not ("misread" or "real"))
-            throw new ArgumentException("Verify.stray's verdict is 'misread' (the frame shows what the film set) or 'real' (a fault in the film).");
+            throw new ArgumentException($"Verify.stray's verdict is 'misread' (the {check.Evidence} shows what the {check.Piece} set) or 'real' (a fault in the {check.Piece}).");
         stray.Verdict = v;
         stray.Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
-        record?.Invoke("film.stray", new Dictionary<string, object?>
+        record?.Invoke($"{check.Piece}.stray", new Dictionary<string, object?>
         {
-            ["video"] = check.Video, ["n"] = number, ["read"] = stray.Read, ["at"] = stray.At, ["frame"] = stray.Frame,
+            [check.NameKey] = check.Name, ["n"] = number, ["read"] = stray.Read, ["at"] = stray.At, ["frame"] = stray.Frame,
             ["near"] = stray.Near, ["verdict"] = v, ["note"] = stray.Note,
         });
-        return check.Result();
+        var result = check.Result();
+        RecordCheck(check, result);
+        return result;
     }
     #endregion
 
     #region Private methods
-    private static Dictionary<string, string> Computed(object? options)
+    /// <summary>
+    /// The check held for <see cref="Stray"/>, recorded, and returned as the script receives it. Checking the same bytes
+    /// again keeps the verdicts already given to the same readings, so a re-render that changed nothing is not re-settled.
+    /// </summary>
+    private Dictionary<string, object?> Hold(ReadBackCheck check)
+    {
+        if ((session?.ReadBack ?? last) is { } before && before.Name == check.Name && before.Hash == check.Hash && check.Hash is not null)
+            foreach (var s in check.Strays)
+                if (before.Strays.FirstOrDefault(b => b.Verdict is not null && b.Read == s.Read && b.Near == s.Near) is { } settled)
+                    (s.Verdict, s.Note) = (settled.Verdict, settled.Note);
+        if (session is not null) session.ReadBack = check;
+        else last = check;
+        madeHere = check;
+        record?.Invoke($"{check.Piece}.verify", check.Event());
+        var result = check.Result();
+        RecordCheck(check, result);
+        return result;
+    }
+
+    /// <summary>
+    /// The read-back's verdict as a judged <c>check</c>, recorded by the check itself — as it stands after the reading
+    /// and after each stray is settled — so the record's verdict is the one the check reached, not one written for it.
+    /// </summary>
+    private void RecordCheck(ReadBackCheck check, Dictionary<string, object?> result) =>
+        record?.Invoke("check", new Dictionary<string, object?>
+        {
+            ["claim"] = ReadBackClaim(check.Name), ["passed"] = result["passed"], ["detail"] = result["summary"], ["judged"] = true,
+            ["by"] = "verify",
+        });
+
+    /// <summary>The claim a read-back records: reserved for <c>Verify</c>; <c>Stage.check</c> refuses it.</summary>
+    internal static string ReadBackClaim(string name) => $"{ReadBackPrefix}{name}: every text has a source and was read as set";
+
+    internal const string ReadBackPrefix = "Read-back of ";
+
+    private static string Hash(string path) => Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path)))[..32];
+
+    /// <summary>
+    /// The options: <c>computed</c> split into the entries whose working shows arithmetic, which are used, and those whose
+    /// working does not (<c>'Period covered from FT methodology'</c>), which are set aside and named in the summary. A
+    /// citation is not a computation, and a figure it labels is looked for in its source instead.
+    /// </summary>
+    private static (Dictionary<string, string> Computed, string Name, string[] Ignored, HashSet<string> Scale) Options(object? options, string method, bool allowName)
     {
         var o = JsInterop.AsDict(options);
-        if (o is null) return [];
+        if (o is null) return ([], "image", [], []);
+        var allowed = allowName ? "{ computed, scale, name }" : "{ computed, scale }";
         foreach (var key in o.Keys)
-            if (key?.ToString() != "computed") throw new ArgumentException($"Verify.film's options are {{ computed }}; '{key}' is not one.");
-        return JsInterop.AsDict(o["computed"]) is { } c
+            if (key?.ToString() is not ("computed" or "name" or "scale") || (key.ToString() == "name" && !allowName))
+                throw new ArgumentException($"{method}'s options are {allowed}; '{key}' is not one.");
+        HashSet<string> scale = o.Contains("scale") && o["scale"] is System.Collections.IEnumerable labels and not string
+            ? [.. labels.Cast<object?>().Select(l => l?.ToString()?.Trim() ?? "").Where(l => l.Length > 0)]
+            : o.Contains("scale") && o["scale"] is not null
+                ? throw new ArgumentException($"{method}'s scale is a list of the axis labels as drawn: {{ scale: ['0%', '1,000%'] }}.")
+                : [];
+        var computed = JsInterop.AsDict(o.Contains("computed") ? o["computed"] : null) is { } c
             ? c.Keys.Cast<object>().ToDictionary(k => k.ToString()!, k => c[k]?.ToString() ?? "", StringComparer.Ordinal)
             : [];
+        var name = o.Contains("name") ? o["name"]?.ToString() ?? "" : "image";
+        if (!SafeName().IsMatch(name))
+            throw new ArgumentException($"{method}'s name is a file name for the read image, letters, digits, '-' and '_': 'final_a', not '{name}'.");
+        var ignored = computed.Where(c => !Arithmetic().IsMatch(c.Value)).Select(c => c.Key).ToArray();
+        foreach (var key in ignored) computed.Remove(key);
+        return (computed, name, ignored, scale);
     }
 
     private static Dictionary<string, object?> Failed(string? name, string? error, string? remedy) =>
         new() { ["ok"] = false, ["failureName"] = name, ["error"] = error, ["remedy"] = remedy };
+
+    private static double[] Box(SKRect r) => [Math.Round(r.Left, 1), Math.Round(r.Top, 1), Math.Round(r.Width, 1), Math.Round(r.Height, 1)];
+
+    /// <summary>The line's box with room around it, cut from the read image; null, or why not.</summary>
+    private static string? Crop(SKBitmap? pixels, SKRect box, string path)
+    {
+        if (pixels is null) return "the read image could not be decoded";
+        var pad = Math.Max(box.Height * 1.5f, 24f);
+        var r = SKRectI.Round(SKRect.Create(box.Left - pad, box.Top - pad, box.Width + 2 * pad, box.Height + 2 * pad));
+        r.Intersect(new SKRectI(0, 0, pixels.Width, pixels.Height));
+        if (r.Width <= 0 || r.Height <= 0) return "the line is off the image";
+        using var subset = new SKBitmap();
+        if (!pixels.ExtractSubset(subset, r)) return "the crop could not be cut";
+        using var data = subset.Encode(SKEncodedImageFormat.Png, 100);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllBytes(path, data.ToArray());
+        return null;
+    }
+
+    [GeneratedRegex("^[A-Za-z0-9_-]{1,64}$")]
+    private static partial Regex SafeName();
+
+    /// <summary>Working that shows arithmetic: a digit and an operator, a minus only when spaced as one.</summary>
+    [GeneratedRegex(@"\d.*([+−×*/÷^=]|\s-\s)|([+−×*/÷^=]|\s-\s).*\d")]
+    private static partial Regex Arithmetic();
     #endregion
 
     #region Fields
@@ -173,24 +334,103 @@ public sealed class VerifyToolkit
         + "\"required\":[\"text\",\"from\",\"to\"],\"properties\":{\"text\":{\"type\":\"string\"},\"from\":{\"type\":\"number\"},"
         + "\"to\":{\"type\":\"number\"}}}}}}";
 
+    /// <summary>What the reader of a still is asked: every line, as written. A line repeated may be listed once.</summary>
+    internal const string ImageQuestion =
+        "List every line of text in this image, each exactly as it is written — keep numbers, units, currency signs and "
+        + "punctuation as shown. Give each line as a separate item, from the top of the image to the bottom; small print, axis "
+        + "labels and footnotes count. A line that appears in several places may be listed once. Only text: do not describe "
+        + "pictures, and never complete or correct a line you cannot read.";
+
+    internal const string ImageSchema =
+        "{\"type\":\"object\",\"required\":[\"items\"],\"properties\":{\"items\":{\"type\":\"array\",\"items\":{\"type\":\"object\","
+        + "\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\"}}}}}}";
+
+    /// <summary>Boxes given per text: an axis label repeated across small multiples needs a few to find, not all of them.</summary>
+    private const int MaxBoxes = 12;
+
     private readonly VideoReader? video;
     private readonly string? projectRoot;
     private readonly SessionContext? session;
     private readonly Action<string, IReadOnlyDictionary<string, object?>>? record;
-    private FilmCheck? last;
+    private ReadBackCheck? last;
+
+    /// <summary>The check this script ran: its strays cannot have been looked at yet.</summary>
+    private ReadBackCheck? madeHere;
+    #endregion
+
+    #region Types
+    /// <summary>One line of text as drawn on a still, in the read image's pixels.</summary>
+    private sealed record Placed(string Text, SKRect Box, float Size);
+
+    /// <summary>A still to check: its lines as drawn and its pixels, from a canvas, its context, or a paper.</summary>
+    private sealed class Still
+    {
+        public required string Kind { get; init; }
+        public required int Width { get; init; }
+        public required int Height { get; init; }
+        public required Placed[] Lines { get; init; }
+        public required Func<SKBitmap> Pixels { get; init; }
+
+        /// <summary>The pixels over white: a transparent ground reads as black to a model and is never what a page shows.</summary>
+        public SKBitmap Flattened()
+        {
+            using var source = Pixels();
+            var flat = new SKBitmap(new SKImageInfo(source.Width, source.Height, SKColorType.Rgba8888, SKAlphaType.Premul));
+            using var canvas = new SKCanvas(flat);
+            canvas.Clear(SKColors.White);
+            using var image = SKImage.FromBitmap(source);
+            canvas.DrawImage(image, 0, 0, new SKSamplingOptions(SKFilterMode.Nearest));
+            return flat;
+        }
+
+        public static Still Of(object source) => source switch
+        {
+            SkiaCanvas c => FromCanvas(c),
+            CanvasRenderingContext2D ctx => FromCanvas(ctx.Canvas),
+            SnapPaper p => FromPaper(p),
+            _ => throw new ArgumentException("Verify.image checks what a canvas or a paper drew: Verify.image(canvas) — pass the canvas, its context, or the paper, after everything is drawn."),
+        };
+
+        private static Still FromCanvas(SkiaCanvas c) => new()
+        {
+            Kind = "canvas", Width = c.Width, Height = c.Height,
+            Lines = [.. c.DrawnText.Select(l => new Placed(l.Words, l.Bounds, l.SizePaper))],
+            Pixels = () => c.SkBitmap.Copy(),
+        };
+
+        /// <summary>A paper's lines are in paper units; they are mapped onto the pixels it renders to.</summary>
+        private static Still FromPaper(SnapPaper p)
+        {
+            var (w, h) = (p.Width > 0 ? (int)MathF.Ceiling(p.Width) : 800, p.Height > 0 ? (int)MathF.Ceiling(p.Height) : 600);
+            var document = SvgDocument.FromSvg<SvgDocument>(p.ToString());
+            var page = document.ViewBox is { Width: > 0, Height: > 0 } vb ? SKRect.Create(vb.MinX, vb.MinY, vb.Width, vb.Height) : SKRect.Create(0, 0, w, h);
+            var (sx, sy) = (w / page.Width, h / page.Height);
+            return new()
+            {
+                Kind = "paper", Width = w, Height = h,
+                Lines = [.. PosterTypeAudit.Lines(document).Select(l => new Placed(l.Words,
+                    SKRect.Create((l.Bounds.Left - page.Left) * sx, (l.Bounds.Top - page.Top) * sy, l.Bounds.Width * sx, l.Bounds.Height * sy), l.SizePaper * sy))],
+                Pixels = () => SKBitmap.Decode(p.ToImageBytes(w, h, "png", 100)),
+            };
+        }
+    }
     #endregion
 }
 
-/// <summary>One reading of something the film never set, held until the agent has looked at its frame.</summary>
-public sealed class FilmStray(int number, string read, double? at, string? frame, string? frameError, string? near, string kind)
+/// <summary>One reading of something the piece never set, held until the agent has looked at its frame or crop.</summary>
+public sealed class ReadBackStray(int number, string read, double? at, string? frame, string? frameError, string? near, string kind)
 {
     public int Number { get; } = number;
     public string Read { get; } = read;
+
+    /// <summary>The film second it was read at; null on a still.</summary>
     public double? At { get; } = at;
+
+    /// <summary>Where to look: the film's frame, or a crop of the still around the line it resembles (else the whole still).</summary>
     public string? Frame { get; } = frame;
     public string? FrameError { get; } = frameError;
 
-    /// <summary>The text set nearest to it, when the reading resembles one: a different figure in a line the film did set.</summary>
+    /// <summary>The text set nearest to it, when the reading resembles one: a different figure in a line the piece did set.</summary>
     public string? Near { get; } = near;
 
     /// <summary><c>'different figure'</c> or <c>'never set'</c>.</summary>
@@ -208,17 +448,37 @@ public sealed class FilmStray(int number, string read, double? at, string? frame
     };
 }
 
-/// <summary>A film's latest check: what it set, where each came from, what the watcher read, and its strays.</summary>
-public sealed class FilmCheck(string video, double duration, Dictionary<string, object?>[] items, List<FilmStray> strays, string? model, string? endpoint)
+/// <summary>A piece's latest check: what it set, where each came from, what the reader read, and its strays.</summary>
+public abstract class ReadBackCheck(string name, Dictionary<string, object?>[] items, List<ReadBackStray> strays, string? model, string? endpoint)
 {
-    public string Video { get; } = video;
-    public List<FilmStray> Strays { get; } = strays;
+    /// <summary>The film, or the still as read.</summary>
+    public string Name { get; } = name;
+    public List<ReadBackStray> Strays { get; } = strays;
+
+    /// <summary>The bytes read, so checking them again can keep the verdicts already given.</summary>
+    public string? Hash { get; init; }
+
+    /// <summary>The <c>computed</c> keys set aside because their working shows no arithmetic.</summary>
+    public string[] Ignored { get; init; } = [];
+
+    /// <summary><c>'film'</c> or <c>'image'</c>: names the events, <c>film.verify</c> / <c>image.verify</c>.</summary>
+    internal abstract string Piece { get; }
+
+    /// <summary>The field that carries <see cref="Name"/>: <c>video</c> or <c>image</c>.</summary>
+    internal abstract string NameKey { get; }
+
+    /// <summary>What a stray is checked against: <c>frame</c> or <c>crop</c>.</summary>
+    internal abstract string Evidence { get; }
+
+    protected Dictionary<string, object?>[] Items { get; } = items;
+    protected string? Model { get; } = model;
+    protected string? Endpoint { get; } = endpoint;
 
     /// <summary>As recorded for the studio: every item, and every stray with its state.</summary>
-    internal Dictionary<string, object?> Event() => new()
+    internal virtual Dictionary<string, object?> Event() => new()
     {
-        ["video"] = Video, ["duration"] = duration, ["model"] = model, ["endpoint"] = endpoint,
-        ["items"] = items.Cast<object?>().ToArray(),
+        [NameKey] = Name, ["model"] = Model, ["endpoint"] = Endpoint,
+        ["items"] = Items.Cast<object?>().ToArray(),
         ["strays"] = Strays.Select(s => (object?)s.Dict()).ToArray(),
         ["counts"] = Counts(),
     };
@@ -227,42 +487,95 @@ public sealed class FilmCheck(string video, double duration, Dictionary<string, 
     internal Dictionary<string, object?> Result()
     {
         var counts = Counts();
-        var unsourced = items.Count(i => (string?)i["source"] == "unsourced figure");
+        var unsourced = Items.Count(i => (string?)i["source"] == "unsourced figure");
         var pending = Strays.Count(s => s.Verdict is null);
         var real = Strays.Count(s => s.Verdict == "real");
-        var bySource = items.GroupBy(i => (string)i["source"]!).OrderByDescending(g => g.Count()).Select(g => $"{g.Count()} {g.Key}");
-        var missed = items.Where(i => (string?)i["status"] == "missed").ToArray();
-        var summary = $"{items.Length} texts on screen: {counts["seen"]} seen by the watcher"
-            + (missed.Length == 0 ? "" : $", {missed.Length} missed ({string.Join("; ", missed.Take(4).Select(m => $"\"{Clip((string)m["text"]!)}\" on screen {m["seconds"]:0.#} s"))})")
+        var bySource = Items.GroupBy(i => (string)i["source"]!).OrderByDescending(g => g.Count()).Select(g => $"{g.Count()} {g.Key}");
+        var missed = Items.Where(i => (string?)i["status"] == "missed").ToArray();
+        var evidence = pending == 1 ? $"its {Evidence}" : $"their {Evidence}s";
+        var summary = $"{Items.Length} texts {Where}: {counts["seen"]} seen by the reader"
+            + (missed.Length == 0 ? "" : $", {missed.Length} missed ({string.Join("; ", missed.Take(4).Select(m => $"\"{Clip((string)m["text"]!)}\" {MissedNote(m)}"))})")
             + $". Sources: {string.Join(", ", bySource)}."
             + (unsourced == 0 ? "" : $" {unsourced} figure{(unsourced == 1 ? " has" : "s have")} no source: find it in a document or the brief, or pass its working as computed.")
-            + (pending == 0 ? "" : $" {pending} reading{(pending == 1 ? "" : "s")} of text the film never set: look at {(pending == 1 ? "its frame" : "their frames")} ({string.Join(", ", Strays.Where(s => s.Verdict is null).Select(s => s.Frame ?? "no frame"))}), then Verify.stray(n, 'misread' | 'real').")
-            + (real == 0 ? "" : $" {real} confirmed fault{(real == 1 ? "" : "s")} in the film: fix and encode again.");
-        return new()
+            + (pending == 0 ? "" : $" {pending} reading{(pending == 1 ? "" : "s")} of text the {Piece} never set: look at {evidence} ({string.Join(", ", Strays.Where(s => s.Verdict is null).Select(s => s.Frame ?? "none saved"))}), then Verify.stray(n, 'misread' | 'real').")
+            + (real == 0 ? "" : $" {real} confirmed fault{(real == 1 ? "" : "s")} in the {Piece}: fix and {Again} again.")
+            + (Ignored.Length == 0 ? "" : $" {Ignored.Length} computed entr{(Ignored.Length == 1 ? "y was" : "ies were")} not used, as the working shows no arithmetic ({string.Join(", ", Ignored.Take(4).Select(k => $"'{Clip(k)}'"))}): a figure from a document is found on its page without one.");
+        var result = new Dictionary<string, object?>
         {
             ["ok"] = true,
             ["passed"] = unsourced == 0 && pending == 0 && real == 0,
-            ["video"] = Video,
-            ["items"] = items.Cast<object?>().ToArray(),
+            [NameKey] = Name,
+            ["items"] = Items.Cast<object?>().ToArray(),
             ["strays"] = Strays.Select(s => (object?)s.Dict()).ToArray(),
             ["counts"] = counts,
-            ["model"] = model,
+            ["model"] = Model,
             ["summary"] = summary,
         };
+        return result;
     }
+
+    /// <summary>Where the texts are, for the summary: <c>on screen</c>.</summary>
+    protected abstract string Where { get; }
+
+    /// <summary>What a fault asks for: <c>encode</c> or <c>render</c>.</summary>
+    protected abstract string Again { get; }
+
+    /// <summary>Why a missed text may have been missed: its seconds on screen, or its size.</summary>
+    protected abstract string MissedNote(Dictionary<string, object?> item);
 
     private Dictionary<string, object?> Counts() => new()
     {
-        ["shown"] = items.Length,
-        ["seen"] = items.Count(i => (string?)i["status"] == "seen"),
-        ["missed"] = items.Count(i => (string?)i["status"] == "missed"),
-        ["unsourced"] = items.Count(i => (string?)i["source"] == "unsourced figure"),
+        ["shown"] = Items.Length,
+        ["seen"] = Items.Count(i => (string?)i["status"] == "seen"),
+        ["missed"] = Items.Count(i => (string?)i["status"] == "missed"),
+        ["unsourced"] = Items.Count(i => (string?)i["source"] == "unsourced figure"),
         ["strays"] = Strays.Count,
         ["pending"] = Strays.Count(s => s.Verdict is null),
         ["real"] = Strays.Count(s => s.Verdict == "real"),
     };
 
     private static string Clip(string s) => s.Length > 40 ? s[..39] + "…" : s.Replace('\n', ' ');
+}
+
+/// <summary>A film's latest check.</summary>
+public sealed class FilmCheck(string video, double duration, Dictionary<string, object?>[] items, List<ReadBackStray> strays, string? model, string? endpoint)
+    : ReadBackCheck(video, items, strays, model, endpoint)
+{
+    public string Video => Name;
+    internal override string Piece => "film";
+    internal override string NameKey => "video";
+    internal override string Evidence => "frame";
+    protected override string Where => "on screen";
+    protected override string Again => "encode";
+
+    internal override Dictionary<string, object?> Event()
+    {
+        var e = base.Event();
+        e["duration"] = duration;
+        return e;
+    }
+
+    protected override string MissedNote(Dictionary<string, object?> item) => $"on screen {item["seconds"]:0.#} s";
+}
+
+/// <summary>A still's latest check.</summary>
+public sealed class ImageCheck(string image, string source, int width, int height, Dictionary<string, object?>[] items, List<ReadBackStray> strays, string? model, string? endpoint)
+    : ReadBackCheck(image, items, strays, model, endpoint)
+{
+    internal override string Piece => "image";
+    internal override string NameKey => "image";
+    internal override string Evidence => "crop";
+    protected override string Where => "on the image";
+    protected override string Again => "render";
+
+    internal override Dictionary<string, object?> Event()
+    {
+        var e = base.Event();
+        (e["source"], e["width"], e["height"]) = (source, width, height);
+        return e;
+    }
+
+    protected override string MissedNote(Dictionary<string, object?> item) => $"set at {item["size"]:0.#} px";
 }
 
 /// <summary>The read-back's comparison: what the watcher read against what the composition set.</summary>
@@ -363,7 +676,8 @@ internal static class FilmReadBack
         return Words(a, b);
     }
 
-    private static double Words(string a, string b)
+    /// <summary>The share of words two texts have in common.</summary>
+    internal static double Words(string a, string b)
     {
         var (wa, wb) = (Normal(a).Split(' ').ToHashSet(), Normal(b).Split(' ').ToHashSet());
         return wa.Count == 0 || wb.Count == 0 ? 0 : wa.Intersect(wb).Count() / (double)wa.Union(wb).Count();
@@ -385,6 +699,9 @@ internal static class FilmReadBack
     /// <summary>The figures in a text, commas dropped, in order: "$40.4 billion (282 million)" is 40.4 and 282.</summary>
     internal static string[] Figures(string? text) =>
         [.. Figure.Matches(text ?? "").Select(m => m.Value.Replace(",", "").TrimEnd('.'))];
+
+    /// <summary>A text with each figure as <c>#</c>: the shape a misread figure keeps. "Grew 2,205.8%" is "grew #%".</summary>
+    internal static string Shape(string? text) => Figure.Replace(Normal(text), "#");
     #endregion
 
     #region Fields
@@ -395,13 +712,94 @@ internal static class FilmReadBack
     #endregion
 }
 
+/// <summary>
+/// A still's read-back: what the reader read against the lines the canvas drew. No time to place a reading, so a reading
+/// is placed by its words; the reader may list a repeated line once, so each distinct text needs reading once.
+/// </summary>
+internal static class ImageReadBack
+{
+    /// <summary>
+    /// Each distinct text's reading, or null when none matched; and each reading that matched nothing. A reading matches a
+    /// text whose words it shares and whose figures it has exactly, as on film. A reading that runs several drawn lines
+    /// together (a wrapped paragraph, or a table row read across its columns) reads every line it contains, and is a stray
+    /// only if it carries a figure none of the drawn lines it contains has. A text not read gets the reading closest to it,
+    /// for the agent to judge: <c>ORORO</c> read as <c>OROO</c> is a size fault, not an absence.
+    /// </summary>
+    internal static (string?[] Seen, string?[] Closest, FilmReadBack.Unmatched[] Strays) Match(IReadOnlyList<string> texts, IReadOnlyList<string> read)
+    {
+        var used = new bool[read.Count];
+        var seen = new string?[texts.Count];
+        var padded = read.Select(r => " " + FilmReadBack.Normal(r) + " ").ToArray();
+        bool Contains(int k, int i) => padded[k].Contains(" " + FilmReadBack.Normal(texts[i]) + " ", StringComparison.Ordinal);
+
+        // Longest first, so a heading is not taken by a reading of a one-word label inside it.
+        foreach (var i in Enumerable.Range(0, texts.Count).OrderByDescending(i => FilmReadBack.Normal(texts[i]).Length))
+        {
+            var figures = FilmReadBack.Figures(texts[i]);
+            var (best, score) = (-1, 0.0);
+            for (var k = 0; k < read.Count; k++)
+            {
+                if (used[k] || !figures.SequenceEqual(FilmReadBack.Figures(read[k]))) continue;
+                var s = FilmReadBack.Similarity(texts[i], read[k]);
+                if (s > score) (best, score) = (k, s);
+            }
+            if (score >= 0.6) (used[best], seen[i]) = (true, read[best]);
+        }
+
+        for (var i = 0; i < texts.Count; i++)
+        {
+            if (seen[i] is not null) continue;
+            var k = Enumerable.Range(0, read.Count).FirstOrDefault(k => Contains(k, i), -1);
+            if (k >= 0) seen[i] = read[k];
+        }
+
+        // Every drawn line a reading contains explains it, whether or not that line was also read elsewhere: the reader
+        // lists a table's figures on their own and again inside each row.
+        var strays = new List<FilmReadBack.Unmatched>();
+        for (var k = 0; k < read.Count; k++)
+        {
+            if (used[k]) continue;
+            var reading = new FilmReadBack.Reading(read[k], null, null);
+            var shape = " " + FilmReadBack.Shape(read[k]) + " ";
+            var contained = Enumerable.Range(0, texts.Count).Where(i => Contains(k, i)).ToArray();
+            var have = contained.SelectMany(i => FilmReadBack.Figures(texts[i])).ToList();
+            var extra = FilmReadBack.Figures(read[k]).Where(f => !have.Remove(f)).ToArray();
+            if (contained.Length > 0 && extra.Length == 0) continue;
+
+            // Beside the drawn figure whose shape it carries, unread first; else the line it most resembles.
+            var shaped = Enumerable.Range(0, texts.Count).Where(i => FilmReadBack.Figures(texts[i]).Length > 0
+                    && shape.Contains(" " + FilmReadBack.Shape(texts[i]) + " ", StringComparison.Ordinal))
+                .OrderBy(i => seen[i] is null ? 0 : 1).ThenByDescending(i => FilmReadBack.Shape(texts[i]).Length).ToArray();
+            var near = shaped.Length > 0 ? texts[shaped[0]]
+                : contained.Length > 0 ? texts[contained[0]]
+                : texts.Select(t => (t, score: FilmReadBack.Words(t, read[k]))).Where(p => p.score >= 0.5)
+                    .OrderByDescending(p => p.score).Select(p => p.t).FirstOrDefault();
+            strays.Add(new(reading, near, near is not null && (extra.Length > 0 || FilmReadBack.Figures(near).Length > 0) ? "different figure" : "never set"));
+        }
+
+        var closest = texts.Select((t, i) => seen[i] is not null ? null : Closest(t, read)).ToArray();
+        return (seen, closest, [.. strays]);
+    }
+
+    /// <summary>The reading carrying most of a text's words, at least half of them; null when none does.</summary>
+    private static string? Closest(string text, IReadOnlyList<string> read)
+    {
+        var words = FilmReadBack.Normal(text).Split(' ').ToHashSet();
+        return read.Select(r => (r, share: words.Intersect(FilmReadBack.Normal(r).Split(' ')).Count() / (double)words.Count))
+            .Where(p => p.share >= 0.5).OrderByDescending(p => p.share).ThenByDescending(p => FilmReadBack.Similarity(text, p.r))
+            .Select(p => p.r).FirstOrDefault();
+    }
+}
+
 /// <summary>Where a text on screen came from, looked up rather than asked: the brief, a document page, Qloo, research.</summary>
 internal sealed class FilmSources
 {
     #region Constructors
     internal FilmSources(string? projectRoot, SessionContext? session)
     {
-        brief = Normal(ReadBrief(projectRoot));
+        var briefText = ReadBrief(projectRoot);
+        brief = Normal(briefText);
+        briefFigures = [.. FilmReadBack.Figures(briefText)];
         pages = ReadPages(projectRoot);
         qloo = session?.Taste.All.Where(r => r.Ok)
             .SelectMany(r => r.Entities.OfType<Dictionary<string, object?>>()
@@ -413,26 +811,54 @@ internal sealed class FilmSources
     #endregion
 
     #region Methods
-    /// <summary>The source of a text set on screen: <c>(kind, detail)</c>, kind one of <c>computed</c>, <c>brief</c>,
-    /// <c>document</c>, <c>qloo</c>, <c>research</c>, <c>own words</c>, or <c>unsourced figure</c> for own words with a number in them.</summary>
-    internal (string Kind, string? Detail) Classify(string text, IReadOnlyDictionary<string, string> computed)
+    /// <summary>
+    /// The source of a text set on screen: <c>(kind, detail)</c>, kind one of <c>scale</c> (an axis label the caller
+    /// declared), <c>computed</c>, <c>brief</c>, <c>document</c>, <c>qloo</c>, <c>research</c>, <c>own words</c>, or
+    /// <c>unsourced figure</c>. A text with figures is sourced figure by
+    /// figure: one sentence may carry a document's figure and a computed one. Each figure is looked for on the documents'
+    /// pages first, then among the figures of the <paramref name="computed"/> keys (so <c>{ 'Top 4.4%': '22 / 500' }</c>
+    /// sources 4.4 wherever it is set), then research and the brief. The kind is the first of computed, document, research,
+    /// brief among the figures' sources, and the detail names each.
+    /// </summary>
+    internal (string Kind, string? Detail) Classify(string text, IReadOnlyDictionary<string, string> computed, IReadOnlySet<string>? scale = null)
     {
+        if (scale?.Contains(text.Trim()) == true) return ("scale", null);
         if (computed.TryGetValue(text, out var working) || computed.TryGetValue(text.Trim(), out working)) return ("computed", working);
         var n = Normal(text);
         var figures = FilmReadBack.Figures(text);
         if (n.Length > 0 && brief.Contains(n, StringComparison.Ordinal)) return ("brief", null);
+        if (qloo.TryGetValue(n, out var handle)) return ("qloo", handle);
 
-        // A figure is a document's when every figure in the text is on one of its pages; words, when the page has them.
-        foreach (var (doc, number, pageText, pageFigures) in pages)
+        if (figures.Length == 0)
         {
-            var found = figures.Length > 0 ? figures.All(pageFigures.Contains) : n.Length >= 4 && pageText.Contains(n, StringComparison.Ordinal);
-            if (found) return ("document", $"{doc} p. {number}");
+            foreach (var (doc, number, pageText, _) in pages)
+                if (n.Length >= 4 && pageText.Contains(n, StringComparison.Ordinal)) return ("document", $"{doc} p. {number}");
+            foreach (var (id, body) in research)
+                if (n.Length >= 4 && body.Contains(n, StringComparison.Ordinal)) return ("research", id);
+            return ("own words", null);
         }
-        if (qloo.TryGetValue(FilmReadBack.Normal(text), out var handle)) return ("qloo", handle);
-        foreach (var (id, body) in research)
-            if (figures.Length > 0 ? figures.All(f => body.Contains(f, StringComparison.Ordinal)) : n.Length >= 4 && body.Contains(n, StringComparison.Ordinal))
-                return ("research", id);
-        return figures.Length > 0 ? ("unsourced figure", null) : ("own words", null);
+
+        // Each figure where it is found: a computed key's figure, a document's page (one page holding them all named
+        // first), research, the brief.
+        var computedFigures = computed.SelectMany(c => FilmReadBack.Figures(c.Key).Select(f => (f, c.Value))).GroupBy(x => x.f)
+            .ToDictionary(g => g.Key, g => g.First().Value);
+        var ordered = pages.OrderBy(p => figures.All(p.Figures.Contains) ? 0 : 1).ToArray();
+        (string? Kind, string Where) SourceOf(string f)
+        {
+            // The document first: a figure on its pages is the document's, whatever a computed entry says about it.
+            foreach (var p in ordered)
+                if (p.Figures.Contains(f)) return ("document", $"{p.Doc} p. {p.Page}");
+            if (computedFigures.TryGetValue(f, out var how)) return ("computed", $"{f} = {how}");
+            foreach (var r in research)
+                if (r.Text.Contains(f, StringComparison.Ordinal)) return ("research", r.Id);
+            return briefFigures.Contains(f) ? ("brief", "brief.md") : (null, f);
+        }
+        var found = figures.Distinct().Select(SourceOf).ToArray();
+
+        var missing = found.Where(x => x.Kind is null).Select(x => x.Where).ToArray();
+        if (missing.Length > 0) return ("unsourced figure", $"no source for {string.Join(", ", missing)}");
+        var kind = new[] { "computed", "document", "research", "brief" }.First(k => found.Any(x => x.Kind == k));
+        return (kind, string.Join("; ", found.Select(x => x.Where).Distinct()));
     }
     #endregion
 
@@ -481,6 +907,7 @@ internal sealed class FilmSources
 
     #region Fields
     private readonly string brief;
+    private readonly HashSet<string> briefFigures;
     private readonly (string Doc, int Page, string Text, HashSet<string> Figures)[] pages;
     private readonly Dictionary<string, string> qloo;
     private readonly (string Id, string Text)[] research;

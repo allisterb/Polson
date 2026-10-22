@@ -125,10 +125,10 @@ public sealed class SessionContext
     public HashSet<(string? Stage, string Text)> NotedOnce { get; } = [];
 
     /// <summary>
-    /// The latest <c>Verify.film</c>, held so a later script can settle its strays with <c>Verify.stray</c> once the agent
-    /// has looked at their frames.
+    /// The latest <c>Verify.film</c> or <c>Verify.image</c>, held so a later script can settle its strays with
+    /// <c>Verify.stray</c> once the agent has looked at their frames or crops.
     /// </summary>
-    public FilmCheck? FilmCheck { get; set; }
+    public ReadBackCheck? ReadBack { get; set; }
 
     /// <summary>
     /// True while one or more tool calls are actively executing on this session.

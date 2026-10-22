@@ -101,10 +101,18 @@ public class SkiaCanvas : IDisposable, IDataUriSource, ILosslessImageSource
     internal IReadOnlyList<string> AuditLayout() =>
         _layoutOverflowed ? [] : LayoutAudit.CheckMarks(_layoutLines, _layoutShapes, SKRect.Create(0, 0, Width, Height));
 
+    /// <summary>
+    /// Every line of text this canvas drew, in canvas pixels and in order: what <c>Verify.image</c> holds the read-back
+    /// against. Kept apart from the layout record, which a canvas drawn a pixel at a time empties.
+    /// </summary>
+    internal IReadOnlyList<TypeLine> DrawnText => _drawnText;
+
     /// <summary>A line of text as drawn, in canvas pixels. Called by the context.</summary>
     internal void RecordText(string words, SKRect bounds, float size, bool upright)
     {
-        if (Room()) _layoutLines.Add(new TypeLine(words, bounds, size, upright));
+        var line = new TypeLine(words, bounds, size, upright);
+        if (_drawnText.Count < MaxDrawnText) _drawnText.Add(line);
+        if (Room()) _layoutLines.Add(line);
     }
 
     /// <summary>A shape as drawn, in canvas pixels. Called by the context.</summary>
@@ -138,11 +146,13 @@ public class SkiaCanvas : IDisposable, IDataUriSource, ILosslessImageSource
 
     #region Fields
     private const int MaxLayoutMarks = 4000;
+    private const int MaxDrawnText = 4000;
 
     private CanvasRenderingContext2D? _context;
     private SkiaBitmapWrapper? _liveBitmap;
     private readonly List<TypeLine> _layoutLines = [];
     private readonly List<LayoutShape> _layoutShapes = [];
+    private readonly List<TypeLine> _drawnText = [];
     private bool _layoutOverflowed;
     #endregion
 }

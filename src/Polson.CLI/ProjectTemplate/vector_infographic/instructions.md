@@ -853,6 +853,36 @@ The same goes for a figure you could not source, a genre the ledger never record
 could not reconcile against its parts. **A stated limitation is a finished piece of work. A silent
 one is a defect with a delivery date.**
 
+#### Then read it back: the last check, on the piece as delivered
+
+`VerifyFigures` reconciles the figures you tagged. **`Verify.image`** reads the whole piece the way a
+reader does. A separate model transcribes the rendered paper, and the transcription is held against
+every `<text>` on it. Then each line's source is looked up, not asked: the brief, a page of a document
+you read, research, or a figure you computed and pass with its working. Manual 13 §8a explains it.
+Put it at the end of `artwork.js`, behind a switch:
+
+```javascript
+// … everything is drawn …
+if (ARGS.verify) {
+  const v = await Verify.image(paper, { computed: { /* 'text exactly as drawn': 'its working' */ },
+                                        scale: [ /* every axis tick label, exactly as drawn */ ] });
+  if (!v.ok) exit(v.remedy);         // 'Pending': the reader is still reading — run the same call again, unchanged
+  log(v.summary);
+}
+return paper;                        // a script that awaits must return what it renders
+```
+
+Run it on the last render: `ExecuteScript(scriptFile: 'artwork.js', args: '{"verify":true}', outFile:
+'artifacts/final.webp', outSvg: 'artifacts/final.svg')`. **The check records its own verdict**, as
+a judged check named `Read-back of …`. Never write it yourself; `Stage.check` refuses the name. An
+unsourced figure comes off the page until it has a source; `detail` names the figure, and a derived
+one goes in `computed`. A missed text is a legibility fault until you show otherwise; `closest` shows
+what the reader made of it. **A stray is a reading of text you never drew: look at its crop (`frame`,
+via `return Skia.Image.load(frame)`) before you settle it** with `Verify.stray(n, 'misread' | 'real',
+note)`, in a later script than the check, which refuses it otherwise. A read-back still failing at
+delivery is delivered failing, with the reason in a note: fix the piece, never the verdict. Report the result in `accuracy.md` under *Checked, and reconciled*,
+and put anything it missed or found real under *Not reconciled*.
+
 
 ## Verifying, rather than hoping
 
@@ -910,6 +940,8 @@ describe.
 
 9. **Every sourced figure carries a `data-basis` tag, and `VerifyFigures` has been run over the saved
    SVG.** A verdict of *nothing to check* means the figures were never tagged, not that they passed.
+10. **The final render has been read back with `Verify.image`, and the check passed.** Every figure
+    has a source, every stray was looked at and settled, and it is recorded as a judged `Stage.check`.
 
 10. **`accuracy.md` is written, and its later sections are not empty.** What could not be checked and
     what the piece still overstates are the parts a client cannot get anywhere else — and the parts a
