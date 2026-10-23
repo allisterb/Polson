@@ -1048,42 +1048,10 @@ internal static partial class MathReading
     }
 
     /// <summary>A command, a superscript, or a braced subscript: <c>\frac</c>, <c>b^2</c>, <c>x_{i}</c>.</summary>
-    internal static bool LooksLikeMath(string reading) => MathMark().IsMatch(reading);
+    internal static bool LooksLikeMath(string reading) => EquationCheck.LooksLikeMath(reading);
 
-    /// <summary>
-    /// A reading as the reader meant it: math delimiters taken off (<c>$…$</c>, <c>$$…$$</c>, <c>\(…\)</c>, <c>\[…\]</c>), and
-    /// LaTeX commands the JSON answer turned into control characters put back. The reader writes <c>\begin</c> into a JSON
-    /// string without doubling the backslash, and the parser reads <c>\b</c> as a backspace: <c>\begin</c> arrived as
-    /// backspace + <c>egin</c> (2026-10-23), and <c>\times</c>, <c>\theta</c>, <c>\frac</c>, <c>\neq</c>, <c>\rho</c> go the same way.
-    /// </summary>
-    internal static string Unwrap(string reading)
-    {
-        var r = reading;
-        if (r.IndexOfAny(['\b', '\f', '\t', '\r', '\n']) >= 0)
-        {
-            var repaired = new StringBuilder(r.Length + 8);
-            for (var i = 0; i < r.Length; i++)
-            {
-                var c = r[i];
-                var letterNext = i + 1 < r.Length && char.IsAsciiLetter(r[i + 1]);
-                var escape = c switch
-                {
-                    '\b' => "\\b", '\f' => "\\f", '\t' => "\\t", '\r' when letterNext => "\\r",
-                    '\n' when letterNext && MathMark().IsMatch(r) => "\\n",
-                    _ => null,
-                };
-                if (escape is null) repaired.Append(c); else repaired.Append(escape);
-            }
-            r = repaired.ToString();
-        }
-        var t = r.Trim();
-        foreach (var (open, close) in Delimiters)
-            if (t.Length > open.Length + close.Length && t.StartsWith(open, StringComparison.Ordinal) && t.EndsWith(close, StringComparison.Ordinal))
-                return t[open.Length..^close.Length].Trim();
-        return r;
-    }
-
-    private static readonly (string Open, string Close)[] Delimiters = [("$$", "$$"), ("$", "$"), (@"\(", @"\)"), (@"\[", @"\]")];
+    /// <summary>A reading as the reader meant it: delimiters off, JSON-eaten commands put back (see <c>EquationCheck.Unwrap</c>).</summary>
+    internal static string Unwrap(string reading) => EquationCheck.Unwrap(reading);
 
     /// <summary>Unclosed braces, or a <c>\frac</c> with its numerator and no denominator: a fragment of a built-up equation.</summary>
     internal static bool Incomplete(string reading) => Depth(reading) > 0 || HalfFraction(reading);
@@ -1127,8 +1095,6 @@ internal static partial class MathReading
         return false;
     }
 
-    [GeneratedRegex(@"\\[A-Za-z]+|\^|_\{")]
-    private static partial Regex MathMark();
 }
 
 /// <summary>Where a text on screen came from, looked up rather than asked: the brief, a document page, Qloo, research.</summary>

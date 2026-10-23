@@ -76,6 +76,27 @@ public class EquationEquivalentTests : TestsRuntime
         Assert.Equal(("unread", "b"), ((string)Check("x = 2", "x + 2")["verdict"]!, (string)Check("x = 2", "x + 2")["side"]!));
     }
 
+    /// <summary>
+    /// The three gaps the Nemotron probe found: bare absolute-value bars, a sum over i, and LaTeX as a model's JSON answer
+    /// carries it — in dollars, with \frac's \f eaten into a form feed.
+    /// </summary>
+    [Fact]
+    public void TestBarsASumOverIAndAModelsLatexAreRead()
+    {
+        Assert.Equal("differs", Check(@"\frac{|x|}{x} = 1")["verdict"]);
+        Assert.Contains((string)Check(@"\frac{|x|}{x} = 1", null, Opts(("domain", Opts(("x", new[] { 0.1, 5d })))))["verdict"]!, new[] { "proved", "agrees" });
+        Assert.Contains((string)Check(@"|a||b|", @"|ab|")["verdict"]!, new[] { "proved", "agrees" });
+        Assert.Equal(@"\frac{\left|x\right|}{x} + \left|y\right|\| \left|z\right|", EquationCheck.AbsoluteBars(@"\frac{|x|}{x} + |y|\| \left|z\right|"));
+
+        Assert.Contains((string)Check(@"\sum_{i=1}^{n} i = \frac{n(n+1)}{2}")["verdict"]!, new[] { "proved", "agrees" });
+        Assert.Equal("differs", Check(@"\sum_{i=1}^{n} i = n(n+1)")["verdict"]);
+        Assert.Equal("proved", Check(@"e^{i\pi} + 1 = 0")["verdict"]);                     // no sum: i is still the unit
+
+        Assert.Equal("differs", Check(@"$(a + b)^2 = a^2 + b^2$")["verdict"]);
+        var eaten = Check("\f" + "rac{d}{dx}x^3 = 3x^2");                                   // "\frac" through JSON
+        Assert.Equal(("proved", "d/(dx)x³"), ((string)eaten["verdict"]!, (string)eaten["a"]!));
+    }
+
     /// <summary>A sum's bound is drawn as an integer: Gauss's formula agrees, or proves, and one off by n does not.</summary>
     [Fact]
     public void TestASumIsCheckedOverWholeNumbers()
