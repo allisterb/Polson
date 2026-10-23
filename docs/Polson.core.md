@@ -781,6 +781,7 @@ and the results chain: `a.union(b).subtract(c)`.
 >
 > Use it to *fit* a label into a known box. To *flow* a paragraph, use `fillWrappedText`, whose `maxWidth` breaks lines instead of narrowing glyphs.
 - `ctx.fillWrappedText(text: string, x: number, y: number, maxWidth: number, lineHeight?: number)` → `TextBlock` — Word-wraps and draws filled paragraph text within `maxWidth`, returning the box it occupied.
+- `ctx.fillEquation(latex: string, x: number, y: number, options?: { size?: number })` → `object` — Typesets and fills an equation from LaTeX (see **Equation**), placed by `textAlign` and `textBaseline` as text is, coloured by `fillStyle` where the LaTeX sets none. `size` is the em in canvas units, the current font's size by default. Returns `{ x, y, x2, y2, baseline, width, height, ascent, descent, linear, latex, ok, size }` and records the equation's `linear` form as drawn text, so the layout audit and `Verify.image` see it. Throws on a parse error, naming where.
 - `ctx.strokeWrappedText(text: string, x: number, y: number, maxWidth: number, lineHeight?: number)` → `TextBlock` — The same, stroked.
 - `ctx.measureWrappedText(text: string, maxWidth: number, lineHeight?: number)` → `TextBlock` — Wraps and reports the box the paragraph *would* occupy, **without drawing it**.
 - `ctx.measureText(text: string)` → `TextMetrics` — Returns `{ width, actualBoundingBoxAscent, actualBoundingBoxDescent, fontBoundingBoxAscent, fontBoundingBoxDescent }`.
@@ -2694,6 +2695,41 @@ for (const cell of Layout.grid(right, 2, 3, 10)) {
 
 canvas;
 ```
+
+---
+
+# Equation (Mathematics from LaTeX)
+
+Typesets mathematics from LaTeX in the engine itself: there is no TeX installation, no file access and no shell, only a
+LaTeX math parser and the Latin Modern Math font. Fractions, roots, scripts, sums, integrals, limits, accents, braces,
+`\text`, `\color`, and the `matrix` (all bracket forms), `cases`, `aligned` and `gather` environments are understood.
+`\dfrac`, `\tfrac` and `\cancel` are not.
+
+```javascript
+const canvas = createCanvas(640, 200);
+const ctx = canvas.getContext('2d');
+ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, 640, 200);
+ctx.fillStyle = '#1b1b1b';
+const eq = Equation.parse('x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}', { size: 48 });
+log(eq.linear);                                   // x = (−b ± √(b² − 4ac))/(2a)
+ctx.textAlign = 'center';
+ctx.fillEquation('x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}', 320, 110, { size: 48 });
+canvas;
+```
+
+> [!IMPORTANT]
+> **Write the LaTeX as a JavaScript string, so each backslash is doubled**: `'\\frac{a}{b}'` is the LaTeX `\frac{a}{b}`.
+>
+> **Every equation has a `linear` form**, the line a reader would write: `(−b ± √(b² − 4ac))/(2a)`. It is what the
+> drawn-text record holds for the equation, and what a read-back of the piece is compared with. A figure in an equation
+> needs a source like any other.
+
+## `Equation`
+
+- `Equation.parse(latex: string, options?: { size?: number })` → `object` — The equation parsed and typeset without
+  drawing it: `{ ok, latex, linear, width, height, ascent, descent, size }`, or `{ ok: false, latex, error }` naming what
+  the parser refused. `size` is the em in canvas units (default 32). LaTeX longer than 2,000 characters or nested more
+  than 32 levels deep is refused before parsing.
 
 ---
 

@@ -111,6 +111,11 @@ public class ManualCoverageTests : TestsRuntime
 
         // The film's read-back against its sources, documented as it was built (2026-10-22); Manual 25 §4 names it.
         ["Verify"] = 100,
+
+        // 0 on arrival (2026-10-23), said plainly: the SDK reference documents every member, but no manual names the
+        // surface yet. The math_explainer workflow's manual is the passage that will (docs/internal/math-explainer-design.md
+        // §10), and this floor goes up with it.
+        ["Equation"] = 0,
         ["Snap"] = 82,
         ["Canvas2D"] = 75,
         ["VectorLogo"] = 74,

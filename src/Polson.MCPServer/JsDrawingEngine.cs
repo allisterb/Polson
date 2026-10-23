@@ -422,6 +422,9 @@ public partial class JsDrawingEngine : Runtime
             var scaleToolkit = new ScaleToolkit();
             engine.SetValue("Scale", scaleToolkit);
 
+            // Equations from LaTeX, measured; drawing is ctx.fillEquation. Not `Math`, which is JavaScript's own.
+            engine.SetValue("Equation", new EquationToolkit());
+
             // Reproducible randomness. `Math.random` is still there and still works; this is the one
             // a run can be re-rendered from, which is what the saved script in `scripts/` promises.
             var randomToolkit = new RandomToolkit();
