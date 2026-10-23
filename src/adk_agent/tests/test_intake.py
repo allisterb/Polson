@@ -19,6 +19,7 @@ No network, no ADK, no model - these run in milliseconds and can be run on every
 
 from __future__ import annotations
 
+import asyncio
 import re
 import sys
 import tempfile
@@ -922,6 +923,19 @@ class SpendCapTests(unittest.TestCase):
         intake._running.add(object())
 
         self.assertIn("already going", intake._too_many())
+
+    def test_a_project_is_running_while_its_task_is_in_flight(self):
+        """The studio asks this rather than reading a still record as stopped: a model turn can be minutes."""
+        async def scenario():
+            gate = asyncio.Event()
+            task = asyncio.create_task(gate.wait(), name=intake.RUN_TASK + "ftc")
+            intake._running.add(task)
+            seen = (intake.running("ftc"), intake.running("other"), intake.Commissioner(None).running("ftc"))
+            gate.set()
+            await task
+            return seen + (intake.running("ftc"),)
+
+        self.assertEqual((True, False, True, False), asyncio.run(scenario()))
 
     def test_a_cap_of_zero_is_no_cap(self):
         """So a local developer, or a deployment that wants none, can turn it off outright."""

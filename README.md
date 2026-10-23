@@ -257,7 +257,7 @@ Useful environment variables, all optional:
 | :--- | :--- |
 | `POLSON_BUDGET_TOKENS` | Billable input-token cap for one run. A circuit breaker stops the run at the allowance plus a grace period. |
 | `POLSON_BUDGET_MINUTES` | Wall-clock deadline, where the workflow does not set its own. |
-| `POLSON_MODEL` | Defaults to `gemini-3.7-flash`. |
+| `POLSON_MODEL` | Defaults to `gemini-3.8-flash`. |
 | `POLSON_ASK_SECONDS` | How long the agent waits when it asks you a question. |
 
 **Think before binding to `0.0.0.0`.** A public URL is an open cost surface, and visitor-typed text reaches an agent holding tools.

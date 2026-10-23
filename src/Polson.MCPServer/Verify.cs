@@ -220,10 +220,12 @@ public sealed partial class VerifyToolkit
 
     /// <summary>
     /// A derivation checked step by step: each step equals the one before it, as <c>Equation.equivalent</c> decides.
-    /// <c>{ ok, passed, name, steps, pairs, counts, summary }</c>; each pair is <c>{ from, to, a, b, verdict, detail, at,
-    /// values, provided, approximate, read }</c>. <paramref name="steps"/> are LaTeX strings or <c>comp.equation</c>
+    /// <c>{ ok, passed, name, steps, given, pairs, counts, summary }</c>; each pair is <c>{ from, to, a, b, verdict, detail,
+    /// at, values, provided, approximate, read }</c>. <paramref name="steps"/> are LaTeX strings or <c>comp.equation</c>
     /// handles, in order. A leading <c>=</c>, and the <c>&amp;</c> of an aligned line, are dropped, so the lines of a
-    /// derivation can be given as written. Two equations in a row are a step of a solution. When the latest read-back read
+    /// derivation can be given as written. Two equations in a row are a step of a solution. An equation beside an
+    /// expression, or with two <c>=</c>, is a chain and is checked as its sides: <c>steps</c> is then the chain compared,
+    /// <c>given</c> the steps as given, and a pair with <c>from</c> equal to <c>to</c> is within a step. When the latest read-back read
     /// the steps, the steps as read are checked too (<c>read</c>), which does not change <c>passed</c>.
     /// <paramref name="options"/>: <c>{ name?, domain?, integers?, samples?, budget? }</c>, <c>budget</c> being the
     /// milliseconds for the whole derivation (15,000).
@@ -302,29 +304,44 @@ public sealed partial class VerifyToolkit
             return reading is null ? null : Step(MathReading.Unwrap(reading));
         }).ToArray();
 
-        var perPair = Math.Clamp(budget / (given.Length - 1), MinPairMs, EquationCheck.DefaultBudgetMs);
+        // A step that is an equation beside one that is an expression is a chain, `∫₀² x² dx = [x³/3]₀²` then `2³/3 − 0³/3`,
+        // and is checked as its sides: each side against the next, so the equation's own claim is checked as well as the
+        // continuation. ftcexplainer1's plan wrote one (2026-10-23) and was told an equation and an expression do not compare.
+        // A step with two `=` is a chain on its own. Equations among equations stay steps of a solution.
+        var sides = given.Select(Sides).ToArray();
+        bool Split(int i) => sides[i].Length > 2
+            || sides[i].Length == 2 && (i > 0 && sides[i - 1].Length == 1 || i + 1 < given.Length && sides[i + 1].Length == 1);
+        var chain = given.SelectMany((s, i) => Split(i) ? sides[i].Select(p => (Latex: p, Step: i)) : [(Latex: s, Step: i)]).ToArray();
+        var readChain = given.SelectMany((_, i) => !Split(i) ? [read[i]]
+            : read[i] is { } r && Sides(r) is var rs && rs.Length == sides[i].Length ? rs.Select(x => (string?)x)
+            : Enumerable.Repeat((string?)null, sides[i].Length)).ToArray();
+
+        var perPair = Math.Clamp(budget / (chain.Length - 1), MinPairMs, EquationCheck.DefaultBudgetMs);
         var options1 = check with { BudgetMs = perPair };
-        var pairs = Enumerable.Range(0, given.Length - 1).Select(i =>
+        var pairs = Enumerable.Range(0, chain.Length - 1).Select(i =>
         {
-            var v = EquationCheck.Check(given[i], given[i + 1], options1);
+            var v = EquationCheck.Check(chain[i].Latex, chain[i + 1].Latex, options1);
             var pair = Pair(v);
-            pair["from"] = i + 1;
-            pair["to"] = i + 2;
-            pair["read"] = read[i] is { } ra && read[i + 1] is { } rb ? Pair(EquationCheck.Check(ra, rb, options1)) : null;
+            pair["from"] = chain[i].Step + 1;
+            pair["to"] = chain[i + 1].Step + 1;
+            pair["read"] = readChain[i] is { } ra && readChain[i + 1] is { } rb ? Pair(EquationCheck.Check(ra, rb, options1)) : null;
             return pair;
         }).ToArray();
+        var chained = chain.Select(c => EquationLayout.LinearFromLatex(c.Latex) ?? c.Latex).ToArray();
 
         var count = (string kind) => pairs.Count(p => (string?)p["verdict"] == kind);
         var failing = pairs.Where(p => (string?)p["verdict"] is not ("proved" or "agrees")).ToArray();
         var readWrong = pairs.Where(p => p["read"] is Dictionary<string, object?> r && (string?)r["verdict"] == "differs").ToArray();
-        var summary = $"{given.Length} steps, {pairs.Length} checked: {count("proved")} proved, {count("agrees")} agree without proof"
+        var summary = $"{given.Length} steps"
+            + (chain.Length == given.Length ? "" : $", {chain.Length} expressions with each equation's sides apart")
+            + $", {pairs.Length} checked: {count("proved")} proved, {count("agrees")} agree without proof"
             + (count("differs") == 0 ? "" : $", {count("differs")} differ")
             + (count("unsettled") == 0 ? "" : $", {count("unsettled")} unsettled")
             + (count("unread") == 0 ? "" : $", {count("unread")} unread") + "."
-            + string.Concat(failing.Take(4).Select(p => $" Step {p["from"]} → {p["to"]} {p["verdict"]}: {p["detail"]}{At(p)}"))
+            + string.Concat(failing.Take(4).Select(p => $" {Label(p)} {p["verdict"]}: {p["detail"]}{At(p)}"))
             + (failing.Length == 0 ? "" : " Fix the step, or give the domain it holds on.")
-            + (readWrong.Length == 0 ? "" : $" As the watcher read them, step{(readWrong.Length == 1 ? "" : "s")} "
-                + $"{string.Join(", ", readWrong.Select(p => $"{p["from"]} → {p["to"]}"))} differ: the reading, not the derivation, is wrong there; see the read-back's strays.");
+            + (readWrong.Length == 0 ? "" : $" As the watcher read them, "
+                + $"{string.Join(", ", readWrong.Select(Label))} differ: the reading, not the derivation, is wrong there; see the read-back's strays.");
         var counts = new Dictionary<string, object?>
         {
             ["proved"] = count("proved"), ["agrees"] = count("agrees"), ["differs"] = count("differs"),
@@ -333,11 +350,14 @@ public sealed partial class VerifyToolkit
         var passed = failing.Length == 0;
         return new()
         {
-            ["ok"] = true, ["passed"] = passed, ["name"] = name, ["steps"] = linear.Cast<object?>().ToArray(),
-            ["pairs"] = pairs.Cast<object?>().ToArray(), ["counts"] = counts, ["summary"] = summary,
+            ["ok"] = true, ["passed"] = passed, ["name"] = name, ["steps"] = chained.Cast<object?>().ToArray(),
+            ["given"] = linear.Cast<object?>().ToArray(), ["pairs"] = pairs.Cast<object?>().ToArray(), ["counts"] = counts,
+            ["summary"] = summary,
         };
 
         static string Step(string latex) => AlignedLine().Replace(latex.Replace("&", ""), "").Trim();
+
+        static string Label(Dictionary<string, object?> p) => Equals(p["from"], p["to"]) ? $"Step {p["from"]}'s sides" : $"Step {p["from"]} → {p["to"]}";
 
         static string At(Dictionary<string, object?> p) => p["at"] is Dictionary<string, object?> at && at.Count > 0
             ? $" (at {string.Join(", ", at.Select(kv => $"{kv.Key} = {kv.Value}"))})"
@@ -415,6 +435,30 @@ public sealed partial class VerifyToolkit
                     default: throw new ArgumentException($"Verify.derivation's options are {{ name, domain, integers, samples, budget }}; '{key}' is not one.");
                 }
         return (name, EquationCheck.ReadOptions(forCheck, "Verify.derivation"), budget);
+    }
+
+    /// <summary>
+    /// LaTeX's sides at each <c>=</c> outside every brace and bracket, so <c>\sum_{k=1}</c> keeps its own; one side for an
+    /// expression, and the whole when a side would be empty.
+    /// </summary>
+    internal static string[] Sides(string latex)
+    {
+        var parts = new List<string>();
+        int depth = 0, start = 0;
+        for (var i = 0; i < latex.Length; i++)
+        {
+            var c = latex[i];
+            if (c == '\\')      // a set's \{ … \} brackets; no command contains =
+            {
+                if (i + 1 < latex.Length) depth += latex[++i] switch { '{' => 1, '}' => -1, _ => 0 };
+                continue;
+            }
+            if (c is '{' or '(' or '[') depth++;
+            else if (c is '}' or ')' or ']') depth--;
+            else if (c == '=' && depth == 0) { parts.Add(latex[start..i].Trim()); start = i + 1; }
+        }
+        parts.Add(latex[start..].Trim());
+        return parts.Count > 1 && parts.All(p => p.Length > 0) ? [.. parts] : [latex];
     }
 
     /// <summary>An aligned derivation's line: a leading <c>=</c>, and a trailing <c>\\</c>.</summary>

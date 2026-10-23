@@ -158,6 +158,19 @@ public class EquationEquivalentTests : TestsRuntime
         Assert.Equal("proved", chain["verdict"]);
     }
 
+    /// <summary>ftcexplainer1 was told "Unsupported Relation ≈" and "Unsupported Ordinary ′"; each now says what to write instead.</summary>
+    [Theory]
+    [InlineData(@"\Delta A \approx f(x) \cdot \Delta x", "Verify.claim")]
+    [InlineData(@"A'(x) = x^2", @"\frac{d}{dx}")]
+    [InlineData(@"A^{\prime}(x) = x^2", @"\frac{d}{dx}")]
+    [InlineData("A′(x) = x^2", @"\frac{d}{dx}")]
+    public void TestAnApproximationOrAPrimeSaysWhatToWriteInstead(string latex, string advice)
+    {
+        var r = Check(latex);
+        Assert.Equal("unread", r["verdict"]);
+        Assert.Contains(advice, (string)r["detail"]!);
+    }
+
     /// <summary>The same check draws the same points, so a verdict and its counterexample can be re-run.</summary>
     [Fact]
     public void TestAVerdictIsReproducible()

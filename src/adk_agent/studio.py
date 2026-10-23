@@ -64,7 +64,7 @@ INSTRUCTIONS_FILENAMES = ("GEMINI.md", "CLAUDE.md")
 #:
 #:   gemini-2.5-flash  OK  1.0s    130 tok
 #:   gemini-3.5-flash  OK  3.8s    485 tok
-#:   gemini-3.7-flash  OK  4.3s    467 tok   <- the default
+#:   gemini-3.7-flash  OK  4.3s    467 tok   <- the default until 2026-10-23 (deprecated; see below)
 #:   gemini-2.5-pro    OK 11.8s   1260 tok
 #:   gemini-3-flash / gemini-3-pro / gemini-3.0-pro / gemini-3.1-pro   404 NOT_FOUND
 #:
@@ -99,7 +99,12 @@ INSTRUCTIONS_FILENAMES = ("GEMINI.md", "CLAUDE.md")
 #:
 #: Note `Gemini 3.0 / 3.1 Pro` appears in billing as a **SKU name**, not a model id — none of those
 #: spellings resolve. Do not infer a model id from an invoice line.
-DEFAULT_MODEL = "gemini-3.7-flash"
+#:
+#: **3.8 since 2026-10-23: 3.7 Flash is being deprecated**, and Google moving customers off it showed as the
+#: model failing here. ftcexplainer1 took 35–154 s per ~20-token turn on 3.7 and died on a 429 after 15 minutes
+#: of retries; one-word probes straight after got 13 s, then two 429s (one after 83 s), while 3.5 Flash answered
+#: in 1.3 s and 2.5 Pro in 2–3 s on the same key. 3.8 Flash answered all three, but in 9–30 s.
+DEFAULT_MODEL = "gemini-3.8-flash"
 
 #: The .NET server has a runtime to start before it speaks MCP. ADK's default is 5s, which is a cold
 #: start away from being too short, and the failure is an empty toolset rather than a stack trace.

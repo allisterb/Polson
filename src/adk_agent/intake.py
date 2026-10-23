@@ -585,6 +585,14 @@ OPENING = "Begin. Read brief.md and work the project through to a finished deliv
 #: the request that started it by many minutes, which is the whole reason it is a task at all.
 _running: set[asyncio.Task] = set()
 
+#: A run's task is named this plus its project, so the studio can ask whether a project is being worked.
+RUN_TASK = "polson-run:"
+
+
+def running(name: str) -> bool:
+    """Whether a run of project `name` is in flight on this host."""
+    return any(isinstance(t, asyncio.Task) and t.get_name() == RUN_TASK + name and not t.done() for t in _running)
+
 #: How many runs this host will start in a rolling 24 hours, and how many at once.
 #:
 #: **The per-run budgets do not add up to a limit.** `POLSON_BUDGET_TOKENS`, `POLSON_BUDGET_MINUTES`
@@ -739,7 +747,7 @@ async def commission(app: FastAPI, name: str, workflow: str, brief: str, kind: s
     # one that never reached here does not consume the day's allowance.
     _started.append(time.time())
 
-    run = asyncio.create_task(launch(app, name))
+    run = asyncio.create_task(launch(app, name), name=RUN_TASK + name)
     _running.add(run)
     run.add_done_callback(_running.discard)
     # The run outlives the request that started it; this keeps the instance's CPU while it works (keepalive.py).
@@ -791,6 +799,10 @@ class Commissioner:
 
     def free_name(self, title: str) -> str:
         return free_name(title)
+
+    def running(self, name: str) -> bool:
+        """Whether this host is working project `name` now: a model turn can be minutes with nothing written."""
+        return running(name)
 
     async def commission(self, name: str, workflow: str, kind: str, brief: str,
                          documents: list[Path]) -> str | None:

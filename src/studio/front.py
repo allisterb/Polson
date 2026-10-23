@@ -27,7 +27,7 @@ import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
@@ -72,16 +72,20 @@ def run_for(registry: Registry, project: Path) -> Run | None:
     return next((r for r in mine if r.live and not r.observed), None) or (mine[0] if mine else None)
 
 
-def status_of(project: Path, run: Run | None, events: list[dict[str, Any]]) -> str:
+def status_of(project: Path, run: Run | None, events: list[dict[str, Any]],
+              in_flight: Callable[[str], bool] | None = None) -> str:
     """One of the six status words, from the run this server holds and the project's own record.
 
     The record decides for a project this server did not run: no events is a draft, a `run.end` after
     renders is delivered, and anything else that has stopped moving is stopped. A live driven run is
-    in the studio, or needs you while a question is open.
+    in the studio, or needs you while a question is open, and so is a project the host says it is working
+    (`in_flight`), however long its record has been still.
     """
     if run is not None and run.live and not run.observed:
         director = getattr(run.stream, "director", None)
         return "needs-you" if director is not None and director.pending else "running"
+    if in_flight is not None and in_flight(project.name):
+        return "needs-you" if asking(project) else "running"
     # A watched run is "live" for a while after its record last moved, so the agent's own ending has to win
     # over that: otherwise a finished ADK run reads as in the studio for minutes after it delivered.
     if run is not None and run.observed and run.live and not agent_ended(project):
@@ -205,7 +209,7 @@ def describe(project: Path, registry: Registry) -> dict[str, Any]:
         "title": record.get("title") or project.name,
         "workflow": card.title if card else (workflow or "Unknown"),
         "kind": card.kind if card else "image",
-        "status": status_of(project, run, events),
+        "status": status_of(project, run, events, getattr(registry, "in_flight", None)),
         "updated": stamp,
         "updated_label": when(stamp),
         "thumb": latest_render(project, events) is not None,

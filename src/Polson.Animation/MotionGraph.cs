@@ -139,6 +139,11 @@ internal static class MotionTypes
         null => "nothing",
         string s => $"the string '{s}'",
         MotionNode n => $"a {n.Type} node",
+        // ftcexplainer1 passed [pt.x, pt.y] on axes.point's [x, y], and was told only "not a Object[]".
+        IList list when list.Cast<object?>().Any(e => e is null) =>
+            $"[{string.Join(", ", list.Cast<object?>().Select(e => e is null ? "undefined" : Convert.ToString(e, CultureInfo.InvariantCulture)))}]. "
+            + "An undefined entry is a property the value does not have: axes.point(x, y) is [x, y], and a vector's .at(t) is { x, y }",
+        IList list => $"a list of {list.Count}",
         _ => $"a {v.GetType().Name}"
     };
     #endregion
