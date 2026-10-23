@@ -165,6 +165,7 @@ except Exception as _e:
 #
 # Mounted rather than merged so its routes cannot collide with ADK's own, and wrapped because a
 # missing UI must not stop the agent runtime from serving.
+_studio_mounted = False
 try:
     import sys as _sys
     from pathlib import Path as _Path
@@ -252,6 +253,7 @@ try:
             return _JSON({"detail": why}, status_code=409)
 
         app.mount("/studio", _studio)
+        _studio_mounted = True
         # Said as what it does, not as a mode name: "observing only" read as though the composer could not start
         # a run, which it can, through the commissioner.
         _logger.warning("polson runtime: studio mounted at /studio (requests start ADK runs; every run in the "
@@ -260,6 +262,13 @@ try:
         _logger.warning("polson runtime: studio not mounted — no studio package at %s", _shared)
 except Exception as _e:
     _logger.warning("polson runtime: studio not mounted (%s)", _e)
+
+# `/` is the client studio's front page. ADK's console sends it to /dev-ui/, which is where a judge handed the bare URL
+# landed; the console stays at /dev-ui/. Without the studio, ADK's own behaviour stands.
+if _studio_mounted:
+    import front_page
+
+    _logger.warning("polson runtime: %s", front_page.install(app, front_page.STUDIO_HOME))
 
 # Last, so it is the outermost middleware: nothing above answers anyone without the password. Not wrapped like the
 # mounts: a malformed POLSON_BASIC_AUTH must stop the server starting rather than leave it open (basic_auth.parse).

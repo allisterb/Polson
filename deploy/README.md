@@ -32,16 +32,24 @@ $SA = "$N-compute@developer.gserviceaccount.com"
 
 One per credential, each readable by the runtime account. The Gemini key belongs to the project it was issued in,
 so its usage and billing stay there unless a new one is made in `$P`; the Qloo and Parallel keys are not Google
-Cloud's and move as they are. `polson-basic-auth` holds `user:password` and is needed only for a public service.
+Cloud's and move as they are.
 
 ```powershell
-foreach ($s in 'polson-agent-key', 'polson-parallel-key', 'polson-qloo-key', 'polson-basic-auth') {
+foreach ($s in 'polson-agent-key', 'polson-parallel-key', 'polson-qloo-key') {
     Get-Clipboard | gcloud secrets create $s --project $P --replication-policy automatic --data-file=-
     gcloud secrets add-iam-policy-binding $s --project $P --member "serviceAccount:$SA" --role roles/secretmanager.secretAccessor
 }
 ```
 
 (Copy each value to the clipboard before its turn of the loop, or run the two lines once per secret.)
+
+**For a public service only:** `polson-basic-auth`, holding `user:password`, the shared sign-in for everyone who
+opens it (§5). A private service does not need it. Create it the same way:
+
+```powershell
+Get-Clipboard | gcloud secrets create polson-basic-auth --project $P --replication-policy automatic --data-file=-
+gcloud secrets add-iam-policy-binding polson-basic-auth --project $P --member "serviceAccount:$SA" --role roles/secretmanager.secretAccessor
+```
 
 **Optional — Nemotron, for `Video.ask` and the first reading of `Documents.ask`.** Nemotron 3.5 Super VL runs on
 NVIDIA's NIM API or Nebius Token Factory, not Google. With neither key, `Video.ask` refuses every call with
@@ -98,8 +106,32 @@ gcloud run services add-iam-policy-binding polson-studio --project $P --region $
 ```
 
 `^;^` makes `;` the separator, because `POLSON_ALLOW_ORIGINS` contains a comma. The invoker grant is what lets the
-keepalive reach a private service. To make it public, add `POLSON_BASIC_AUTH` from its secret first, then
-`--allow-unauthenticated`; never the other way round.
+keepalive reach a private service.
+
+This deploy is **private**: only accounts with `roles/run.invoker` reach it, so it runs without basic auth and needs
+no `polson-basic-auth` secret. The startup log says `basic auth OFF`, which is expected here.
+
+### A public deploy
+
+A public service is open to anyone with the URL, and behind it an agent that spends metered models and a Qloo key
+on whatever a visitor types, so it **always carries basic auth**. Create the `polson-basic-auth` secret first (§3),
+then deploy in two steps:
+
+1. Deploy as above, still with `--no-allow-unauthenticated`, but with
+   `POLSON_BASIC_AUTH=polson-basic-auth:latest` added to `--set-secrets`. The startup log must then say
+   `basic auth on: every request needs the password for user '…'`. A value that is not `user:password` stops the
+   revision starting, so the last good one keeps serving.
+2. Only once the log says so, open it:
+
+   ```powershell
+   gcloud run services add-iam-policy-binding polson-studio --project $P --region $R --member allUsers --role roles/run.invoker
+   ```
+
+Never the other way round: a public revision without the secret is open to everyone.
+
+Every route then needs the shared `user:password`: the studio, `/new`, ADK's API and its console at `/dev-ui/`.
+Judges need only the user name and password. The keepalive sends the same credential with its own request
+(`src/adk_agent/keepalive.py`), so runs nobody is watching keep their CPU.
 
 Reach a private service with `gcloud run services proxy polson-studio --project $P --region $R --port 8080`.
 
