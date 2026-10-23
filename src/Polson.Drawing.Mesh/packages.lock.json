@@ -67,15 +67,6 @@
         "resolved": "1.0.0-pre.2",
         "contentHash": "bz47Ascj0qrc4vZZgs6H60uHUk1vwe5R/6W9NTQsz2cjBzGcYQoBYjxTFbHly0iPlaQ2RLGcgJYlEgfC5KAf9A=="
       },
-      "CSharpMath.Evaluation": {
-        "type": "Transitive",
-        "resolved": "1.0.0-pre.2",
-        "contentHash": "UBjtjNRq7mnQ962FsBvpQwoa7/P/I8FKo27ksXy7AmBwDmbfX+Y4gBriPYTHOafZtK4X1unlxHcIKB4PmzvI1g==",
-        "dependencies": {
-          "AngouriMath": "1.4.0",
-          "CSharpMath": "1.0.0-pre.2"
-        }
-      },
       "CSharpMath.Rendering": {
         "type": "Transitive",
         "resolved": "1.0.0-pre.2",
@@ -368,7 +359,6 @@
         "type": "Project",
         "dependencies": {
           "AngouriMath": "[2.5.0, )",
-          "CSharpMath.Evaluation": "[1.0.0-pre.2, )",
           "CSharpMath.Rendering": "[1.0.0-pre.2, )",
           "MathNet.Numerics": "[5.0.0, )",
           "Polson.Drawing.Svg": "[0.1.0, )",

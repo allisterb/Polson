@@ -184,7 +184,8 @@ internal sealed class EquationLayout
     public const float MaxSize = 4000;
 
     /// <summary>CSharpMath's typesetting context and Typography's glyph caches are shared statics, not made for concurrent scripts.</summary>
-    private static readonly object Typesetting = new();
+    /// <summary>CSharpMath's parser and typesetter are not safe to run concurrently: everything that parses holds this.</summary>
+    internal static readonly object Typesetting = new();
     #endregion
 
     #region Types

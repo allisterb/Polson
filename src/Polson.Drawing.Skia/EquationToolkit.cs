@@ -28,6 +28,39 @@ public sealed class EquationToolkit
             ? new() { ["ok"] = false, ["latex"] = latex, ["error"] = error }
             : Describe(layout);
     }
+
+    /// <summary>
+    /// Whether two expressions are the same mathematics, <c>Equation.equivalent(a, b?, options?)</c>, or with one argument
+    /// whether an equation <c>lhs = rhs</c> holds: <c>{ verdict, a, b, detail, points, provided?, at?, values?, approximate }</c>.
+    /// <c>verdict</c> is <c>'proved'</c> (simplified to 0), <c>'agrees'</c> (equal at every point tried, not proved),
+    /// <c>'differs'</c> (with the counterexample <c>at</c> and both <c>values</c>), <c>'unsettled'</c>, or <c>'unread'</c>
+    /// (the LaTeX was refused; <c>side</c> says which). <paramref name="options"/>: <c>{ domain?: { x: [lo, hi] }, integers?,
+    /// samples?, budget? }</c>.
+    /// </summary>
+    public Dictionary<string, object?> Equivalent(string a, string? b = null, object? options = null)
+    {
+        var v = EquationCheck.Check(a ?? "", b, EquationCheck.ReadOptions(options, "Equation.equivalent"));
+        // Every key, null when it does not apply: a key left out would let Jint resolve `r.values` to the dictionary's own
+        // Values property, and a script would read the whole result as the two values.
+        return new Dictionary<string, object?>
+        {
+            ["verdict"] = v.Kind,
+            ["a"] = v.A,
+            ["b"] = v.B,
+            ["detail"] = v.Detail,
+            ["points"] = v.Points,
+            ["approximate"] = v.Approximate,
+            ["provided"] = v.Provided,
+            ["side"] = v.Side,
+            ["at"] = v.At is { Count: > 0 } at ? at.ToDictionary(p => p.Key, p => (object?)p.Value) : null,
+            ["values"] = v.ValueA is { } x && v.ValueB is { } y ? new object?[] { Number(x), Number(y) } : null,
+        };
+
+        // A real value as a number; a complex one as text, since a script has no complex type.
+        static object Number(System.Numerics.Complex c) => Math.Abs(c.Imaginary) < 1e-12 * Math.Max(1, c.Magnitude)
+            ? Math.Round(c.Real, 12)
+            : $"{Math.Round(c.Real, 9).ToString(System.Globalization.CultureInfo.InvariantCulture)}{(c.Imaginary < 0 ? "−" : "+")}{Math.Round(Math.Abs(c.Imaginary), 9).ToString(System.Globalization.CultureInfo.InvariantCulture)}i";
+    }
     #endregion
 
     #region Internal methods
