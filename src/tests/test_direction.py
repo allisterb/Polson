@@ -230,6 +230,21 @@ class VerificationTests(unittest.TestCase):
         self.assertEqual([s["frame"] for s in after["images"][0]["strays"]], ["artifacts/verify/final-stray-1.png"])
         self.assertEqual(after["films"], [])
 
+    def test_a_derivation_is_shown_step_by_step_and_a_new_check_replaces_the_old(self):
+        first = {"type": "derivation.verify", "name": "area", "steps": ["∫₀² x²/2 dx", "8/6", "3/4"], "passed": False,
+                 "counts": {"proved": 1, "differs": 1},
+                 "pairs": [{"from": 1, "to": 2, "verdict": "proved", "read": None},
+                           {"from": 2, "to": 3, "verdict": "differs", "at": None, "values": [1.333333333333, 0.75], "read": None}]}
+        fixed = dict(first, steps=["∫₀² x²/2 dx", "8/6", "4/3"], passed=True,
+                     pairs=[dict(first["pairs"][0]), {"from": 2, "to": 3, "verdict": "proved", "read": None}])
+        other = dict(first, name="solve", steps=["2x = 4", "x = 2"], passed=True, pairs=[{"from": 1, "to": 2, "verdict": "proved"}])
+        only = direction.verification([first], None)["derivations"]
+        self.assertEqual([(d["name"], d["passed"]) for d in only], [("area", False)])
+        self.assertEqual(only[0]["pairs"][1]["values"], [1.333333333333, 0.75])
+        both = direction.verification([first, other, fixed], None)["derivations"]
+        self.assertEqual([(d["name"], d["passed"], d["steps"][-1]) for d in both], [("solve", True, "x = 2"), ("area", True, "4/3")])
+        self.assertEqual(direction.verification([{"type": "derivation.verify", "name": "x"}], None)["derivations"], [])
+
     def test_the_latest_verdict_per_claim_and_the_documents_read(self):
         events = [{"type": "check", "claim": "reading time", "passed": False, "detail": "title 1.1 s"},
                   {"type": "check", "claim": "reading time", "passed": True, "detail": "title 2.2 s"},
