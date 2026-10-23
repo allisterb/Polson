@@ -464,6 +464,93 @@ public class VerifyTests : TestsRuntime, IDisposable
 
     #region Types
     /// <summary>The watcher: answers every request with one transcription, as a chat completion.</summary>
+    /// <summary>A worked integral as an aligned derivation is written: every line follows, and the check records itself.</summary>
+    [Fact]
+    public void TestADerivationThatHoldsPassesAndRecordsItsVerdict()
+    {
+        var recorded = new List<(string Type, IReadOnlyDictionary<string, object?> Fields)>();
+        var verify = new VerifyToolkit(null, root, null, (t, f) => recorded.Add((t, f)));
+        var result = verify.Derivation(new object[]
+        {
+            @"\int_0^2 \frac{x^2}{2}\,dx", @"&= \left[\frac{x^3}{6}\right]_0^2 \\", @"&= \frac{8}{6} \\", @"&= \frac{4}{3}",
+        }, new Dictionary<string, object?> { ["name"] = "area under x²/2" });
+
+        Assert.True((bool)result["passed"]!, (string)result["summary"]!);
+        Assert.Equal(["∫₀² x²/2 dx", "[x³/6]₀²", "8/6", "4/3"], ((object?[])result["steps"]!).Cast<string>());
+        Assert.Equal(3, ((Dictionary<string, object?>)result["counts"]!)["proved"]);
+        Assert.Equal(["derivation.verify", "check"], recorded.Select(r => r.Type));
+        var check = recorded[1].Fields;
+        Assert.Equal(("Derivation area under x²/2: every step follows from the last", true), ((string)check["claim"]!, (bool)check["passed"]!));
+    }
+
+    /// <summary>A wrong step fails the derivation, named with its counterexample; a solution's steps are equations.</summary>
+    [Fact]
+    public void TestAWrongStepFailsTheDerivationAndSolvingIsChecked()
+    {
+        var verify = new VerifyToolkit(null, root, null);
+        var wrong = verify.Derivation(new object[] { "(a+b)^2", "a^2 + b^2", "a^2 + b^2" });
+        Assert.False((bool)wrong["passed"]!);
+        var first = (Dictionary<string, object?>)((object?[])wrong["pairs"]!)[0]!;
+        Assert.Equal(("differs", 1, 2), ((string)first["verdict"]!, (int)first["from"]!, (int)first["to"]!));
+        Assert.Contains("Step 1 → 2 differs", (string)wrong["summary"]!);
+
+        Assert.True((bool)verify.Derivation(new object[] { "2x + 3 = 7", "2x = 4", "x = 2" })["passed"]!);
+        var lost = verify.Derivation(new object[] { "x^2 = 4", "x = 2" });                 // a root lost is not a step
+        Assert.False((bool)lost["passed"]!);
+        Assert.Contains("not equivalent", (string)((Dictionary<string, object?>)((object?[])lost["pairs"]!)[0]!)["detail"]!);
+        Assert.Throws<ArgumentException>(() => verify.Derivation(new object[] { "x" }));
+        Assert.Throws<ArgumentException>(() => verify.Derivation(new object[] { "x", "x" }, new Dictionary<string, object?> { ["steps"] = 2 }));
+    }
+
+    /// <summary>A comp.equation handle is a step; and the claim a derivation records cannot be written by Stage.check.</summary>
+    [Fact]
+    public void TestEquationHandlesAreStepsAndTheClaimIsReserved()
+    {
+        var comp = new MotionToolkit(root).Composition(new Hashtable { ["width"] = 320d, ["height"] = 180d });
+        var steps = new object[]
+        {
+            comp.Equation(new Hashtable { ["latex"] = @"\frac{d}{dx} x^3" }),
+            comp.Equation(new Hashtable { ["latex"] = "3x^2" }),
+        };
+        Assert.True((bool)new VerifyToolkit(null, root, null).Derivation(steps)["passed"]!);
+
+        var result = new JsDrawingEngine().Execute("const c = createCanvas(4, 4); Stage.check('Derivation mine: every step follows from the last', true); c;", 4, 4, null, "png", 90);
+        Assert.False(result.Success);
+        Assert.Contains("Verify.derivation", result.Error);
+    }
+
+    /// <summary>
+    /// The steps as the reader read them are checked too: a misreading that breaks the chain is reported against the
+    /// reading, and the derivation itself still passes.
+    /// </summary>
+    [Fact]
+    public async Task TestTheStepsAsReadAreCheckedBesideTheStepsAsSet()
+    {
+        var canvas = new global::Polson.Drawing.Skia.SkiaCanvas(900, 400);
+        var ctx = canvas.GetContext();
+        ctx.FillStyle = "#ffffff";
+        ctx.FillRect(0, 0, 900, 400);
+        ctx.FillStyle = "#111111";
+        string[] steps = [@"\frac{8}{6}", @"\frac{4}{3}", @"1.\overline{3}"];
+        ctx.FillEquation(steps[0], 40, 100, new Hashtable { ["size"] = 48f });
+        ctx.FillEquation(steps[1], 40, 200, new Hashtable { ["size"] = 48f });
+        var read = new JsonObject
+        {
+            ["items"] = new JsonArray(new JsonObject { ["text"] = @"$\frac{8}{6}$" }, new JsonObject { ["text"] = @"\frac{3}{4}" }),
+        }.ToJsonString();
+        using var reader = new VideoReader([new NemotronEndpoint(NemotronEndpoint.Nebius, "https://tf.example/v1", "k", NemotronEndpoint.NebiusModel)],
+            new DocumentBudget(5), root, http: new HttpClient(new Answer(read)));
+        var verify = new VerifyToolkit(reader, root, null);
+        await verify.Image(canvas, new Dictionary<string, object?> { ["name"] = "steps" });
+
+        var result = verify.Derivation(new object[] { steps[0], steps[1] });
+        Assert.True((bool)result["passed"]!, (string)result["summary"]!);
+        var pair = (Dictionary<string, object?>)((object?[])result["pairs"]!)[0]!;
+        var asRead = Assert.IsType<Dictionary<string, object?>>(pair["read"]);
+        Assert.Equal(("8/6", "3/4", "differs"), ((string)asRead["a"]!, (string)asRead["b"]!, (string)asRead["verdict"]!));
+        Assert.Contains("As the watcher read them", (string)result["summary"]!);
+    }
+
     private sealed class Answer(string content) : HttpMessageHandler
     {
         /// <summary>The last request's body, to see how the piece was sent.</summary>

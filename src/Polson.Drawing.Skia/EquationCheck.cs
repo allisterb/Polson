@@ -66,6 +66,7 @@ internal static partial class EquationCheck
             return new("unread", linearA, linearB, convertTimedOut ? "converting the LaTeX took too long." : converted.Error ?? "the LaTeX is not an expression.")
                 { Side = converted.Side };
         var (left, right) = (converted.Left, converted.Right);
+        if (converted.Equations) return EquationStep(left, right, linearA, linearB, options, Seed(a, b));
         if (b is null) (linearA, linearB) = Halves(linearA!);
 
         var symbolicMs = Math.Max(100, options.BudgetMs * 2 / 5);
@@ -174,16 +175,78 @@ internal static partial class EquationCheck
         }
     }
 
-    private static (Entity? Left, Entity? Right, string? Error, string? Side) Convert(MathList a, MathList? b)
+    /// <summary>
+    /// The two things compared: two expressions, the two sides of one equation, or — <c>Equations</c> — two equations,
+    /// each as its <c>lhs − rhs</c>.
+    /// </summary>
+    private static (Entity? Left, Entity? Right, bool Equations, string? Error, string? Side) Convert(MathList a, MathList? b)
     {
         var (itemA, errorA) = MathEvaluation.Evaluate(a);
-        if (errorA is not null) return (null, null, errorA, "a");
-        if (itemA is not MathEvaluation.MathItem.Entity { Content: var left }) return (null, null, "the LaTeX is not a single expression.", "a");
+        if (errorA is not null) return (null, null, false, errorA, "a");
+        if (itemA is not MathEvaluation.MathItem.Entity { Content: var left }) return (null, null, false, "the LaTeX is not a single expression.", "a");
         if (b is null)
-            return left is Entity.Equalsf eq ? (eq.Left, eq.Right, null, null) : (null, null, "with one argument, the LaTeX is an equation: lhs = rhs.", "a");
+            return left is Entity.Equalsf eq ? (eq.Left, eq.Right, false, null, null) : (null, null, false, "with one argument, the LaTeX is an equation: lhs = rhs.", "a");
         var (itemB, errorB) = MathEvaluation.Evaluate(b);
-        if (errorB is not null) return (null, null, errorB, "b");
-        return itemB is MathEvaluation.MathItem.Entity { Content: var right } ? (left, right, null, null) : (null, null, "the LaTeX is not a single expression.", "b");
+        if (errorB is not null) return (null, null, false, errorB, "b");
+        if (itemB is not MathEvaluation.MathItem.Entity { Content: var right }) return (null, null, false, "the LaTeX is not a single expression.", "b");
+        return (left, right) switch
+        {
+            (Entity.Equalsf p, Entity.Equalsf q) => (p.Left - p.Right, q.Left - q.Right, true, null, null),
+            (Entity.Equalsf, _) or (_, Entity.Equalsf) => (null, null, false,
+                "one is an equation and the other an expression: compare two equations, or two expressions.", left is Entity.Equalsf ? "b" : "a"),
+            _ => (left, right, false, null, null),
+        };
+    }
+
+    /// <summary>
+    /// Two equations as a step of a solution: equivalent when the first's <c>lhs − rhs</c> is a nonzero constant times the
+    /// second's — rearranging, adding to both sides, scaling. Dividing by a variable is not, as it can lose a solution.
+    /// </summary>
+    private static Verdict EquationStep(Entity first, Entity second, string? linearA, string? linearB, Options options, int seed)
+    {
+        var symbolicMs = Math.Max(100, options.BudgetMs * 2 / 5);
+        var ratio = OnOwnStack(_ => Ratio(first, second), symbolicMs, out var symbolicTimedOut);
+
+        // The ratio at the first informative point, held to at every other; a point on either solution set says nothing.
+        NComplex? r0 = null;
+        bool? Proportional(NComplex x, NComplex y, double tolerance)
+        {
+            var scale = Math.Max(1, Math.Max(x.Magnitude, y.Magnitude));
+            if (x.Magnitude <= tolerance * scale || y.Magnitude <= tolerance * scale) return null;
+            var r = x / y;
+            r0 ??= r;
+            return (r - r0.Value).Magnitude <= tolerance * Math.Max(1, r0.Value.Magnitude) * 10;
+        }
+        var numeric = OnOwnStack(token => Numeric(first, second, options, seed, token, Proportional), options.BudgetMs - symbolicMs, out var numericTimedOut);
+        var points = numeric?.Agreed ?? 0;
+        var approximate = numeric?.Approximate ?? false;
+
+        if (numeric?.Counterexample is { } c && r0 is { } k0)
+            return new("differs", linearA, linearB,
+                $"the equations are not equivalent: lhs − rhs of the first is {Show(k0)} times the second's at one point and {Show(c.A / c.B)} times at this one.")
+                { At = c.At, ValueA = c.A, ValueB = c.B, Points = points, Approximate = approximate };
+        if (ratio is { } k)
+            return new("proved", linearA, linearB, k == NComplex.One
+                    ? "the same equation, rearranged: lhs − rhs is unchanged."
+                    : $"equivalent: lhs − rhs of the first is {Show(k)} times the second's.")
+                { Points = points, Approximate = approximate };
+        if (points >= MinPoints)
+            return new("agrees", linearA, linearB, $"no proof, but lhs − rhs keeps one ratio between them at all {points} points tried.")
+                { Points = points, Approximate = approximate };
+        return new("unsettled", linearA, linearB,
+            (symbolicTimedOut ? "simplifying took longer than its budget" : "the ratio did not simplify to a number")
+            + (numericTimedOut ? "; evaluating took longer than its budget." : $"; only {points} informative points of the {MinPoints} needed."))
+            { Points = points, Approximate = approximate };
+
+        static string Show(NComplex v) => Math.Abs(v.Imaginary) < 1e-12 ? Math.Round(v.Real, 9).ToString(CultureInfo.InvariantCulture) : v.ToString(CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>The constant the first expression is of the second, when their ratio simplifies to a nonzero number.</summary>
+    private static NComplex? Ratio(Entity first, Entity second)
+    {
+        var r = (first / second).Simplify();
+        if (r is Entity.Providedf { Expression: var e }) r = e;
+        return r.Vars.Count == 0 && Value(r) is { } k && k != NComplex.Zero ? k : null;
     }
 
     /// <summary>
@@ -224,8 +287,11 @@ internal static partial class EquationCheck
     /// Both sides at random points, drawn reproducibly from the inputs: free variables from <c>domain</c>, else either sign
     /// of 0.25 to 2.5; a sum's bounds and <c>integers</c> from 1 to 12.
     /// </summary>
-    private static NumericResult Numeric(Entity a, Entity b, Options options, int seed, CancellationToken token)
+    private static NumericResult Numeric(Entity a, Entity b, Options options, int seed, CancellationToken token,
+        Func<NComplex, NComplex, double, bool?>? judge = null)
     {
+        // Equal, by default; a judge may also skip a point (null) that says nothing.
+        judge ??= (x, y, tolerance) => (x - y).Magnitude <= tolerance * Math.Max(1, Math.Max(x.Magnitude, y.Magnitude));
         // Calculus first: substituting into an unevaluated derivative rewrites its own variable.
         var (ea, eb) = (a.Evaled, b.Evaled);
         if (new[] { ea, eb }.Any(e => e.Nodes.OfType<Entity.Derivativef>().Any() || e.Nodes.OfType<Entity.Limitf>().Any()))
@@ -250,8 +316,9 @@ internal static partial class EquationCheck
             if (va is not { } x || vb is not { } y) continue;
             tried++;
             approximate |= approxA || approxB;
-            var scale = Math.Max(1, Math.Max(x.Magnitude, y.Magnitude));
-            if ((x - y).Magnitude <= (approxA || approxB ? LooseTolerance : Tolerance) * scale) agreed++;
+            var verdict = judge(x, y, approxA || approxB ? LooseTolerance : Tolerance);
+            if (verdict is null) continue;
+            if (verdict.Value) agreed++;
             else return new(agreed, new(at.ToDictionary(p => p.Key.Name, p => p.Value), x, y), approximate, null);
         }
         return new(agreed, null, approximate, tried == 0 ? "neither side could be evaluated as a number at any point" : null, free.Length == 0);
