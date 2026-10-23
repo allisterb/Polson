@@ -194,6 +194,8 @@ public static class JsSurface
         new("text", typeof(MotionText), "Motion", true),
         new("equation", typeof(MotionEquation), "Motion", true),
         new("axes", typeof(MotionAxes), "Motion", true),
+        // What comp.number(...) returns: a number that counts.
+        new("counter", typeof(MotionNumber), "Motion", true),
     ];
 
     /// <summary>

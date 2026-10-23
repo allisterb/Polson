@@ -861,30 +861,55 @@ public sealed class MotionComposition : MotionLayerList
     {
         var step = Math.Max(1, (int)Math.Round(Fps / 12));
         var frames = Enumerable.Range(0, FrameCount).Where(f => f % step == 0 || f == FrameCount - 1).ToArray();
-        return [.. TextHandles.Select(t =>
+        return [.. TextHandles.SelectMany(t => t.Counts ? Held(t) : [Item(t, t.Text, Spans(t, frames), step / Fps)])];
+
+        // A counting number by the values it holds on screen for at least half a second, each its own item; read every
+        // frame, since its string can change on any of them.
+        IEnumerable<object?> Held(IShownText t)
         {
-            var spans = new List<object?>();
-            double? start = null, last = null;
-            foreach (var f in frames)
+            var shown = Enumerable.Range(0, FrameCount).Select(f => t.VisibleOnFrame(f / Fps) ? t.TextAt(f / Fps) : null).ToArray();
+            if (shown.All(s => s is null)) yield return Item(t, t.Text, [], 1 / Fps);   // never shown, as a text is reported
+            for (var f = 0; f < shown.Length;)
             {
-                var time = f / Fps;
-                if (t.VisibleOnFrame(time)) { start ??= time; last = time; }
-                else if (start is not null) { spans.Add(new[] { start.Value, last!.Value }); start = null; }
+                var g = f;
+                while (g + 1 < shown.Length && shown[g + 1] == shown[f]) g++;
+                if (shown[f] is { } s && (g - f + 1) / Fps >= HeldSeconds - 1e-9) yield return Item(t, s, [[f / Fps, g / Fps]], 1 / Fps);
+                f = g + 1;
             }
-            if (start is not null) spans.Add(new[] { start.Value, last!.Value });
-            var intervals = spans.Cast<double[]>().ToArray();
-            return (object?)new Dictionary<string, object?>
-            {
-                ["text"] = t.Text,
-                ["kind"] = t.Kind,
-                ["desc"] = t.Desc,
-                ["from"] = intervals.Length == 0 ? null : intervals[0][0],
-                ["to"] = intervals.Length == 0 ? null : intervals[^1][1],
-                ["seconds"] = Math.Round(intervals.Sum(i => i[1] - i[0] + step / Fps), 3),
-                ["intervals"] = intervals.Select(i => (object?)i).ToArray(),
-            };
-        })];
+        }
     }
+
+    /// <summary>How long a counting number must show a value for <see cref="Texts"/> to list it.</summary>
+    internal const double HeldSeconds = 0.5;
+
+    /// <summary>Each counting number while it counts on the frame: a reading in its format and range then is not a stray.</summary>
+    internal MotionNumber.Count[] Counting() =>
+        [.. TextHandles.OfType<MotionNumber>().Select(n => n.Counting()).OfType<MotionNumber.Count>()];
+
+    private double[][] Spans(IShownText t, int[] frames)
+    {
+        var spans = new List<double[]>();
+        double? start = null, last = null;
+        foreach (var f in frames)
+        {
+            var time = f / Fps;
+            if (t.VisibleOnFrame(time)) { start ??= time; last = time; }
+            else if (start is not null) { spans.Add([start.Value, last!.Value]); start = null; }
+        }
+        if (start is not null) spans.Add([start.Value, last!.Value]);
+        return [.. spans];
+    }
+
+    private static object? Item(IShownText t, string text, double[][] intervals, double step) => new Dictionary<string, object?>
+    {
+        ["text"] = text,
+        ["kind"] = t.Kind,
+        ["desc"] = t.Desc,
+        ["from"] = intervals.Length == 0 ? null : intervals[0][0],
+        ["to"] = intervals.Length == 0 ? null : intervals[^1][1],
+        ["seconds"] = Math.Round(intervals.Sum(i => i[1] - i[0] + step), 3),
+        ["intervals"] = intervals.Select(i => (object?)i).ToArray(),
+    };
 
     /// <summary>
     /// A bone of the composition's skeleton:

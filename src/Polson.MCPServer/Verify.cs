@@ -98,6 +98,16 @@ public sealed partial class VerifyToolkit
             .ToArray();
         var sources = new FilmSources(projectRoot, session);
         var match = FilmReadBack.Match(expected, read);
+        // A counting number caught mid-count is on the film, though not a claim. The watcher samples frames of its own, so it
+        // reads values no frame of ours drew exactly ($380M and $924M on a count to $974M, 2026-10-23): a reading counts as
+        // mid-count when it is one figure, written in the number's format, in its range, while it counted.
+        var counting = comp.Counting();
+        bool MidCount(FilmReadBack.Reading r) =>
+            FilmReadBack.MatchFigures(r.Text) is [var figure]
+            && double.TryParse(figure, NumberStyles.Float, CultureInfo.InvariantCulture, out var value)
+            && counting.Any(c => c.Covers(value, r.From, FilmReadBack.Slack)
+                && FilmReadBack.Normal(FilmReadBack.Canon(c.Format.Format(value))) == FilmReadBack.Normal(FilmReadBack.Canon(r.Text)));
+        match = match with { Strays = [.. match.Strays.Where(s => !MidCount(s.Reading))] };
 
         var items = expected.Select((e, i) =>
         {

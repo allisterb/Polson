@@ -15,8 +15,14 @@ internal interface IShownText
 
     string? Desc { get; }
 
-    /// <summary><c>'text'</c> or <c>'equation'</c>.</summary>
+    /// <summary><c>'text'</c>, <c>'equation'</c>, <c>'tick'</c> or <c>'number'</c>.</summary>
     string Kind { get; }
+
+    /// <summary>Whether what it shows changes with time — a counting number — so it is listed by the values it holds.</summary>
+    bool Counts => false;
+
+    /// <summary>What it shows at the film's <paramref name="time"/>.</summary>
+    string TextAt(double time) => Text;
 
     /// <summary>Whether it is visible on the frame at the film's <paramref name="time"/>, every group above counted.</summary>
     bool VisibleOnFrame(double time);

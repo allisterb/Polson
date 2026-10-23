@@ -2,6 +2,7 @@ namespace Polson.Animation;
 
 using System;
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -136,6 +137,9 @@ public sealed class MotionText : IShownText
     /// <summary>Whether any letter is visible on the frame at the film's <paramref name="time"/>: <c>comp.texts()</c>'s test.</summary>
     internal bool VisibleOnFrame(double time) => Letters(time, FrameOn, "texts").Count > 0;
 
+    /// <summary>The time the layer sees at the film's <paramref name="time"/>, through every group's clock above it.</summary>
+    internal double LayerTime(double time) => stack.TimeFor(layer, stack.SpaceAt(time).Time);
+
     string? IShownText.Desc => layer.Desc;
 
     string IShownText.Kind => "text";
@@ -190,6 +194,11 @@ public sealed class MotionText : IShownText
 /// a one-glyph text layer, with what the animators do sampled at the frame rate.
 /// </para>
 /// <para><b>A family that is not installed is refused</b>, where Synfig falls back to sans silently.</para>
+/// <para>
+/// <b>A counting number</b> (<c>comp.number</c>) is this layer with its string following a real node, formatted as
+/// Synfig's <c>realstring</c> converter formats it (<c>valuenode_realstring.cpp</c>), and written to <c>.sif</c> as that
+/// converter, inside a <c>join</c> for a prefix or suffix.
+/// </para>
 /// </remarks>
 internal sealed class MotionTextLayer : MotionLayer
 {
@@ -197,8 +206,18 @@ internal sealed class MotionTextLayer : MotionLayer
     public MotionTextLayer(MotionOptions o, bool yDown, MotionComposition? root) : base(o)
     {
         (this.yDown, this.root, who) = (yDown, root, o.Who);
-        text = (o.Raw("text") as string ?? o.Raw("text")?.ToString() ?? "").Replace("\r\n", "\n");
-        if (text.Trim().Length == 0) throw new ArgumentException($"{o.Who} needs some text: {{ text: 'BE COOL', family: 'Arial' }}.");
+        if (o.Has("value"))
+        {
+            // A counting number: the string follows a real node, shaped afresh for each value it shows.
+            count = o.Node("value", MotionType.Real, 0d);
+            format = NumberFormat.Read(o.Raw("format"), o.Who);
+            text = format.Format(count.Evaluate(0)[0]);
+        }
+        else
+        {
+            text = (o.Raw("text") as string ?? o.Raw("text")?.ToString() ?? "").Replace("\r\n", "\n");
+            if (text.Trim().Length == 0) throw new ArgumentException($"{o.Who} needs some text: {{ text: 'BE COOL', family: 'Arial' }}.");
+        }
 
         family = (o.Raw("family") as string)?.Trim() is { Length: > 0 } f
             ? f : throw new ArgumentException($"{o.Who} needs a family, an installed font: {{ family: 'Arial' }}. Skia.Font.families() lists them.");
@@ -249,6 +268,9 @@ internal sealed class MotionTextLayer : MotionLayer
     private readonly MotionNode size, origin, orient, color, compress, vcompress;
     private readonly Animator[] animators;
     private readonly TextShape shape;
+    private readonly MotionNode? count;
+    private readonly NumberFormat? format;
+    private readonly ConcurrentDictionary<string, TextShape> shapes = new();
 
     private static readonly Dictionary<string, int> Weights = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -259,7 +281,30 @@ internal sealed class MotionTextLayer : MotionLayer
 
     #region Methods
     public override IEnumerable<MotionNode> Nodes() =>
-        new[] { Amount, size, origin, orient, color, compress, vcompress }.Concat(animators.SelectMany(a => a.Nodes()));
+        new[] { Amount, size, origin, orient, color, compress, vcompress }.Concat(count is null ? [] : [count])
+            .Concat(animators.SelectMany(a => a.Nodes()));
+
+    /// <summary>The string shown at the layer's <paramref name="time"/>: the words, or a counting number's value as formatted.</summary>
+    internal string WordsAt(double time) => count is null ? text : format!.Format(count.Evaluate(time)[0]);
+
+    /// <summary>A counting number's value at the layer's <paramref name="time"/>; null for words.</summary>
+    internal double? ValueAt(double time) => count?.Evaluate(time)[0];
+
+    /// <summary>How a counting number is written; null for words.</summary>
+    internal NumberFormat? Format => format;
+
+    /// <summary>The composition the layer was added to.</summary>
+    internal MotionComposition? Root => root;
+
+    /// <summary>The shaped string at a time: one shape for words, one per value shown for a counting number.</summary>
+    private TextShape ShapeAt(double time)
+    {
+        if (count is null) return shape;
+        var words = WordsAt(time);
+        if (words == text) return shape;
+        if (shapes.Count > 4000) shapes.Clear();
+        return shapes.GetOrAdd(words, w => TextShape.Build(w, shape.Typeface, kerning));
+    }
 
     protected override void Draw(SkiaCanvas surface, double time, double amount)
     {
@@ -306,7 +351,7 @@ internal sealed class MotionTextLayer : MotionLayer
             : SifWriter.Param("size", sif.Linkable("scale", "vector", ("link", half), ("scalar", size)));
 
         return Element("text", "0.5", sif,
-            SifWriter.Param("text", new XElement("string", text)),
+            SifWriter.Param("text", count is null ? new XElement("string", text) : format!.ToSif(sif, count, Desc)),
             sif.Param("color", color),
             SifWriter.Param("family", new XElement("string", SifFamily(shape.Typeface))),
             SifWriter.Param("style", new XElement("integer", new XAttribute("value", style))),
@@ -328,6 +373,10 @@ internal sealed class MotionTextLayer : MotionLayer
     /// </summary>
     public override XElement ToSvg(SvgAnimationWriter svg, MotionTimeMap map)
     {
+        if (count is not null)
+            throw new InvalidOperationException(
+                $"The number{(Desc is null ? "" : $" '{Desc}'")} counts, which changes its glyphs frame by frame — more than SVG "
+                + "can say without a path per frame. Export it to .sif, which counts as this does, or capture the composition as frames.");
         var keyed = new[] { ("size", size), ("compress", compress), ("vcompress", vcompress), ("orient", orient) }
             .Where(p => !svg.Track(p.Item2, 0, map).IsStatic || (p.Item2.Kind == MotionType.Vector && !svg.Track(p.Item2, 1, map).IsStatic))
             .Select(p => p.Item1).ToArray();
@@ -420,10 +469,11 @@ internal sealed class MotionTextLayer : MotionLayer
         var or = orient.Evaluate(time);
         var hc = compress.Evaluate(time)[0];
         var vc = vcompress.Evaluate(time)[0];
+        var shape = ShapeAt(time);
         var s = em / shape.UnitsPerEm;
         var sy = yDown ? s : -s;           // font units are y down, as Skia gives them; contour y is up
 
-        var states = Animate(time, em);
+        var states = Animate(time, em, shape);
 
         // Synfig's layout in contour units (y up): pens per line, the first line's tallest glyph, the block's height.
         var glyphs = shape.Glyphs;
@@ -473,6 +523,7 @@ internal sealed class MotionTextLayer : MotionLayer
     internal List<(string Cluster, SKRect Ink, double Opacity, int Char, int Word, int Line)> Letters(double time)
     {
         var frame = Frame(time);
+        var shape = ShapeAt(time);
         var letters = new List<(string, SKRect, double, int, int, int)>();
         // The layer's own amount fades every letter: a text faded out by it shows nothing, so it has no visible letters.
         var amount = AmountAt(time);
@@ -492,7 +543,7 @@ internal sealed class MotionTextLayer : MotionLayer
     }
 
     /// <summary>Every glyph's accumulated animator state at a time — EffectCraft's <c>char_transforms</c>.</summary>
-    private GlyphState[] Animate(double time, double em)
+    private GlyphState[] Animate(double time, double em, TextShape shape)
     {
         var states = new GlyphState[shape.Glyphs.Length];
         for (var i = 0; i < states.Length; i++) states[i] = GlyphState.Identity;

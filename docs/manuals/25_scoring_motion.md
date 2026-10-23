@@ -133,7 +133,7 @@ Then two different artifacts, for two different readers:
 
 ### Mathematics on screen
 
-> **Implemented by**: `comp.equation(...)`.
+> **Implemented by**: `comp.equation(...)`, `comp.axes(...)`, `comp.number(...)`.
 
 An equation is set with `comp.equation({ latex, origin, size })`, typeset in the engine from LaTeX, never lettered by hand
 with `comp.text` and never pasted in as a picture. It is drawn as outlines in a group of its own, so it moves, fades and
@@ -152,6 +152,13 @@ and keying its `trimEnd` from 0 to 1 draws it on. `axes.area(f, a, b)` fills und
 rectangles under it and returns their total, and `axes.tangent(f, x)` returns the slope it drew. Print those returned
 numbers, never retyped ones: a label computed from the value the picture drew cannot disagree with it. The axes' tick
 labels are equations, read back with the film; `axes.x` and `axes.y` hold the ranges they were drawn to.
+
+**A number that counts lands on its value and stays there.** `comp.number({ value, format, family })` shows a value
+that follows a node: key it from 0 to the figure and the digits count up. Format it with `{ decimals, prefix, suffix }`
+rather than building the string yourself. Hold the start and the end: `comp.texts()` lists only the values held for
+half a second or more, and those are the claims the film is checked on. A value caught mid-count is not one.
+`counter.textAt(t)` gives the string shown at a time and `counter.valueAt(t)` the value, so a caption can quote what
+the counter landed on.
 
 ### Reading the film back
 

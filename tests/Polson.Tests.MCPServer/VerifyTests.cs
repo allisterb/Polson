@@ -183,6 +183,53 @@ public class VerifyTests : TestsRuntime, IDisposable
         Assert.Throws<ArgumentException>(() => later.Stray(9, "misread"));
         Assert.Throws<ArgumentException>(() => later.Stray(1, "maybe"));
     }
+    /// <summary>
+    /// A counting number is checked by the values it holds. A reading in its format and range while it counts is no stray,
+    /// even a value no frame drew exactly; one outside its range, or after it stopped, is.
+    /// </summary>
+    [Fact]
+    public async Task TestACountingNumberIsReadByWhatItHolds()
+    {
+        if (!FFmpeg.Available || !SkiaSharp.SKFontManager.Default.GetFontFamilies().Contains("Arial"))
+        {
+            Info("Skipped: needs ffmpeg and Arial.");
+            return;
+        }
+        var motion = new MotionToolkit(root);
+        var comp = motion.Composition(new Hashtable { ["width"] = 320d, ["height"] = 180d, ["fps"] = 12d, ["duration"] = 4d });
+        comp.Fill(new Hashtable { ["color"] = "#ffffff" });
+        var count = motion.Nodes.Animated("real", new object[]
+        {
+            new Hashtable { ["time"] = 0d, ["value"] = 0d }, new Hashtable { ["time"] = 1d, ["value"] = 0d }, new Hashtable { ["time"] = 2.5, ["value"] = 974d },
+        });
+        var number = comp.Number(new Hashtable { ["value"] = count, ["family"] = "Arial", ["size"] = 40d, ["origin"] = new[] { 160d, 90d },
+            ["format"] = new Hashtable { ["prefix"] = "$", ["suffix"] = "M" } });
+        comp.SaveVideo("counting.mp4");
+
+        var watched = new JsonObject
+        {
+            ["items"] = new JsonArray(
+                new JsonObject { ["text"] = "$0M", ["from"] = 0, ["to"] = 1 },
+                new JsonObject { ["text"] = number.TextAt(1.75), ["from"] = 1.75, ["to"] = 1.8 },
+                new JsonObject { ["text"] = "$380M", ["from"] = 1.5, ["to"] = 1.5 },
+                new JsonObject { ["text"] = "$974M", ["from"] = 2.5, ["to"] = 4 },
+                new JsonObject { ["text"] = "$999M", ["from"] = 3, ["to"] = 3.5 }),
+        }.ToJsonString();
+        using var video = new VideoReader([new NemotronEndpoint(NemotronEndpoint.Nebius, "https://tf.example/v1", "k", NemotronEndpoint.NebiusModel)],
+            new DocumentBudget(5), root, http: new HttpClient(new Answer(watched)));
+        var result = await new VerifyToolkit(video, root, null).Film(comp, "counting.mp4", new Dictionary<string, object?>
+        {
+            ["computed"] = new Dictionary<string, object?> { ["$0M"] = "the start", ["$974M"] = "974" },
+        });
+
+        Assert.True((bool)result["ok"]!, result.GetValueOrDefault("error") as string);
+        var items = ((object?[])result["items"]!).Cast<Dictionary<string, object?>>().ToArray();
+        Assert.Equal(["$0M", "$974M"], items.Select(i => (string)i["text"]!));
+        Assert.All(items, i => Assert.Equal("seen", i["status"]));
+        var stray = Assert.Single(((object?[])result["strays"]!).Cast<Dictionary<string, object?>>());
+        Assert.Equal("$999M", stray["read"]);
+    }
+
     [Fact]
     public void TestAStillsTextsAreReadOnceEachAndAWrappedReadingCoversItsLines()
     {
