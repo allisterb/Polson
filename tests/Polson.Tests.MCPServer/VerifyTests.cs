@@ -225,6 +225,110 @@ public class VerifyTests : TestsRuntime, IDisposable
         Assert.Equal("#26 OROO Heated Apparel Fashion • US", closest[5]);
     }
 
+    /// <summary>The equation probe's defect: a split-off fragment, <c>2</c>, is not a reading of a long line that contains it.</summary>
+    [Fact]
+    public void TestAShortFragmentIsNotAReadingOfTheLongLineItSitsIn()
+    {
+        var (seen, _, strays) = ImageReadBack.Match(["aₙ = a₁ + (n − 2)d"], ["2"]);
+        Assert.Null(seen[0]);
+        Assert.Single(strays);
+    }
+
+    /// <summary>A script written <c>^</c> is the same text as one set as a superscript character, and a changed exponent is a changed figure.</summary>
+    [Fact]
+    public void TestScriptsCompareAlikeAndAChangedExponentIsADifferentFigure()
+    {
+        Assert.Equal("E = mc^2 - a_n", FilmReadBack.Canon("E = mc² − aₙ"));
+        var same = ImageReadBack.Match(["E = mc²"], ["E = mc^2"]);
+        Assert.Equal("E = mc^2", same.Seen[0]);
+        var changed = ImageReadBack.Match(["E = mc²"], ["E = mc^3"]);
+        Assert.Null(changed.Seen[0]);
+        Assert.Equal([("different figure", "E = mc²")], changed.Strays.Select(s => (s.Kind, s.Near)));
+    }
+
+    /// <summary>Readings in LaTeX become linear forms through the same parser; a built-up equation split into rows is joined.</summary>
+    [Fact]
+    public void TestLatexReadingsAreLinearisedAndSplitEquationsJoined()
+    {
+        var prepared = MathReading.Prepare([
+            @"x = \frac{-b \pm \sqrt{b^2 - 5ac}", "2a",
+            @"\int_{0}^{1} x^2 \, dx = \frac{1}", "4",
+            "Revenue grew 22%",
+            @"a^2 + b^2 = c^2"]);
+
+        Assert.Equal(["x = (−b ± √(b² − 5ac))/(2a)", "∫₀¹ x² dx = 1/4", "Revenue grew 22%", "a² + b² = c²"], prepared.Select(p => p.Compare));
+        Assert.Equal([(0, 1), (2, 3), (4, 4), (5, 5)], prepared.Select(p => (p.First, p.Last)));
+        Assert.Equal("x = \\frac{-b \\pm \\sqrt{b^2 - 5ac}\n2a", prepared[0].Raw);
+    }
+
+    /// <summary>
+    /// Readings as the reader sent them on 2026-10-23: wrapped in <c>$…$</c>, and with <c>\begin</c> turned into a backspace by
+    /// a JSON string that did not double its backslashes. A price is not math and keeps its dollar sign.
+    /// </summary>
+    [Theory]
+    [InlineData("$E = mc^3$", "E = mc^3")]
+    [InlineData("\begin{pmatrix} 2 & 7 \\\\ 0 & 3 \\end{pmatrix}", @"\begin{pmatrix} 2 & 7 \\ 0 & 3 \end{pmatrix}")]
+    [InlineData("a \times b", @"a \times b")]
+    [InlineData(@"\[ x^2 \]", "x^2")]
+    [InlineData("$974M returned", "$974M returned")]
+    public void TestAReadingIsUnwrappedAndItsEscapesRepaired(string read, string meant) =>
+        Assert.Equal(meant, MathReading.Unwrap(read));
+
+    /// <summary>
+    /// The fault probe (2026-10-23): a denominator painted over was read as <c>\frac{1}{}</c>. The stray belongs beside its
+    /// equation, so its crop shows where to look.
+    /// </summary>
+    [Fact]
+    public void TestAnEquationWithAPartMissingIsAStrayBesideIt()
+    {
+        var prepared = MathReading.Prepare([@"\int_0^1 x^2 dx = \frac{1}{}"]);
+        var (seen, _, strays) = ImageReadBack.Match(["∫₀¹ x² dx = 1/3", "a² + b² = c²"], [prepared[0].Compare]);
+        Assert.Null(seen[0]);
+        Assert.Equal([("different figure", "∫₀¹ x² dx = 1/3")], strays.Select(s => (s.Kind, s.Near)));
+    }
+
+    /// <summary>The same characters spaced differently are the same reading: <c>x² dx</c> and <c>x^2dx</c>; different figures are not.</summary>
+    [Fact]
+    public void TestSpacingAloneDoesNotMakeAReadingDifferent()
+    {
+        Assert.Equal("∫_0^1 x^2dx = 1/3", ImageReadBack.Match(["∫₀¹ x² dx = 1/3"], ["∫_0^1 x^2dx = 1/3"]).Seen[0]);
+        Assert.Null(ImageReadBack.Match(["x = 1 2"], ["x = 12"]).Seen[0]);
+    }
+
+    /// <summary>
+    /// End to end on a real canvas: an equation read back in LaTeX is seen, shown as read; the same equation drawn with
+    /// 4ac and read with 5ac is a different figure.
+    /// </summary>
+    [Fact]
+    public async Task TestAnEquationReadBackInLatexIsSeenAndAChangedTermIsAStray()
+    {
+        var canvas = new global::Polson.Drawing.Skia.SkiaCanvas(900, 400);
+        var ctx = canvas.GetContext();
+        ctx.FillStyle = "#ffffff";
+        ctx.FillRect(0, 0, 900, 400);
+        ctx.FillStyle = "#111111";
+        ctx.FillEquation(@"E = mc^2", 40, 100, new Hashtable { ["size"] = 48f });
+        ctx.FillEquation(@"x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}", 40, 280, new Hashtable { ["size"] = 48f });
+
+        var read = new JsonObject
+        {
+            ["items"] = new JsonArray(
+                new JsonObject { ["text"] = "E = mc^2" },
+                new JsonObject { ["text"] = @"x = \frac{-b \pm \sqrt{b^2 - 5ac}" },
+                new JsonObject { ["text"] = "2a" }),
+        }.ToJsonString();
+        using var reader = new VideoReader([new NemotronEndpoint(NemotronEndpoint.Nebius, "https://tf.example/v1", "k", NemotronEndpoint.NebiusModel)],
+            new DocumentBudget(5), root, http: new HttpClient(new Answer(read)));
+        var result = await new VerifyToolkit(reader, root, null).Image(canvas, new Dictionary<string, object?> { ["name"] = "eq" });
+
+        var items = ((object?[])result["items"]!).Cast<Dictionary<string, object?>>().ToArray();
+        Assert.Equal(["seen", "missed"], items.Select(i => (string)i["status"]!));
+        Assert.Equal("E = mc^2", items[0]["readAs"]);
+        var stray = Assert.Single(((object?[])result["strays"]!).Cast<Dictionary<string, object?>>());
+        Assert.Equal(("different figure", "x = (−b ± √(b² − 4ac))/(2a)"), ((string)stray["kind"]!, (string)stray["near"]!));
+        Assert.Equal("x = \\frac{-b \\pm \\sqrt{b^2 - 5ac}\n2a", stray["read"]);
+    }
+
     /// <summary>
     /// End to end on a real canvas: one line read as set, one read with another figure, one painted over and so missed. The
     /// still goes to the reader as an image; the stray's crop is saved and it stays pending until settled.

@@ -90,6 +90,20 @@ internal sealed class EquationLayout
     }
 
     /// <summary>
+    /// The linear form of a LaTeX reading, parsed but not typeset, or null when it does not parse: how a read-back compares
+    /// a reader's transcription with the equation that was set, through the same parser and the same linearizer.
+    /// </summary>
+    public static string? LinearFromLatex(string? latex)
+    {
+        if (Guard(latex) is not null) return null;
+        lock (Typesetting)
+        {
+            var (list, error) = LaTeXParser.MathListFromLaTeX(latex!);
+            return error is null && list.Atoms.Count > 0 ? MathLinear.Of(list) : null;
+        }
+    }
+
+    /// <summary>
     /// Length and nesting, checked on the text before the parser sees it: braces (escaped ones not counted),
     /// <c>\left…\right</c> and <c>\begin…\end</c>.
     /// </summary>

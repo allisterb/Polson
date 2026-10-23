@@ -85,7 +85,12 @@ public sealed partial class VerifyToolkit
                 ? "The watcher is still reading; it finishes into the cache. Run the same call again, unchanged."
                 : answer.Remedy);
 
-        var read = FilmReadBack.ParseReading(answer.Text);
+        // Compared as prepared (a LaTeX reading as its linear form, a split equation joined), shown as read.
+        var parsed = FilmReadBack.ParseReading(answer.Text);
+        var prepared = MathReading.Prepare([.. parsed.Select(r => r.Text)]);
+        var read = prepared.Select(p => new FilmReadBack.Reading(p.Compare, parsed[p.First].From, parsed[p.Last].To)).ToArray();
+        var rawOf = prepared.GroupBy(p => p.Compare).ToDictionary(g => g.Key, g => g.First().Raw);
+        string? Raw(string? compared) => compared is null ? null : rawOf.GetValueOrDefault(compared, compared);
         var expected = comp.Texts().OfType<Dictionary<string, object?>>()
             .Select(t => new FilmReadBack.Shown((string)t["text"]!, t["from"] as double?, t["to"] as double?, t["seconds"] as double? ?? 0,
                 [.. ((object?[])t["intervals"]!).OfType<double[]>()]))
@@ -106,7 +111,7 @@ public sealed partial class VerifyToolkit
                 ["source"] = source.Kind,
                 ["detail"] = source.Detail,
                 ["seen"] = seen is not null,
-                ["readAs"] = seen?.Text,
+                ["readAs"] = Raw(seen?.Text),
                 ["readAt"] = seen?.From,
                 ["status"] = e.From is null ? "never shown" : seen is not null ? "seen" : "missed",
             };
@@ -117,7 +122,7 @@ public sealed partial class VerifyToolkit
             var at = Math.Clamp((s.Reading.From ?? 0) + 0.25, 0, comp.Duration);
             var frame = $"artifacts/verify/stray-{i + 1}.png";
             var error = FFmpeg.Frame(full, at, ProjectPath.Resolve(projectRoot, frame, "frame", "Write"));
-            return new ReadBackStray(i + 1, s.Reading.Text, s.Reading.From, error is null ? frame : null, error, s.Near, s.Kind);
+            return new ReadBackStray(i + 1, Raw(s.Reading.Text)!, s.Reading.From, error is null ? frame : null, error, s.Near, s.Kind);
         }).ToList();
 
         return Hold(new FilmCheck(videoPath, comp.Duration, items, strays, answer.Provenance?.Model, answer.Provenance?.Endpoint)
@@ -150,7 +155,11 @@ public sealed partial class VerifyToolkit
                 ? "The reader is still reading; it finishes into the cache. Run the same script again, unchanged."
                 : answer.Remedy);
 
-        var read = FilmReadBack.ParseReading(answer.Text).Select(r => r.Text).ToArray();
+        // Compared as prepared (a LaTeX reading as its linear form), shown as read.
+        var prepared = MathReading.Prepare([.. FilmReadBack.ParseReading(answer.Text).Select(r => r.Text)]);
+        var read = prepared.Select(p => p.Compare).ToArray();
+        var rawOf = prepared.GroupBy(p => p.Compare).ToDictionary(g => g.Key, g => g.First().Raw);
+        string? Raw(string? compared) => compared is null ? null : rawOf.GetValueOrDefault(compared, compared);
         var page = SKRect.Create(0, 0, still.Width, still.Height);
         var lines = still.Lines.Where(l => FilmReadBack.Normal(l.Text).Length > 0).ToArray();
         var shown = lines.GroupBy(l => FilmReadBack.Normal(l.Text))
@@ -176,8 +185,8 @@ public sealed partial class VerifyToolkit
                 ["source"] = src.Kind,
                 ["detail"] = src.Detail,
                 ["seen"] = seen is not null,
-                ["readAs"] = seen,
-                ["closest"] = seen is null ? closest : null,
+                ["readAs"] = Raw(seen),
+                ["closest"] = seen is null ? Raw(closest) : null,
                 ["status"] = s.On.Length == 0 ? "off the canvas" : seen is not null ? "seen" : "missed",
             };
         }).ToArray();
@@ -187,10 +196,10 @@ public sealed partial class VerifyToolkit
         {
             // A crop around the line the reading resembles, where to look; otherwise the whole image is where.
             var near = onCanvas.Where(o => o.Text == s.Near).SelectMany(o => o.On).FirstOrDefault();
-            if (near is null) return new ReadBackStray(i + 1, s.Reading.Text, null, imagePath, null, s.Near, s.Kind);
+            if (near is null) return new ReadBackStray(i + 1, Raw(s.Reading.Text)!, null, imagePath, null, s.Near, s.Kind);
             var crop = $"artifacts/verify/{name}-stray-{i + 1}.png";
             var error = Crop(pixels, near.Box, ProjectPath.Resolve(projectRoot, crop, "crop", "Write"));
-            return new ReadBackStray(i + 1, s.Reading.Text, null, error is null ? crop : imagePath, error, s.Near, s.Kind);
+            return new ReadBackStray(i + 1, Raw(s.Reading.Text)!, null, error is null ? crop : imagePath, error, s.Near, s.Kind);
         }).ToList();
 
         return Hold(new ImageCheck(imagePath, still.Kind, still.Width, still.Height, items, strays, answer.Provenance?.Model, answer.Provenance?.Endpoint)
@@ -327,7 +336,8 @@ public sealed partial class VerifyToolkit
     internal const string Question =
         "List every piece of text that appears on screen in this video, each exactly as it is written — keep numbers, units, "
         + "currency signs and punctuation as shown — with the second it first appears and the second it disappears. Give "
-        + "lines that appear at different times as separate items. Only text: do not describe pictures.";
+        + "lines that appear at different times as separate items. Write any mathematical expression or equation as one "
+        + "item, however many lines it spans, in LaTeX. Only text: do not describe pictures.";
 
     internal const string Schema =
         "{\"type\":\"object\",\"required\":[\"items\"],\"properties\":{\"items\":{\"type\":\"array\",\"items\":{\"type\":\"object\","
@@ -338,8 +348,9 @@ public sealed partial class VerifyToolkit
     internal const string ImageQuestion =
         "List every line of text in this image, each exactly as it is written — keep numbers, units, currency signs and "
         + "punctuation as shown. Give each line as a separate item, from the top of the image to the bottom; small print, axis "
-        + "labels and footnotes count. A line that appears in several places may be listed once. Only text: do not describe "
-        + "pictures, and never complete or correct a line you cannot read.";
+        + "labels and footnotes count. A line that appears in several places may be listed once. Write any mathematical "
+        + "expression or equation as one item, however many lines it spans, in LaTeX. Only text: do not describe pictures, "
+        + "and never complete or correct a line you cannot read.";
 
     internal const string ImageSchema =
         "{\"type\":\"object\",\"required\":[\"items\"],\"properties\":{\"items\":{\"type\":\"array\",\"items\":{\"type\":\"object\","
@@ -642,7 +653,7 @@ internal static class FilmReadBack
         {
             var near = shown.Where(s => s.From is not null && InTime(s, x.r)).Select(s => (s, score: Words(s.Text, x.r.Text)))
                 .Where(p => p.score >= 0.5).OrderByDescending(p => p.score).Select(p => p.s.Text).FirstOrDefault();
-            return new Unmatched(x.r, near, near is not null && Figures(near).Length > 0 ? "different figure" : "never set");
+            return new Unmatched(x.r, near, near is not null && MatchFigures(near).Length > 0 ? "different figure" : "never set");
         }).ToArray();
         return new Outcome(seen, strays);
     }
@@ -651,11 +662,11 @@ internal static class FilmReadBack
     private static int Best(Shown shown, string text, IReadOnlyList<Reading> read, bool[] used)
     {
         var (best, bestScore) = (-1, 0.0);
-        var figures = Figures(text);
+        var figures = MatchFigures(text);
         for (var k = 0; k < read.Count; k++)
         {
             if (used[k] || !InTime(shown, read[k])) continue;
-            if (!figures.SequenceEqual(Figures(read[k].Text))) continue;
+            if (!figures.SequenceEqual(MatchFigures(read[k].Text))) continue;
             var score = Similarity(text, read[k].Text);
             if (score > bestScore) (best, bestScore) = (k, score);
         }
@@ -665,22 +676,58 @@ internal static class FilmReadBack
     private static bool InTime(Shown s, Reading r) =>
         r.From is not { } at || s.Intervals.Length == 0 || s.Intervals.Any(iv => at >= iv[0] - Slack && at <= iv[1] + Slack);
 
-    /// <summary>1 for the same words in order; containment counts most of that; otherwise the share of words in common.</summary>
+    /// <summary>
+    /// 1 for the same words in order; containment counts most of that when the shorter is at least half the longer;
+    /// otherwise the share of words in common. Compared in <see cref="Canon"/> form, so <c>b²</c> and <c>b^2</c> agree.
+    /// </summary>
+    /// <remarks>Containment used to count at any length, and a split-off fragment, <c>2</c>, matched the line
+    /// <c>aₙ = a₁ + (n − 2)d</c> (equation probe, 2026-10-23): a short reading inside a long line is not a reading of it.</remarks>
     internal static double Similarity(string a, string b)
     {
-        var (na, nb) = (Normal(a), Normal(b));
+        var (na, nb) = (Normal(Canon(a)), Normal(Canon(b)));
         if (na.Length == 0 || nb.Length == 0) return 0;
         if (na == nb) return 1;
-        if (na.Contains(nb, StringComparison.Ordinal) || nb.Contains(na, StringComparison.Ordinal))
-            return 0.6 + 0.4 * Math.Min(na.Length, nb.Length) / Math.Max(na.Length, nb.Length);
+        // The same characters spaced differently: an equation's thin space, x² dx and x²dx. The figures are compared apart.
+        if (na.Replace(" ", "") == nb.Replace(" ", "")) return 0.95;
+        var ratio = (double)Math.Min(na.Length, nb.Length) / Math.Max(na.Length, nb.Length);
+        if (ratio >= 0.5 && (na.Contains(nb, StringComparison.Ordinal) || nb.Contains(na, StringComparison.Ordinal)))
+            return 0.6 + 0.4 * ratio;
         return Words(a, b);
     }
 
-    /// <summary>The share of words two texts have in common.</summary>
+    /// <summary>The share of words two texts have in common, in <see cref="Canon"/> form.</summary>
     internal static double Words(string a, string b)
     {
-        var (wa, wb) = (Normal(a).Split(' ').ToHashSet(), Normal(b).Split(' ').ToHashSet());
+        var (wa, wb) = (Normal(Canon(a)).Split(' ').ToHashSet(), Normal(Canon(b)).Split(' ').ToHashSet());
         return wa.Count == 0 || wb.Count == 0 ? 0 : wa.Intersect(wb).Count() / (double)wa.Union(wb).Count();
+    }
+
+    /// <summary>
+    /// The figures a reader would compare, in <see cref="Canon"/> form: <c>mc²</c> has the figure 2, so <c>mc³</c> is a
+    /// different figure. Sourcing keeps <see cref="Figures"/>, where an exponent is not a claim needing a source.
+    /// </summary>
+    internal static string[] MatchFigures(string? text) => Figures(Canon(text));
+
+    /// <summary>
+    /// A text with Unicode scripts spelled out and the minus sign as a hyphen: <c>x¹⁰ − aₙ</c> is <c>x^10 - a_n</c>. The
+    /// linear form of an equation writes scripts as script characters, and a reader writes <c>^</c>; both compare alike.
+    /// </summary>
+    internal static string Canon(string? text)
+    {
+        if (string.IsNullOrEmpty(text)) return "";
+        var sb = new StringBuilder(text.Length + 8);
+        char? mode = null;
+        foreach (var c in text)
+        {
+            char? mark = null;
+            var plain = c;
+            if (Superscript.TryGetValue(c, out var sup)) (mark, plain) = ('^', sup);
+            else if (Subscript.TryGetValue(c, out var sub)) (mark, plain) = ('_', sub);
+            if (mark is not null && mark != mode) sb.Append(mark.Value);
+            sb.Append(plain == '−' ? '-' : plain);
+            mode = mark;
+        }
+        return sb.ToString();
     }
 
     /// <summary>A text as compared: no case, accents or punctuation, straight quotes, single spaces.</summary>
@@ -693,7 +740,9 @@ internal static class FilmReadBack
             if (CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.NonSpacingMark) continue;
             sb.Append(char.IsLetterOrDigit(c) || c is '%' or '$' or '.' ? char.ToLowerInvariant(c) : ' ');
         }
-        return Regex.Replace(Regex.Replace(sb.ToString(), @"(?<!\d)\.|\.(?!\d)", " "), @"\s+", " ").Trim();
+        // A figure and a word meet at a token boundary: 2dx is 2 dx, as x² dx is, so a thin space read or not is one reading.
+        var split = Regex.Replace(sb.ToString(), @"(?<=\d)(?=\p{L})|(?<=\p{L})(?=\d)", " ");
+        return Regex.Replace(Regex.Replace(split, @"(?<!\d)\.|\.(?!\d)", " "), @"\s+", " ").Trim();
     }
 
     /// <summary>The figures in a text, commas dropped, in order: "$40.4 billion (282 million)" is 40.4 and 282.</summary>
@@ -701,12 +750,26 @@ internal static class FilmReadBack
         [.. Figure.Matches(text ?? "").Select(m => m.Value.Replace(",", "").TrimEnd('.'))];
 
     /// <summary>A text with each figure as <c>#</c>: the shape a misread figure keeps. "Grew 2,205.8%" is "grew #%".</summary>
-    internal static string Shape(string? text) => Figure.Replace(Normal(text), "#");
+    internal static string Shape(string? text) => Figure.Replace(Normal(Canon(text)), "#");
     #endregion
 
     #region Fields
     /// <summary>How far a reading's time may sit outside a text's interval: the watcher samples about once a second.</summary>
     internal const double Slack = 1.5;
+
+    private static readonly Dictionary<char, char> Superscript = new()
+    {
+        ['⁰'] = '0', ['¹'] = '1', ['²'] = '2', ['³'] = '3', ['⁴'] = '4', ['⁵'] = '5', ['⁶'] = '6', ['⁷'] = '7', ['⁸'] = '8', ['⁹'] = '9',
+        ['⁺'] = '+', ['⁻'] = '-', ['⁼'] = '=', ['⁽'] = '(', ['⁾'] = ')', ['ⁿ'] = 'n', ['ⁱ'] = 'i',
+    };
+
+    private static readonly Dictionary<char, char> Subscript = new()
+    {
+        ['₀'] = '0', ['₁'] = '1', ['₂'] = '2', ['₃'] = '3', ['₄'] = '4', ['₅'] = '5', ['₆'] = '6', ['₇'] = '7', ['₈'] = '8', ['₉'] = '9',
+        ['₊'] = '+', ['₋'] = '-', ['₌'] = '=', ['₍'] = '(', ['₎'] = ')', ['ₐ'] = 'a', ['ₑ'] = 'e', ['ₕ'] = 'h', ['ᵢ'] = 'i', ['ⱼ'] = 'j',
+        ['ₖ'] = 'k', ['ₗ'] = 'l', ['ₘ'] = 'm', ['ₙ'] = 'n', ['ₒ'] = 'o', ['ₚ'] = 'p', ['ᵣ'] = 'r', ['ₛ'] = 's', ['ₜ'] = 't', ['ᵤ'] = 'u',
+        ['ᵥ'] = 'v', ['ₓ'] = 'x',
+    };
 
     private static readonly Regex Figure = new(@"\d[\d,]*(?:\.\d+)?", RegexOptions.Compiled);
     #endregion
@@ -729,17 +792,17 @@ internal static class ImageReadBack
     {
         var used = new bool[read.Count];
         var seen = new string?[texts.Count];
-        var padded = read.Select(r => " " + FilmReadBack.Normal(r) + " ").ToArray();
-        bool Contains(int k, int i) => padded[k].Contains(" " + FilmReadBack.Normal(texts[i]) + " ", StringComparison.Ordinal);
+        var padded = read.Select(r => " " + FilmReadBack.Normal(FilmReadBack.Canon(r)) + " ").ToArray();
+        bool Contains(int k, int i) => padded[k].Contains(" " + FilmReadBack.Normal(FilmReadBack.Canon(texts[i])) + " ", StringComparison.Ordinal);
 
         // Longest first, so a heading is not taken by a reading of a one-word label inside it.
         foreach (var i in Enumerable.Range(0, texts.Count).OrderByDescending(i => FilmReadBack.Normal(texts[i]).Length))
         {
-            var figures = FilmReadBack.Figures(texts[i]);
+            var figures = FilmReadBack.MatchFigures(texts[i]);
             var (best, score) = (-1, 0.0);
             for (var k = 0; k < read.Count; k++)
             {
-                if (used[k] || !figures.SequenceEqual(FilmReadBack.Figures(read[k]))) continue;
+                if (used[k] || !figures.SequenceEqual(FilmReadBack.MatchFigures(read[k]))) continue;
                 var s = FilmReadBack.Similarity(texts[i], read[k]);
                 if (s > score) (best, score) = (k, s);
             }
@@ -762,19 +825,19 @@ internal static class ImageReadBack
             var reading = new FilmReadBack.Reading(read[k], null, null);
             var shape = " " + FilmReadBack.Shape(read[k]) + " ";
             var contained = Enumerable.Range(0, texts.Count).Where(i => Contains(k, i)).ToArray();
-            var have = contained.SelectMany(i => FilmReadBack.Figures(texts[i])).ToList();
-            var extra = FilmReadBack.Figures(read[k]).Where(f => !have.Remove(f)).ToArray();
+            var have = contained.SelectMany(i => FilmReadBack.MatchFigures(texts[i])).ToList();
+            var extra = FilmReadBack.MatchFigures(read[k]).Where(f => !have.Remove(f)).ToArray();
             if (contained.Length > 0 && extra.Length == 0) continue;
 
             // Beside the drawn figure whose shape it carries, unread first; else the line it most resembles.
-            var shaped = Enumerable.Range(0, texts.Count).Where(i => FilmReadBack.Figures(texts[i]).Length > 0
+            var shaped = Enumerable.Range(0, texts.Count).Where(i => FilmReadBack.MatchFigures(texts[i]).Length > 0
                     && shape.Contains(" " + FilmReadBack.Shape(texts[i]) + " ", StringComparison.Ordinal))
                 .OrderBy(i => seen[i] is null ? 0 : 1).ThenByDescending(i => FilmReadBack.Shape(texts[i]).Length).ToArray();
             var near = shaped.Length > 0 ? texts[shaped[0]]
                 : contained.Length > 0 ? texts[contained[0]]
                 : texts.Select(t => (t, score: FilmReadBack.Words(t, read[k]))).Where(p => p.score >= 0.5)
                     .OrderByDescending(p => p.score).Select(p => p.t).FirstOrDefault();
-            strays.Add(new(reading, near, near is not null && (extra.Length > 0 || FilmReadBack.Figures(near).Length > 0) ? "different figure" : "never set"));
+            strays.Add(new(reading, near, near is not null && (extra.Length > 0 || FilmReadBack.MatchFigures(near).Length > 0) ? "different figure" : "never set"));
         }
 
         var closest = texts.Select((t, i) => seen[i] is not null ? null : Closest(t, read)).ToArray();
@@ -789,6 +852,126 @@ internal static class ImageReadBack
             .Where(p => p.share >= 0.5).OrderByDescending(p => p.share).ThenByDescending(p => FilmReadBack.Similarity(text, p.r))
             .Select(p => p.r).FirstOrDefault();
     }
+}
+
+/// <summary>
+/// Readings of mathematics, made comparable with the equations that were set: the reader writes LaTeX, the record holds the
+/// linear form, and both go through the same parser and linearizer (<see cref="EquationLayout.LinearFromLatex"/>).
+/// </summary>
+/// <remarks>
+/// Measured 2026-10-23 on Nebius: Nemotron transcribed twelve typeset equations as exact LaTeX down to 16 px, reported
+/// twelve deliberately wrong ones as drawn rather than as the textbook forms, and in one run of two split built-up
+/// equations into visual rows (<c>x = \frac{-b \pm \sqrt{b^2 - 5ac}</c>, then <c>2a</c>). A fragment that will not parse
+/// alone is joined to the next reading when together they do.
+/// </remarks>
+internal static partial class MathReading
+{
+    /// <summary>
+    /// Each reading as shown (<c>Raw</c>, with a joined fragment's lines), as compared (<c>Compare</c>), and which readings
+    /// it came from (<c>First</c>, and <c>Last</c> when a fragment was joined to the next).
+    /// </summary>
+    internal static List<(string Raw, string Compare, int First, int Last)> Prepare(IReadOnlyList<string> read)
+    {
+        var prepared = new List<(string, string, int, int)>();
+        read = [.. read.Select(Unwrap)];
+        for (var i = 0; i < read.Count; i++)
+        {
+            var r = read[i];
+            if (!LooksLikeMath(r)) { prepared.Add((r, r, i, i)); continue; }
+            if (EquationLayout.LinearFromLatex(r) is { } linear && !Incomplete(r)) { prepared.Add((r, linear, i, i)); continue; }
+            if (i + 1 < read.Count && Join(r, read[i + 1]) is { } joined && EquationLayout.LinearFromLatex(joined) is { } whole)
+            {
+                prepared.Add((r + "\n" + read[i + 1], whole, i, i + 1));
+                i++;
+                continue;
+            }
+            prepared.Add((r, EquationLayout.LinearFromLatex(r) ?? r, i, i));
+        }
+        return prepared;
+    }
+
+    /// <summary>A command, a superscript, or a braced subscript: <c>\frac</c>, <c>b^2</c>, <c>x_{i}</c>.</summary>
+    internal static bool LooksLikeMath(string reading) => MathMark().IsMatch(reading);
+
+    /// <summary>
+    /// A reading as the reader meant it: math delimiters taken off (<c>$…$</c>, <c>$$…$$</c>, <c>\(…\)</c>, <c>\[…\]</c>), and
+    /// LaTeX commands the JSON answer turned into control characters put back. The reader writes <c>\begin</c> into a JSON
+    /// string without doubling the backslash, and the parser reads <c>\b</c> as a backspace: <c>\begin</c> arrived as
+    /// backspace + <c>egin</c> (2026-10-23), and <c>\times</c>, <c>\theta</c>, <c>\frac</c>, <c>\neq</c>, <c>\rho</c> go the same way.
+    /// </summary>
+    internal static string Unwrap(string reading)
+    {
+        var r = reading;
+        if (r.IndexOfAny(['\b', '\f', '\t', '\r', '\n']) >= 0)
+        {
+            var repaired = new StringBuilder(r.Length + 8);
+            for (var i = 0; i < r.Length; i++)
+            {
+                var c = r[i];
+                var letterNext = i + 1 < r.Length && char.IsAsciiLetter(r[i + 1]);
+                var escape = c switch
+                {
+                    '\b' => "\\b", '\f' => "\\f", '\t' => "\\t", '\r' when letterNext => "\\r",
+                    '\n' when letterNext && MathMark().IsMatch(r) => "\\n",
+                    _ => null,
+                };
+                if (escape is null) repaired.Append(c); else repaired.Append(escape);
+            }
+            r = repaired.ToString();
+        }
+        var t = r.Trim();
+        foreach (var (open, close) in Delimiters)
+            if (t.Length > open.Length + close.Length && t.StartsWith(open, StringComparison.Ordinal) && t.EndsWith(close, StringComparison.Ordinal))
+                return t[open.Length..^close.Length].Trim();
+        return r;
+    }
+
+    private static readonly (string Open, string Close)[] Delimiters = [("$$", "$$"), ("$", "$"), (@"\(", @"\)"), (@"\[", @"\]")];
+
+    /// <summary>Unclosed braces, or a <c>\frac</c> with its numerator and no denominator: a fragment of a built-up equation.</summary>
+    internal static bool Incomplete(string reading) => Depth(reading) > 0 || HalfFraction(reading);
+
+    /// <summary>The fragment closed and the next reading set as what it lacks: a denominator, or the rest of a group.</summary>
+    internal static string? Join(string fragment, string next)
+    {
+        var depth = Depth(fragment);
+        if (depth < 0) return null;
+        var closed = fragment + new string('}', depth);
+        return HalfFraction(closed) ? closed + "{" + next + "}" : depth > 0 ? closed + " " + next : null;
+    }
+
+    private static int Depth(string s)
+    {
+        var depth = 0;
+        for (var i = 0; i < s.Length; i++)
+        {
+            if (s[i] == '\\' && i + 1 < s.Length && s[i + 1] is '{' or '}') { i++; continue; }
+            if (s[i] == '{') depth++;
+            else if (s[i] == '}') depth--;
+        }
+        return depth;
+    }
+
+    /// <summary>The last <c>\frac</c> ends the text with one group: <c>= \frac{1}</c>.</summary>
+    private static bool HalfFraction(string s)
+    {
+        var t = s.TrimEnd();
+        var at = t.LastIndexOf(@"\frac", StringComparison.Ordinal);
+        if (at < 0) return false;
+        var i = at + 5;
+        while (i < t.Length && t[i] == ' ') i++;
+        if (i >= t.Length || t[i] != '{') return false;
+        var depth = 0;
+        for (; i < t.Length; i++)
+        {
+            if (t[i] == '{') depth++;
+            else if (t[i] == '}' && --depth == 0) return i == t.Length - 1;
+        }
+        return false;
+    }
+
+    [GeneratedRegex(@"\\[A-Za-z]+|\^|_\{")]
+    private static partial Regex MathMark();
 }
 
 /// <summary>Where a text on screen came from, looked up rather than asked: the brief, a document page, Qloo, research.</summary>
