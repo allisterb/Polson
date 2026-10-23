@@ -46,8 +46,8 @@ internal interface IShownText
 public sealed class MotionEquation : IShownText
 {
     #region Constructors
-    internal MotionEquation(string latex, string linear, MotionGroup group, string? desc, double width, double height) =>
-        (Latex, Text, this.group, this.desc, Width, Height) = (latex, linear, group, desc, width, height);
+    internal MotionEquation(string latex, string linear, MotionGroup group, string? desc, double width, double height, string kind = "equation") =>
+        (Latex, Text, this.group, this.desc, Width, Height, this.kind) = (latex, linear, group, desc, width, height, kind);
     #endregion
 
     #region Properties
@@ -65,7 +65,8 @@ public sealed class MotionEquation : IShownText
 
     string? IShownText.Desc => desc;
 
-    string IShownText.Kind => "equation";
+    /// <summary><c>'equation'</c>, or <c>'tick'</c> for an axis label <c>comp.axes</c> drew: a ruler, not a claim.</summary>
+    string IShownText.Kind => kind;
     #endregion
 
     #region Methods
@@ -75,6 +76,7 @@ public sealed class MotionEquation : IShownText
     #region Fields
     private readonly MotionGroup group;
     private readonly string? desc;
+    private readonly string kind;
     #endregion
 }
 
@@ -87,7 +89,10 @@ public abstract partial class MotionLayerList
     /// glyph the LaTeX does not colour itself (<c>\color</c>), and keys. Returns the equation, which <c>comp.texts()</c> lists
     /// by its linear form.
     /// </summary>
-    public MotionEquation Equation(object? options)
+    public MotionEquation Equation(object? options) => Equation(options, "equation");
+
+    /// <summary>An equation of a given kind: <c>'tick'</c> for an axis label, which <c>Verify.film</c> sources as a scale.</summary>
+    internal MotionEquation Equation(object? options, string kind)
     {
         var o = new MotionOptions(options, "equation", "latex", "origin", "size", "orient", "color", "amount", "blend", "desc");
         if (o.Raw("latex") is not string latex)
@@ -127,7 +132,7 @@ public abstract partial class MotionLayerList
             }
         }
 
-        var equation = new MotionEquation(latex, layout.Linear, group, o.Has("desc") ? o.Raw("desc")?.ToString() : null, layout.Width, height);
+        var equation = new MotionEquation(latex, layout.Linear, group, o.Has("desc") ? o.Raw("desc")?.ToString() : null, layout.Width, height, kind);
         Root?.TextHandles.Add(equation);
         return equation;
     }

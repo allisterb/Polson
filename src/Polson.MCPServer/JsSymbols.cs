@@ -193,6 +193,7 @@ public static class JsSurface
         // What comp.text(...) returns: where the letters are, for a title-safe check or a thing placed on a word.
         new("text", typeof(MotionText), "Motion", true),
         new("equation", typeof(MotionEquation), "Motion", true),
+        new("axes", typeof(MotionAxes), "Motion", true),
     ];
 
     /// <summary>
