@@ -231,6 +231,9 @@ public sealed class StageApi
         if (clean.StartsWith(VerifyToolkit.ReadBackPrefix, StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException($"Stage.check: a claim beginning '{VerifyToolkit.ReadBackPrefix}' is recorded by Verify.image and "
                 + "Verify.film themselves, from what the reader read. Run the check; do not write its verdict.");
+        if (clean.StartsWith(VerifyToolkit.DerivationPrefix, StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException($"Stage.check: a claim beginning '{VerifyToolkit.DerivationPrefix}' is recorded by Verify.derivation "
+                + "itself, from the mathematics. Run the check; do not write its verdict.");
 
         // **A failure kept on purpose is its own state.** The finder that reports two fists on one rope is right;
         // the drawing wants them there. Without a third state the record showed a red check and the reason lived in

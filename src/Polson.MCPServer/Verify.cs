@@ -219,6 +219,104 @@ public sealed partial class VerifyToolkit
     }
 
     /// <summary>
+    /// A derivation checked step by step: each step equals the one before it, as <c>Equation.equivalent</c> decides.
+    /// <c>{ ok, passed, name, steps, pairs, counts, summary }</c>; each pair is <c>{ from, to, a, b, verdict, detail, at,
+    /// values, provided, approximate, read }</c>. <paramref name="steps"/> are LaTeX strings or <c>comp.equation</c>
+    /// handles, in order. A leading <c>=</c>, and the <c>&amp;</c> of an aligned line, are dropped, so the lines of a
+    /// derivation can be given as written. Two equations in a row are a step of a solution. When the latest read-back read
+    /// the steps, the steps as read are checked too (<c>read</c>), which does not change <c>passed</c>.
+    /// <paramref name="options"/>: <c>{ name?, domain?, integers?, samples?, budget? }</c>, <c>budget</c> being the
+    /// milliseconds for the whole derivation (15,000).
+    /// </summary>
+    public Dictionary<string, object?> Derivation(object steps, object? options = null)
+    {
+        var (name, check, budget) = DerivationOptions(options);
+        var given = (steps as System.Collections.IEnumerable is { } e && steps is not string ? e.Cast<object?>() : [])
+            .Select(s => s switch
+            {
+                string latex => latex,
+                MotionEquation equation => equation.Latex,
+                _ => throw new ArgumentException("Verify.derivation's steps are LaTeX strings or comp.equation handles."),
+            }).Select(Step).ToArray();
+        if (given.Length is < 2 or > MaxSteps)
+            throw new ArgumentException($"Verify.derivation needs 2 to {MaxSteps} steps, in order; it was given {given.Length}.");
+
+        // The steps as the latest read-back read them, matched by linear form: read as set, or — misread, and so not seen —
+        // the reading closest to it on a still, or the stray recorded beside it on a film.
+        var linear = given.Select(s => EquationLayout.LinearFromLatex(s) ?? s).ToArray();
+        var readBack = session?.ReadBack ?? last;
+        var read = linear.Select(l =>
+        {
+            var item = readBack?.ItemList.FirstOrDefault(i => (string?)i["text"] == l);
+            var reading = item?["readAs"] as string ?? item?.GetValueOrDefault("closest") as string
+                ?? readBack?.Strays.FirstOrDefault(s => s.Near == l)?.Read;
+            return reading is null ? null : Step(MathReading.Unwrap(reading));
+        }).ToArray();
+
+        var perPair = Math.Clamp(budget / (given.Length - 1), MinPairMs, EquationCheck.DefaultBudgetMs);
+        var options1 = check with { BudgetMs = perPair };
+        var pairs = Enumerable.Range(0, given.Length - 1).Select(i =>
+        {
+            var v = EquationCheck.Check(given[i], given[i + 1], options1);
+            var pair = Pair(v);
+            pair["from"] = i + 1;
+            pair["to"] = i + 2;
+            pair["read"] = read[i] is { } ra && read[i + 1] is { } rb ? Pair(EquationCheck.Check(ra, rb, options1)) : null;
+            return pair;
+        }).ToArray();
+
+        var count = (string kind) => pairs.Count(p => (string?)p["verdict"] == kind);
+        var failing = pairs.Where(p => (string?)p["verdict"] is not ("proved" or "agrees")).ToArray();
+        var readWrong = pairs.Where(p => p["read"] is Dictionary<string, object?> r && (string?)r["verdict"] == "differs").ToArray();
+        var summary = $"{given.Length} steps, {pairs.Length} checked: {count("proved")} proved, {count("agrees")} agree without proof"
+            + (count("differs") == 0 ? "" : $", {count("differs")} differ")
+            + (count("unsettled") == 0 ? "" : $", {count("unsettled")} unsettled")
+            + (count("unread") == 0 ? "" : $", {count("unread")} unread") + "."
+            + string.Concat(failing.Take(4).Select(p => $" Step {p["from"]} → {p["to"]} {p["verdict"]}: {p["detail"]}{At(p)}"))
+            + (failing.Length == 0 ? "" : " Fix the step, or give the domain it holds on.")
+            + (readWrong.Length == 0 ? "" : $" As the watcher read them, step{(readWrong.Length == 1 ? "" : "s")} "
+                + $"{string.Join(", ", readWrong.Select(p => $"{p["from"]} → {p["to"]}"))} differ: the reading, not the derivation, is wrong there; see the read-back's strays.");
+        var counts = new Dictionary<string, object?>
+        {
+            ["proved"] = count("proved"), ["agrees"] = count("agrees"), ["differs"] = count("differs"),
+            ["unsettled"] = count("unsettled"), ["unread"] = count("unread"),
+        };
+        var passed = failing.Length == 0;
+
+        record?.Invoke("derivation.verify", new Dictionary<string, object?>
+        {
+            ["name"] = name, ["steps"] = linear.Cast<object?>().ToArray(), ["pairs"] = pairs.Cast<object?>().ToArray(),
+            ["counts"] = counts, ["passed"] = passed,
+        });
+        record?.Invoke("check", new Dictionary<string, object?>
+        {
+            ["claim"] = DerivationClaim(name), ["passed"] = passed, ["detail"] = summary, ["by"] = "verify",
+        });
+        return new()
+        {
+            ["ok"] = true, ["passed"] = passed, ["name"] = name, ["steps"] = linear.Cast<object?>().ToArray(),
+            ["pairs"] = pairs.Cast<object?>().ToArray(), ["counts"] = counts, ["summary"] = summary,
+        };
+
+        static string Step(string latex) => AlignedLine().Replace(latex.Replace("&", ""), "").Trim();
+
+        static string At(Dictionary<string, object?> p) => p["at"] is Dictionary<string, object?> at && at.Count > 0
+            ? $" (at {string.Join(", ", at.Select(kv => $"{kv.Key} = {kv.Value}"))})"
+            : "";
+
+        static Dictionary<string, object?> Pair(EquationCheck.Verdict v) => new()
+        {
+            ["a"] = v.A, ["b"] = v.B, ["verdict"] = v.Kind, ["detail"] = v.Detail, ["provided"] = v.Provided,
+            ["approximate"] = v.Approximate,
+            ["at"] = v.At is { Count: > 0 } at ? at.ToDictionary(p => p.Key, p => (object?)p.Value) : null,
+            ["values"] = v.ValueA is { } x && v.ValueB is { } y ? new object?[] { Real(x), Real(y) } : null,
+        };
+
+        static object Real(System.Numerics.Complex c) => Math.Abs(c.Imaginary) < 1e-12 * Math.Max(1, c.Magnitude)
+            ? Math.Round(c.Real, 12) : c.ToString(CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
     /// A stray of the latest check settled after looking at its frame or crop: <paramref name="verdict"/> <c>'misread'</c>
     /// (it shows what the piece set; the reader misread it) or <c>'real'</c> (it shows what was read: a fault in the piece).
     /// Returns the check as it now stands. Refused in the script that ran the check: nothing has been looked at yet.
@@ -282,6 +380,34 @@ public sealed partial class VerifyToolkit
     internal static string ReadBackClaim(string name) => $"{ReadBackPrefix}{name}: every text has a source and was read as set";
 
     internal const string ReadBackPrefix = "Read-back of ";
+
+    /// <summary>The claim a derivation check records: reserved for <c>Verify</c>; <c>Stage.check</c> refuses it.</summary>
+    internal static string DerivationClaim(string name) => $"{DerivationPrefix}{name}: every step follows from the last";
+
+    internal const string DerivationPrefix = "Derivation ";
+
+    /// <summary>The derivation's options: its name, and what <c>Equation.equivalent</c> takes, with a budget for the whole.</summary>
+    private static (string Name, EquationCheck.Options Check, int BudgetMs) DerivationOptions(object? options)
+    {
+        var o = JsInterop.AsDict(options);
+        var forCheck = new System.Collections.Hashtable();
+        string name = "derivation";
+        var budget = DerivationBudgetMs;
+        if (o is not null)
+            foreach (var key in o.Keys.Cast<object>().Select(k => k.ToString()!))
+                switch (key)
+                {
+                    case "name": name = o[key]?.ToString()?.Trim() is { Length: > 0 } n ? n : name; break;
+                    case "budget": budget = (int)Math.Clamp(Convert.ToDouble(o[key], CultureInfo.InvariantCulture), 1000, MaxDerivationBudgetMs); break;
+                    case "domain" or "integers" or "samples": forCheck[key] = o[key]; break;
+                    default: throw new ArgumentException($"Verify.derivation's options are {{ name, domain, integers, samples, budget }}; '{key}' is not one.");
+                }
+        return (name, EquationCheck.ReadOptions(forCheck, "Verify.derivation"), budget);
+    }
+
+    /// <summary>An aligned derivation's line: a leading <c>=</c>, and a trailing <c>\\</c>.</summary>
+    [GeneratedRegex(@"^\s*=\s*|\s*\\\\\s*$")]
+    private static partial Regex AlignedLine();
 
     private static string Hash(string path) => Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path)))[..32];
 
@@ -371,6 +497,9 @@ public sealed partial class VerifyToolkit
 
     /// <summary>Boxes given per text: an axis label repeated across small multiples needs a few to find, not all of them.</summary>
     private const int MaxBoxes = 12;
+
+    /// <summary>A derivation's length and time: 30 steps, 15 s for the whole by default (25 s at most, under the 30 s script limit), at least 0.4 s a step.</summary>
+    private const int MaxSteps = 30, DerivationBudgetMs = 15000, MaxDerivationBudgetMs = 25000, MinPairMs = 400;
 
     private readonly VideoReader? video;
     private readonly string? projectRoot;
@@ -495,6 +624,9 @@ public abstract class ReadBackCheck(string name, Dictionary<string, object?>[] i
     internal abstract string Evidence { get; }
 
     protected Dictionary<string, object?>[] Items { get; } = items;
+
+    /// <summary>The items, for a later check that reads what this one read: <c>Verify.derivation</c>.</summary>
+    internal IReadOnlyList<Dictionary<string, object?>> ItemList => Items;
     protected string? Model { get; } = model;
     protected string? Endpoint { get; } = endpoint;
 

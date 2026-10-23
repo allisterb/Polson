@@ -5179,6 +5179,12 @@ return canvas;
 
   Recorded as `image.verify`, which the studio's Verification view draws over the image, and as a judged `check`. The latest check, film or image, is held for `Verify.stray`.
 - `Verify.stray(n: number, verdict: 'misread' | 'real', note?: string)` → `object` — Settles stray `n` of the latest check, film or image, after you have looked at its frame or crop, recorded as `film.stray` or `image.stray` and as the check's updated verdict. Returns the check as it now stands, with a fresh `summary` and `passed`. Throws in the script that ran the check.
+- `Verify.derivation(steps: (string | equation)[], options?: { name?: string, domain?: object, integers?: string[], samples?: number, budget?: number })` → `object` — **A derivation checked step by step**: each step equals the one before it, as `Equation.equivalent` decides. Returns `{ ok, passed, name, steps, pairs, counts, summary }`.
+  - `steps` are LaTeX strings or `comp.equation` handles, 2 to 30, in order. Give the lines as written: a leading `=`, the `&` of an aligned line and a trailing `\\` are dropped. Two equations in a row are a step of a solution (`2x + 3 = 7` then `2x = 4`). They are equivalent when one's `lhs − rhs` is a constant multiple of the other's; squaring away a root is not.
+  - Each pair is `{ from, to, a, b, verdict, detail, at, values, provided, approximate, read }`, numbered from 1. `passed` is true when every pair is `'proved'` or `'agrees'`; the summary names each failing step with its counterexample.
+  - **The steps as the reader read them are checked too**, when the latest `Verify.film` or `Verify.image` read them. `read` holds that pair's verdict on the readings, whether read as set or misread. A reading that breaks the chain is reported in the summary against the reading, not the derivation, and does not change `passed`.
+  - `domain`, `integers` and `samples` are `Equation.equivalent`'s. `budget` is the milliseconds for the whole derivation (15,000; at most 25,000), shared between the steps.
+  - Recorded as `derivation.verify` and as the check `Derivation <name>: every step follows from the last` (`name` defaults to `'derivation'`). `Stage.check` refuses a claim beginning `Derivation `: run the check, do not write its verdict.
 
 ---
 

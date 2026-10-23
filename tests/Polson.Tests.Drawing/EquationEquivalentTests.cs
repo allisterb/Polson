@@ -59,6 +59,23 @@ public class EquationEquivalentTests : TestsRuntime
         Assert.NotEqual(values[0], values[1]);
     }
 
+    /// <summary>
+    /// Two equations are a step of a solution when lhs − rhs of one is a constant multiple of the other's; squaring away a
+    /// root, or a different answer, is not.
+    /// </summary>
+    [Fact]
+    public void TestEquationsAreEquivalentWhenOneIsAMultipleOfTheOther()
+    {
+        Assert.Equal("proved", Check("2x + 3 = 7", "2x = 4")["verdict"]);
+        Assert.Equal("proved", Check("2x = 4", "x = 2")["verdict"]);
+        Assert.Equal("proved", Check("x^2 - 4 = 0", "(x-2)(x+2) = 0")["verdict"]);
+        Assert.Equal("differs", Check("2x = 4", "x = 3")["verdict"]);
+        var lost = Check("x^2 = 4", "x = 2");
+        Assert.Equal("differs", lost["verdict"]);
+        Assert.Contains("not equivalent", (string)lost["detail"]!);
+        Assert.Equal(("unread", "b"), ((string)Check("x = 2", "x + 2")["verdict"]!, (string)Check("x = 2", "x + 2")["side"]!));
+    }
+
     /// <summary>A sum's bound is drawn as an integer: Gauss's formula agrees, or proves, and one off by n does not.</summary>
     [Fact]
     public void TestASumIsCheckedOverWholeNumbers()

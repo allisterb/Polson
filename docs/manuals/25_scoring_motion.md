@@ -133,7 +133,7 @@ Then two different artifacts, for two different readers:
 
 ### Mathematics on screen
 
-> **Implemented by**: `comp.equation(...)`, `comp.axes(...)`, `comp.number(...)`, `Equation.equivalent(...)`.
+> **Implemented by**: `comp.equation(...)`, `comp.axes(...)`, `comp.number(...)`, `Equation.equivalent(...)`, `Verify.derivation(...)`.
 
 An equation is set with `comp.equation({ latex, origin, size })`, typeset in the engine from LaTeX, never lettered by hand
 with `comp.text` and never pasted in as a picture. It is drawn as outlines in a group of its own, so it moves, fades and
@@ -151,6 +151,11 @@ step. `Equation.equivalent(previous, next)` says whether each step equals the on
 `'agrees'` at every point tried, or `'differs'` with the point where it fails. With one argument it checks an equation
 `lhs = rhs`. A counterexample at a negative `x` usually means the step holds only where `x` is positive: say so with
 `{ domain: { x: [0, 5] } }` and say so on screen too.
+
+Then check the derivation as a whole, after the read-back: `Verify.derivation(steps)` takes the lines in order and
+records the verdict itself, so the run's record shows the mathematics was checked, not claimed. Give it the
+`comp.equation` handles you drew, and it also checks the steps as the watcher read them. A misreading that breaks the
+chain is the film's problem to fix, not the mathematics'.
 
 **A graph is drawn in data, not in pixels.** `comp.axes({ x: [min, max, step], y: [min, max, step], origin, size })` maps the
 data onto the frame; `axes.point(x, y)` places anything at a data point. `axes.plot(f)` draws a function, sampled once,
