@@ -287,6 +287,22 @@ public class VerifyTests : TestsRuntime, IDisposable
         Assert.Equal([("different figure", "∫₀¹ x² dx = 1/3")], strays.Select(s => (s.Kind, s.Near)));
     }
 
+    /// <summary>
+    /// A sign is part of a figure (the axes film read −1 as 1, 2026-10-23); a binary minus and a year range's hyphen are not.
+    /// </summary>
+    [Fact]
+    public void TestASignIsPartOfAFigure()
+    {
+        Assert.Equal(["-1"], FilmReadBack.MatchFigures("−1"));
+        Assert.Equal(["2", "4"], FilmReadBack.MatchFigures("b² − 4ac"));
+        Assert.Equal(["2016", "19"], FilmReadBack.MatchFigures("2016-19"));
+        Assert.Equal(["-3"], FilmReadBack.MatchFigures("(−3%)"));
+
+        var (seen, _, strays) = ImageReadBack.Match(["−1", "Lost −$974M"], ["1", "Lost $974M"]);
+        Assert.Equal([null, null], seen.AsEnumerable());
+        Assert.Equal(2, strays.Length);
+    }
+
     /// <summary>The same characters spaced differently are the same reading: <c>x² dx</c> and <c>x^2dx</c>; different figures are not.</summary>
     [Fact]
     public void TestSpacingAloneDoesNotMakeAReadingDifferent()

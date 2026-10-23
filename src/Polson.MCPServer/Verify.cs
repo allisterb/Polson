@@ -91,7 +91,8 @@ public sealed partial class VerifyToolkit
         var read = prepared.Select(p => new FilmReadBack.Reading(p.Compare, parsed[p.First].From, parsed[p.Last].To)).ToArray();
         var rawOf = prepared.GroupBy(p => p.Compare).ToDictionary(g => g.Key, g => g.First().Raw);
         string? Raw(string? compared) => compared is null ? null : rawOf.GetValueOrDefault(compared, compared);
-        var expected = comp.Texts().OfType<Dictionary<string, object?>>()
+        var texts = comp.Texts().OfType<Dictionary<string, object?>>().ToArray();
+        var expected = texts
             .Select(t => new FilmReadBack.Shown((string)t["text"]!, t["from"] as double?, t["to"] as double?, t["seconds"] as double? ?? 0,
                 [.. ((object?[])t["intervals"]!).OfType<double[]>()]))
             .ToArray();
@@ -100,7 +101,8 @@ public sealed partial class VerifyToolkit
 
         var items = expected.Select((e, i) =>
         {
-            var source = sources.Classify(e.Text, computed, scale);
+            // An axis label comp.axes drew is a ruler, not a claim: sourced as a scale without being declared.
+            var source = texts[i].GetValueOrDefault("kind") as string == "tick" ? (Kind: "scale", Detail: (string?)"axis label") : sources.Classify(e.Text, computed, scale);
             var seen = match.Seen[i];
             return new Dictionary<string, object?>
             {
@@ -336,7 +338,8 @@ public sealed partial class VerifyToolkit
     internal const string Question =
         "List every piece of text that appears on screen in this video, each exactly as it is written — keep numbers, units, "
         + "currency signs and punctuation as shown — with the second it first appears and the second it disappears. Give "
-        + "lines that appear at different times as separate items. Write any mathematical expression or equation as one "
+        + "lines that appear at different times as separate items. Small text counts: axis and tick labels, legends, "
+        + "footnotes. Write any mathematical expression or equation as one "
         + "item, however many lines it spans, in LaTeX. Only text: do not describe pictures.";
 
     internal const string Schema =
@@ -703,10 +706,15 @@ internal static class FilmReadBack
     }
 
     /// <summary>
-    /// The figures a reader would compare, in <see cref="Canon"/> form: <c>mc²</c> has the figure 2, so <c>mc³</c> is a
-    /// different figure. Sourcing keeps <see cref="Figures"/>, where an exponent is not a claim needing a source.
+    /// The figures a reader would compare, in <see cref="Canon"/> form and with their signs: <c>mc²</c> has the figure 2, so
+    /// <c>mc³</c> is a different figure, and <c>−1</c> is not <c>1</c>. A minus is a sign when it is attached to the number
+    /// and not to a word or number before it: <c>−1</c>, <c>(−3</c>, but not <c>n − 1</c> or <c>2016-19</c>. Sourcing keeps
+    /// <see cref="Figures"/>, unsigned, where an exponent is not a claim and a page saying "fell 3%" sources −3%.
     /// </summary>
-    internal static string[] MatchFigures(string? text) => Figures(Canon(text));
+    /// <remarks>Unsigned, an axes film read the y axis's −1 as 1 and the check counted it seen (2026-10-23): a loss read as a
+    /// gain would have passed the same way.</remarks>
+    internal static string[] MatchFigures(string? text) =>
+        [.. SignedFigure.Matches(Canon(text)).Select(m => m.Value.Replace(",", "").Replace("$", "").TrimEnd('.'))];
 
     /// <summary>
     /// A text with Unicode scripts spelled out and the minus sign as a hyphen: <c>x¹⁰ − aₙ</c> is <c>x^10 - a_n</c>. The
@@ -772,6 +780,9 @@ internal static class FilmReadBack
     };
 
     private static readonly Regex Figure = new(@"\d[\d,]*(?:\.\d+)?", RegexOptions.Compiled);
+
+    /// <summary>A figure with its sign, which may stand before a currency symbol: <c>−1</c>, <c>−$974</c>.</summary>
+    private static readonly Regex SignedFigure = new(@"(?:(?<![\w.)\]}])-\$?)?\d[\d,]*(?:\.\d+)?", RegexOptions.Compiled);
     #endregion
 }
 
@@ -793,7 +804,11 @@ internal static class ImageReadBack
         var used = new bool[read.Count];
         var seen = new string?[texts.Count];
         var padded = read.Select(r => " " + FilmReadBack.Normal(FilmReadBack.Canon(r)) + " ").ToArray();
-        bool Contains(int k, int i) => padded[k].Contains(" " + FilmReadBack.Normal(FilmReadBack.Canon(texts[i])) + " ", StringComparison.Ordinal);
+        // Contained, and every one of the line's figures, signs included, is among the reading's: −1 is not inside "1".
+        var readFigures = read.Select(FilmReadBack.MatchFigures).ToArray();
+        bool Contains(int k, int i) =>
+            padded[k].Contains(" " + FilmReadBack.Normal(FilmReadBack.Canon(texts[i])) + " ", StringComparison.Ordinal)
+            && FilmReadBack.MatchFigures(texts[i]).All(readFigures[k].Contains);
 
         // Longest first, so a heading is not taken by a reading of a one-word label inside it.
         foreach (var i in Enumerable.Range(0, texts.Count).OrderByDescending(i => FilmReadBack.Normal(texts[i]).Length))

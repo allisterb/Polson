@@ -146,6 +146,13 @@ words. Hold it still until it has been read, and change one thing at a time.
 so the read-back below checks equations as it checks words: what the film set against what a watcher read. The handle
 keeps both: `equation.latex` is what you wrote, `equation.text` the linear form.
 
+**A graph is drawn in data, not in pixels.** `comp.axes({ x: [min, max, step], y: [min, max, step], origin, size })` maps the
+data onto the frame; `axes.point(x, y)` places anything at a data point. `axes.plot(f)` draws a function, sampled once,
+and keying its `trimEnd` from 0 to 1 draws it on. `axes.area(f, a, b)` fills under it, `axes.riemann(f, a, b, n)` stands
+rectangles under it and returns their total, and `axes.tangent(f, x)` returns the slope it drew. Print those returned
+numbers, never retyped ones: a label computed from the value the picture drew cannot disagree with it. The axes' tick
+labels are equations, read back with the film; `axes.x` and `axes.y` hold the ranges they were drawn to.
+
 ### Reading the film back
 
 > **Implemented by**: `comp.texts()`, `Verify.film(...)`, `Verify.stray(...)`.
