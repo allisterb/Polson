@@ -39,7 +39,7 @@ using static MotionTextSelectors;
 /// <c>docs/Polson.core.md</c> and the studio manuals.
 /// </para>
 /// </remarks>
-public sealed class MotionText
+public sealed class MotionText : IShownText
 {
     #region Constructors
     internal MotionText(MotionTextLayer layer, MotionLayerList stack) => (this.layer, this.stack) = (layer, stack);
@@ -135,6 +135,12 @@ public sealed class MotionText
 
     /// <summary>Whether any letter is visible on the frame at the film's <paramref name="time"/>: <c>comp.texts()</c>'s test.</summary>
     internal bool VisibleOnFrame(double time) => Letters(time, FrameOn, "texts").Count > 0;
+
+    string? IShownText.Desc => layer.Desc;
+
+    string IShownText.Kind => "text";
+
+    bool IShownText.VisibleOnFrame(double time) => VisibleOnFrame(time);
 
     /// <summary>
     /// The letters at a time in the stack's own terms, or carried out to the frame: each group above, outermost first,

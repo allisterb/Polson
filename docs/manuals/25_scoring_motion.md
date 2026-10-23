@@ -131,6 +131,21 @@ Then two different artifacts, for two different readers:
 
 `Motion.count` reports how many frames are held and `Motion.clear()` discards them, which matters because frames are uncompressed bitmaps and a long capture at full size will reach the ceiling.
 
+### Mathematics on screen
+
+> **Implemented by**: `comp.equation(...)`.
+
+An equation is set with `comp.equation({ latex, origin, size })`, typeset in the engine from LaTeX, never lettered by hand
+with `comp.text` and never pasted in as a picture. It is drawn as outlines in a group of its own, so it moves, fades and
+keys as any group does; grow it by scaling a group around it, since its size is fixed when it is typeset.
+
+**Give an equation its reading time, and a little more.** A viewer reads a formula symbol by symbol, more slowly than
+words. Hold it still until it has been read, and change one thing at a time.
+
+`comp.texts()` lists each equation by its linear form, the line a reader would write (`x = (−b ± √(b² − 4ac))/(2a)`),
+so the read-back below checks equations as it checks words: what the film set against what a watcher read. The handle
+keeps both: `equation.latex` is what you wrote, `equation.text` the linear form.
+
 ### Reading the film back
 
 > **Implemented by**: `comp.texts()`, `Verify.film(...)`, `Verify.stray(...)`.

@@ -28,7 +28,7 @@ using SkiaSharp;
 /// form is the one documented in <c>docs/Polson.core.md</c> and the studio manuals.
 /// </para>
 /// </remarks>
-public abstract class MotionLayerList
+public abstract partial class MotionLayerList
 {
     #region Fields
     private protected readonly List<MotionLayer> layers = [];
@@ -845,7 +845,7 @@ public sealed class MotionComposition : MotionLayerList
     internal bool YDown => view[3] > view[1];
 
     /// <summary>Every text added anywhere in this composition, groups included, in the order added.</summary>
-    internal List<MotionText> TextHandles { get; } = [];
+    internal List<IShownText> TextHandles { get; } = [];
     #endregion
 
     #region Methods
@@ -876,6 +876,7 @@ public sealed class MotionComposition : MotionLayerList
             return (object?)new Dictionary<string, object?>
             {
                 ["text"] = t.Text,
+                ["kind"] = t.Kind,
                 ["desc"] = t.Desc,
                 ["from"] = intervals.Length == 0 ? null : intervals[0][0],
                 ["to"] = intervals.Length == 0 ? null : intervals[^1][1],

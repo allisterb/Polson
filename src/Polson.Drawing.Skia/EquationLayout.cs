@@ -153,8 +153,12 @@ internal sealed class EquationLayout
         }
     }
 
-    /// <summary>The outlines the equation draws, in the coordinates <see cref="Draw"/> would use, with their colours.</summary>
-    public List<(SKPath Path, SKColor Color)> Outlines(float x, float y, SKColor color)
+    /// <summary>
+    /// The outlines the equation draws, its left baseline at (<paramref name="x"/>, <paramref name="y"/>), with their
+    /// colours: in y-down units as <see cref="Draw"/> uses, or with <paramref name="yDown"/> false in y-up units, as a
+    /// Synfig-style view is.
+    /// </summary>
+    public List<(SKPath Path, SKColor Color)> Outlines(float x, float y, SKColor color, bool yDown = true)
     {
         using var bitmap = new SKBitmap(1, 1);
         using var canvas = new SKCanvas(bitmap);
@@ -165,7 +169,7 @@ internal sealed class EquationLayout
             var target = new MathCanvas(canvas, paint, collected);
             canvas.Save();
             canvas.Translate(x, y);
-            canvas.Scale(1, -1);
+            if (yDown) canvas.Scale(1, -1);
             Display.Position = new PointF(0, 0);
             Display.Draw(new GraphicsContext(target, null));
             canvas.Restore();
