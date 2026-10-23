@@ -138,12 +138,54 @@ internal static partial class EquationCheck
     }
 
     /// <summary>
+    /// LaTeX as its writer meant it: math delimiters taken off (<c>$…$</c>, <c>$$…$$</c>, <c>\(…\)</c>, <c>\[…\]</c>), and
+    /// commands a JSON answer turned into control characters put back. A model writes <c>\begin</c> into a JSON string
+    /// without doubling the backslash, and the parser reads <c>\b</c> as a backspace: <c>\begin</c> arrived as backspace +
+    /// <c>egin</c> (2026-10-23), and <c>\times</c>, <c>\theta</c>, <c>\frac</c>, <c>\neq</c>, <c>\rho</c> go the same way. Shared
+    /// by the read-back, for a watcher's reading, and by <see cref="Check"/>, for LaTeX a model wrote.
+    /// </summary>
+    internal static string Unwrap(string latex)
+    {
+        var r = latex;
+        if (r.IndexOfAny(['\b', '\f', '\t', '\r', '\n']) >= 0)
+        {
+            var repaired = new System.Text.StringBuilder(r.Length + 8);
+            for (var i = 0; i < r.Length; i++)
+            {
+                var c = r[i];
+                var letterNext = i + 1 < r.Length && char.IsAsciiLetter(r[i + 1]);
+                var escape = c switch
+                {
+                    '\b' => "\\b", '\f' => "\\f", '\t' => "\\t", '\r' when letterNext => "\\r",
+                    '\n' when letterNext && MathMark().IsMatch(r) => "\\n",
+                    _ => null,
+                };
+                if (escape is null) repaired.Append(c); else repaired.Append(escape);
+            }
+            r = repaired.ToString();
+        }
+        var t = r.Trim();
+        foreach (var (open, close) in Delimiters)
+            if (t.Length > open.Length + close.Length && t.StartsWith(open, StringComparison.Ordinal) && t.EndsWith(close, StringComparison.Ordinal))
+                return t[open.Length..^close.Length].Trim();
+        return r;
+    }
+
+    /// <summary>A command, a superscript, or a braced subscript: <c>\frac</c>, <c>b^2</c>, <c>x_{i}</c>.</summary>
+    internal static bool LooksLikeMath(string text) => MathMark().IsMatch(text);
+
+    /// <summary>
     /// The LaTeX as the bridge needs it: calculus written with an italic d, as agents and readers write it
     /// (<c>\frac{d}{dx}</c>, <c>\int … dx</c>), given the upright d the bridge requires.
     /// </summary>
     internal static string Normalise(string latex)
     {
         var s = DerivativeFraction().Replace(latex, m => $@"\frac{{\mathrm{{d}}{m.Groups[1].Value}{m.Groups[2].Value}}}{{\mathrm{{d}}{m.Groups[3].Value}{m.Groups[4].Value}}}");
+        s = AbsoluteBars(s.Replace(@"\lvert", @"\left|").Replace(@"\rvert", @"\right|"));
+        // A sum over i: the bridge reads i as the imaginary unit, so the index is given a letter the LaTeX does not use.
+        // Every lone i is renamed, which misreads only a sum over i beside a complex i, as in no explainer seen yet.
+        if (SumOverI().IsMatch(s) && new[] { "k", "j", "m", "r", "q" }.FirstOrDefault(l => !Regex.IsMatch(s, $@"(?<![\\A-Za-z]){l}(?![A-Za-z])")) is { } free)
+            s = LoneI().Replace(s, free);
         // An integral's own d is the last one before its end: one per \int, taken from the right.
         var integrals = Regex.Count(s, @"\\int(?![a-zA-Z])");
         if (integrals == 0) return s;
@@ -151,9 +193,36 @@ internal static partial class EquationCheck
         return IntegralD().Replace(s, m => ds.Contains(m.Index) ? $@"\mathrm{{d}}{m.Groups[1].Value}" : m.Value);
     }
 
+    /// <summary>
+    /// Bare absolute-value bars as <c>\left| … \right|</c>, which the bridge reads as <c>abs</c>: CSharpMath parses a bare
+    /// <c>|</c> as a plain symbol. Bars pair within their brace group, alternately opening and closing, so <c>|a||b|</c> is
+    /// |a|·|b|; nested bars, <c>|x - |y||</c>, are ambiguous in LaTeX itself and pair left to right. <c>\|</c> and
+    /// <c>\left|</c>, <c>\right|</c> are left alone.
+    /// </summary>
+    internal static string AbsoluteBars(string latex)
+    {
+        if (!latex.Contains('|')) return latex;
+        var b = new System.Text.StringBuilder(latex.Length + 16);
+        var open = new Stack<bool>([false]);
+        for (var i = 0; i < latex.Length; i++)
+        {
+            var c = latex[i];
+            if (c == '{') open.Push(false);
+            else if (c == '}' && open.Count > 1) open.Pop();
+            var written = i > 0 && latex[i - 1] == '\\'
+                || b.ToString().EndsWith(@"\left", StringComparison.Ordinal) || b.ToString().EndsWith(@"\right", StringComparison.Ordinal);
+            if (c != '|' || written) { b.Append(c); continue; }
+            var opening = !open.Pop();
+            open.Push(opening);
+            b.Append(opening ? @"\left|" : @"\right|");
+        }
+        return b.ToString();
+    }
+
     /// <summary>The parsed MathList and its linear form, or why the LaTeX was refused.</summary>
     private static (MathList? List, string? Linear, string? Refused) Read(string latex)
     {
+        latex = Unwrap(latex);      // a model's LaTeX, as from a JSON answer: $ … $, and \frac arriving as a form feed
         if (EquationLayout.Guard(latex) is { } refusal) return (null, null, refusal);
         if (latex.Length > MaxLength) return (null, null, $"the LaTeX is {latex.Length} characters; at most {MaxLength} are checked.");
         int depth = 0, deepest = 0;
@@ -427,6 +496,17 @@ internal static partial class EquationCheck
 
     [GeneratedRegex(@"(?<![\\A-Za-z])d\s*([A-Za-z])(?![A-Za-z])")]
     private static partial Regex IntegralD();
+
+    [GeneratedRegex(@"\\[A-Za-z]+|\^|_\{")]
+    private static partial Regex MathMark();
+
+    [GeneratedRegex(@"\\(sum|prod)\s*_\s*\{?\s*i\s*=")]
+    private static partial Regex SumOverI();
+
+    [GeneratedRegex(@"(?<![\\A-Za-z])i(?![A-Za-z])")]
+    private static partial Regex LoneI();
+
+    private static readonly (string Open, string Close)[] Delimiters = [("$$", "$$"), ("$", "$"), (@"\(", @"\)"), (@"\[", @"\]")];
     #endregion
 
     #region Fields
