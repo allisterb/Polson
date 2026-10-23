@@ -600,6 +600,48 @@ public class CanvasRenderingContext2D
         DrawTextLines(text, x, y, font, paint, maxWidth);
     }
 
+    /// <summary>
+    /// An equation from LaTeX, filled with <c>fillStyle</c> where the LaTeX sets no colour, placed by <c>textAlign</c> and
+    /// <c>textBaseline</c> as text is. <paramref name="options"/>: <c>{ size? }</c>, the em in canvas units, the current
+    /// font's size by default. Returns the box it occupied with its <c>linear</c> form, and records that line as drawn text,
+    /// so the layout audit and <c>Verify.image</c> see it. A parse error throws, naming the position.
+    /// </summary>
+    public Dictionary<string, object?> FillEquation(string latex, float x, float y, object? options = null)
+    {
+        var size = JsInterop.AsDict(options) is null ? _currentState.FontSize : EquationToolkit.Size(options, "ctx.fillEquation");
+        var (layout, error) = EquationLayout.Parse(latex, size);
+        if (layout is null) throw new ArgumentException($"ctx.fillEquation: {error}");
+
+        var left = _currentState.TextAlign switch
+        {
+            "center" => x - layout.Width / 2f,
+            "right" or "end" => x - layout.Width,
+            _ => x
+        };
+        var baseline = _currentState.TextBaseline switch
+        {
+            "top" or "hanging" => y + layout.Ascent,
+            "middle" => y + (layout.Ascent - layout.Descent) / 2f,
+            "bottom" or "ideographic" => y - layout.Descent,
+            _ => y
+        };
+
+        using var paint = _currentState.CreateFillPaint();
+        layout.Draw(Canvas.SkCanvas, left, baseline, paint);
+
+        var local = new SKRect(left, baseline - layout.Ascent, left + layout.Width, baseline + layout.Descent);
+        var m = Canvas.SkCanvas.TotalMatrix;
+        var box = m.MapRect(local);
+        var scale = MathF.Sqrt(MathF.Abs(m.ScaleX * m.ScaleY - m.SkewX * m.SkewY));
+        if (paint.Color.Alpha > 0 || paint.Shader is not null)
+            Canvas.RecordText(layout.Linear, box, size * scale, MathF.Abs(m.SkewX) < 1e-4f && MathF.Abs(m.SkewY) < 1e-4f);
+
+        var result = EquationToolkit.Describe(layout);
+        (result["x"], result["y"], result["x2"], result["y2"]) = (local.Left, local.Top, local.Right, local.Bottom);
+        result["baseline"] = baseline;
+        return result;
+    }
+
     /// <summary>Wraps and fills a paragraph, returning the box it occupied.</summary>
     public Dictionary<string, object> FillWrappedText(string text, float x, float y, float maxWidth,
         float? lineHeight = null)
