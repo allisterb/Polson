@@ -59,10 +59,35 @@
           "AngleSharp": "[1.5.0, 2.0.0)"
         }
       },
+      "AngouriMath": {
+        "type": "Transitive",
+        "resolved": "2.5.0",
+        "contentHash": "wrOOzOA0FePqdso5UnL5w4qXXPVEHVJn8Ccd0l0o6WAtMG3Fv2ODgt+7JV9zAyNIpsyCn0nah5YJQ/w2qJuVMA==",
+        "dependencies": {
+          "Antlr4.Runtime.Standard": "4.13.1",
+          "GenericTensor": "1.0.4",
+          "HonkSharp": "1.0.3",
+          "PeterO.Numbers": "1.8.0"
+        }
+      },
+      "Antlr4.Runtime.Standard": {
+        "type": "Transitive",
+        "resolved": "4.13.1",
+        "contentHash": "Da5+i4kFHUseJRZGcBG5fmZGpA/Ns180ibrQMxgZzjpQOnENVvSL5gi5HZ8Ncz8/AR2WsKbOg2lMBzjz0HUQcA=="
+      },
       "CSharpMath": {
         "type": "Transitive",
         "resolved": "1.0.0-pre.2",
         "contentHash": "bz47Ascj0qrc4vZZgs6H60uHUk1vwe5R/6W9NTQsz2cjBzGcYQoBYjxTFbHly0iPlaQ2RLGcgJYlEgfC5KAf9A=="
+      },
+      "CSharpMath.Evaluation": {
+        "type": "Transitive",
+        "resolved": "1.0.0-pre.2",
+        "contentHash": "UBjtjNRq7mnQ962FsBvpQwoa7/P/I8FKo27ksXy7AmBwDmbfX+Y4gBriPYTHOafZtK4X1unlxHcIKB4PmzvI1g==",
+        "dependencies": {
+          "AngouriMath": "1.4.0",
+          "CSharpMath": "1.0.0-pre.2"
+        }
       },
       "CSharpMath.Rendering": {
         "type": "Transitive",
@@ -76,6 +101,11 @@
         "type": "Transitive",
         "resolved": "4.3.1",
         "contentHash": "A8UtcghHQlWxPJhJF5bsfEYO7068JHGTuJ7tzyyMjd5fE/N/xY1cVOUhzuLLFwMOCJVnM4mqSQc93W9fGfZ1kA=="
+      },
+      "GenericTensor": {
+        "type": "Transitive",
+        "resolved": "1.0.4",
+        "contentHash": "sQsqRbJiwFH37OjriIKQx3VWKuRJ09s/SZdwqL0FreJbFSpbpY1UKeiP8RWsb88QcS2DgyicheyvdJ9YgLnUpQ=="
       },
       "Google.Api.CommonProtos": {
         "type": "Transitive",
@@ -250,6 +280,11 @@
         "resolved": "14.2.0",
         "contentHash": "NCqaG3bJDl66JdmHeyOpRUf4eiGVwu8OSxGv6ukofBiukVyUpWj01btr/telMQLQ+XuQ83iDpi6NRDFoRIcojA=="
       },
+      "HonkSharp": {
+        "type": "Transitive",
+        "resolved": "1.0.3",
+        "contentHash": "nV2VQhjXCuF7UC730/Pmb+CLfsdZad2J1JCNqlVCHjgBbn41LWODrJv5LDQPUKYIjZJC66pR9rSmSmyalKF7fA=="
+      },
       "Jint": {
         "type": "Transitive",
         "resolved": "4.9.2",
@@ -257,6 +292,11 @@
         "dependencies": {
           "Acornima": "1.6.2"
         }
+      },
+      "MathNet.Numerics": {
+        "type": "Transitive",
+        "resolved": "5.0.0",
+        "contentHash": "pg1W2VwaEQMAiTpGK840hZgzavnqjlCMTVSbtVCXVyT+7AX4mc1o89SPv4TBlAjhgCOo9c1Y+jZ5m3ti2YgGgA=="
       },
       "Microsoft.Bcl.AsyncInterfaces": {
         "type": "Transitive",
@@ -611,6 +651,11 @@
         "resolved": "13.0.4",
         "contentHash": "pdgNNMai3zv51W5aq268sujXUyx7SNdE2bj1wZcWjAQrKMFZV260lbqYop1d2GM67JI1huLRwxo9ZqnfF/lC6A=="
       },
+      "PeterO.Numbers": {
+        "type": "Transitive",
+        "resolved": "1.8.0",
+        "contentHash": "N8ffDC+jwF1XcA+VfugZO1+wFClOvWjyXzXrstkpdjkgH2LgAfnEZIAFQbKgidHtTh5RAfwhCtH3MSfgZXxXwA=="
+      },
       "Serilog": {
         "type": "Transitive",
         "resolved": "4.2.0",
@@ -855,7 +900,10 @@
       "polson.drawing.skia": {
         "type": "Project",
         "dependencies": {
+          "AngouriMath": "[2.5.0, )",
+          "CSharpMath.Evaluation": "[1.0.0-pre.2, )",
           "CSharpMath.Rendering": "[1.0.0-pre.2, )",
+          "MathNet.Numerics": "[5.0.0, )",
           "Polson.Drawing.Svg": "[0.1.0, )",
           "Polson.Runtime": "[0.1.0, )",
           "SkiaSharp": "[4.148.0, )",
