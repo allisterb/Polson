@@ -17,6 +17,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="CSharpMath.Rendering" Version="1.0.0-pre.2" />
     <PackageReference Include="SkiaSharp" Version="4.148.0" />
     <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="4.148.0" />
   </ItemGroup>

@@ -54,6 +54,19 @@
           "AngleSharp": "[1.5.0, 2.0.0)"
         }
       },
+      "CSharpMath": {
+        "type": "Transitive",
+        "resolved": "1.0.0-pre.2",
+        "contentHash": "bz47Ascj0qrc4vZZgs6H60uHUk1vwe5R/6W9NTQsz2cjBzGcYQoBYjxTFbHly0iPlaQ2RLGcgJYlEgfC5KAf9A=="
+      },
+      "CSharpMath.Rendering": {
+        "type": "Transitive",
+        "resolved": "1.0.0-pre.2",
+        "contentHash": "l/+Gzf0Nop2QrFMCsutmYA9iXM/+AjKGHXFCN6y+Y12yqmXZoX/m75rgj5M5y7ZTNmchUj4fRnaa7EEDA+fgJA==",
+        "dependencies": {
+          "CSharpMath": "1.0.0-pre.2"
+        }
+      },
       "ExCSS": {
         "type": "Transitive",
         "resolved": "4.3.1",
@@ -199,10 +212,7 @@
       "Microsoft.TestPlatform.ObjectModel": {
         "type": "Transitive",
         "resolved": "17.12.0",
-        "contentHash": "TDqkTKLfQuAaPcEb3pDDWnh7b3SyZF+/W9OZvWFp6eJCIiiYFdSB6taE2I6tWrFw5ywhzOb6sreoGJTI6m3rSQ==",
-        "dependencies": {
-          "System.Reflection.Metadata": "1.6.0"
-        }
+        "contentHash": "TDqkTKLfQuAaPcEb3pDDWnh7b3SyZF+/W9OZvWFp6eJCIiiYFdSB6taE2I6tWrFw5ywhzOb6sreoGJTI6m3rSQ=="
       },
       "Microsoft.TestPlatform.TestHost": {
         "type": "Transitive",
@@ -350,11 +360,6 @@
           "Svg.SceneGraph": "5.2.1"
         }
       },
-      "System.Reflection.Metadata": {
-        "type": "Transitive",
-        "resolved": "1.6.0",
-        "contentHash": "COC1aiAJjCoA5GBF+QKL2uLqEBew4JsCkQmoHKbN3TlOZKa2fKLz5CpiRQKDz0RsAOEGsVKqOD5bomsXq/4STQ=="
-      },
       "xunit.abstractions": {
         "type": "Transitive",
         "resolved": "2.0.3",
@@ -406,6 +411,7 @@
       "polson.drawing.skia": {
         "type": "Project",
         "dependencies": {
+          "CSharpMath.Rendering": "[1.0.0-pre.2, )",
           "Polson.Drawing.Svg": "[0.1.0, )",
           "Polson.Runtime": "[0.1.0, )",
           "SkiaSharp": "[4.148.0, )",

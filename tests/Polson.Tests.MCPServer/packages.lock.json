@@ -59,6 +59,19 @@
           "AngleSharp": "[1.5.0, 2.0.0)"
         }
       },
+      "CSharpMath": {
+        "type": "Transitive",
+        "resolved": "1.0.0-pre.2",
+        "contentHash": "bz47Ascj0qrc4vZZgs6H60uHUk1vwe5R/6W9NTQsz2cjBzGcYQoBYjxTFbHly0iPlaQ2RLGcgJYlEgfC5KAf9A=="
+      },
+      "CSharpMath.Rendering": {
+        "type": "Transitive",
+        "resolved": "1.0.0-pre.2",
+        "contentHash": "l/+Gzf0Nop2QrFMCsutmYA9iXM/+AjKGHXFCN6y+Y12yqmXZoX/m75rgj5M5y7ZTNmchUj4fRnaa7EEDA+fgJA==",
+        "dependencies": {
+          "CSharpMath": "1.0.0-pre.2"
+        }
+      },
       "ExCSS": {
         "type": "Transitive",
         "resolved": "4.3.1",
@@ -842,6 +855,7 @@
       "polson.drawing.skia": {
         "type": "Project",
         "dependencies": {
+          "CSharpMath.Rendering": "[1.0.0-pre.2, )",
           "Polson.Drawing.Svg": "[0.1.0, )",
           "Polson.Runtime": "[0.1.0, )",
           "SkiaSharp": "[4.148.0, )",
