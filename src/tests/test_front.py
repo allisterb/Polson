@@ -674,6 +674,15 @@ class AdkStatusTests(unittest.TestCase):
             channel.pending.return_value = []
             self.assertEqual(front.status_of(p, run, []), "running")
 
+    def test_a_run_the_host_is_working_is_running_however_still_its_record(self):
+        """ftcexplainer1 read as Stopped during a 154 s model turn: a still record is not an ended run."""
+        p = project_dir(self.root, "ftc")
+        quiet = mock.Mock(observed=True, live=False, status="watching")
+        events = [{"type": "script.ok"}]
+        self.assertEqual(front.status_of(p, quiet, events), "stopped")
+        self.assertEqual(front.status_of(p, quiet, events, lambda name: name == "ftc"), "running")
+        self.assertEqual(front.status_of(p, quiet, events, lambda name: False), "stopped")
+
     def test_a_commissioned_run_before_its_first_event_is_queued_not_a_draft(self):
         p = project_dir(self.root, "fresh")
         watching = mock.Mock(observed=True, live=False, status="watching")

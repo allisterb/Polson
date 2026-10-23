@@ -502,6 +502,37 @@ public class VerifyTests : TestsRuntime, IDisposable
         Assert.Throws<ArgumentException>(() => verify.Derivation(new object[] { "x", "x" }, new Dictionary<string, object?> { ["steps"] = 2 }));
     }
 
+    /// <summary>
+    /// ftcexplainer1 wrote an equation followed by expressions, and was told an equation and an expression do not compare.
+    /// Such a step is a chain, checked as its sides: the equation's own claim is checked, so a wrong antiderivative with
+    /// right arithmetic after it fails. A sum's subscript = is not a side, and equations among equations stay a solution.
+    /// </summary>
+    [Fact]
+    public void TestAnEquationBesideAnExpressionIsCheckedAsAChain()
+    {
+        var verify = new VerifyToolkit(null, root, null);
+        var right = verify.Derivation(new object[] { @"\int_0^2 x^2\,dx = \left[\frac{x^3}{3}\right]_0^2", @"\frac{2^3}{3} - \frac{0^3}{3}", @"\frac{8}{3}" });
+        Assert.True((bool)right["passed"]!, (string)right["summary"]!);
+        Assert.Equal(["∫₀² x² dx", "[x³/3]₀²", "2³/3 − 0³/3", "8/3"], ((object?[])right["steps"]!).Cast<string>());
+        Assert.Equal(3, ((object?[])right["given"]!).Length);
+        var pairs = ((object?[])right["pairs"]!).Cast<Dictionary<string, object?>>().ToArray();
+        Assert.Equal([(1, 1), (1, 2), (2, 3)], pairs.Select(p => ((int)p["from"]!, (int)p["to"]!)));
+        Assert.Contains("4 expressions with each equation's sides apart", (string)right["summary"]!);
+
+        var wrong = verify.Derivation(new object[] { @"\int_0^2 x^2\,dx = \left[\frac{x^4}{4}\right]_0^2", @"\frac{2^4}{4} - 0", "4" });
+        Assert.False((bool)wrong["passed"]!);
+        Assert.Contains("Step 1's sides differs", (string)wrong["summary"]!);
+
+        Assert.True((bool)verify.Derivation(new object[] { @"\sum_{k=1}^{n} k = \frac{n(n+1)}{2}", @"\frac{n^2 + n}{2}" },
+            new Dictionary<string, object?> { ["integers"] = new[] { "n" } })["passed"]!);
+        Assert.True((bool)verify.Derivation(new object[] { "(x+1)^2 = x^2 + 2x + 1 = 1 + 2x + x^2", "x^2 + 2x + 1" })["passed"]!);
+        Assert.Equal(["2x + 3 = 7", "2x = 4", "x = 2"], ((object?[])verify.Derivation(new object[] { "2x + 3 = 7", "2x = 4", "x = 2" })["steps"]!).Cast<string>());
+        Assert.Equal([@"\sum_{k=1}^{n} k", @"\frac{n(n+1)}{2}"], VerifyToolkit.Sides(@"\sum_{k=1}^{n} k = \frac{n(n+1)}{2}"));
+        Assert.Equal([@"\{x : x = 1\}"], VerifyToolkit.Sides(@"\{x : x = 1\}"));
+        Assert.Equal(["a", "b", "c"], VerifyToolkit.Sides("a = b = c"));
+        Assert.Equal(["x = "], VerifyToolkit.Sides("x = "));
+    }
+
     /// <summary>A comp.equation handle is a step; and the claim a derivation records cannot be written by Stage.check.</summary>
     [Fact]
     public void TestEquationHandlesAreStepsAndTheClaimIsReserved()

@@ -272,6 +272,8 @@ def create_app(root: Path | None = None, registry: Registry | None = None,
     app.state.observe_only = observe_only
     app.state.create_at = create_at
     app.state.commissioner = commissioner
+    if commissioner is not None and callable(getattr(commissioner, "running", None)):
+        app.state.registry.in_flight = commissioner.running
     app.state.console_at = console_at
     app.state.console_apps = Path(console_apps).resolve() if console_apps else None
 

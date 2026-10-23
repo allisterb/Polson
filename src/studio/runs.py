@@ -19,7 +19,7 @@ import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, TYPE_CHECKING
+from typing import Any, Callable, TYPE_CHECKING
 
 from orchestrator import project as project_mod
 from orchestrator.broker import Subscription
@@ -135,6 +135,10 @@ class Registry:
         self.daily = daily
         self._runs: dict[str, Run] = {}
         self._today: list[str] = []
+        #: Whether this host is working the named project right now, when the host can say: the ADK runtime runs its
+        #: requests in this process and knows. Without it a watched run is live only while its record moves, and a
+        #: 154 s model turn on ftcexplainer1 (2026-10-23) read as stopped in the middle of the run.
+        self.in_flight: Callable[[str], bool] | None = None
     # endregion
 
     # region Properties

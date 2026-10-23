@@ -51,19 +51,19 @@ internal static partial class EquationCheck
     public static Verdict Check(string a, string? b, Options options)
     {
         var (listA, linearA, refusedA) = Read(a);
-        if (refusedA is not null) return new("unread", null, null, refusedA) { Side = "a" };
+        if (refusedA is not null) return new("unread", null, null, Explain(refusedA)) { Side = "a" };
         MathList? listB = null;
         string? linearB = null;
         if (b is not null)
         {
             (listB, linearB, var refusedB) = Read(b);
-            if (refusedB is not null) return new("unread", linearA, null, refusedB) { Side = "b" };
+            if (refusedB is not null) return new("unread", linearA, null, Explain(refusedB)) { Side = "b" };
         }
 
         // The bridge, then each pass, on a thread of their own: a deep tree recurses, and a slow one must be stoppable.
         var converted = OnOwnStack(_ => Convert(listA!, listB), ConvertMs, out var convertTimedOut);
         if (convertTimedOut || converted.Error is not null || converted.Left is null || converted.Right is null)
-            return new("unread", linearA, linearB, convertTimedOut ? "converting the LaTeX took too long." : converted.Error ?? "the LaTeX is not an expression.")
+            return new("unread", linearA, linearB, convertTimedOut ? "converting the LaTeX took too long." : Explain(converted.Error) ?? "the LaTeX is not an expression.")
                 { Side = converted.Side };
         var (left, right) = (converted.Left, converted.Right);
         if (converted.Equations) return EquationStep(left, right, linearA, linearB, options, Seed(a, b));
@@ -223,6 +223,23 @@ internal static partial class EquationCheck
         return b.ToString();
     }
 
+    /// <summary>
+    /// The bridge's refusal, with what to do about it where the bridge's words name only a symbol. ftcexplainer1's plan was
+    /// told "Unsupported Relation ≈" and "Unsupported Ordinary ′" (2026-10-23), neither of which says what would be read.
+    /// </summary>
+    private static string? Explain(string? error) => error switch
+    {
+        null => null,
+        _ when error.StartsWith("Unsupported", StringComparison.Ordinal) && (error.Contains('≈') || error.Contains('∼') || error.Contains('≃')) =>
+            $"{error}: an approximation is not an identity, so no step check can prove it. Check what it approximates with Verify.claim, "
+            + "or write the exact statement, such as a limit.",
+        _ when error.StartsWith("Unsupported", StringComparison.Ordinal) && (error.Contains('′') || error.Contains('″') || error.EndsWith('\''))
+            || error.Contains(@"\prime", StringComparison.Ordinal) =>
+            $"{error}: f′(x) names the derivative of a function the check does not know. Write the function out, as "
+            + @"\frac{d}{dx}(x^3/3), or check the statement in words with Verify.claim.",
+        _ => error,
+    };
+
     /// <summary>The parsed MathList and its linear form, or why the LaTeX was refused.</summary>
     private static (MathList? List, string? Linear, string? Refused) Read(string latex)
     {
@@ -266,7 +283,8 @@ internal static partial class EquationCheck
         {
             (Entity.Equalsf p, Entity.Equalsf q) => (p.Left - p.Right, q.Left - q.Right, true, null, null),
             (Entity.Equalsf, _) or (_, Entity.Equalsf) => (null, null, false,
-                "one is an equation and the other an expression: compare two equations, or two expressions.", left is Entity.Equalsf ? "b" : "a"),
+                "one is an equation and the other an expression: compare two equations, or two expressions. In a worked chain, "
+                + "Verify.derivation checks an equation beside an expression as its sides.", left is Entity.Equalsf ? "b" : "a"),
             _ => (left, right, false, null, null),
         };
     }

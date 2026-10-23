@@ -126,6 +126,11 @@ public class MotionCompositionTests(ITestOutputHelper output) : TestsRuntime
         e = Assert.Throws<ArgumentException>(() => comp.Circle(new Dictionary<string, object?> { ["radius"] = double.PositiveInfinity }));
         Assert.Contains("finite", e.Message);
         Assert.Throws<ArgumentException>(() => motion.Nodes.Linear("real", 0d, double.NaN));
+
+        // ftcexplainer1: [pt.x, pt.y] on axes.point's [x, y] was refused as "not a Object[]".
+        e = Assert.Throws<ArgumentException>(() => comp.Circle(new Dictionary<string, object?> { ["origin"] = new object?[] { null, null } }));
+        Assert.Contains("[undefined, undefined]", e.Message);
+        Assert.Contains("axes.point(x, y) is [x, y]", e.Message);
     }
 
     [Fact]

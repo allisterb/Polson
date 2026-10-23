@@ -165,7 +165,9 @@ def _run_create_project(
     if not inline_manuals:
         args += ["--no-inline-manuals"]
 
-    done = subprocess.run(args, capture_output=True, text=True)
+    # The CLI writes redirected output in the console code page, not UTF-8: without `errors` a `·` from Spectre
+    # killed the reader thread, which costs nothing on success and the whole failure detail on a failure.
+    done = subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if done.returncode != 0:
         detail = (done.stderr or done.stdout or "").strip()
         raise GenerateError(f"create-project failed ({done.returncode}).\n{detail}")
