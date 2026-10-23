@@ -14,16 +14,6 @@
           "PeterO.Numbers": "1.8.0"
         }
       },
-      "CSharpMath.Evaluation": {
-        "type": "Direct",
-        "requested": "[1.0.0-pre.2, )",
-        "resolved": "1.0.0-pre.2",
-        "contentHash": "UBjtjNRq7mnQ962FsBvpQwoa7/P/I8FKo27ksXy7AmBwDmbfX+Y4gBriPYTHOafZtK4X1unlxHcIKB4PmzvI1g==",
-        "dependencies": {
-          "AngouriMath": "1.4.0",
-          "CSharpMath": "1.0.0-pre.2"
-        }
-      },
       "CSharpMath.Rendering": {
         "type": "Direct",
         "requested": "[1.0.0-pre.2, )",

@@ -2723,6 +2723,10 @@ canvas;
 > **Every equation has a `linear` form**, the line a reader would write: `(−b ± √(b² − 4ac))/(2a)`. It is what the
 > drawn-text record holds for the equation, and what a read-back of the piece is compared with. A figure in an equation
 > needs a source like any other.
+>
+> **An equation drawn correctly can still be wrong.** `Equation.equivalent` checks the mathematics: that each step of a
+> derivation equals the last, and that a label's formula is what the code computed. It does so by AngouriMath's
+> simplification and by evaluating both sides at random points, in the engine, with no Python.
 
 ## `Equation`
 
@@ -2730,6 +2734,17 @@ canvas;
   drawing it: `{ ok, latex, linear, width, height, ascent, descent, size }`, or `{ ok: false, latex, error }` naming what
   the parser refused. `size` is the em in canvas units (default 32). LaTeX longer than 2,000 characters or nested more
   than 32 levels deep is refused before parsing.
+- `Equation.equivalent(a: string, b?: string, options?: { domain?: object, integers?: string[], samples?: number, budget?: number })` → `object` — **Whether two expressions are the same mathematics**, or with one argument whether an equation `lhs = rhs` holds: `{ verdict, a, b, detail, points, approximate, provided, at, values, side }`, a key that does not apply being `null`. `a` and `b` come back as linear forms. Check every step of a derivation before you draw it, and every formula a label states.
+  - `verdict` is one of five:
+    - `'proved'`: the difference simplified to 0. `provided` names a condition when the identity needs one: `\frac{x^2-1}{x-1}` is `x+1` provided `x ≠ 1`.
+    - `'agrees'`: no proof, but the sides were equal at every point tried. That is strong evidence, not proof.
+    - `'differs'`: there is a point where the sides are not equal. `at` is that point (`{ x: -1.37 }`) and `values` the two sides there. A counterexample outranks a simplifier's 0.
+    - `'unsettled'`: neither pass finished or could evaluate; `detail` says why.
+    - `'unread'`: the LaTeX was refused or is not an expression; `side` says which one.
+  - **Variables are drawn from both signs by default** (0.25 to 2.5 either side of 0), so `\sqrt{x^2}` and `x` differ, at a negative `x`. Give the domain the formula is used on, `{ domain: { x: [0, 5] } }`, and it agrees there. `\ln(ab) = \ln a + \ln b` needs `a` and `b` positive in the same way.
+  - A sum's bounds are drawn as whole numbers from 1 to 12, as is any name in `integers`. Points are drawn reproducibly from the inputs, so a counterexample can be re-run.
+  - Calculus is understood: `\frac{d}{dx}`, `\int_a^b … dx` (plain or upright `d`), `\sum_{k=1}^{n}`, `\lim`, and the evaluation bracket `\left[F\right]_a^b`, F(b) − F(a) in F's one variable. An integral AngouriMath cannot work out is integrated numerically, and `approximate` is then true. Write `\sin x \cos x` for sin(x)·cos(x): a function's unbracketed argument ends at the next function.
+  - `samples` is how many points must agree (24; 4 to 200). `budget` is the time allowed in milliseconds (4,000; 200 to 15,000), shared between simplifying and evaluating; on overrun the check stops and says so. Each side is at most 600 characters, with brackets nested at most 32 deep.
 
 ---
 

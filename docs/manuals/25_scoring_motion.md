@@ -133,7 +133,7 @@ Then two different artifacts, for two different readers:
 
 ### Mathematics on screen
 
-> **Implemented by**: `comp.equation(...)`, `comp.axes(...)`, `comp.number(...)`.
+> **Implemented by**: `comp.equation(...)`, `comp.axes(...)`, `comp.number(...)`, `Equation.equivalent(...)`.
 
 An equation is set with `comp.equation({ latex, origin, size })`, typeset in the engine from LaTeX, never lettered by hand
 with `comp.text` and never pasted in as a picture. It is drawn as outlines in a group of its own, so it moves, fades and
@@ -145,6 +145,12 @@ words. Hold it still until it has been read, and change one thing at a time.
 `comp.texts()` lists each equation by its linear form, the line a reader would write (`x = (−b ± √(b² − 4ac))/(2a)`),
 so the read-back below checks equations as it checks words: what the film set against what a watcher read. The handle
 keeps both: `equation.latex` is what you wrote, `equation.text` the linear form.
+
+**Check the mathematics before you animate it.** A derivation drawn beautifully with a wrong step teaches the wrong
+step. `Equation.equivalent(previous, next)` says whether each step equals the one before: `'proved'` by simplification,
+`'agrees'` at every point tried, or `'differs'` with the point where it fails. With one argument it checks an equation
+`lhs = rhs`. A counterexample at a negative `x` usually means the step holds only where `x` is positive: say so with
+`{ domain: { x: [0, 5] } }` and say so on screen too.
 
 **A graph is drawn in data, not in pixels.** `comp.axes({ x: [min, max, step], y: [min, max, step], origin, size })` maps the
 data onto the frame; `axes.point(x, y)` places anything at a data point. `axes.plot(f)` draws a function, sampled once,
