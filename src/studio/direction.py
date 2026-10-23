@@ -413,7 +413,8 @@ def verification(events: list[dict[str, Any]], reference_check: dict[str, Any] |
     yet looked at is counted, never shown**: the watcher misreads, and a reading is not a finding until its frame has
     been seen. **images**: each still's latest `Verify.image`, the same with each text's box on the image in place of
     its seconds, and a crop in place of a frame. **derivations**: each derivation's latest `Verify.derivation`, step by
-    step, with every pair's verdict and, where the watcher read the steps, the steps as read. **checks**: the run's
+    step, with every pair's verdict and, where the watcher read the steps, the steps as read. **claims**: each claim's
+    latest `Verify.claim`, with the code Nemotron wrote to check it and what each check found. **checks**: the run's
     `Stage.check`s, the latest per claim. **references**: the Qloo reference check. **documents**: the documents the run
     read, and with which model.
     """
@@ -424,6 +425,12 @@ def verification(events: list[dict[str, Any]], reference_check: dict[str, Any] |
         if e.get("type") == "derivation.verify" and e.get("name") and isinstance(e.get("steps"), list):
             derivations.pop(e["name"], None)
             derivations[e["name"]] = {k: e.get(k) for k in ("name", "steps", "pairs", "counts", "passed", "ts")}
+    claims: dict[str, dict[str, Any]] = {}
+    for e in events:
+        if e.get("type") == "claim.verify" and e.get("name") and e.get("claim"):
+            claims.pop(e["name"], None)
+            claims[e["name"]] = {k: e.get(k) for k in ("name", "claim", "context", "verdict", "passed", "checks", "code", "error",
+                                                       "model", "ts")}
 
     checks: dict[str, dict[str, Any]] = {}
     for e in events:
@@ -437,7 +444,8 @@ def verification(events: list[dict[str, Any]], reference_check: dict[str, Any] |
             documents[e["descriptor"]] = {"document": e["descriptor"], "model": e.get("model"),
                                           "reads": documents.get(e["descriptor"], {}).get("reads", 0) + 1}
 
-    return {"films": films, "images": images, "derivations": list(derivations.values()), "checks": list(checks.values()),
+    return {"films": films, "images": images, "derivations": list(derivations.values()), "claims": list(claims.values()),
+            "checks": list(checks.values()),
             "references": reference_check, "documents": list(documents.values())}
 
 

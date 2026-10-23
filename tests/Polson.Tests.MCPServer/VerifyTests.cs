@@ -551,6 +551,92 @@ public class VerifyTests : TestsRuntime, IDisposable
         Assert.Contains("As the watcher read them", (string)result["summary"]!);
     }
 
+    private (VerifyToolkit Verify, Answer Http, List<(string Type, IReadOnlyDictionary<string, object?> Fields)> Recorded) Claimant(string answer)
+    {
+        var http = new Answer(answer);
+        var reader = new VideoReader([new NemotronEndpoint(NemotronEndpoint.Nebius, "https://tf.example/v1", "k", NemotronEndpoint.NebiusModel)],
+            new DocumentBudget(20), root, http: new HttpClient(http));
+        var recorded = new List<(string, IReadOnlyDictionary<string, object?>)>();
+        return (new VerifyToolkit(reader, root, null, (t, f) => recorded.Add((t, f))), http, recorded);
+    }
+
+    private static string Js(string code) => "```javascript\n" + code + "\n```";
+
+    /// <summary>
+    /// A claim is checked by the code the model wrote, run in the engine: the verdict is the code's, the code is returned
+    /// and recorded, and the claim goes to the model as text, with no media part.
+    /// </summary>
+    [Fact]
+    public async Task TestAClaimIsCheckedByTheCodeTheModelWrote()
+    {
+        var (verify, http, recorded) = Claimant(Js("const pct = (582.3 - 399.0) / 399.0 * 100;\ncheck('up 46%', rounds(pct, 46), { pct });"));
+        var r = await verify.Claim("Revenue grew from $399.0M to $582.3M, up 46%.", new Dictionary<string, object?> { ["name"] = "growth" });
+
+        Assert.True((bool)r["passed"]!, (string)r["summary"]!);
+        Assert.Equal("holds", r["verdict"]);
+        var check = (Dictionary<string, object?>)Assert.Single((object?[])r["checks"]!)!;
+        Assert.Contains("45.93", (string)check["detail"]!);
+        Assert.Contains("rounds(pct, 46)", (string)r["code"]!);
+        Assert.Contains("Claim: Revenue grew from $399.0M", http.LastRequest);
+        Assert.DoesNotContain("image_url", http.LastRequest);
+        Assert.DoesNotContain("video_url", http.LastRequest);
+        Assert.Equal(["claim.verify", "check"], recorded.Select(e => e.Type));
+        Assert.Equal(("Claim checked: growth", true), ((string)recorded[1].Fields["claim"]!, (bool)recorded[1].Fields["passed"]!));
+    }
+
+    /// <summary>A failing check fails the claim, with what decided it; the routines' results serialise into the detail.</summary>
+    [Fact]
+    public async Task TestAClaimThatDoesNotHoldFailsWithItsEvidence()
+    {
+        var (verify, _, _) = Claimant(Js("""
+            const r = Equation.equivalent('(a + b)^2', 'a^2 + b^2');
+            check('(a + b)^2 = a^2 + b^2', r.verdict === 'proved' || r.verdict === 'agrees', r);
+            const d = Verify.derivation(['2x + 3 = 7', '2x = 4', 'x = 2']);
+            check('the worked solution', d.passed, d.summary);
+            """));
+        var r = await verify.Claim("The square of a sum is the sum of the squares, and 2x + 3 = 7 gives x = 2.");
+        Assert.Equal(("fails", false), ((string)r["verdict"]!, (bool)r["passed"]!));
+        var checks = ((object?[])r["checks"]!).Cast<Dictionary<string, object?>>().ToArray();
+        Assert.Equal([false, true], checks.Select(c => (bool)c["passed"]!));
+        Assert.Contains("\"verdict\":\"differs\"", (string)checks[0]["detail"]!);
+        Assert.Contains("(a + b)^2 = a^2 + b^2", (string)r["summary"]!);
+    }
+
+    /// <summary>
+    /// The code runs with nothing to misuse: no Assets or the rest of Verify, no eval, no endless loop; each is an error
+    /// verdict, not a pass. A check passed by a literal true is refused without running; an answer with no code checks nothing.
+    /// </summary>
+    [Theory]
+    [InlineData("const m = Assets.material('stone'); check('x', m !== null, 'm');", "error")]
+    [InlineData("const v = Verify.film; check('x', v !== undefined, 'v');", "error")]
+    [InlineData("check('x', eval('1 + 1') === 2, 'eval');", "error")]
+    [InlineData("let n = 0; while (true) { n++; } check('x', n > 0, 'loop');", "error")]
+    [InlineData("check(\"the claim holds\", true, 'because I say so');", "refused")]
+    [InlineData("const x = 1 + 1;", "unchecked")]
+    public async Task TestTheSandboxHoldsAndAVerdictMustBeComputed(string code, string verdict)
+    {
+        var (verify, _, _) = Claimant(Js(code));
+        var r = await verify.Claim($"A claim checked by: {code}", new Dictionary<string, object?> { ["budget"] = 2000 });
+        Assert.Equal((verdict, false), ((string)r["verdict"]!, (bool)r["passed"]!));
+        Assert.Equal("unchecked", (await Claimant("I think it is true.").Verify.Claim("Prose, no code."))["verdict"]);
+    }
+
+    [Fact]
+    public void TestRoundsAtTheStatedPrecisionAndCloseToATolerance()
+    {
+        Assert.True(VerifyToolkit.Rounds(45.9398, 46, Jint.Native.JsValue.Undefined));
+        Assert.True(VerifyToolkit.Rounds(4.4072, 4.4, Jint.Native.JsValue.Undefined));
+        Assert.False(VerifyToolkit.Rounds(20.83, 18, Jint.Native.JsValue.Undefined));
+        Assert.False(VerifyToolkit.Rounds(4.46, 4.4, Jint.Native.JsValue.Undefined));
+        Assert.True(VerifyToolkit.Rounds(33.1, 33, new Jint.Native.JsNumber(0)));
+        Assert.True(VerifyToolkit.Close(0.331, 1.1 * 1.1 * 1.1 - 1, Jint.Native.JsValue.Undefined));
+        Assert.False(VerifyToolkit.Close(0.2, 0.1487, Jint.Native.JsValue.Undefined));
+
+        var result = new JsDrawingEngine().Execute("const c = createCanvas(4, 4); Stage.check('Claim checked: mine', true); c;", 4, 4, null, "png", 90);
+        Assert.False(result.Success);
+        Assert.Contains("Verify.claim", result.Error);
+    }
+
     private sealed class Answer(string content) : HttpMessageHandler
     {
         /// <summary>The last request's body, to see how the piece was sent.</summary>

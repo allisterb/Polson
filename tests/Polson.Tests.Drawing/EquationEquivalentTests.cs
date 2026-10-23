@@ -93,6 +93,9 @@ public class EquationEquivalentTests : TestsRuntime
         Assert.Equal("proved", Check(@"e^{i\pi} + 1 = 0")["verdict"]);                     // no sum: i is still the unit
 
         Assert.Equal("differs", Check(@"$(a + b)^2 = a^2 + b^2$")["verdict"]);
+        Assert.Equal("proved", Check(@"sin^2 x + cos^2 x", "1")["verdict"]);                // bare names, as Ultra wrote them
+        Assert.Equal("proved", Check(@"3*(4/3) - 7 = -3")["verdict"]);                       // * for a product
+        Assert.Equal("proved", Check(@"\sin^2 x + \cos^2 x", "1")["verdict"]);              // commands already written stay as they are
         var eaten = Check("\f" + "rac{d}{dx}x^3 = 3x^2");                                   // "\frac" through JSON
         Assert.Equal(("proved", "d/(dx)x³"), ((string)eaten["verdict"]!, (string)eaten["a"]!));
     }

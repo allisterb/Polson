@@ -231,6 +231,9 @@ public sealed class StageApi
         if (clean.StartsWith(VerifyToolkit.ReadBackPrefix, StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException($"Stage.check: a claim beginning '{VerifyToolkit.ReadBackPrefix}' is recorded by Verify.image and "
                 + "Verify.film themselves, from what the reader read. Run the check; do not write its verdict.");
+        if (clean.StartsWith(VerifyToolkit.ClaimPrefix, StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException($"Stage.check: a claim beginning '{VerifyToolkit.ClaimPrefix}' is recorded by Verify.claim itself, "
+                + "from the code that checked it. Run the check; do not write its verdict.");
         if (clean.StartsWith(VerifyToolkit.DerivationPrefix, StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException($"Stage.check: a claim beginning '{VerifyToolkit.DerivationPrefix}' is recorded by Verify.derivation "
                 + "itself, from the mathematics. Run the check; do not write its verdict.");

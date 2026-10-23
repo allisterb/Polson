@@ -182,6 +182,10 @@ internal static partial class EquationCheck
     {
         var s = DerivativeFraction().Replace(latex, m => $@"\frac{{\mathrm{{d}}{m.Groups[1].Value}{m.Groups[2].Value}}}{{\mathrm{{d}}{m.Groups[3].Value}{m.Groups[4].Value}}}");
         s = AbsoluteBars(s.Replace(@"\lvert", @"\left|").Replace(@"\rvert", @"\right|"));
+        // Written as code is written: `sin^2 x` without its backslash (s·i·n to the parser, and i the imaginary unit), and
+        // `*` for a product, which CSharpMath does not read. Nemotron Ultra wrote both in a check (2026-10-23).
+        s = BareFunction().Replace(s, m => @"\" + m.Value);
+        s = s.Replace("*", @" \cdot ");
         // A sum over i: the bridge reads i as the imaginary unit, so the index is given a letter the LaTeX does not use.
         // Every lone i is renamed, which misreads only a sum over i beside a complex i, as in no explainer seen yet.
         if (SumOverI().IsMatch(s) && new[] { "k", "j", "m", "r", "q" }.FirstOrDefault(l => !Regex.IsMatch(s, $@"(?<![\\A-Za-z]){l}(?![A-Za-z])")) is { } free)
@@ -499,6 +503,10 @@ internal static partial class EquationCheck
 
     [GeneratedRegex(@"\\[A-Za-z]+|\^|_\{")]
     private static partial Regex MathMark();
+
+    /// <summary>A function name written without its backslash, as a word on its own: <c>sin x</c>, <c>ln(2)</c>.</summary>
+    [GeneratedRegex(@"(?<![\\A-Za-z])(arcsin|arccos|arctan|sinh|cosh|tanh|sin|cos|tan|cot|sec|csc|ln|log)(?![A-Za-z])")]
+    private static partial Regex BareFunction();
 
     [GeneratedRegex(@"\\(sum|prod)\s*_\s*\{?\s*i\s*=")]
     private static partial Regex SumOverI();

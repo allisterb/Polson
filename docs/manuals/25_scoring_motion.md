@@ -133,7 +133,7 @@ Then two different artifacts, for two different readers:
 
 ### Mathematics on screen
 
-> **Implemented by**: `comp.equation(...)`, `comp.axes(...)`, `comp.number(...)`, `Equation.equivalent(...)`, `Verify.derivation(...)`.
+> **Implemented by**: `comp.equation(...)`, `comp.axes(...)`, `comp.number(...)`, `Equation.equivalent(...)`, `Verify.derivation(...)`, `Verify.claim(...)`.
 
 An equation is set with `comp.equation({ latex, origin, size })`, typeset in the engine from LaTeX, never lettered by hand
 with `comp.text` and never pasted in as a picture. It is drawn as outlines in a group of its own, so it moves, fades and
@@ -156,6 +156,12 @@ Then check the derivation as a whole, after the read-back: `Verify.derivation(st
 records the verdict itself, so the run's record shows the mathematics was checked, not claimed. Give it the
 `comp.equation` handles you drew, and it also checks the steps as the watcher read them. A misreading that breaks the
 chain is the film's problem to fix, not the mathematics'.
+
+**A claim in words is checked by code a second model writes.** "Revenue grew 46%", or "the area under the curve is 9", is
+not an equation until someone writes it as one. `Verify.claim(text, { context })` has Nemotron write the JavaScript that
+checks it with these same routines, and runs that code: the verdict is the code's, and the code comes back with it. Read
+it before trusting a pass. A check of the wrong thing is visible there, and nowhere else. Give it the figures the claim
+rests on as `context` when they are not in the sentence.
 
 **A graph is drawn in data, not in pixels.** `comp.axes({ x: [min, max, step], y: [min, max, step], origin, size })` maps the
 data onto the frame; `axes.point(x, y)` places anything at a data point. `axes.plot(f)` draws a function, sampled once,
