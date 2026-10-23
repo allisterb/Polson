@@ -24,7 +24,8 @@ using Polson.ExtendedMind.DocumentProcessing;
 /// </para>
 /// <para>
 /// <b>The code runs with nothing to misuse.</b> A separate engine, holding only <c>Equation</c>, the derivation check,
-/// <c>check</c>, <c>rounds</c> and <c>close</c>: no canvas, files, network, <c>Assets</c> or the rest of <c>Verify</c>, no
+/// <c>check</c>, <c>rounds</c>, <c>close</c>, <c>integrate</c> and <c>solve</c>: no canvas, files, network,
+/// <c>Assets</c> or the rest of <c>Verify</c>, no
 /// string compilation, and capped statements, recursion, memory and time. A claim taken from a document can steer the
 /// code, and at worst it checks the wrong thing, in the open.
 /// </para>
@@ -126,6 +127,9 @@ public sealed partial class VerifyToolkit
             }));
             engine.SetValue("rounds", new Func<double, double, JsValue?, bool>(Rounds));
             engine.SetValue("close", new Func<double, double, JsValue?, bool>(Close));
+            // Calls back into this engine, so the statement, memory and time caps hold inside f too.
+            engine.SetValue("integrate", new Func<JsValue, double, double, double>((f, a, b) => Integrate(engine, f, a, b)));
+            engine.SetValue("solve", new Func<JsValue, double, double, double?>((f, a, b) => Solve(engine, f, a, b)));
             engine.Execute(ClaimPrelude);
             engine.Execute("(function () {\n" + code + "\n})();");
         }
@@ -155,6 +159,46 @@ public sealed partial class VerifyToolkit
         var t = tolerance is not null && tolerance.IsNumber() ? Math.Abs(tolerance.AsNumber()) : 1e-9;
         return double.IsFinite(a) && double.IsFinite(b) && Math.Abs(a - b) <= t * Math.Max(1, Math.Max(Math.Abs(a), Math.Abs(b)));
     }
+
+    /// <summary>
+    /// ∫ from <paramref name="a"/> to <paramref name="b"/> of a JavaScript function, by Math.NET's adaptive Gauss–Kronrod
+    /// quadrature to a relative error of 1e-10. A limit may be ±Infinity when <paramref name="f"/> decays quickly; NaN when
+    /// the integral diverges or the error estimate stays above 1e-6 of ∫|f|, so a check built on it fails rather than passes.
+    /// </summary>
+    internal static double Integrate(Engine engine, JsValue f, double a, double b)
+    {
+        var fn = Numeric(engine, f, "integrate");
+        if (double.IsNaN(a) || double.IsNaN(b)) return double.NaN;
+        if (a == b) return 0;
+        try
+        {
+            // Quadrature never evaluates the endpoints, so a divergent integral (1/x on [0, 1]) still returns a finite sum;
+            // only its error estimate says so.
+            var value = MathNet.Numerics.Integrate.GaussKronrod(fn, a, b, out var error, out var l1, 1e-10);
+            return double.IsFinite(value) && error <= 1e-6 * Math.Max(1, l1) ? value : double.NaN;
+        }
+        catch (Exception ex) when (ex is ArgumentException or ArithmeticException)
+        {
+            return double.NaN;
+        }
+    }
+
+    /// <summary>
+    /// A root of a JavaScript function in the bracket [<paramref name="a"/>, <paramref name="b"/>], by Brent's method to
+    /// 1e-12; null when the function does not change sign across the bracket, so no root is promised there.
+    /// </summary>
+    internal static double? Solve(Engine engine, JsValue f, double a, double b)
+    {
+        var fn = Numeric(engine, f, "solve");
+        if (!double.IsFinite(a) || !double.IsFinite(b) || a == b)
+            throw new ArgumentException("solve(f, a, b) takes a bracket of two different finite numbers, a and b.");
+        return MathNet.Numerics.RootFinding.Brent.TryFindRoot(fn, Math.Min(a, b), Math.Max(a, b), 1e-12, 200, out var root) ? root : null;
+    }
+
+    /// <summary>A JavaScript function of one number, as a .NET one; a value that is not a number reads as NaN.</summary>
+    private static Func<double, double> Numeric(Engine engine, JsValue f, string who) => f is Jint.Native.Function.Function
+        ? x => engine.Invoke(f, x) is var y && y.IsNumber() ? y.AsNumber() : double.NaN
+        : throw new ArgumentException($"{who}'s first argument is a function of one number, such as x => x * x.");
 
     /// <summary>The last <c>```javascript</c> block of an answer, or null.</summary>
     internal static string? CodeOf(string? answer)
@@ -219,6 +263,11 @@ public sealed partial class VerifyToolkit
         - rounds(exact, stated, decimals?) -> whether the exact value rounds to the stated figure at the precision it is written
           with (rounds(45.94, 46) and rounds(4.407, 4.4) are true).
         - close(a, b, tolerance?) -> whether two numbers agree to a relative tolerance (1e-9).
+        - integrate(f, a, b) -> the integral of a JavaScript function f (x => ...) from a to b, accurate to about 1e-10 relative.
+          a or b may be Infinity or -Infinity when f decays quickly. NaN when f is not finite on the interval.
+          Compare it with close(integrate(f, a, b), stated, 1e-8), or with rounds for a rounded figure.
+        - solve(f, a, b) -> a root of f between a and b, accurate to about 1e-12, or null when f does not change sign
+          across [a, b]. A claim that f has a root near r is checked by solving in a bracket around r.
         - Plain JavaScript arithmetic and Math.*. Nothing else: no files, network, canvas or other objects.
 
         Rules:

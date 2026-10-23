@@ -182,6 +182,14 @@ CARDS: tuple[Card, ...] = (
                  Extra("questions", "Their questions", placeholder="One question a line, up to five", long=True),
                  Extra("duration", "Duration", ("45 seconds", "60 seconds"), "45 seconds")),
          types=("report",), needs=".pdf"),
+    # A theorem or concept explained in a film: equations, graphs and narration, every formula and claim checked before
+    # it is drawn and the film read back after. The Nebius entry's; the `math_explainer` workflow.
+    Card("maths-explainer", "Maths explainer", "video", "Video · a theorem or concept, every step checked",
+         (Route("math_explainer", "Maths explainer"),),
+         extras=(Extra("topic", "Theorem or concept", placeholder="Named as a textbook would name it"),
+                 Extra("viewer", "Who is watching", placeholder="Their level, and what they already know", long=True),
+                 Extra("duration", "Duration", ("45 seconds", "60 seconds", "90 seconds"), "60 seconds"),
+                 Extra("narration", "Narration", ("A voice", "None: every word on screen"), "A voice"))),
     Card("motion-graphic", "Motion graphic", "motion", "Animation · one action, keyed",
          (Route("animation", "One keyed action"),),
          extras=(Extra("duration", "Duration", ("2 seconds", "4 seconds", "8 seconds"), "4 seconds"),

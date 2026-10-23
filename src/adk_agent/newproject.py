@@ -283,7 +283,7 @@ def main(argv: list[str] | None = None) -> int:
     # refusal from the CLI as correct and this string as the thing to update.
     parser.add_argument("--workflow", default="logo",
                         help="logo, infographic, vector_infographic, drawing, comic, painting, "
-                             "comic_studio, harness. The CLI's templates are the authority.")
+                             "comic_studio, trailer, math_explainer, harness. The CLI's templates are the authority.")
     parser.add_argument("--prompt", help="The subject, in a line. Treated as untrusted data.")
     parser.add_argument("--type", dest="type_", help="Narrows the workflow's direction.")
     parser.add_argument("--force", action="store_true", help="Overwrite an existing project.")

@@ -107,6 +107,10 @@ WORKFLOWS: dict[str, tuple[str, ...]] = {
     # read by Nemotron through `Documents.ask` and needing no Qloo. **No type is a film trailer**, so it is in
     # `UNTYPED_IS_A_CHOICE` below.
     "trailer": ("product", "report"),
+    # **The Nebius entry's.** A theorem or concept explained in the model's own argument, every formula and claim checked
+    # before it is drawn (`Equation`, `Verify.derivation`, `Verify.claim`, whose code Nemotron writes) and the film read
+    # back after. Untyped. Documents are optional material (lecture notes, a textbook page), never the subject.
+    "math_explainer": (),
 }
 
 #: Workflows whose lone type is **not** what an empty type means. The form selects a workflow's only type for
@@ -220,6 +224,7 @@ DEADLINES: dict[str, int] = {
     # The craft defaults. They need the keepalive: without it the ceiling is 38 and `check` clamps them to it.
     "poster": 45,
     "trailer": 60,
+    "math_explainer": 60,
 }
 
 #: Minutes added to a commission's deadline for each audience past the second (`Audience C:` onward).
@@ -417,6 +422,20 @@ STARTERS: tuple[dict[str, str], ...] = (
                  "Roasters. Claim: \"Steeped for twenty hours.\" Call to action: \"Find it chilled.\" "
                  "Audience A: Berlin, aged 30 to 34. Audience B: Lagos, aged 30 to 34. Audience C: Seoul, aged "
                  "30 to 34. Silent. No logo is supplied: set the name in type.",
+    },
+    {
+        # The Nebius entry's. A theorem every first-year student meets, with a worked example whose every step the checks
+        # can decide: the integral, its evaluation bracket and the area all go through `Verify.derivation`, and the claim
+        # that the area grows at the curve's height through `Verify.claim`. States no figure: the worked values are the
+        # agent's to compute and check.
+        "label": "Maths explainer: the fundamental theorem of calculus",
+        "name": "ftcexplainer",
+        "workflow": "math_explainer",
+        "kind": "",
+        "brief": "Explain the fundamental theorem of calculus to a first-year student who knows what a derivative is "
+                 "and what the area under a curve means, but has not seen why the two are connected. Show that the "
+                 "area under a curve grows at the rate of the curve's height, then use it to find an area exactly, "
+                 "worked through with x squared. Sixty seconds, narrated.",
     },
     {
         "label": "Empty room, after",
