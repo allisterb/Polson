@@ -5138,6 +5138,8 @@ return canvas;
 >
 > **A reading that runs several drawn lines together is not a stray.** The reader reads a table row across its columns ("#18 Fair Price Properties Property • US +2,587.2%"). Every line it contains was drawn, so it explains itself. It is a stray only if it carries a figure that none of those lines has.
 >
+> **Equations are compared through the parser that drew them.** An equation drawn with `ctx.fillEquation` is recorded as its `linear` form. The reader answers in LaTeX, and that answer is parsed into its linear form too, so `\frac{1}{3}` and `1/3`, or `b^2` and `b²`, are one reading. A changed term is still a different figure: drawn with `4ac` and read with `5ac`, the equation is a stray beside itself. A built-up equation the reader splits into rows is joined back before comparing, and spacing alone never makes two readings different.
+>
 > **A missed text carries `closest`**: the reading holding most of its words. "ORORO Heated Apparel" read as "OROO Heated Apparel" was drawn at 12 px; that is a size fault, not an absence.
 
 ## `Verify`
