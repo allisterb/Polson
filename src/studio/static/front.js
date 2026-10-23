@@ -1080,6 +1080,42 @@
     return card;
   }
 
+  // Claims checked by code a second model wrote: each claim, its verdict, what each check found, and — folded, but one
+  // click away — the code itself, since the code is the only place a check of the wrong thing would show.
+  var CLAIM = { holds: ['Holds', 'is-pass'], fails: ['Fails', 'is-fail'], unchecked: ['Not checked', 'is-kept'],
+                error: ['Did not run', 'is-kept'], refused: ['Refused', 'is-fail'] };
+  function claimsCard(claims) {
+    var card = el('section', 'fr-card fr-verify fr-claims');
+    card.appendChild(el('h3', 'fr-heading', 'Claims, checked by code'));
+    var model = claims.map(function (c) { return c.model; }).filter(Boolean)[0];
+    card.appendChild(el('p', 'fr-small', 'Each claim the piece makes in words, checked by JavaScript that ' + (model || 'Nemotron')
+      + ' wrote and the engine ran with nothing but its maths routines. The verdict is the code’s; the code is shown so what was checked can be read.'));
+    var list = el('ul', 'fr-vchecks');
+    claims.forEach(function (c) {
+      var li = el('li');
+      var chip = CLAIM[c.verdict] || [c.verdict, 'is-kept'];
+      li.appendChild(el('span', 'fr-vcheck ' + chip[1], chip[0]));
+      var body = el('div');
+      body.appendChild(el('span', 'fr-claim', c.claim));
+      if (c.context) body.appendChild(el('p', 'fr-small', 'Given: ' + c.context));
+      if ((c.checks || []).length) {
+        var ul = el('ul', 'fr-claimchecks');
+        c.checks.forEach(function (k) {
+          ul.appendChild(el('li', 'fr-small ' + (k.passed ? 'is-pass' : 'is-fail'), (k.passed ? '✓ ' : '✗ ') + k.what + (k.detail ? ' — ' + k.detail : '')));
+        });
+        body.appendChild(ul);
+      }
+      if (c.error) body.appendChild(el('p', 'fr-small', c.error));
+      if (c.code) {
+        var d = el('details'); d.appendChild(el('summary', 'fr-small', 'the code that checked it'));
+        d.appendChild(el('pre', 'fr-code', c.code)); body.appendChild(d);
+      }
+      li.appendChild(body); list.appendChild(li);
+    });
+    card.appendChild(list);
+    return card;
+  }
+
   function renderVerification(box, v) {
     box.textContent = '';
     (v.films || []).forEach(function (film) {
@@ -1167,6 +1203,7 @@
     });
 
     (v.derivations || []).forEach(function (d) { box.appendChild(derivationCard(d)); });
+    if ((v.claims || []).length) box.appendChild(claimsCard(v.claims));
 
     if ((v.checks || []).length) {
       var cc = el('section', 'fr-card fr-verify');
@@ -1216,7 +1253,8 @@
           contrast: (data.contrasts || []).length > 0,
           choices: !!(data.map && (data.map.choices || []).length),
           verification: !!(data.verification && ((data.verification.films || []).length || (data.verification.images || []).length
-            || (data.verification.derivations || []).length || (data.verification.checks || []).length))
+            || (data.verification.derivations || []).length || (data.verification.claims || []).length
+            || (data.verification.checks || []).length))
         };
         Object.keys(shown).forEach(function (v) {
           var tab = views.querySelector('.ps-tab[data-view="' + v + '"]'); if (tab) tab.hidden = !shown[v];
@@ -1241,7 +1279,7 @@
   }
   // As the run fetches, contrasts and checks, the views follow — a moment after, so a burst refetches once.
   var tasteTimer = null;
-  ['taste.query', 'taste.contrast', 'taste.check', 'film.verify', 'film.stray', 'image.verify', 'image.stray', 'derivation.verify', 'check'].forEach(function (kind) {
+  ['taste.query', 'taste.contrast', 'taste.check', 'film.verify', 'film.stray', 'image.verify', 'image.stray', 'derivation.verify', 'claim.verify', 'check'].forEach(function (kind) {
     on(kind, function () { clearTimeout(tasteTimer); tasteTimer = setTimeout(loadTaste, 800); });
   });
   if (views) loadTaste();

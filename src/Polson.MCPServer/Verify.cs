@@ -230,6 +230,55 @@ public sealed partial class VerifyToolkit
     /// </summary>
     public Dictionary<string, object?> Derivation(object steps, object? options = null)
     {
+        var result = DerivationCheck(steps, options, readBack: true);
+        record?.Invoke("derivation.verify", new Dictionary<string, object?>
+        {
+            ["name"] = result["name"], ["steps"] = result["steps"], ["pairs"] = result["pairs"], ["counts"] = result["counts"],
+            ["passed"] = result["passed"],
+        });
+        record?.Invoke("check", new Dictionary<string, object?>
+        {
+            ["claim"] = DerivationClaim((string)result["name"]!), ["passed"] = result["passed"], ["detail"] = result["summary"], ["by"] = "verify",
+        });
+        return result;
+    }
+    /// <summary>
+    /// A stray of the latest check settled after looking at its frame or crop: <paramref name="verdict"/> <c>'misread'</c>
+    /// (it shows what the piece set; the reader misread it) or <c>'real'</c> (it shows what was read: a fault in the piece).
+    /// Returns the check as it now stands. Refused in the script that ran the check: nothing has been looked at yet.
+    /// </summary>
+    public Dictionary<string, object?> Stray(int number, string verdict, string? note = null)
+    {
+        var check = (session?.ReadBack ?? last) ?? throw new InvalidOperationException("Verify.stray: run Verify.film or Verify.image first; there is no check to settle.");
+        var stray = check.Strays.FirstOrDefault(s => s.Number == number)
+            ?? throw new ArgumentException($"Verify.stray: there is no stray {number}; the check has {check.Strays.Count}.");
+        if (ReferenceEquals(check, madeHere))
+            throw new InvalidOperationException($"Verify.stray: look at the {check.Evidence} first. A stray is settled in a later script than the check, "
+                + $"after you have seen {stray.Frame ?? check.Name} (return Skia.Image.load('{stray.Frame ?? check.Name}') from a script to see it).");
+        var v = verdict?.Trim().ToLowerInvariant();
+        if (v is not ("misread" or "real"))
+            throw new ArgumentException($"Verify.stray's verdict is 'misread' (the {check.Evidence} shows what the {check.Piece} set) or 'real' (a fault in the {check.Piece}).");
+        stray.Verdict = v;
+        stray.Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
+        record?.Invoke($"{check.Piece}.stray", new Dictionary<string, object?>
+        {
+            [check.NameKey] = check.Name, ["n"] = number, ["read"] = stray.Read, ["at"] = stray.At, ["frame"] = stray.Frame,
+            ["near"] = stray.Near, ["verdict"] = v, ["note"] = stray.Note,
+        });
+        var result = check.Result();
+        RecordCheck(check, result);
+        return result;
+    }
+    #endregion
+
+    #region Internal methods
+    /// <summary>
+    /// The derivation check itself, recorded by neither: <see cref="Derivation"/> records it, and a claim's check calls it
+    /// from inside <see cref="Claim"/>'s sandbox, where the claim is what is recorded. <paramref name="readBack"/> checks
+    /// the steps as the latest read-back read them too.
+    /// </summary>
+    internal Dictionary<string, object?> DerivationCheck(object steps, object? options, bool readBack)
+    {
         var (name, check, budget) = DerivationOptions(options);
         var given = (steps as System.Collections.IEnumerable is { } e && steps is not string ? e.Cast<object?>() : [])
             .Select(s => s switch
@@ -244,12 +293,12 @@ public sealed partial class VerifyToolkit
         // The steps as the latest read-back read them, matched by linear form: read as set, or — misread, and so not seen —
         // the reading closest to it on a still, or the stray recorded beside it on a film.
         var linear = given.Select(s => EquationLayout.LinearFromLatex(s) ?? s).ToArray();
-        var readBack = session?.ReadBack ?? last;
+        var latest = readBack ? session?.ReadBack ?? last : null;
         var read = linear.Select(l =>
         {
-            var item = readBack?.ItemList.FirstOrDefault(i => (string?)i["text"] == l);
+            var item = latest?.ItemList.FirstOrDefault(i => (string?)i["text"] == l);
             var reading = item?["readAs"] as string ?? item?.GetValueOrDefault("closest") as string
-                ?? readBack?.Strays.FirstOrDefault(s => s.Near == l)?.Read;
+                ?? latest?.Strays.FirstOrDefault(s => s.Near == l)?.Read;
             return reading is null ? null : Step(MathReading.Unwrap(reading));
         }).ToArray();
 
@@ -282,16 +331,6 @@ public sealed partial class VerifyToolkit
             ["unsettled"] = count("unsettled"), ["unread"] = count("unread"),
         };
         var passed = failing.Length == 0;
-
-        record?.Invoke("derivation.verify", new Dictionary<string, object?>
-        {
-            ["name"] = name, ["steps"] = linear.Cast<object?>().ToArray(), ["pairs"] = pairs.Cast<object?>().ToArray(),
-            ["counts"] = counts, ["passed"] = passed,
-        });
-        record?.Invoke("check", new Dictionary<string, object?>
-        {
-            ["claim"] = DerivationClaim(name), ["passed"] = passed, ["detail"] = summary, ["by"] = "verify",
-        });
         return new()
         {
             ["ok"] = true, ["passed"] = passed, ["name"] = name, ["steps"] = linear.Cast<object?>().ToArray(),
@@ -316,33 +355,6 @@ public sealed partial class VerifyToolkit
             ? Math.Round(c.Real, 12) : c.ToString(CultureInfo.InvariantCulture);
     }
 
-    /// <summary>
-    /// A stray of the latest check settled after looking at its frame or crop: <paramref name="verdict"/> <c>'misread'</c>
-    /// (it shows what the piece set; the reader misread it) or <c>'real'</c> (it shows what was read: a fault in the piece).
-    /// Returns the check as it now stands. Refused in the script that ran the check: nothing has been looked at yet.
-    /// </summary>
-    public Dictionary<string, object?> Stray(int number, string verdict, string? note = null)
-    {
-        var check = (session?.ReadBack ?? last) ?? throw new InvalidOperationException("Verify.stray: run Verify.film or Verify.image first; there is no check to settle.");
-        var stray = check.Strays.FirstOrDefault(s => s.Number == number)
-            ?? throw new ArgumentException($"Verify.stray: there is no stray {number}; the check has {check.Strays.Count}.");
-        if (ReferenceEquals(check, madeHere))
-            throw new InvalidOperationException($"Verify.stray: look at the {check.Evidence} first. A stray is settled in a later script than the check, "
-                + $"after you have seen {stray.Frame ?? check.Name} (return Skia.Image.load('{stray.Frame ?? check.Name}') from a script to see it).");
-        var v = verdict?.Trim().ToLowerInvariant();
-        if (v is not ("misread" or "real"))
-            throw new ArgumentException($"Verify.stray's verdict is 'misread' (the {check.Evidence} shows what the {check.Piece} set) or 'real' (a fault in the {check.Piece}).");
-        stray.Verdict = v;
-        stray.Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
-        record?.Invoke($"{check.Piece}.stray", new Dictionary<string, object?>
-        {
-            [check.NameKey] = check.Name, ["n"] = number, ["read"] = stray.Read, ["at"] = stray.At, ["frame"] = stray.Frame,
-            ["near"] = stray.Near, ["verdict"] = v, ["note"] = stray.Note,
-        });
-        var result = check.Result();
-        RecordCheck(check, result);
-        return result;
-    }
     #endregion
 
     #region Private methods

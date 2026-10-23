@@ -380,6 +380,15 @@ details.fr-more > summary { cursor: pointer; font: 600 13px/18px var(--font-sans
 .fr-dlink.is-differs .fr-dmark, .fr-dlink.is-differs > .fr-small:not(.fr-dread) { color: var(--failed); }
 .fr-dlink.is-unsettled, .fr-dlink.is-unread { border-left-color: var(--attention); }
 .fr-dlink.is-unsettled .fr-dmark, .fr-dlink.is-unread .fr-dmark { color: var(--attention); }
+/* Claims checked by code: each check found, and the code itself one click away. */
+.fr-claim { font: 500 15px/22px var(--font-sans); color: var(--ink); }
+.fr-claimchecks { list-style: none; margin: var(--space-1) 0 0; padding: 0; display: grid; gap: 2px; }
+.fr-claimchecks li { overflow-wrap: anywhere; }
+.fr-claimchecks li.is-pass { color: var(--done); }
+.fr-claimchecks li.is-fail { color: var(--failed); }
+.fr-code { margin: var(--space-1) 0 0; padding: var(--space-2) var(--space-3); max-height: 18rem; overflow: auto;
+  background: var(--surface-sunken); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  font: 400 12px/18px ui-monospace, "Cascadia Mono", Consolas, monospace; color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; }
 .fr-vjudged { margin-left: var(--space-2); padding: 0 var(--space-2); border: 1px dashed var(--line-control); border-radius: var(--radius-pill); font: 500 11px/18px var(--font-sans); color: var(--ink-muted); }
 @media (max-width: 720px) {
   .fr-vtable th:nth-child(2), .fr-vtable td:nth-child(2) { display: none; }

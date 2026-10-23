@@ -59,6 +59,12 @@ public class VideoReader : DocumentProcessor
         [".mp4"] = "video/mp4",
     };
 
+    /// <summary>
+    /// The type of a text source: sent as text, no media. How <c>Verify.claim</c> asks for a check, through the same
+    /// cache, budget, record and pending wait as a film's read.
+    /// </summary>
+    public const string TextType = "text/plain";
+
     /// <summary>Largest clip sent, in bytes. A data URI grows by a third on the way, and minutes of video are not the use.</summary>
     public const int MaxVideoBytes = 16 * 1024 * 1024;
 
@@ -74,19 +80,22 @@ public class VideoReader : DocumentProcessor
     #region Methods
     /// <summary>
     /// One chat completion with the clip attached as a <c>video_url</c> data URI — or, for a still passed as bytes with an
-    /// <c>image/*</c> type (<c>Verify.image</c>'s read-back), as an <c>image_url</c>.
+    /// <c>image/*</c> type (<c>Verify.image</c>'s read-back), as an <c>image_url</c>; or, for <see cref="TextType"/> bytes
+    /// (<c>Verify.claim</c>), as text after the query, with no media at all.
     /// </summary>
     protected override async Task<Generation> Generate(
         byte[] bytes, string mime, string query, string model, string? schema, bool images, CancellationToken ct)
     {
         var kind = mime.StartsWith("image/", StringComparison.OrdinalIgnoreCase) ? "image_url" : "video_url";
-        var content = new JsonArray(
-            new JsonObject { ["type"] = "text", ["text"] = query },
-            new JsonObject
-            {
-                ["type"] = kind,
-                [kind] = new JsonObject { ["url"] = $"data:{mime};base64,{Convert.ToBase64String(bytes)}" },
-            });
+        var content = mime == TextType
+            ? new JsonArray(new JsonObject { ["type"] = "text", ["text"] = query + "\n\n" + System.Text.Encoding.UTF8.GetString(bytes) })
+            : new JsonArray(
+                new JsonObject { ["type"] = "text", ["text"] = query },
+                new JsonObject
+                {
+                    ["type"] = kind,
+                    [kind] = new JsonObject { ["url"] = $"data:{mime};base64,{Convert.ToBase64String(bytes)}" },
+                });
         var (text, tokens, finish, endpoint) = await chat.Ask(model, content, schema, ct);
         return new Generation(text, tokens, finish) { Model = model, Endpoint = endpoint };
     }

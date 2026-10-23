@@ -245,6 +245,16 @@ class VerificationTests(unittest.TestCase):
         self.assertEqual([(d["name"], d["passed"], d["steps"][-1]) for d in both], [("solve", True, "x = 2"), ("area", True, "4/3")])
         self.assertEqual(direction.verification([{"type": "derivation.verify", "name": "x"}], None)["derivations"], [])
 
+    def test_a_claim_is_shown_with_the_code_that_checked_it(self):
+        first = {"type": "claim.verify", "name": "growth", "claim": "Revenue grew 46%.", "verdict": "error", "passed": False,
+                 "checks": [], "code": "check('x', rounds(", "error": "SyntaxError"}
+        again = dict(first, verdict="holds", passed=True, error=None, code="check('up 46%', rounds(45.94, 46), 'pct 45.94')",
+                     checks=[{"what": "up 46%", "passed": True, "detail": "pct 45.94"}])
+        claims = direction.verification([first, again, {"type": "claim.verify", "name": "x"}], None)["claims"]
+        self.assertEqual([(c["name"], c["verdict"]) for c in claims], [("growth", "holds")])
+        self.assertIn("rounds(45.94, 46)", claims[0]["code"])
+        self.assertEqual(claims[0]["checks"][0]["what"], "up 46%")
+
     def test_the_latest_verdict_per_claim_and_the_documents_read(self):
         events = [{"type": "check", "claim": "reading time", "passed": False, "detail": "title 1.1 s"},
                   {"type": "check", "claim": "reading time", "passed": True, "detail": "title 2.2 s"},
