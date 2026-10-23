@@ -1023,6 +1023,63 @@
     return legend;
   }
 
+  // A derivation as its steps in order, each joined to the next by what the check found: proved, agreeing at every point
+  // tried, or differing at a point it names. Built with DOM calls: every step is the agent's mathematics.
+  var STEP = { proved: 'proved', agrees: 'agrees at every point tried', differs: 'does not follow', unsettled: 'not settled',
+               unread: 'could not be read' };
+  function stepNumber(x) {
+    if (typeof x !== 'number') return String(x);
+    var s = Math.abs(x) >= 1e5 || (x !== 0 && Math.abs(x) < 1e-3) ? x.toExponential(3) : String(+x.toPrecision(6));
+    return s.replace('-', '−');
+  }
+  function stepWhy(p, equations) {
+    var why = STEP[p.verdict] || p.verdict;
+    if (p.verdict === 'proved' && p.provided) why += ', provided ' + p.provided;
+    if (p.verdict === 'differs') {
+      var at = p.at ? Object.keys(p.at).map(function (k) { return k + ' = ' + stepNumber(p.at[k]); }).join(', ') : '';
+      if (at) why += ': at ' + at;
+      // Two equations' values are each one's lhs − rhs there; elsewhere they kept another ratio, so a solution changed.
+      if (p.values && p.values.length === 2) why += (at ? ', ' : ': ') + (equations
+        ? 'lhs − rhs is ' + stepNumber(p.values[0]) + ' in one and ' + stepNumber(p.values[1]) + ' in the other, not the ratio they keep elsewhere, so a solution was gained or lost'
+        : 'the two sides give ' + stepNumber(p.values[0]) + ' and ' + stepNumber(p.values[1]));
+    }
+    if (p.approximate) why += ' (an integral evaluated numerically)';
+    return why;
+  }
+  function derivationCard(d) {
+    var card = el('section', 'fr-card fr-verify fr-deriv');
+    card.appendChild(el('h3', 'fr-heading', d.name));
+    var counts = d.counts || {};
+    var tally = ['proved', 'agrees', 'differs', 'unsettled', 'unread'].filter(function (k) { return counts[k]; })
+      .map(function (k) { return counts[k] + ' ' + (k === 'agrees' ? 'agree without proof' : k === 'differs' ? 'do not follow' : k); });
+    var head = el('p', 'fr-small');
+    head.appendChild(el('span', 'fr-vcheck ' + (d.passed ? 'is-pass' : 'is-fail'), d.passed ? 'Pass' : 'Fail'));
+    head.appendChild(document.createTextNode(' ' + (d.passed ? 'Every step follows from the last' : 'A step does not follow from the last')
+      + ' · ' + (d.steps || []).length + ' steps · ' + tally.join(' · ') + ' · checked by computer algebra in the engine, not by a model'));
+    card.appendChild(head);
+
+    var list = el('div', 'fr-dsteps');
+    (d.steps || []).forEach(function (s, i) {
+      list.appendChild(el('div', 'fr-dstep', s));
+      var p = (d.pairs || [])[i];
+      if (!p) return;
+      // Two equations in a row are a step of a solution: ⇔ where it holds, not =.
+      var equations = / = /.test(s) && / = /.test(d.steps[i + 1] || '');
+      var mark = { proved: equations ? '⇔' : '=', agrees: equations ? '⇔' : '≈', differs: equations ? '⇎' : '≠' }[p.verdict] || '?';
+      var link = el('div', 'fr-dlink is-' + p.verdict);
+      link.title = p.detail || '';
+      link.appendChild(el('span', 'fr-dmark', mark));
+      link.appendChild(el('span', 'fr-small', stepWhy(p, equations)));
+      if (p.read) {
+        link.appendChild(el('span', 'fr-small fr-dread', 'As the watcher read it: “' + (p.read.a || '?') + '” to “' + (p.read.b || '?') + '”, '
+          + (p.read.verdict === 'differs' ? 'which does not follow: the reading is wrong here, not the mathematics' : STEP[p.read.verdict] || p.read.verdict)));
+      }
+      list.appendChild(link);
+    });
+    card.appendChild(list);
+    return card;
+  }
+
   function renderVerification(box, v) {
     box.textContent = '';
     (v.films || []).forEach(function (film) {
@@ -1109,6 +1166,8 @@
       box.appendChild(card);
     });
 
+    (v.derivations || []).forEach(function (d) { box.appendChild(derivationCard(d)); });
+
     if ((v.checks || []).length) {
       var cc = el('section', 'fr-card fr-verify');
       cc.appendChild(el('h3', 'fr-heading', 'Checks the studio ran'));
@@ -1157,7 +1216,7 @@
           contrast: (data.contrasts || []).length > 0,
           choices: !!(data.map && (data.map.choices || []).length),
           verification: !!(data.verification && ((data.verification.films || []).length || (data.verification.images || []).length
-            || (data.verification.checks || []).length))
+            || (data.verification.derivations || []).length || (data.verification.checks || []).length))
         };
         Object.keys(shown).forEach(function (v) {
           var tab = views.querySelector('.ps-tab[data-view="' + v + '"]'); if (tab) tab.hidden = !shown[v];
@@ -1182,7 +1241,7 @@
   }
   // As the run fetches, contrasts and checks, the views follow — a moment after, so a burst refetches once.
   var tasteTimer = null;
-  ['taste.query', 'taste.contrast', 'taste.check', 'film.verify', 'film.stray', 'image.verify', 'image.stray', 'check'].forEach(function (kind) {
+  ['taste.query', 'taste.contrast', 'taste.check', 'film.verify', 'film.stray', 'image.verify', 'image.stray', 'derivation.verify', 'check'].forEach(function (kind) {
     on(kind, function () { clearTimeout(tasteTimer); tasteTimer = setTimeout(loadTaste, 800); });
   });
   if (views) loadTaste();

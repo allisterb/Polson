@@ -412,11 +412,18 @@ def verification(events: list[dict[str, Any]], reference_check: dict[str, Any] |
     whether the watcher read it — with its strays as the agent settled them after looking at their frames. **A stray not
     yet looked at is counted, never shown**: the watcher misreads, and a reading is not a finding until its frame has
     been seen. **images**: each still's latest `Verify.image`, the same with each text's box on the image in place of
-    its seconds, and a crop in place of a frame. **checks**: the run's `Stage.check`s, the latest per claim.
-    **references**: the Qloo reference check. **documents**: the documents the run read, and with which model.
+    its seconds, and a crop in place of a frame. **derivations**: each derivation's latest `Verify.derivation`, step by
+    step, with every pair's verdict and, where the watcher read the steps, the steps as read. **checks**: the run's
+    `Stage.check`s, the latest per claim. **references**: the Qloo reference check. **documents**: the documents the run
+    read, and with which model.
     """
     films = _read_backs(events, "film", "video", ("duration",))
     images = _read_backs(events, "image", "image", ("source", "width", "height"))
+    derivations: dict[str, dict[str, Any]] = {}
+    for e in events:
+        if e.get("type") == "derivation.verify" and e.get("name") and isinstance(e.get("steps"), list):
+            derivations.pop(e["name"], None)
+            derivations[e["name"]] = {k: e.get(k) for k in ("name", "steps", "pairs", "counts", "passed", "ts")}
 
     checks: dict[str, dict[str, Any]] = {}
     for e in events:
@@ -430,8 +437,8 @@ def verification(events: list[dict[str, Any]], reference_check: dict[str, Any] |
             documents[e["descriptor"]] = {"document": e["descriptor"], "model": e.get("model"),
                                           "reads": documents.get(e["descriptor"], {}).get("reads", 0) + 1}
 
-    return {"films": films, "images": images, "checks": list(checks.values()), "references": reference_check,
-            "documents": list(documents.values())}
+    return {"films": films, "images": images, "derivations": list(derivations.values()), "checks": list(checks.values()),
+            "references": reference_check, "documents": list(documents.values())}
 
 
 def _read_backs(events: list[dict[str, Any]], piece: str, key: str, fields: tuple[str, ...]) -> list[dict[str, Any]]:
