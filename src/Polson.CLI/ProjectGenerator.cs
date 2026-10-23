@@ -654,6 +654,9 @@ internal static class ProjectGenerator
         // Fifteen seconds of motion graphics: beats, an animatic, keys, two sheets and a video that takes a quarter of a
         // minute to encode. A poster's forty-five, plus the motion.
         ["trailer"] = 60,
+        // A minute of film like the trailer's, with a plan whose every formula and claim is checked before anything is
+        // drawn, narration spoken line by line, and a read-back. No measured run behind it yet; tune after the first.
+        ["math_explainer"] = 60,
         ["infographic"] = 30,
         // Same allowance as `infographic`: the vector discipline changes what is built, not how long
         // it takes. Two Apollo vector runs finished inside it, the longer at 18.6 minutes.
@@ -1135,7 +1138,9 @@ internal static class ProjectGenerator
         // Workflow deliverables: drawing's turns.md, painting's materials.md, sketch_scene's sketch.md,
         // animation's animation.md, poster's and trailer's direction.md and scripts, trailer's Synfig file.
         "turns.md", "materials.md", "sketch.md", "animation.md",
-        "direction.md", "poster.js", "trailer.js", "trailer.sif"
+        "direction.md", "poster.js", "trailer.js", "trailer.sif",
+        // math_explainer's film script and its checked plan.
+        "explainer.js", "plan.md"
     ];
 
     /// <summary>What a clear actually managed to do.</summary>
@@ -1417,6 +1422,9 @@ internal static class ProjectGenerator
         // Scoring motion is the method; composition and type are what a trailer moves. 24 and 28 (the figure) are absent:
         // a trailer here is shapes and type, not a character.
         ["trailer"] = ["25", "09", "11"],
+        // Scoring motion carries *Mathematics on screen* (equations, axes, counting numbers, the checks); composition and
+        // type lay out a scene of formulas. No figure manuals: an explainer is formulas and graphs, not a character.
+        ["math_explainer"] = ["25", "09", "11"],
         ["painting"] = ["09", "07"],
         ["vector_infographic"] = ["09", "13"],
         ["infographic"] = ["09", "13"],

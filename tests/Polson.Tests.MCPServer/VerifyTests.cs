@@ -621,6 +621,36 @@ public class VerifyTests : TestsRuntime, IDisposable
         Assert.Equal("unchecked", (await Claimant("I think it is true.").Verify.Claim("Prose, no code."))["verdict"]);
     }
 
+    /// <summary>
+    /// integrate and solve answer what the CAS cannot settle by sampling: a definite integral to an infinite limit, a root
+    /// in a bracket. A wrong figure fails; no sign change is null, not a root; a divergent integrand is NaN, not a pass.
+    /// </summary>
+    [Fact]
+    public async Task TestIntegrateAndSolveCheckAnIntegralAndARoot()
+    {
+        var (verify, _, _) = Claimant(Js("""
+            const g = integrate(x => Math.exp(-x * x), -Infinity, Infinity);
+            check('the Gaussian integral is sqrt(pi)', close(g, Math.sqrt(Math.PI), 1e-8), { g });
+            check('the area under sin over [0, pi] is 2', close(integrate(Math.sin, 0, Math.PI), 2), 'sin');
+            const r = solve(x => x * x - 2, 0, 2);
+            check('x^2 = 2 has the root 1.41421', r !== null && rounds(r, 1.41421), { r });
+            check('the area under x^2 over [0, 1] is 1/2', close(integrate(x => x * x, 0, 1), 0.5), 'x^2');
+            check('x^2 + 1 has a root in [-3, 3]', solve(x => x * x + 1, -3, 3) !== null, 'none');
+            check('1/x is integrable over [0, 1]', !isNaN(integrate(x => 1 / x, 0, 1)), '1/x');
+            check('1/sqrt(x) over [0, 1] is 2', close(integrate(x => 1 / Math.sqrt(x), 0, 1), 2, 1e-6), 'improper');
+            check('e^-x over [0, Infinity) is 1', close(integrate(x => Math.exp(-x), 0, Infinity), 1, 1e-8), 'tail');
+            """));
+        var r = await verify.Claim("Integrals and roots.");
+        var checks = ((object?[])r["checks"]!).Cast<Dictionary<string, object?>>().ToArray();
+        Assert.Equal([true, true, true, false, false, false, true, true], checks.Select(c => (bool)c["passed"]!));
+        Assert.Equal("fails", (string)r["verdict"]!);
+
+        var (bad, _, _) = Claimant(Js("check('x', solve(1, 0, 2) !== null, 'f');"));
+        Assert.Equal("error", (string)(await bad.Claim("solve needs a function."))["verdict"]!);
+        var (loop, _, _) = Claimant(Js("check('x', integrate(x => { while (true) {} }, 0, 1) > 0, 'loop');"));
+        Assert.Equal("error", (string)(await loop.Claim("An endless integrand.", new Dictionary<string, object?> { ["budget"] = 2000 }))["verdict"]!);
+    }
+
     [Fact]
     public void TestRoundsAtTheStatedPrecisionAndCloseToATolerance()
     {

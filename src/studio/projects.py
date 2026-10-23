@@ -66,6 +66,8 @@ WORKFLOWS: dict[str, tuple[str, ...]] = {
     # trailer**, which is not the same as "the studio's choice": `product` is a fifteen-second product ad, and
     # `report` an explainer that answers an audience's questions from a document the director attached.
     "trailer": ("product", "report"),
+    # A theorem or concept explained in an animated film, every formula checked before it is drawn. No types.
+    "math_explainer": (),
     "harness": ("image", "infographic", "logo"),
 }
 

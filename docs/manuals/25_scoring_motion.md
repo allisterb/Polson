@@ -161,7 +161,8 @@ chain is the film's problem to fix, not the mathematics'.
 not an equation until someone writes it as one. `Verify.claim(text, { context })` has Nemotron write the JavaScript that
 checks it with these same routines, and runs that code: the verdict is the code's, and the code comes back with it. Read
 it before trusting a pass. A check of the wrong thing is visible there, and nowhere else. Give it the figures the claim
-rests on as `context` when they are not in the sentence.
+rests on as `context` when they are not in the sentence. The code can integrate (`integrate(f, a, b)`, limits may be infinite) and find a root in a bracket
+(`solve(f, a, b)`), so an area or a crossing point is checked by computing it, not by recognising it.
 
 **A graph is drawn in data, not in pixels.** `comp.axes({ x: [min, max, step], y: [min, max, step], origin, size })` maps the
 data onto the frame; `axes.point(x, y)` places anything at a data point. `axes.plot(f)` draws a function, sampled once,

@@ -189,6 +189,8 @@ DELIVERABLES: tuple[tuple[str, str], ...] = (
     ("direction.md", "why it looks like this: every choice and the evidence behind it"),
     ("artwork.js", "the drawing itself, as code"),
     ("trailer.js", "the trailer itself, as code: every layer and key"),
+    ("plan.md", "the explainer's scenes, every formula in them and what checked it"),
+    ("explainer.js", "the explainer itself, as code: every equation, graph and key"),
     ("accuracy.md", "what was checked against a source, and what could not be"),
     ("findings.md", "the agent's own account of friction, gaps and surprise"),
     ("critique_log.md", "the studio's critique of its own passes"),

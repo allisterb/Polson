@@ -88,6 +88,7 @@ public partial class ProjectGeneratorTests : TestsRuntime, IDisposable
     [InlineData("comic")]
     [InlineData("painting")]
     [InlineData("comic_studio")]
+    [InlineData("math_explainer")]
     [InlineData("harness")]
     public void TestNoBraceVariableSurvivesIntoTheInstructions(string workflow)
     {
