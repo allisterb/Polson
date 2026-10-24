@@ -457,6 +457,10 @@ internal static class ProjectGenerator
                 ? Render("_shared", "deadline.md",
                     new Dictionary<string, string> { ["DEADLINE_MINUTES"] = deadline.ToString() })
                 : string.Empty,
+
+            // Nobody will answer: the agent decides where the workflow would ask, and records each decision as the
+            // question it replaced. After the deadline so it reads as the last word on how to work, and it says it wins.
+            ["AUTO"] = opts.Auto ? Render("_shared", "auto.md", []) : string.Empty,
         };
 
         // The instructions are always rewritten: they are the project's system prompt, generated
@@ -473,7 +477,7 @@ internal static class ProjectGenerator
         }
 
         WriteText(dir, ".gitignore", GitIgnore(orchestratable));
-        WriteJson(dir, "project.json", ProjectManifest(id, workflow, type, sdk, profile, createdUtc, orchestratable, deadline, opts.Test));
+        WriteJson(dir, "project.json", ProjectManifest(id, workflow, type, sdk, profile, createdUtc, orchestratable, deadline, opts.Test, opts.Auto));
 
         // Roles, checklists, anything else the workflow ships. Rendered like the rest, so they can
         // carry the same tokens.
@@ -488,7 +492,7 @@ internal static class ProjectGenerator
         }
 
         WriteJson(dir, host.McpConfig, McpConfig(dir));
-        WriteJson(dir, host.Permissions, Permissions(sdk, standalone, workflow, dir, roles.Count > 0, opts.Test));
+        WriteJson(dir, host.Permissions, Permissions(sdk, standalone, workflow, dir, roles.Count > 0, opts.Test, opts.Auto));
 
         // Antigravity keeps hooks in their own file; Claude Code carries them inside the settings
         // file written just above, so only one of these two lines does anything per host.
@@ -527,7 +531,7 @@ internal static class ProjectGenerator
         // so the file would be one nothing ever reads.
         if (orchestratable)
         {
-            WriteJson(dir, "agent.config.json", AgentConfig(host));
+            WriteJson(dir, "agent.config.json", AgentConfig(host, opts.Auto));
         }
 
         Report(dir, id, workflow, type, sdk, standalone, host, preserved);
@@ -819,7 +823,7 @@ internal static class ProjectGenerator
     /// by probing filenames. <c>conversationId</c> is standalone-only state: resume belongs to us,
     /// and a desktop host neither writes nor reads it.
     /// </remarks>
-    static object ProjectManifest(string id, string workflow, string type, string sdk, string profile, string createdUtc, bool orchestratable, int deadlineMinutes, bool test)
+    static object ProjectManifest(string id, string workflow, string type, string sdk, string profile, string createdUtc, bool orchestratable, int deadlineMinutes, bool test, bool auto = false)
     {
         // An ordered dictionary rather than an anonymous type: the optional fields would otherwise
         // need one shape per combination of them, and the order here is the order on disk.
@@ -839,6 +843,9 @@ internal static class ProjectGenerator
         // Only when true. A design project is not a test run and should not carry a
         // field saying it is not one.
         if (test) manifest["test"] = true;
+
+        // Only when true, like `test`. Read by the ADK runtime, which then gives the agent no `ask_director`.
+        if (auto) manifest["auto"] = true;
 
         // The slot the orchestrator records a resumable session into, so it exists wherever the
         // orchestrator can run — which is now any Antigravity project, not only a standalone one.
@@ -1011,11 +1018,12 @@ internal static class ProjectGenerator
     /// It is a constant, and nothing parses it.
     /// </para>
     /// </remarks>
-    static object AgentConfig(HostFiles host) => new
+    static object AgentConfig(HostFiles host, bool auto = false) => new
     {
         schema = 1,
         readBy = "polson-orchestrator",
-        agentBehavior = "interactive",
+        // `--auto` makes it autonomous: the orchestrator then attaches no director, so a question is skipped, not waited on.
+        agentBehavior = auto ? "autonomous" : "interactive",
         instructionsFile = host.Instructions,
         deniedTools = AlwaysDenied.Concat(StandaloneDenied).ToArray(),
         saveDir = "session/save",
@@ -1639,7 +1647,7 @@ internal static class ProjectGenerator
             .Concat(ToolNames().Select(t => $"polson:{t}"))
             .Select(key => new KeyValuePair<string, string>(key, "allow"));
 
-    static object Permissions(string sdk, bool standalone, string workflow, string dir, bool hasSubagents, bool test)
+    static object Permissions(string sdk, bool standalone, string workflow, string dir, bool hasSubagents, bool test, bool auto = false)
     {
         var denied = standalone ? [.. AlwaysDenied, .. StandaloneDenied] : AlwaysDenied;
 
@@ -1703,7 +1711,9 @@ internal static class ProjectGenerator
                         .Concat(hasSubagents ? ["Agent", "Task"] : Array.Empty<string>()).ToArray(),
                     deny = ShellDenies()
                         .Concat(["BashOutput", "KillShell", "WebFetch", "WebSearch"])
-                        .Concat(IsIsolated(workflow, test) ? SourceDenies() : []).ToArray(),
+                        .Concat(IsIsolated(workflow, test) ? SourceDenies() : [])
+                        // Autonomous: Claude Code's own question tool would wait on a person the run promised not to need.
+                        .Concat(auto ? ["AskUserQuestion"] : Array.Empty<string>()).ToArray(),
                 },
 
                 // Without this, Claude Code asks a human to approve the project's own MCP server

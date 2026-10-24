@@ -1722,6 +1722,30 @@ as if you had never asked. The waiting time is not charged against your deadline
 # had once from a workflow template. A placeholder with no braces in it cannot.
 RUNTIME_ADDENDUM = RUNTIME_ADDENDUM.replace("__ASK_TIMEOUT__", f"{ask.TIMEOUT:.0f}")
 
+#: The addendum for a project made with `create-project --auto`: no `ask_director` bullet, and in place of *Asking, and
+#: when not to* — which tells the agent a director is watching — a pointer to the instructions' *Autonomous mode*. Derived
+#: from the interactive one rather than written twice, so the tool descriptions cannot drift between the two.
+AUTONOMOUS_ADDENDUM = (
+    RUNTIME_ADDENDUM[:RUNTIME_ADDENDUM.index("### Asking, and when not to")].replace(
+        RUNTIME_ADDENDUM[RUNTIME_ADDENDUM.index("- **`ask_director("):RUNTIME_ADDENDUM.index("`write_script` and `edit_script` keep")],
+        "\n")
+    + """### Nobody to ask
+
+**This run is autonomous**: the director chose to leave it to you, so there is no `ask_director` here. Where the
+instructions say to ask, decide as their *Autonomous mode* section says, record the decision, and carry on.
+""")
+
+
+def autonomous_in(project: Path) -> bool:
+    """Whether the project was made with `create-project --auto`, from `project.json`. False when it cannot be read."""
+    manifest = project / "project.json"
+    if not manifest.is_file():
+        return False
+    try:
+        return json.loads(_read(manifest)).get("auto") is True
+    except (ValueError, OSError, AttributeError):
+        return False
+
 
 # --------------------------------------------------------------------------------------------
 # The advisor — a role's way of asking for a second opinion.
@@ -1866,7 +1890,8 @@ def build(
     # layout is not the repository's.
     chosen_model = model or os.environ.get("POLSON_MODEL", "").strip() or DEFAULT_MODEL
     chosen_dll = cli_dll or os.environ.get("POLSON_CLI_DLL", "").strip() or None
-    instruction = Verbatim(instructions_for(project) + RUNTIME_ADDENDUM)
+    autonomous = autonomous_in(project)
+    instruction = Verbatim(instructions_for(project) + (AUTONOMOUS_ADDENDUM if autonomous else RUNTIME_ADDENDUM))
     # One toolset, shared. See the module docstring for why, and for what it costs.
     toolset = toolset_for(project, Path(chosen_dll) if chosen_dll else None)
     # Perception. Every agent gets these: a role that cannot see its own work is the failure
@@ -1923,8 +1948,10 @@ def build(
     # director — and the Facilitator is the role holding the brief, so it is the one that knows what
     # is genuinely unsettled rather than merely locally ambiguous. A role that wants a ruling asks
     # the Facilitator, which is what `transfer` is already for.
+    # **An autonomous run has no `ask_director` at all**, rather than one that returns at once: a tool that is there is
+    # a tool that gets called, and each call is a turn spent learning that nobody answers.
     asking = []
-    if (ask_tool := ask.make_tool(project)) is not None:
+    if not autonomous and (ask_tool := ask.make_tool(project)) is not None:
         asking.append(FunctionTool(ask_tool))
     # Environment is the fallback here for the same reason it is for the model: an allowance is a
     # deployment fact, and the container is where a run's deadline is actually known.

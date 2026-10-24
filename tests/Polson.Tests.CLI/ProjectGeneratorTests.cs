@@ -559,6 +559,43 @@ public partial class ProjectGeneratorTests : TestsRuntime, IDisposable
         Assert.Equal(1, report.Split(data).Length - 1);
     }
 
+    /// <summary>
+    /// `--auto`: the instructions say nobody will answer, the manifest records it for the ADK runtime, the Antigravity
+    /// config runs the agent autonomous, and Claude Code's own question tool is denied. Without it, none of that.
+    /// </summary>
+    [Fact]
+    public void TestAutoModeTellsEveryHostThatNobodyWillAnswer()
+    {
+        Assert.True(ProjectGenerator.Create(Options("auto-agy", o => { o.Workflow = "trailer"; o.Auto = true; })));
+        Assert.True(ProjectGenerator.Create(Options("auto-claude", o => { o.Workflow = "poster"; o.Sdk = "claude"; o.Auto = true; })));
+        Assert.True(ProjectGenerator.Create(Options("asks", o => { o.Workflow = "trailer"; })));
+
+        var agy = Path.Combine(root, "auto-agy");
+        Assert.Contains("## Autonomous mode — nobody will answer", File.ReadAllText(Path.Combine(agy, "GEMINI.md")), StringComparison.Ordinal);
+        Assert.Contains("\"auto\": true", File.ReadAllText(Path.Combine(agy, "project.json")), StringComparison.Ordinal);
+        Assert.Contains("\"agentBehavior\": \"autonomous\"", File.ReadAllText(Path.Combine(agy, "agent.config.json")), StringComparison.Ordinal);
+
+        var claude = Path.Combine(root, "auto-claude");
+        Assert.Contains("Autonomous mode", File.ReadAllText(Path.Combine(claude, "CLAUDE.md")), StringComparison.Ordinal);
+        Assert.Contains("\"AskUserQuestion\"", File.ReadAllText(Path.Combine(claude, ".claude/settings.local.json")), StringComparison.Ordinal);
+
+        var asks = Path.Combine(root, "asks");
+        Assert.DoesNotContain("Autonomous mode", File.ReadAllText(Path.Combine(asks, "GEMINI.md")), StringComparison.Ordinal);
+        Assert.DoesNotContain("\"auto\"", File.ReadAllText(Path.Combine(asks, "project.json")), StringComparison.Ordinal);
+        Assert.Contains("\"agentBehavior\": \"interactive\"", File.ReadAllText(Path.Combine(asks, "agent.config.json")), StringComparison.Ordinal);
+    }
+
+    /// <summary>Every workflow carries the autonomous section's token, so `--auto` reaches whatever is generated.</summary>
+    [Fact]
+    public void TestEveryWorkflowCarriesTheAutoToken()
+    {
+        foreach (var workflow in ProjectGenerator.KnownWorkflows)
+        {
+            Assert.True(ProjectGenerator.Create(Options($"auto-{workflow}", o => { o.Workflow = workflow; o.Auto = true; })), workflow);
+            Assert.Contains("Autonomous mode", File.ReadAllText(Path.Combine(root, $"auto-{workflow}", "GEMINI.md")), StringComparison.Ordinal);
+        }
+    }
+
     /// <summary>A pitch is a trailer of figures and projections: Manual 13, its own type section, and its own allowance.</summary>
     [Fact]
     public void TestAPitchCarriesTheDataManualAndItsOwnDeadline()

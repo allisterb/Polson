@@ -738,7 +738,7 @@ def check(name: str, workflow: str, kind: str, brief: str, deadline: str = "",
 
 async def commission(app: FastAPI, name: str, workflow: str, brief: str, kind: str = "",
                      deadline: str = "", documents: list[Path] | tuple[Path, ...] = (),
-                     start: bool = True) -> str | None:
+                     start: bool = True, auto: bool = False) -> str | None:
     """Makes the project and, with `start`, sets the agent working on it. Raises `Refused`.
 
     Returns the studio's page for the run when one was started and a studio is mounted to watch it,
@@ -748,7 +748,8 @@ async def commission(app: FastAPI, name: str, workflow: str, brief: str, kind: s
     minutes = check(name, workflow, kind, brief, deadline, start)
     try:
         create(name, workflow=workflow, prompt=brief, type_=kind or None, deadline=minutes,
-               documents=[str(p) for p in documents] or None, budget_tokens=token_budget(workflow, brief, kind))
+               documents=[str(p) for p in documents] or None, budget_tokens=token_budget(workflow, brief, kind),
+               auto=auto)
     except GenerateError as exc:
         raise Refused(400, str(exc)) from exc
 
@@ -824,8 +825,8 @@ class Commissioner:
         return running(name)
 
     async def commission(self, name: str, workflow: str, kind: str, brief: str,
-                         documents: list[Path]) -> str | None:
-        return await commission(self.app, name, workflow, brief, kind, documents=documents, start=True)
+                         documents: list[Path], auto: bool = False) -> str | None:
+        return await commission(self.app, name, workflow, brief, kind, documents=documents, start=True, auto=auto)
 
 
 #: `POST /requests` — the studio's composer, which commissions through `Commissioner` and so meets
@@ -993,6 +994,11 @@ FORM = """<!doctype html>
     Start the agent straight away, and open the studio on it
   </label>
 
+  <label style="font-weight:400; margin-top:.4rem">
+    <input type="checkbox" name="auto" value="1" style="width:auto; margin-right:.4rem">
+    Decide everything &mdash; the agent asks nothing, and lists its decisions for you to review afterwards
+  </label>
+
   <p class="note">If this host restarts while your project is running, the run stops and you will
      need to start it again. <b>The work it had already done is kept</b> &mdash; the project comes
      back under <b>Archived projects</b> in the studio, with its renders, its scripts and its
@@ -1127,6 +1133,7 @@ def mount(app: FastAPI) -> None:
         deadline: str = Form(""),
         document: UploadFile | None = File(None),
         start: str = Form(""),
+        auto: str = Form(""),
     ):
         """Creates a project, stages the upload into its `documents/`, opens the console on it."""
         name, kind = name.strip(), kind.strip()
@@ -1150,7 +1157,7 @@ def mount(app: FastAPI) -> None:
                 staged.append(await stage_upload(document, scratch))
 
             watching = await commission(request_app, name, workflow, brief, kind, deadline,
-                                        documents=staged, start=bool(start))
+                                        documents=staged, start=bool(start), auto=bool(auto))
         except Refused as exc:
             raise HTTPException(exc.status, str(exc)) from exc
         finally:

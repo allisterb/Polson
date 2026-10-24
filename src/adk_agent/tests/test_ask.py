@@ -351,6 +351,32 @@ class AskWiringTests(unittest.TestCase):
             self.assertNotIn("ask_director", [getattr(t, "name", "") for t in sub.tools],
                              f"{sub.name} should transfer to the facilitator rather than ask")
 
+    def test_an_autonomous_project_has_no_one_to_ask(self):
+        """`create-project --auto`: no tool, and no instruction saying a director is watching."""
+        import json as _json
+
+        root = Path(tempfile.mkdtemp(prefix="polson-askauto-")) / "acme"
+        try:
+            (root / "events").mkdir(parents=True)
+            (root / "project.json").write_text(
+                _json.dumps({"id": "acme", "workflow": "logo", "auto": True}), encoding="utf-8")
+            (root / "GEMINI.md").write_text("# instructions", encoding="utf-8")
+
+            import studio
+            self.assertTrue(studio.autonomous_in(root))
+            agent = studio.build(root)
+            names = [getattr(t, "name", "") for t in agent.tools]
+        finally:
+            shutil.rmtree(root.parent, ignore_errors=True)
+
+        self.assertNotIn("ask_director", names)
+        self.assertNotIn("ask_director(", agent.instruction)
+        self.assertNotIn("A director is watching", agent.instruction)
+        self.assertIn("This run is autonomous", agent.instruction)
+        # The rest of the runtime's tools are still described.
+        self.assertIn("`peek(artifact_path)`", agent.instruction)
+        self.assertIn("`edit_script(path, old_text, new_text)`", agent.instruction)
+
 
 class PeekArtifactNameTests(unittest.IsolatedAsyncioTestCase):
     """One artifact name per file type, behind a flag, because names are what cost the cache.

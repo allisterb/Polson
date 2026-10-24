@@ -421,6 +421,8 @@ set's own check from *More than one audience*:
 
 {{DEADLINE}}
 
+{{AUTO}}
+
 {{DELIVERABLES}}
 
 {{TEST}}
