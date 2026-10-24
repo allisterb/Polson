@@ -98,6 +98,53 @@ public class TasteReferencesTests : TestsRuntime, IDisposable
         Assert.Equal(["\"Neon Noir\""], (string[])check["unverified"]!);
     }
 
+    /// <summary>
+    /// poster4 (2026-10-24) cited 34 tags from <c>insights</c> entities — Q-Tip's "Jazz Rap" — and all 34 came back
+    /// unverified, though every one was in the answer: only the answer's own tags were read. The workflow says to take
+    /// unverified evidence out.
+    /// </summary>
+    [Fact]
+    public void TestATagOnAnEntityTheCitedQueryReturnedIsFound()
+    {
+        var session = Session().Append(new TasteResult
+        {
+            Id = "t5", Op = "insights", Label = "signalled artists", Ok = true,
+            Entities = [new Dictionary<string, object?>
+            {
+                ["id"] = "a-1", ["name"] = "Q-Tip", ["type"] = "urn:entity:artist",
+                ["tags"] = new object?[] { Tag("Jazz Rap"), Tag("Conscious") },
+            }],
+        }).ToArray();
+
+        var check = TasteReferences.Check(Table(
+            "| Record | `t5` — Q-Tip \"Jazz Rap\" (item 1), \"Conscious\" (item 1) | Qloo |",
+            "| Wrong answer | t3 — \"Jazz Rap\" (item 1) | Qloo |"), session);
+
+        Assert.Equal(["\"Jazz Rap\""], (string[])check["unverified"]!);     // t3 returned no such tag
+        Assert.Equal(3, check["checked"]);
+    }
+
+    [Fact]
+    public void TestABacktickedHandleInTheParenthesisIsRead()
+    {
+        var check = TasteReferences.Check(Table("| Grade | \"Flowing\" (`t2` item 2) | Qloo (t2) |"), Session());
+
+        Assert.True((bool)check["passed"]!, (string)check["summary"]!);
+        Assert.Equal(1, check["checked"]);
+    }
+
+    /// <summary>A citation the parser cannot read used to be skipped, so the row passed with nothing checked.</summary>
+    [Fact]
+    public void TestATagCitationInAnUnknownFormIsUnreadAndFails()
+    {
+        var check = TasteReferences.Check(Table("| Grade | \"Flowing\" (see t2, second) | Qloo (t2) |"), Session());
+
+        Assert.False((bool)check["passed"]!);
+        Assert.Empty((string[])check["unverified"]!);                      // not a reason to delete it
+        Assert.Contains("\"Flowing\" (see t2, second)", Assert.Single((string[])check["unread"]!));
+        Assert.Contains("not read", (string)check["summary"]!);
+    }
+
     [Fact]
     public void TestAMissingFailedOrAbsentHandleIsAProblem()
     {
@@ -171,7 +218,7 @@ public class TasteReferencesTests : TestsRuntime, IDisposable
         Assert.True((bool)check["passed"]!);
         var (type, fields) = Assert.Single(recorded);
         Assert.Equal("taste.check", type);
-        Assert.Equal(["path", "passed", "checked", "unverified", "rows"], fields.Keys);
+        Assert.Equal(["path", "passed", "checked", "unverified", "unread", "rows"], fields.Keys);
         Assert.Throws<ArgumentException>(() => taste.CheckReferences("../outside.md"));
         Assert.Throws<FileNotFoundException>(() => taste.CheckReferences("missing.md"));
     }

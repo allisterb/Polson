@@ -130,6 +130,43 @@ public sealed class RunEventLog : Runtime
         }
     }
 
+    /// <summary>
+    /// Whether a project-relative render is research — a sheet of Qloo's pictures, other people's posters and logos
+    /// (Manual 29 §2a) — which the studio never serves and the process book never shows.
+    /// </summary>
+    /// <remarks>
+    /// Research is any render made by a script that took a Qloo picture's pixels (its execution recorded
+    /// <c>taste.pictures</c>), whatever the file is called. The studio's <c>research.py</c> applies the same rule. No
+    /// name rule: <c>01_research_*</c> was tried, and would also have caught an infographic's <c>research_spend.png</c>.
+    /// </remarks>
+    public bool IsResearch(string relativePath)
+    {
+        var name = relativePath.Replace('\\', '/');
+        if (!Enabled || !File.Exists(eventsFile)) return false;
+
+        try
+        {
+            var executions = new HashSet<string>(StringComparer.Ordinal);
+            var renders = new List<(string Execution, string Artifact)>();
+            foreach (var line in File.ReadLines(eventsFile!))
+            {
+                if (!line.Contains("\"taste.pictures\"", StringComparison.Ordinal) && !line.Contains("\"render\"", StringComparison.Ordinal)) continue;
+                using var doc = JsonDocument.Parse(line);
+                var e = doc.RootElement;
+                if (!e.TryGetProperty("execution", out var x) || x.GetString() is not { } execution) continue;
+                var type = e.TryGetProperty("type", out var t) ? t.GetString() : null;
+                if (type == "taste.pictures") executions.Add(execution);
+                else if (type == "render" && e.TryGetProperty("artifact", out var a) && a.GetString() is { } artifact) renders.Add((execution, artifact));
+            }
+            return renders.Any(r => executions.Contains(r.Execution) && string.Equals(r.Artifact, name, StringComparison.OrdinalIgnoreCase));
+        }
+        catch (Exception ex) when (ex is IOException or JsonException)
+        {
+            // Unreadable, so not provably research; a refusal here would block a legitimate page.
+            return false;
+        }
+    }
+
     /// <summary>Rewrites an absolute path as a forward-slashed path relative to the project.</summary>
     /// <remarks>
     /// Relative because the log has to stay valid when the directory is moved or served; forward

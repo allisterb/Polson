@@ -219,7 +219,12 @@ public partial class DrawingMcpTools
             {
                 var o = (Dictionary<string, object?>)TasteObjects.Entity(x.Entity)!;
                 o["audienceRank"] = x.Rank;
-                o.Remove("properties");     // kept in the single-call answers; a profile is read for its references
+                // A profile is read for its references, so of Qloo's properties it keeps only what visual research
+                // reads: the picture Taste.images fetches, the look Taste.vocabulary tallies, and a film's year for the
+                // research board. The rest stays in the single-call answers.
+                o["properties"] = o.GetValueOrDefault("properties") is Dictionary<string, object?> all
+                    ? all.Where(p => p.Key is "image" or "style_description" or "release_year").ToDictionary(p => p.Key, p => p.Value)
+                    : null;
                 return (object?)o;
             })];
             var distinctive = Objects(ranked.Where(x => !baseIds.Contains(x.Entity.EntityId)));

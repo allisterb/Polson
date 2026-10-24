@@ -5,6 +5,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 
 using Polson.ExtendedMind.ParallelSearch;
 
@@ -120,6 +122,12 @@ public sealed class TasteRegistry
     {
         get { lock (results) return [.. results]; }
     }
+
+    /// <summary>Pictures fetched from Qloo this session; cache hits are not counted.</summary>
+    public int ImagesFetched { get; private set; }
+
+    /// <summary>Qloo pictures one session may fetch: visual research for several audiences, with room to redo it.</summary>
+    public const int ImageAllowance = 240;
     #endregion
 
     #region Methods
@@ -160,6 +168,28 @@ public sealed class TasteRegistry
             .Where(e => string.Equals(e.GetValueOrDefault("id") as string, entityId, StringComparison.OrdinalIgnoreCase))
             .Select(e => e.GetValueOrDefault("type") as string)
             .FirstOrDefault(t => t is not null);
+
+    /// <summary>
+    /// An entity as a Qloo answer this session received delivered it, with that answer's id; null when no answer
+    /// named it. The first answer to carry its properties wins.
+    /// </summary>
+    public (Dictionary<string, object?> Entity, string Answer)? Entity(string entityId) =>
+        All.SelectMany(r => r.Entities.Concat(SharedOf(r)).OfType<Dictionary<string, object?>>().Select(e => (Entity: e, Answer: r.Id)))
+            .Where(p => string.Equals(p.Entity.GetValueOrDefault("id") as string, entityId, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(p => p.Entity.GetValueOrDefault("properties") is null ? 1 : 0)
+            .Select(p => ((Dictionary<string, object?>, string)?)(p.Entity, p.Answer))
+            .FirstOrDefault();
+
+    /// <summary>Takes <paramref name="count"/> pictures from the session's allowance; false, and nothing taken, when it would overrun.</summary>
+    public bool TakeImages(int count)
+    {
+        lock (results)
+        {
+            if (ImagesFetched + count > ImageAllowance) return false;
+            ImagesFetched += count;
+            return true;
+        }
+    }
     #endregion
 
     #region Private methods
@@ -188,12 +218,14 @@ public sealed class TasteToolkit
     /// <param name="registry">This session's answers.</param>
     /// <param name="projectRoot">Where <see cref="CheckReferences"/> reads from; nothing outside it is read.</param>
     /// <param name="record">Records a run event — <c>taste.check</c> — when given.</param>
+    /// <param name="images">Where <see cref="Images"/> fetches Qloo's pictures; null and every picture is refused as not configured.</param>
     public TasteToolkit(TasteRegistry registry, string? projectRoot = null,
-        Action<string, IReadOnlyDictionary<string, object?>>? record = null)
+        Action<string, IReadOnlyDictionary<string, object?>>? record = null, QlooImageSource? images = null)
     {
         this.registry = registry;
         this.projectRoot = projectRoot;
         this.record = record;
+        this.images = images;
     }
     #endregion
 
@@ -282,18 +314,210 @@ public sealed class TasteToolkit
         record?.Invoke("taste.check", new Dictionary<string, object?>
         {
             ["path"] = name, ["passed"] = check["passed"], ["checked"] = check["checked"],
-            ["unverified"] = check["unverified"], ["rows"] = check["rows"],
+            ["unverified"] = check["unverified"], ["unread"] = check["unread"], ["rows"] = check["rows"],
         });
         return check;
     }
 
+    /// <summary>
+    /// Qloo's pictures of entities this session's answers named — a brand's logo, a film's poster — each measured
+    /// for colour on arrival: <c>await Taste.images(t3, { take: 24, type: 'brand' })</c>.
+    /// </summary>
+    /// <param name="source">An answer, or an array of its entities, entity ids or earlier pictures.</param>
+    /// <param name="options"><c>{ take?: number (default 24, at most 48), type?: 'brand' | 'film' | 'show' | 'artist' | 'place' | a urn }</c>.</param>
+    /// <remarks>
+    /// The URL is always the one Qloo sent this session for that entity, never one a script supplies, so an entity
+    /// no answer named is refused as <c>UnknownEntity</c>. A failure is a value, one picture at a time; the call
+    /// itself does not throw for a bad picture. Recorded as <c>taste.images</c>, names and failures only.
+    /// </remarks>
+    public async Task<TasteImage[]> Images(object source, object? options = null)
+    {
+        var take = Math.Clamp(Option<int?>(options, "take") ?? 24, 1, MaxImages);
+        var type = TypeUrn(Option<string>(options, "type"));
+        var wanted = IdsOf(source)
+            .Select(id => (Id: id, Found: registry.Entity(id)))
+            .Where(p => type is null || p.Found is null
+                || (p.Found.Value.Entity.GetValueOrDefault("types") as object?[] ?? []).Any(t => string.Equals(t as string, type, StringComparison.OrdinalIgnoreCase))
+                || string.Equals(p.Found.Value.Entity.GetValueOrDefault("type") as string, type, StringComparison.OrdinalIgnoreCase))
+            .Take(take)
+            .ToArray();
+
+        // One deadline for the whole set, inside the script limit: a slow host costs pictures, not the script.
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        using var gate = new SemaphoreSlim(6);
+        var pictures = await Task.WhenAll(wanted.Select(async w =>
+        {
+            await gate.WaitAsync();
+            try { return await Picture(w.Id, w.Found, deadline.Token); }
+            finally { gate.Release(); }
+        }));
+
+        record?.Invoke("taste.images", new Dictionary<string, object?>
+        {
+            ["requested"] = pictures.Length,
+            ["delivered"] = pictures.Count(p => p.Success),
+            ["fromCache"] = pictures.Count(p => p.FromCache),
+            ["names"] = pictures.Where(p => p.Success).Select(p => p.Name).ToArray(),
+            ["failures"] = pictures.Where(p => !p.Success).Select(p => $"{p.Name}: {p.Failure}").ToArray(),
+        });
+        return pictures;
+    }
+
+    /// <summary>
+    /// Where a set of pictures' lead hues fall on the wheel — the crowded sectors, the empty ones, the neutral
+    /// pictures: <c>{ n, neutral, sectors, crowded, open, light, dark, summary }</c>. See <see cref="TasteVisual.ColourField"/>.
+    /// Recorded as <c>taste.field</c>.
+    /// </summary>
+    public Dictionary<string, object?> ColourField(TasteImage[] pictures)
+    {
+        ArgumentNullException.ThrowIfNull(pictures);
+        var field = TasteVisual.ColourField(pictures);
+        record?.Invoke("taste.field", new Dictionary<string, object?>
+        {
+            ["n"] = field["n"], ["crowded"] = field["crowded"], ["open"] = field["open"], ["summary"] = field["summary"],
+        });
+        return field;
+    }
+
+    /// <summary>
+    /// The words recurring in Qloo's style descriptions of a set — pictures, an answer, or its entities:
+    /// <c>[{ word, count, share, names }]</c>. See <see cref="TasteVisual.Vocabulary"/>.
+    /// </summary>
+    /// <param name="options"><c>{ take?: number (default 20), min?: number (default 2) }</c>.</param>
+    public object?[] Vocabulary(object source, object? options = null)
+    {
+        // Pictures carry their descriptions; anything else is looked up by id in this session's answers.
+        var pictures = source switch
+        {
+            TasteImage[] given => given,
+            System.Collections.IEnumerable items and not string when items.Cast<object?>().ToArray() is { Length: > 0 } all
+                && all.All(i => i is TasteImage) => all.Cast<TasteImage>().ToArray(),
+            _ => null,
+        };
+        var described = pictures?.Select(p => (p.Name, p.StyleDescription))
+            ?? IdsOf(source).Select(id => registry.Entity(id)).OfType<(Dictionary<string, object?> Entity, string Answer)>()
+                .Select(p => (p.Entity.GetValueOrDefault("name") as string ?? "?", StyleOf(p.Entity)));
+        return TasteVisual.Vocabulary(described, Option<int?>(options, "take") ?? 20, Option<int?>(options, "min") ?? 2);
+    }
+
+    /// <summary>
+    /// A colour in the terms a field is measured in: <c>{ lightness, chroma, hue, neutral, sector }</c>, with
+    /// <c>sector</c> spelled as <see cref="ColourField"/> spells it (<c>'blue 240–270°'</c>), or null for a neutral.
+    /// For placing a finished piece's colour on the field its research measured. Takes <c>#rgb</c> or <c>#rrggbb</c>.
+    /// </summary>
+    public Dictionary<string, object?> Oklch(string color)
+    {
+        var hex = (color ?? string.Empty).Trim().TrimStart('#');
+        if (hex.Length == 3) hex = string.Concat(hex.Select(c => $"{c}{c}"));
+        if (hex.Length != 6 || !int.TryParse(hex, System.Globalization.NumberStyles.HexNumber, null, out var rgb))
+            throw new ArgumentException($"Taste.oklch takes '#rrggbb' or '#rgb'; '{color}' is neither.", nameof(color));
+
+        var (L, C, H) = TasteColour.Oklch((byte)(rgb >> 16), (byte)(rgb >> 8), (byte)rgb);
+        var neutral = C < TasteColour.NeutralChroma;
+        var from = (int)(H / 30) % 12 * 30;
+        return new()
+        {
+            ["lightness"] = Math.Round(L, 4), ["chroma"] = Math.Round(C, 4), ["hue"] = Math.Round(H, 1), ["neutral"] = neutral,
+            ["sector"] = neutral ? null : $"{TasteVisual.SectorNames[from / 30]} {from}–{from + 30}°",
+        };
+    }
+
     private static string Named(TasteResult r) => string.IsNullOrWhiteSpace(r.Label) ? r.Id : $"{r.Id} ({r.Label})";
+
+    private async Task<TasteImage> Picture(string id, (Dictionary<string, object?> Entity, string Answer)? found, CancellationToken token)
+    {
+        if (found is not { } f)
+            return new TasteImage { Id = id, Name = id, Failure = TasteImageFailure.UnknownEntity,
+                Error = $"No Qloo answer this session named '{id}'. Ask the Taste tool first; a picture comes only with its answer." };
+
+        var name = f.Entity.GetValueOrDefault("name") as string ?? id;
+        var properties = Get(f.Entity, "properties") as IDictionary<string, object?>;
+        var url = Get(properties, "image") is IDictionary<string, object?> image ? Get(image, "url") as string : null;
+        var year = Get(properties, "release_year") is { } y && int.TryParse(Convert.ToString(y, System.Globalization.CultureInfo.InvariantCulture), out var parsed) ? parsed : (int?)null;
+        var rank = f.Entity.GetValueOrDefault("audienceRank") is { } r ? Convert.ToInt32(r, System.Globalization.CultureInfo.InvariantCulture)
+            : Array.IndexOf(registry.Get(f.Answer)?.Entities ?? [], f.Entity) + 1;
+        TasteImage Failed(TasteImageFailure failure, string error) => new()
+        {
+            Id = id, Name = name, Type = f.Entity.GetValueOrDefault("type") as string, Url = url, Year = year, Rank = rank,
+            StyleDescription = StyleOf(f.Entity), Answer = f.Answer, Failure = failure, Error = error,
+        };
+
+        if (images is null) return Failed(TasteImageFailure.NotConfigured, "Qloo pictures are not configured on this server.");
+        if (string.IsNullOrWhiteSpace(url)) return Failed(TasteImageFailure.NoImage, $"Qloo keeps no picture for {name}.");
+        if (!images.IsCached(url) && !registry.TakeImages(1))
+            return Failed(TasteImageFailure.AllowanceSpent, $"This session's {TasteRegistry.ImageAllowance} Qloo pictures are spent.");
+
+        var fetched = await images.Fetch(url, token);
+        if (!fetched.Success) return Failed(fetched.Failure, fetched.Error ?? fetched.Failure.ToString());
+        return new TasteImage
+        {
+            Success = true, Id = id, Name = name, Type = f.Entity.GetValueOrDefault("type") as string, Url = url, Year = year, Rank = rank,
+            StyleDescription = StyleOf(f.Entity), Answer = f.Answer, Width = fetched.Width, Height = fetched.Height,
+            MimeType = fetched.MimeType, FromCache = fetched.FromCache, Colours = fetched.Colour?.Colours ?? [],
+            Neutral = fetched.Colour?.Neutral ?? 1, Lightness = fetched.Colour?.Lightness ?? 0, Lead = fetched.Colour?.Lead,
+            bytes = fetched.Bytes, taken = Taken,
+        };
+    }
+
+    /// <summary>
+    /// Records <c>taste.pictures</c> once per script, the first time it takes a Qloo picture's pixels. Every render
+    /// that script makes is then research to the studio, whatever the file is called, and is never served: the
+    /// pictures are other people's posters and logos (Manual 29 §2a). Names only reach the record, never pixels.
+    /// </summary>
+    private void Taken(TasteImage picture)
+    {
+        if (Interlocked.Exchange(ref picturesTaken, 1) == 1) return;
+        record?.Invoke("taste.pictures", new Dictionary<string, object?> { ["first"] = picture.Name });
+    }
+
+    private static string? StyleOf(Dictionary<string, object?> entity) =>
+        Get(Get(entity, "properties") as IDictionary<string, object?>, "style_description") as string;
+
+    /// <summary>Entity ids from an answer, a single id, or an array of entities, ids or pictures — in order, once each.</summary>
+    private static string[] IdsOf(object? source) => source switch
+    {
+        null => [],
+        string id => [id],
+        TasteResult r => [.. r.Entities.OfType<Dictionary<string, object?>>().Select(e => e.GetValueOrDefault("id") as string).OfType<string>().Distinct()],
+        IDictionary<string, object?> e => Get(e, "id") is string id ? [id] : [],
+        System.Collections.IEnumerable items => [.. items.Cast<object?>().Select(i => i switch
+        {
+            string s => s,
+            TasteImage p => p.Id,
+            IDictionary<string, object?> e => Get(e, "id") as string,
+            _ => null,
+        }).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase)],
+        _ => [],
+    };
+
+    private static string? TypeUrn(string? type) => type?.Trim().ToLowerInvariant() switch
+    {
+        null or "" => null,
+        "film" or "films" or "movie" => "urn:entity:movie",
+        "show" or "tv" or "tv_show" => "urn:entity:tv_show",
+        var t when t.StartsWith("urn:", StringComparison.Ordinal) => t,
+        var t => "urn:entity:" + t,
+    };
+
+    private static T? Option<T>(object? options, string name)
+    {
+        if (Get(options as IDictionary<string, object?>, name) is not { } value) return default;
+        var target = Nullable.GetUnderlyingType(typeof(T)) ?? typeof(T);
+        return (T)Convert.ChangeType(value, target, System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private static object? Get(IDictionary<string, object?>? dict, string key) =>
+        dict is not null && dict.TryGetValue(key, out var value) ? value : null;
+
+    private const int MaxImages = 48;
     #endregion
 
     #region Fields
     private readonly TasteRegistry registry;
     private readonly string? projectRoot;
     private readonly Action<string, IReadOnlyDictionary<string, object?>>? record;
+    private readonly QlooImageSource? images;
+    private int picturesTaken;
     #endregion
 }
 

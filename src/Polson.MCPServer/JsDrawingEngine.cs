@@ -93,6 +93,12 @@ public partial class JsDrawingEngine : Runtime
     public static PhotoToolkit? Photos { get; set; }
 
     /// <summary>
+    /// Where <c>Taste.images</c> fetches Qloo's pictures, configured with Qloo at startup. Null and every picture is
+    /// refused as not configured; the answers themselves are unaffected.
+    /// </summary>
+    public static Polson.ExtendedMind.Taste.QlooImageSource? TasteImages { get; set; }
+
+    /// <summary>
     /// The project directory a script's file paths resolve against. Null for an ad-hoc server.
     /// </summary>
     /// <remarks>
@@ -514,10 +520,11 @@ public partial class JsDrawingEngine : Runtime
             // Qloo answers, read-only, for the same reason: the agent fetches them with the Taste tool so it
             // can reason with them, and a script reads them back to cite what a mark rests on.
             // checkReferences reads direction.md inside the project and records its verdicts as `taste.check`.
+            // images is the one fetch here: Qloo's own pictures of entities its answers named, for visual research.
             var tasteEvents = Events;
             engine.SetValue("Taste", new Polson.ExtendedMind.Taste.TasteToolkit(
                 session?.Taste ?? new Polson.ExtendedMind.Taste.TasteRegistry(), ProjectRoot,
-                (type, fields) => tasteEvents?.Append(type, session?.Stage, executionId, fields)));
+                (type, fields) => tasteEvents?.Append(type, session?.Stage, executionId, fields), TasteImages));
 
             // Global logging & exit helpers
             engine.SetValue("log", new Action<string>(msg =>

@@ -1104,6 +1104,67 @@ class ArtifactRouteTests(unittest.TestCase):
             self.assertNotIn(b"client", page.content)
     # endregion
 
+    # region Research sheets
+    def _researched(self) -> None:
+        """A run that looked at Qloo's posters on a sheet of its own (x1), then drew the board, which has none (x2)."""
+        artifacts = self.root / "acme" / "artifacts"
+        (artifacts / "look.png").write_bytes(b"posters")
+        (artifacts / "01_field_a.png").write_bytes(b"the board")
+        self._record({"type": "taste.pictures", "execution": "x1", "first": "Suspiria"},
+                     {"type": "render", "execution": "x1", "artifact": "artifacts/look.png", "format": "png"},
+                     {"type": "render", "execution": "x2", "artifact": "artifacts/01_field_a.png", "format": "png"})
+
+    def test_a_render_is_never_judged_research_by_its_name(self):
+        """An R&D infographic's `research_spend.png` is its own work: served, and the finished piece when it is the last.
+
+        A name rule (`01_research_*`) was tried for research sheets and dropped on 2026-10-24 because it caught this.
+        The artifact route reads no record either way: what keeps a sheet off the page is the stream never sending it.
+        """
+        (self.root / "acme" / "artifacts" / "research_spend.png").write_bytes(b"the chart")
+        self._record({"type": "render", "execution": "x1", "artifact": "artifacts/research_spend.png", "format": "png"})
+
+        page = self.client.get("/runs/acme-1/artifact/artifacts/research_spend.png")
+        pieces = [d for d in self.client.get("/runs/acme-1/deliverables").json()["deliverables"] if d["kind"] == "render"]
+
+        self.assertEqual(page.status_code, 200)
+        self.assertEqual(page.content, b"the chart")
+        self.assertIn("research_spend.png", json.dumps(pieces))
+
+    def test_a_research_sheet_is_never_the_finished_piece(self):
+        """Even as the run's last render, it must not become the piece the page shows."""
+        self._researched()
+        with open(self.root / "acme" / "events" / "server.jsonl", "a", encoding="utf-8") as log:
+            log.write(json.dumps({"type": "taste.pictures", "execution": "x3"}) + "\n")
+            log.write(json.dumps({"type": "render", "execution": "x3", "artifact": "artifacts/look.png", "format": "png"}) + "\n")
+
+        pieces = [d for d in self.client.get("/runs/acme-1/deliverables").json()["deliverables"] if d["kind"] == "render"]
+
+        self.assertTrue(pieces)
+        self.assertNotIn("look.png", json.dumps(pieces))
+        self.assertIn("01_field_a.png", json.dumps(pieces))
+    # endregion
+
+
+class ResearchStreamTests(unittest.TestCase):
+    """The live record without research renders: the page never draws a row for a sheet of Qloo's pictures."""
+
+    def test_renders_from_a_script_that_took_qloos_pictures_are_dropped_in_order(self):
+        from studio.research import StreamFilter
+
+        events = [{"type": "render", "execution": "x0", "artifact": "artifacts/01_concepts_a.png"},
+                  {"type": "taste.pictures", "execution": "x1", "first": "Suspiria"},
+                  {"type": "render.layout", "execution": "x1", "artifact": "artifacts/look.png"},
+                  {"type": "render", "execution": "x1", "artifact": "artifacts/look.png"},
+                  {"type": "render", "execution": "x2", "artifact": "artifacts/research_spend.png"},
+                  {"type": "render", "execution": "x2", "artifact": "artifacts/01_field_a.png"},
+                  {"type": "script.ok", "execution": "x1"}]
+
+        research = StreamFilter()
+        kept = [e for e in events if research.keep(e)]
+
+        self.assertEqual([e.get("artifact") for e in kept],
+                         ["artifacts/01_concepts_a.png", None, "artifacts/research_spend.png", "artifacts/01_field_a.png", None])
+
 
 class InterjectionTests(unittest.TestCase):
     """Speaking to a run that is already going.

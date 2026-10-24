@@ -72,6 +72,54 @@ public class ProcessBookTests : TestsRuntime, IDisposable
         Assert.DoesNotContain(warned.Logs, l => l.Contains("'Concepts' runs on"));
     }
 
+    /// <summary>
+    /// The book is the client's, and a sheet of Qloo's pictures is other people's posters and logos. Known by the script
+    /// that drew it, never by its name: an infographic's own <c>research_spend.png</c> goes in.
+    /// </summary>
+    [Fact]
+    public void TestAResearchSheetIsRefusedAndAnythingElseIsNot()
+    {
+        foreach (var name in new[] { "look.png", "01_field_a.png", "research_spend.png" })
+            File.Copy(Path.Combine(root, "artifacts", "frame.png"), Path.Combine(root, "artifacts", name));
+        Record();
+        DrawingExecutionResult Book(string image) => new JsDrawingEngine { ProjectRoot = root, Events = new RunEventLog(root) }
+            .Execute($"Stage.book('process.pdf', {{ title: 'X', pages: [{{ image: '{image}' }}] }});\nconst c = createCanvas(8, 8); c;", 8, 8, null, "png", 90);
+
+        var refused = Book("artifacts/look.png");
+
+        Assert.False(refused.Success);
+        Assert.Contains("research sheet", refused.Error);
+        Assert.Contains("01_field_a.png", refused.Error);
+        Assert.True(Book("artifacts/01_field_a.png").Success);
+        Assert.True(Book("artifacts/research_spend.png").Success);
+    }
+
+    /// <summary>Any render of a script that took a Qloo picture's pixels is research, whatever it is called, and nothing else is.</summary>
+    [Fact]
+    public void TestTheRecordMarksEveryRenderOfAScriptThatTookQloosPictures()
+    {
+        Record();
+        var log = new RunEventLog(root);
+
+        Assert.True(log.IsResearch("artifacts/look.png"));
+        Assert.True(log.IsResearch(@"artifacts\look.png"));
+        Assert.False(log.IsResearch("artifacts/01_field_a.png"));
+        Assert.False(log.IsResearch("artifacts/01_research_b.webp"));      // a name is not evidence
+        Assert.False(log.IsResearch("artifacts/research_spend.png"));
+    }
+
+    /// <summary>A run that looked at Qloo's posters on a sheet (x1), then drew the board, which has none (x2).</summary>
+    private void Record()
+    {
+        Directory.CreateDirectory(Path.Combine(root, "events"));
+        File.WriteAllLines(Path.Combine(root, "events", "server.jsonl"),
+        [
+            """{"type":"taste.pictures","execution":"x1","first":"Suspiria"}""",
+            """{"type":"render","execution":"x1","artifact":"artifacts/look.png","format":"png"}""",
+            """{"type":"render","execution":"x2","artifact":"artifacts/01_field_a.png","format":"png"}""",
+        ]);
+    }
+
     [Theory]
     [InlineData("{ title: 'X', pages: [{ image: 'artifacts/missing.png' }] }", "is not in the project")]
     [InlineData("{ title: 'X', pages: [{ title: 'Y', picture: 'artifacts/frame.png' }] }", "not 'picture'")]

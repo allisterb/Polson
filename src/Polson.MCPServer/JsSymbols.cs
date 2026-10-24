@@ -136,6 +136,7 @@ public static class JsSurface
         new("Taste", typeof(Polson.ExtendedMind.Taste.TasteToolkit), "Taste", false),
         new("tasteResult", typeof(Polson.ExtendedMind.Taste.TasteResult), "Taste", true),
         new("tasteBudget", typeof(Polson.ExtendedMind.Taste.QlooBudget), "Taste", true),
+        new("tasteImage", typeof(Polson.ExtendedMind.Taste.TasteImage), "Taste", true),
 
         new("Drawing", typeof(ConstructiveDrawingToolkit), "Drawing", false),
         new("Logo", typeof(LogoDesignToolkit), "Logo", false),
