@@ -844,6 +844,10 @@ public sealed class MotionComposition : MotionLayerList
     /// <summary>Whether y grows down the screen in the units layers use: the view's top is above its bottom.</summary>
     internal bool YDown => view[3] > view[1];
 
+    /// <summary>The frame in the composition's units: its view, with left below right and top below bottom.</summary>
+    internal SKRect ViewRect => new((float)Math.Min(view[0], view[2]), (float)Math.Min(view[1], view[3]),
+        (float)Math.Max(view[0], view[2]), (float)Math.Max(view[1], view[3]));
+
     /// <summary>Every text added anywhere in this composition, groups included, in the order added.</summary>
     internal List<IShownText> TextHandles { get; } = [];
     #endregion
@@ -1044,6 +1048,14 @@ public sealed class MotionComposition : MotionLayerList
     /// <c>width</c> pixels wide (160) over <c>background</c> (white, as the video), so a 15 s film takes a few seconds.
     /// </summary>
     public Dictionary<string, object?> Flashes(object? options = null) => MotionFlashes.Measure(this, options);
+
+    /// <summary>
+    /// Where the film shows nothing: <c>{ passed, stretches, blankSeconds, longestAllowed, frames, width }</c>, each stretch
+    /// <c>{ from, to, seconds }</c>. A frame is blank when almost every pixel is its most common colour; <c>passed</c> is no
+    /// stretch longer than <c>longest</c> seconds (1). <c>options</c>: <c>{ from?, to?, longest?, width?, fps?, background? }</c>,
+    /// frames drawn <c>width</c> wide (320), <c>fps</c> a second (6), over <c>background</c> (white, as the video).
+    /// </summary>
+    public Dictionary<string, object?> Blank(object? options = null) => MotionBlank.Measure(this, options);
 
     /// <summary>
     /// Renders every frame into <c>Motion</c>'s frame buffer, ready for <c>Motion.sheet</c> or

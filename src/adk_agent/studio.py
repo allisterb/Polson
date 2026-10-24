@@ -822,6 +822,36 @@ RETRY_MAX_DELAY = 60.0
 #: point of the setting. 5xx are transient too and cost nothing to include.
 RETRY_STATUS_CODES = [429, 500, 502, 503, 504]
 
+#: How long one attempt at a model call may take before it is abandoned and retried, in seconds.
+#:
+#: **There was none, so a call Google never answered waited until the breaker.** ftcexplainer2 (2026-10-23, 3.8 Flash)
+#: sent a turn at 20:11:32 and had heard nothing eight minutes later; its page showed `write_script`, which had finished
+#: in milliseconds, as the thing it was waiting on. A retry policy only acts on an answer, and a hung connection is not
+#: one. The longest real turns measured are 154 s (3.7, a 20-token reply under load) and 98 s (7,250 tokens out), so
+#: 180 s leaves those alone and turns a hang into a retry at three minutes rather than at 53.
+REQUEST_TIMEOUT_SECONDS = float(os.environ.get("POLSON_REQUEST_TIMEOUT_SECONDS", "180"))
+
+
+def _show_retries() -> None:
+    """Prints each retry genai makes, with its cause, beside the turn log.
+
+    A turn's time is all the turn log shows, and on 2026-10-23 a 138 s turn could not be told from a 20 s answer behind
+    two 429s. genai logs every retry at INFO before it sleeps (tenacity's `before_sleep_log`); this lets those lines,
+    and only those, through.
+    """
+    log = logging.getLogger("google_genai._api_client")
+    if any(getattr(h, "polson", False) for h in log.handlers):
+        return
+    handler = logging.StreamHandler()
+    handler.polson = True
+    handler.setFormatter(logging.Formatter("model retry: %(message)s"))
+    handler.addFilter(lambda r: r.getMessage().startswith("Retrying"))
+    log.addHandler(handler)
+    log.setLevel(min(log.level or logging.INFO, logging.INFO))
+
+
+_show_retries()
+
 
 #: The first segment of a name that is the JavaScript SDK's, not a tool: `Stage.begin`, `Snap(...)`.
 _SDK_GLOBALS = frozenset({
@@ -876,6 +906,7 @@ def _retry_config() -> types.GenerateContentConfig:
         # which reads a run with no thinking as pure action.
         thinking_config=types.ThinkingConfig(include_thoughts=True),
         http_options=types.HttpOptions(
+            timeout=int(REQUEST_TIMEOUT_SECONDS * 1000),        # milliseconds, per attempt
             retry_options=types.HttpRetryOptions(
                 attempts=RETRY_ATTEMPTS,
                 initial_delay=RETRY_INITIAL_DELAY,
