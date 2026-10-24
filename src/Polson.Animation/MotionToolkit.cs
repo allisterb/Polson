@@ -443,56 +443,13 @@ public class MotionToolkit : IDisposable
 
         var opt = JsInterop.AsDict(options);
         var picked = SelectIndices(opt);
-        var cols = Math.Max(1, (int)Num(opt, "cols", picked.Count <= 6 ? picked.Count : (int)MathF.Ceiling(MathF.Sqrt(picked.Count))));
-        var rows = (int)MathF.Ceiling(picked.Count / (float)cols);
-        var scale = Math.Clamp(Num(opt, "scale", 1f), 0.05f, 4f);
-        var gap = Num(opt, "gap", 10f);
-        var pad = Num(opt, "padding", 12f);
-        var labels = opt == null || !opt.Contains("labels") || Convert.ToBoolean(opt["labels"]);
         var fps = opt != null && opt.Contains("fps") ? Num(opt, "fps", 25f) : (float?)null;
-        var labelH = labels ? Num(opt, "labelHeight", 22f) : 0f;
+        var (bytes, sheetW, sheetH, cols, rows, format) = Tile([.. picked.Select(i => frames[i])],
+            [.. picked.Select(i => Label(i, fps))], opt, Math.Clamp(Num(opt, "scale", 1f), 0.05f, 4f));
 
-        var cellW = MathF.Max(1f, frames[0].Width * scale);
-        var cellH = MathF.Max(1f, frames[0].Height * scale);
-        var sheetW = (int)MathF.Ceiling(cols * cellW + (cols + 1) * gap + pad * 2);
-        var sheetH = (int)MathF.Ceiling(rows * (cellH + labelH) + (rows + 1) * gap + pad * 2);
-
-        using var sheet = new SKBitmap(sheetW, sheetH, SKColorType.Rgba8888, SKAlphaType.Premul);
-        using var canvas = new SKCanvas(sheet);
-        canvas.Clear(SkiaColorParser.Parse(opt?["background"]?.ToString() ?? "#e4e0d4"));
-
-        using var font = new SKFont(SKTypeface.FromFamilyName(opt?["fontFamily"]?.ToString() ?? "Georgia"),
-            Math.Max(7f, labelH * 0.62f));
-        using var ink = new SKPaint { Color = SkiaColorParser.Parse(opt?["labelColor"]?.ToString() ?? "#15151a"), IsAntialias = true };
-        using var border = new SKPaint { Color = ink.Color, IsStroke = true, StrokeWidth = 1.5f, IsAntialias = true };
-
-        for (var i = 0; i < picked.Count; i++)
-        {
-            var frame = frames[picked[i]];
-            var x = pad + (i % cols) * (cellW + gap) + gap;
-            var y = pad + (i / cols) * (cellH + labelH + gap) + gap;
-
-            // Mipmapped, so a cell smaller than its frame averages the pixels it covers. Point-sampled,
-            // a 2px line at scale 0.4 falls between samples and leaves the cell, so the ground under a
-            // figure simply vanished from a live run's spacing sheet.
-            using (var image = SKImage.FromBitmap(frame))
-                canvas.DrawImage(image,
-                    SKRect.Create(0, 0, frame.Width, frame.Height),
-                    SKRect.Create(x, y, cellW, cellH),
-                    new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear));
-            canvas.DrawRect(SKRect.Create(x, y, cellW, cellH), border);
-
-            if (!labels) continue;
-            canvas.DrawText(Label(picked[i], fps), x, y + cellH + labelH * 0.72f, SKTextAlign.Left, font, ink);
-        }
-
-        var format = opt?["format"]?.ToString() ?? "png";
-        var quality = (int)Num(opt, "quality", 92f);
         var full = ProjectPath.Resolve(projectRoot, filePath, nameof(filePath), "Write to");
         var directory = Path.GetDirectoryName(full);
         if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
-
-        var bytes = SkiaImageEncoder.Encode(sheet, format, quality);
         File.WriteAllBytes(full, bytes);
 
         Record("render", full, new()
@@ -519,6 +476,59 @@ public class MotionToolkit : IDisposable
             ["height"] = sheetH,
             ["bytes"] = (long)bytes.Length
         };
+    }
+
+    /// <summary>
+    /// Tiles <paramref name="cells"/> into one labelled sheet, each drawn at <paramref name="scale"/>: <c>Motion.sheet</c>'s
+    /// layout and <c>comp.sheet</c>'s. <paramref name="opt"/> carries <c>cols, gap, padding, labels, labelHeight,
+    /// background, labelColor, fontFamily, format, quality</c>.
+    /// </summary>
+    internal static (byte[] Bytes, int Width, int Height, int Cols, int Rows, string Format) Tile(
+        IReadOnlyList<SKBitmap> cells, IReadOnlyList<string> labelText, IDictionary? opt, float scale)
+    {
+        var cols = Math.Max(1, (int)Num(opt, "cols", cells.Count <= 6 ? cells.Count : (int)MathF.Ceiling(MathF.Sqrt(cells.Count))));
+        var rows = (int)MathF.Ceiling(cells.Count / (float)cols);
+        var gap = Num(opt, "gap", 10f);
+        var pad = Num(opt, "padding", 12f);
+        var labels = opt == null || !opt.Contains("labels") || Convert.ToBoolean(opt["labels"]);
+        var labelH = labels ? Num(opt, "labelHeight", 22f) : 0f;
+
+        var cellW = MathF.Max(1f, cells[0].Width * scale);
+        var cellH = MathF.Max(1f, cells[0].Height * scale);
+        var sheetW = (int)MathF.Ceiling(cols * cellW + (cols + 1) * gap + pad * 2);
+        var sheetH = (int)MathF.Ceiling(rows * (cellH + labelH) + (rows + 1) * gap + pad * 2);
+
+        using var sheet = new SKBitmap(sheetW, sheetH, SKColorType.Rgba8888, SKAlphaType.Premul);
+        using var canvas = new SKCanvas(sheet);
+        canvas.Clear(SkiaColorParser.Parse(opt?["background"]?.ToString() ?? "#e4e0d4"));
+
+        using var font = new SKFont(SKTypeface.FromFamilyName(opt?["fontFamily"]?.ToString() ?? "Georgia"),
+            Math.Max(7f, labelH * 0.62f));
+        using var ink = new SKPaint { Color = SkiaColorParser.Parse(opt?["labelColor"]?.ToString() ?? "#15151a"), IsAntialias = true };
+        using var border = new SKPaint { Color = ink.Color, IsStroke = true, StrokeWidth = 1.5f, IsAntialias = true };
+
+        for (var i = 0; i < cells.Count; i++)
+        {
+            var frame = cells[i];
+            var x = pad + (i % cols) * (cellW + gap) + gap;
+            var y = pad + (i / cols) * (cellH + labelH + gap) + gap;
+
+            // Mipmapped, so a cell smaller than its frame averages the pixels it covers. Point-sampled,
+            // a 2px line at scale 0.4 falls between samples and leaves the cell, so the ground under a
+            // figure simply vanished from a live run's spacing sheet.
+            using (var image = SKImage.FromBitmap(frame))
+                canvas.DrawImage(image,
+                    SKRect.Create(0, 0, frame.Width, frame.Height),
+                    SKRect.Create(x, y, cellW, cellH),
+                    new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear));
+            canvas.DrawRect(SKRect.Create(x, y, cellW, cellH), border);
+
+            if (!labels) continue;
+            canvas.DrawText(labelText[i], x, y + cellH + labelH * 0.72f, SKTextAlign.Left, font, ink);
+        }
+
+        var format = opt?["format"]?.ToString() ?? "png";
+        return (SkiaImageEncoder.Encode(sheet, format, (int)Num(opt, "quality", 92f)), sheetW, sheetH, cols, rows, format);
     }
 
     /// <summary>

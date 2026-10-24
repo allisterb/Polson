@@ -104,7 +104,8 @@ Taste({ op: 'profile', audience: '{"location":"Mumbai","age":"45_to_54"}', label
 - **The beat is a separate choice from the holds.** A pulse taken from music an audience loves needs tempos
   from a source, cited. A tempo in beats per minute is **not** a Qloo fact, and published tempos are unreliable
   outside Western catalogues. With no sound in the brief, choose a pulse that suits the holds and mark it
-  *assumed*.
+  *assumed* — **a silent film still needs one**: films for feeds and public screens mostly play with the sound off,
+  and cut to a track they still move to a rhythm (Manual 25 §12e).
 - **Films and shows are the grade and the transitions.** The distinctive titles' look — film stock,
   warm or cold, crushed or lifted blacks, how their titles arrive — motivates `comp.colorCorrect` and
   the choice between a cut and a wipe.
@@ -171,6 +172,12 @@ any film is planned, and the shared parts are shared on purpose.
   | What only B's film draws on | only B: *Title*, *Title* | Qloo (t2) |
 - **Budget the time for every film.** One film took about a quarter of a 60-minute run. The deadline already
   counts the size of the set, so each film has about the same time a pair's would — not a pair's time shared.
+- **The set is a kit** (Manual 29 §7): before any film, decide what is fixed — type, hierarchy, the order of the
+  beats, the end card's structure — and what each audience may change — grade, pace, the hero image, any allusion.
+  Write the kit as its own section of `direction.md`, before the audiences', with the evidence for each variable part.
+- **Words that cross languages** (Manual 29 §6): no slang, rhyme or puns in a line more than one audience will read;
+  prefer names, years and numbers, which need no translation; a translated line is recorded as not checked by a
+  native speaker; brand and product names stay as they are.
 
 **Carry a poster's shapes over as its own path data.** `comp.region({ path })` and `comp.outline({ path })`
 take an SVG `d` unchanged, holes and curves included, so paste the poster's `<path>` data into a group whose
@@ -206,6 +213,12 @@ when its answer would change the others'.
 
 ## Stage 2 — beats
 
+**The concept comes before the beats.** Where a poster in `documents/` already sets it, carry it over. Where nothing
+does, put the brief in one sentence and make **three concepts by three methods** — a verb applied to the core image, a
+figure, a sign chosen for its kind (Manual 29 §2–§5) — and choose one against the sentence, recording the other two and
+why they lost (§8). In motion the verb is the move, so the concept already says how the film moves. **Decide the
+resolve with it**: the last shot the film builds to, and the earlier shots as parts or close-ups of it (Manual 25 §12b).
+
 A trailer is short enough to plan in full before any key is set. Write the beats as a table in
 `direction.md`, **times in seconds and frames** (24 fps: frame = seconds × 24):
 
@@ -231,23 +244,15 @@ A trailer is short enough to plan in full before any key is set. Write the beats
 ## Stage 3 — the animatic
 
 Build the composition with every layer **at its key pose for each beat** before you add motion between
-them, and draw one cell per beat onto one sheet:
+them, and put one cell per beat on one sheet:
 
 ```javascript
-const sheet = createCanvas(4 * 320, Math.ceil(beats.length / 4) * 180);
-const ctx = sheet.getContext('2d');
-beats.forEach((b, i) => {
-    ctx.save();
-    ctx.translate((i % 4) * 320, Math.floor(i / 4) * 180);
-    ctx.scale(0.25, 0.25);
-    comp.draw(ctx, b.key);            // each frame stays inside its own cell
-    ctx.restore();
-});
-sheet;
+comp.sheet('artifacts/03_animatic.png', { times: beats.map(b => b.key), cols: 4 });   // each cell labelled with its time
 ```
 
-Write it as `artifacts/03_animatic.png`. If the cells do not tell the story in order, motion will not
-rescue it.
+`comp.sheet` renders only the times named, each shrunk to its cell (480 wide by default; `scale` to change it), so a
+sheet of a long film costs a few frames. It writes the file itself: look at it with your image tool. If the cells do
+not tell the story in order, motion will not rescue it.
 
 ---
 

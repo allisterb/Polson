@@ -96,6 +96,34 @@ the model and the deck disagree on a figure, both are the company's: show neithe
   let it stand as checked. A caption too small or blurred to read is not read: leave it out and say so.
 - **Record it**: `Stage.check('every figure on screen was found on its page', …, 'N found, M computed, K from the brief, L left out')`.
 
+### Stage 1b — every label confirmed by the deck
+
+**A figure's words are a claim too, and the page check cannot see them.** It finds the digits on the page, so it passed
+*"50% — SF + NYC alone"* when the deck says the **seven** target cities (SF, NYC, LA, Chicago, Houston, PA, Dallas)
+cover 50% of the US market. That is the error an investor catches first, and it is in the words, not the number.
+So once the scenes are written, and before anything is designed, put **every figure with the exact words it will
+carry on screen** back to the deck in one call:
+
+```javascript
+const LABELS = SCENES.flatMap(s => s.figures.map(f => ({ figure: f.shown, label: f.label })));   // as they will be set
+const CONFIRM = await Documents.ask(DECK,
+    'For each pair, say whether this deck supports the figure with exactly that meaning. Watch the scope: who or what it '
+    + 'covers, where, when, and words such as "alone", "only", "all", "each", "per year". Quote the deck\'s sentence, and '
+    + 'where the label says more or less than the deck, give the deck\'s own wording.\n'
+    + LABELS.map((p, i) => `${i + 1}. ${p.figure} — ${p.label}`).join('\n'),
+    { schema: { type: 'object', required: ['pairs'], properties: { pairs: { type: 'array', items: { type: 'object',
+        required: ['n', 'supported', 'quote', 'deckWording'], properties: { n: { type: 'integer' }, supported: { type: 'boolean' },
+            quote: { type: 'string' }, deckWording: { type: 'string' } } } } } } });
+if (!CONFIRM.success) { error(CONFIRM.remedy); exit(CONFIRM.failureName); }
+const unsupported = JSON.parse(CONFIRM.text).pairs.filter(p => !p.supported);
+Stage.check('every figure\'s label is the deck\'s own claim', unsupported.length === 0,
+    unsupported.map(p => `${LABELS[p.n - 1].figure} "${LABELS[p.n - 1].label}" -> deck: "${p.deckWording}"`).join('; ') || 'all confirmed');
+```
+
+- **An unsupported label is rewritten in the deck's wording**, then the whole list is asked again — a fix is a new
+  claim. Never drop the check to make it pass.
+- **Put the quotes in `direction.md`** beside each figure: the label, the deck's sentence, and the page.
+
 ### The rules of a pitch
 
 - **Every number on screen is printed in the documents and found on its page, computed in the script from ones that
@@ -107,6 +135,11 @@ the model and the deck disagree on a figure, both are the company's: show neithe
   sound off, from a single frame. Record it: `Stage.check('every forward-looking figure is marked as one', …)`.
 - **Scenarios travel together.** Where the deck sets outcomes side by side — best, realistic, worst — show them side
   by side, each labelled as the deck labels it. The best case alone is a different claim from the deck's.
+- **Scenarios in different units are cards, not bars.** "$1B+ revenue", "5% of five cities" and "10 cars" share no
+  scale, so bars of them would measure nothing — and an empty outlined box beside each, as one film drew, is a mark
+  that carries no value. Draw each scenario as a **card**: a panel with a dashed or outlined border (the open mark of a
+  projection), its label, its figure set large inside, and the deck's one-line description under it. Bars are for
+  figures in one unit on one scale.
 - **The basis comes with the figure.** A projection the deck derives — *10.6M trips × $20 average fee* — shows its
   derivation, because an investor discounts a number with no assumptions behind it. Where the deck prints none, the
   figure stands as the company's, attributed.
@@ -155,6 +188,11 @@ section rather than rush one:
 **About ten seconds a scene**, a little more where a projection's basis must be read. Ninety seconds holds about seven
 of these; two minutes about nine; three minutes all of them. Put the scene list, with its length per scene, in Q1.
 
+**The length is the brief's.** Cut it only on a measurement, never on an estimate: encode one scene first, time it,
+and multiply. A run once cut a two-minute brief to 87 seconds on an estimate of 65 minutes' encoding, then finished
+with 37 minutes unused — the parts encode one per script, so the film's length costs scripts, not a single long wait.
+If the measurement says it will not fit, say so in Q1 with the numbers.
+
 **One scene per encoded part.** A two-minute film will not encode inside one script: encode each scene with
 `comp.saveVideo('artifacts/part1.mp4', { from, to })` in a script of its own, the parts silent, then
 `Motion.joinVideos([...], 'output.mp4', { audio })`, as stage 4 says. Plan the beats so every part boundary falls on
@@ -178,7 +216,14 @@ if (line.unsaid.length) error('the recording says more than the line: ' + line.u
 - **Say the figure on screen, as it is on screen.** A voice that says "two hundred million" over "$200M" is one claim;
   a voice that rounds differently, or names a figure the screen does not show, is two — and the second is unchecked.
 - **The voice makes no claim the screen could not carry.** Every sentence is the deck's, attributed in a retelling.
+- **The film must make its case with the sound off.** A narrated pitch is audio-dominant — the pictures illustrate the
+  voice (Manual 25 §12e) — but investors often watch in a feed, muted. Every claim and figure the voice makes is on
+  screen too, in fewer words; the voice adds the argument between them, never a fact of its own.
+- **Let the voice lead the cut.** Start a scene's first line a beat before its picture cuts in, or let a last line run
+  over the next scene's first frames — a J or an L cut (§12d) — rather than cutting voice and picture on one frame.
 - The same line in the same voice is served from the cache for nothing. Give every line once, at the join.
+- **A new line takes about 13 seconds to record**, so speak **at most two new lines a script**: eight in one script
+  ran out of time with two written. Pass which lines to record in `ARGS` and run the script until all are cached.
 
 ### Visual style — produced, not plain
 
@@ -188,15 +233,59 @@ once, before the beats, and record it in `direction.md` with its reasons.
 - **A ground with depth**, not a flat fill: a `comp.radialGradient` vignette under everything, and one slow move per
   scene with `comp.camera()`, eased `halt` at both ends, **never while a figure is being read**.
 - **Light on the one thing that matters**: one glow a scene, on its figure, keyed up as it arrives and down to 0 after.
+- **Every scene has a picture, made of the deck's own facts.** A scene of words alone is a slide, and the first pitch
+  film was exactly that: headings, figures and empty space. Give each scene one diagram the viewer reads before the
+  words — two figures in one unit as bars on one scale (a medallion's ~$500k against a driver's $31k), a share as a
+  filled bar or ring, a market by area, steps as a timeline, places as labelled dots, a product as the few shapes of
+  its flow (*tap → car assigned → pickup*). **Nothing in a picture that the deck does not say**: no invented icons
+  of customers, no map detail, no logos.
+- **Fill the frame.** Lay each scene on a two-column grid — the picture on one side, the figure and its words on the
+  other — so no more than about a third of the frame is empty at the scene's key moment. Type that sits in the top
+  left of an empty frame reads as unfinished.
 - **Figures arrive whole.** A figure rises, fades or scales into place as the number it is — **never a counter that
   ticks up** and **no character cascade on a figure**: both put numbers on screen the documents never printed.
 - **Type as the design.** One family; figures heavy, units smaller beside them; the claim in a calmer weight; the
   source line small and steady, **at 32 px or more at 1080p**, naming the deck and its page (*"Pitch deck, p. 7"*).
 - **Cuts and wipes, not dissolves**: a dissolve lays one scene's figures over the next one's. No motion blur on text.
+- **Carry a figure across a change of scene instead of setting it twice.** Where the next scene builds on a figure —
+  the market size the business model then divides — keep it in a group outside both scenes and change the scene around
+  it: a partial edit (Manual 25 §12c), which says *the same number* without a word.
+- **The ask is the resolve.** Design the end on the ask first, and let the earlier scenes lead to it (§12b).
 - **Your palette, not the company's.** One accent and its tints on a neutral; contrast 4.5 : 1 for text. Do not rebuild
   the company's identity — its colour as the whole palette, its typeface, its devices. For a retelling this is the
   whole difference between a film *about* the deck and one passing as the company's.
 - **Budget the frame**: time `comp.render(t)` on each scene's busiest moment before encoding.
+
+### Layout — measured, not eyeballed
+
+**Two texts must never touch.** The first pitch film set "22%" and "of all four biggest players" so close they read as
+one word, and "35%" ran into its label the same way: the figure's width depends on its digits, so a label placed at
+a fixed x collides whenever the figure is wider than planned. **Place a label from the figure's measured box**, not a
+guess — `boundsAt` gives it — and check every scene at its key moment before encoding:
+
+```javascript
+// TEXTS: every comp.text handle by name, kept as each is made. KEY: each scene's key moment, in seconds.
+const GAP = 24;   // px at 1080p: a word space at the label's size, at least
+const clashes = [];
+for (const [scene, t] of Object.entries(KEY)) {
+    const boxes = Object.entries(TEXTS).map(([name, h]) => [name, h.boundsAt(t, { frame: true })])
+        .filter(([, b]) => b && b.width > 0 && b.height > 0);
+    for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
+        const [[na, a], [nb, b]] = [boxes[i], boxes[j]];
+        const apart = a.x + a.width + GAP <= b.x || b.x + b.width + GAP <= a.x || a.y + a.height + GAP / 2 <= b.y || b.y + b.height + GAP / 2 <= a.y;
+        if (!apart) clashes.push(`${scene}: ${na} / ${nb}`);
+    }
+    for (const [name, b] of boxes)
+        if (b.x < 0.05 * W || b.y < 0.05 * H || b.x + b.width > 0.95 * W || b.y + b.height > 0.95 * H) clashes.push(`${scene}: ${name} outside title-safe`);
+}
+Stage.check('no two texts touch and every text is title-safe at each key moment', clashes.length === 0, clashes.join('; ') || 'clear');
+```
+
+- **A check that fails is fixed in the layout, never by loosening the check.** One run "fixed" a title-safe check to
+  pass a film whose text was off the frame; one rendered still would have shown it. **When a check and a still
+  disagree, render the still** (`comp.sheet` at the key moments, or `comp.render(t)`) and believe it.
+- **`offset` is where a group's `origin` lands**, not a displacement: a scene group with `origin: [W/2, H/2]` rests
+  at `offset: [W/2, H/2]`. Resting it at `[0, 0]` moved every scene of one film off the top left of the frame.
 
 ### More than one audience
 
@@ -213,6 +302,9 @@ set honest: **the case is shared and only its telling is the audience's.**
   long word reads better, keep `compact: 'long'` and set the currency in the words around it. Choose the locale from
   the place **and the film's language**: an English film for Tokyo writes `$200M`. `Locale.locales` lists what is
   carried.
+- **Every figure in every text, headings and narration included.** A London film that set `US$4.2bn` under the heading
+  *"A $4.2B market"* wrote one figure two ways in one frame. Build each heading and line from the same `Locale.number`
+  call as its figure, never type a figure into a sentence by hand.
 - **Never convert a currency.** A dollar raise stays in dollars in every film: a conversion is a figure with a rate and
   a date the documents do not give.
 - **Tell the read-back how each written figure was written**: `{ computed: { '$2億': '200,000,000 / 100,000,000 = 2
@@ -238,7 +330,8 @@ number: look at its frame before deciding. The check records its own verdict; do
 ### Questions, for a pitch
 
 - **Q1** (after the reading, before any design): the scene list with its length per scene; each scene's claim and
-  figures, each marked found, computed, from the brief, from an image, or left out, **with its kind**; every
+  figures, each marked found, computed, from the brief, from an image, or left out, **with its kind and its label's
+  confirmation from Stage 1b**; every
   disagreement between a derivation and its printed result, and between the deck and the model; and the sections
   dropped for length. The director confirms the case before anything moves.
 - **Q2** the tone, pace and voice.

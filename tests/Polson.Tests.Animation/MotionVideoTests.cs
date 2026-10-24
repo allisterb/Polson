@@ -187,6 +187,45 @@ public class MotionVideoTests : TestsRuntime, IDisposable
         Assert.Empty((List<object?>)result["warnings"]!);
     }
 
+    /// <summary>
+    /// Past the script's limit an encode stops and keeps nothing: no film under its name, no partial beside it. Jint stops a
+    /// script only between statements, and uberpitch1's timed-out part was written anyway, under the name it reused.
+    /// </summary>
+    [Fact]
+    public void TestAnEncodePastTheScriptsLimitKeepsNothing()
+    {
+        if (!FFmpeg.Available) return;
+        var comp = new MotionToolkit(root).Composition(Opts(("width", 32d), ("height", 32d), ("fps", 25d), ("duration", 1d)));
+        comp.Fill(Opts(("color", "#ffffff")));
+
+        using (ScriptDeadline.Begin(TimeSpan.Zero))
+            Assert.Throws<TimeoutException>(() => comp.SaveVideo("late.mp4"));
+
+        Assert.False(File.Exists(Path.Combine(root, "late.mp4")));
+        Assert.Empty(Directory.GetFiles(root, "*.part"));
+        comp.SaveVideo("late.mp4");                                          // outside a script, nothing stops it
+        Assert.True(File.Exists(Path.Combine(root, "late.mp4")));
+    }
+
+    /// <summary>A sheet of a composition renders only the times asked for, each in a labelled cell 480 wide by default.</summary>
+    [Fact]
+    public void TestASheetOfACompositionShowsTheTimesNamed()
+    {
+        var comp = Ramp(new MotionToolkit(root), 960);
+
+        var sheet = comp.Sheet("artifacts/sheet.png", Opts(("times", new object[] { 0d, 1d, 1.96 }), ("cols", 3d)));
+
+        Assert.Equal((3, 3, 1), ((int)sheet["cells"]!, (int)sheet["cols"]!, (int)sheet["rows"]!));
+        using var image = SKBitmap.Decode(File.ReadAllBytes(Path.Combine(root, "artifacts", "sheet.png")));
+        Assert.Equal((int)sheet["width"]!, image.Width);
+        Assert.InRange(image.Width, 3 * 480, 3 * 480 + 80);
+        // The ramp runs red to blue: the first cell is red and the last blue, each drawn whole in its own cell.
+        var top = 12 + 10 + 120;
+        Assert.True(image.GetPixel(12 + 10 + 240, top).Red > 200);
+        Assert.True(image.GetPixel(image.Width - 12 - 10 - 240, top).Blue > 200);
+        Assert.Throws<ArgumentException>(() => comp.Sheet("artifacts/bad.png", Opts(("times", new object[] { 5d }))));
+    }
+
     /// <summary><c>from</c> moves the sound with the picture: starts are composition times.</summary>
     [Fact]
     public void TestFromMovesTheSoundWithThePicture()

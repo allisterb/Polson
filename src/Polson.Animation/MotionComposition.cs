@@ -3,6 +3,7 @@ namespace Polson.Animation;
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -1082,6 +1083,91 @@ public sealed class MotionComposition : MotionLayerList
         }
 
         return count;
+    }
+
+    /// <summary>
+    /// A contact sheet of the composition at chosen times, written to <paramref name="filePath"/>: <c>{ path, cells, times,
+    /// cols, rows, width, height, bytes }</c>. <c>options</c>: <c>{ times? | count?, from?, to?, scale?, cols?, labels?,
+    /// background?, labelColor?, fontFamily?, gap?, padding?, format?, quality? }</c> — <c>times</c> in seconds, or
+    /// <c>count</c> (8) spread from <c>from</c> to <c>to</c>, both ends included; <c>scale</c> defaults to cells 480 wide.
+    /// </summary>
+    /// <remarks>
+    /// <c>Motion.sheet</c> tiles frames already captured, and capturing a two-minute 1080p film holds thousands of
+    /// uncompressed frames. A run that needed to see its film built its own sheet from <c>comp.draw</c> instead, never got
+    /// it right, and built most of the film unseen. This renders only the instants asked for, each shrunk to its cell as
+    /// it is drawn, so a sheet of a long film costs a few frames' rendering.
+    /// </remarks>
+    public Dictionary<string, object?> Sheet(string filePath, object? options = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+        var o = new MotionOptions(options, "composition.sheet", "times", "count", "from", "to", "scale", "cols", "labels",
+            "background", "labelColor", "fontFamily", "gap", "padding", "format", "quality");
+        double[] times;
+        if (o.Raw("times") is IEnumerable given and not string)
+            times = [.. given.Cast<object?>().Select(t => Convert.ToDouble(t, CultureInfo.InvariantCulture))];
+        else
+        {
+            var count = (int)o.Number("count", 8);
+            var (from, to) = (o.Number("from", 0), o.Number("to", Duration));
+            if (count < 1 || to < from) throw new ArgumentException("composition.sheet: count is at least 1, and from comes before to.");
+            times = count == 1 ? [from] : [.. Enumerable.Range(0, count).Select(i => from + i * (to - from) / (count - 1))];
+        }
+        if (times.Length is 0 or > 48)
+            throw new ArgumentException($"composition.sheet takes 1 to 48 times, not {times.Length}: a sheet is to be read at a glance.");
+        if (times.FirstOrDefault(t => t < 0 || t > Duration + 1e-9, -1) is var outside and >= 0)
+            throw new ArgumentException($"composition.sheet: {outside:0.###} s is outside the film (0 to {Duration:0.###} s).");
+
+        var scale = Math.Clamp(o.Number("scale", Math.Min(1, 480d / Width)), 0.05, 1);
+        var (cellW, cellH) = (Math.Max(1, (int)Math.Round(Width * scale)), Math.Max(1, (int)Math.Round(Height * scale)));
+        var cells = new List<SKBitmap>();
+        try
+        {
+            foreach (var t in times)
+            {
+                ScriptDeadline.ThrowIfPassed("comp.sheet");
+                using var frame = Render(t);
+                var cell = new SKBitmap(cellW, cellH, SKColorType.Rgba8888, SKAlphaType.Premul);
+                using (var c = new SKCanvas(cell))
+                using (var image = SKImage.FromBitmap(frame.SkBitmap))
+                {
+                    // Over the sheet's ground, as the film is over its background: a transparent cell reads as missing.
+                    c.Clear(SKColors.White);
+                    c.DrawImage(image, SKRect.Create(0, 0, Width, Height), SKRect.Create(0, 0, cellW, cellH),
+                        new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear));
+                }
+                cells.Add(cell);
+            }
+            var (bytes, sheetW, sheetH, cols, rows, format) = MotionToolkit.Tile(cells,
+                [.. times.Select(t => $"{t:0.00}s  ·  f{(int)Math.Round(t * Fps)}")], JsInterop.AsDict(options), 1f);
+
+            var full = ProjectPath.Resolve(projectRoot, filePath, nameof(filePath), "Write to");
+            Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+            File.WriteAllBytes(full, bytes);
+            motion?.Record("render", full, new()
+            {
+                ["motion"] = "sheet",
+                ["format"] = format.ToLowerInvariant() is "jpg" ? "jpeg" : format.ToLowerInvariant(),
+                ["bytes"] = (long)bytes.Length,
+                ["cells"] = times.Length,
+                ["width"] = sheetW,
+                ["height"] = sheetH
+            });
+            return new()
+            {
+                ["path"] = filePath,
+                ["cells"] = times.Length,
+                ["times"] = times.Select(t => (object?)t).ToList(),
+                ["cols"] = cols,
+                ["rows"] = rows,
+                ["width"] = sheetW,
+                ["height"] = sheetH,
+                ["bytes"] = (long)bytes.Length
+            };
+        }
+        finally
+        {
+            foreach (var cell in cells) cell.Dispose();
+        }
     }
 
     /// <summary>

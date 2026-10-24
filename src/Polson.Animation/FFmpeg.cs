@@ -135,7 +135,9 @@ public static class FFmpeg
 
         var w = width + (width & 1);
         var h = height + (height & 1);
-        var partial = output + ".part";
+        // Its own name per encode: a host that gave up waiting and retried used to meet the first encode, still running,
+        // holding the one shared `.part`, and was refused "Access to the path is denied".
+        var partial = $"{output}.{Guid.NewGuid():N}.part";
         var info = Info(exe, [.. Arguments(w, h, fps, frameCount, partial, format, quality, tracks)]);
 
         using var flat = new SKBitmap(w, h, SKColorType.Rgba8888, SKAlphaType.Opaque);
@@ -153,6 +155,9 @@ public static class FFmpeg
         {
             foreach (var frame in frames)
             {
+                // The script's limit, checked here because Jint cannot stop native work: past it, the encode stops and
+                // keeps nothing, which is what the timeout's message then truthfully says (`ScriptDeadline`).
+                ScriptDeadline.ThrowIfPassed(who);
                 if (frame.Width != width || frame.Height != height)
                     throw new InvalidOperationException(
                         $"{who}: every frame must be {width}x{height}; frame {count} is {frame.Width}x{frame.Height}.");

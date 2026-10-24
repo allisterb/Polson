@@ -88,6 +88,24 @@ public class VerifyTests : TestsRuntime, IDisposable
         Assert.Single(late.Strays);
     }
 
+    /// <summary>
+    /// uberpitch1: six lines read word for word about two seconds before they arrived were each reported twice, missed
+    /// and stray. An exact reading that near is the text; a near-miss of the words still has to be in time.
+    /// </summary>
+    [Fact]
+    public void TestAnExactReadingAFewSecondsEarlyIsTheTextNotAMissAndAStray()
+    {
+        var shown = new[] { Shown("the whole US market, a year", 43.67, 54.92), Shown("Scenarios — the company’s own estimates.", 55.67, 72.9) };
+        var outcome = FilmReadBack.Match(shown, [Read("the whole US market, a year", 42), Read("Scenarios - the company's own estimates.", 54)]);
+
+        Assert.All(outcome.Seen, Assert.NotNull);
+        Assert.Empty(outcome.Strays);
+
+        var near = FilmReadBack.Match([Shown("the whole US market, a year", 43.67, 54.92)], [Read("the whole market a year", 41)]);
+        Assert.Null(near.Seen[0]);
+        Assert.Single(near.Strays);
+    }
+
     [Theory]
     [InlineData("$40.4 billion (282 million)", new[] { "40.4", "282" })]
     [InlineData("102,718 units, up 4.5%.", new[] { "102718", "4.5" })]

@@ -138,22 +138,13 @@ is served from cache, but the turn that asks again is not.
 ## Stage 3 — the animatic
 
 Build each scene **at its key pose** — the derivation fully written, the curve fully drawn, the result highlighted —
-and draw one cell per scene onto one sheet:
+and put one cell per scene on one sheet:
 
 ```javascript
-const sheet = createCanvas(3 * 320, Math.ceil(KEYS.length / 3) * 180);   // KEYS: each scene's key moment, in seconds
-const ctx = sheet.getContext('2d');
-KEYS.forEach((t, i) => {
-    ctx.save();
-    ctx.translate((i % 3) * 320, Math.floor(i / 3) * 180);
-    ctx.scale(0.25, 0.25);
-    comp.draw(ctx, t);
-    ctx.restore();
-});
-sheet;
+comp.sheet('artifacts/03_animatic.png', { times: KEYS, cols: 3 });   // KEYS: each scene's key moment, in seconds
 ```
 
-Write it as `artifacts/03_animatic.png`. If the cells do not carry the argument in order, motion will not rescue it.
+`comp.sheet` renders only the times named and writes the file itself; look at it with your image tool. If the cells do not carry the argument in order, motion will not rescue it.
 **At a quarter size an equation's small symbols are hard to read on the sheet**: check a scene's formulas on a
 full-size `comp.render(t)` of its key moment, not on the cell.
 

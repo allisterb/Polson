@@ -68,7 +68,9 @@ public sealed class MotionText : IShownText
     /// </summary>
     public Dictionary<string, object?>? BoundsAt(double time, object? options = null)
     {
-        var letters = Letters(time, options, "boundsAt");
+        // A letter scaled to nothing as it arrives has no ink: counted, it made a zero-size box mid-fade where the
+        // reference promises null, and a frame check flagged every text in a film as off the frame for one frame each.
+        var letters = Letters(time, options, "boundsAt").Where(l => l.Ink.Width > 0 && l.Ink.Height > 0).ToList();
         if (letters.Count == 0) return null;
         return Box(letters.Skip(1).Aggregate(letters[0].Ink, (b, l) => SKRect.Union(b, l.Ink)));
     }

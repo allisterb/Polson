@@ -850,6 +850,19 @@ internal static class FilmReadBack
             }
         }
 
+        // The same words and figures, read a little outside the interval, are the same text: the watcher's times drift.
+        // uberpitch1 (2026-10-24) read six lines word for word 1.7–2.3 s before they arrived, and each was reported twice,
+        // missed and stray, fourteen problems where there were none. Only an exact reading is paired this far out.
+        for (var i = 0; i < shown.Count; i++)
+        {
+            var s = shown[i];
+            if (seen[i] is not null || s.From is null) continue;
+            var figures = MatchFigures(s.Text);
+            var k = Enumerable.Range(0, read.Count).FirstOrDefault(k => !used[k] && InTime(s, read[k], DriftSlack)
+                && Similarity(s.Text, read[k].Text) >= 0.95 && figures.SequenceEqual(MatchFigures(read[k].Text)), -1);
+            if (k >= 0) { used[k] = true; seen[i] = read[k]; }
+        }
+
         var strays = read.Select((r, k) => (r, k)).Where(x => !used[x.k]).Select(x =>
         {
             var near = shown.Where(s => s.From is not null && InTime(s, x.r)).Select(s => (s, score: Words(s.Text, x.r.Text)))
@@ -874,8 +887,8 @@ internal static class FilmReadBack
         return bestScore >= 0.6 ? best : -1;
     }
 
-    private static bool InTime(Shown s, Reading r) =>
-        r.From is not { } at || s.Intervals.Length == 0 || s.Intervals.Any(iv => at >= iv[0] - Slack && at <= iv[1] + Slack);
+    private static bool InTime(Shown s, Reading r, double slack = Slack) =>
+        r.From is not { } at || s.Intervals.Length == 0 || s.Intervals.Any(iv => at >= iv[0] - slack && at <= iv[1] + slack);
 
     /// <summary>
     /// 1 for the same words in order; containment counts most of that when the shorter is at least half the longer;
@@ -962,6 +975,9 @@ internal static class FilmReadBack
     #region Fields
     /// <summary>How far a reading's time may sit outside a text's interval: the watcher samples about once a second.</summary>
     internal const double Slack = 1.5;
+
+    /// <summary>How far an exact reading may sit outside its text's interval and still be that text (<see cref="Match"/>).</summary>
+    internal const double DriftSlack = 4;
 
     private static readonly Dictionary<char, char> Superscript = new()
     {
