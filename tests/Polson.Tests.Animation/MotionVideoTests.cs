@@ -207,6 +207,22 @@ public class MotionVideoTests : TestsRuntime, IDisposable
         Assert.True(File.Exists(Path.Combine(root, "late.mp4")));
     }
 
+    /// <summary>A still is the frame at its time, full size, over white unless told otherwise; and as many as asked for.</summary>
+    [Fact]
+    public void TestAStillIsTheFrameAtItsTimeAtFullSize()
+    {
+        var comp = Ramp(new MotionToolkit(root), 96);
+
+        foreach (var (name, t) in new[] { ("start", 0d), ("end", 1.96) }) comp.Still($"artifacts/still_{name}.png", t);
+
+        using var start = SKBitmap.Decode(File.ReadAllBytes(Path.Combine(root, "artifacts", "still_start.png")));
+        using var end = SKBitmap.Decode(File.ReadAllBytes(Path.Combine(root, "artifacts", "still_end.png")));
+        Assert.Equal((96, 96), (start.Width, start.Height));
+        Assert.True(start.GetPixel(48, 48).Red > 200 && end.GetPixel(48, 48).Blue > 200);
+        Assert.Throws<ArgumentException>(() => comp.Still("artifacts/late.png", 5));
+        Assert.Throws<ArgumentException>(() => comp.Still("artifacts/frame.gif", 1));
+    }
+
     /// <summary>A sheet of a composition renders only the times asked for, each in a labelled cell 480 wide by default.</summary>
     [Fact]
     public void TestASheetOfACompositionShowsTheTimesNamed()

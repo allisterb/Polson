@@ -184,6 +184,9 @@ if MARKDOWN is not None:
 #: worth. That is the order a judge wants them in, and the page shows them in the order given.
 DELIVERABLES: tuple[tuple[str, str], ...] = (
     ("brief.md", "the commission, as the agent received it"),
+    # The concept presentation (Manual 29 §8): the ideas weighed before any was made, each with its evidence and its
+    # drawbacks, and the recommendation. After the brief, because it is the step between what was asked and what was made.
+    ("concepts.md", "the concepts weighed, each with its evidence and drawbacks, and why one was chosen"),
     # The poster workflow's: every visual choice and the evidence it rests on, Qloo or research. Second,
     # because it is what a judge of a taste-grounded poster reads straight after the brief.
     ("direction.md", "why it looks like this: every choice and the evidence behind it"),

@@ -2,6 +2,7 @@ namespace Polson.MCPServer;
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 
@@ -38,16 +39,20 @@ public sealed class StageApi
     private readonly RunEventLog? events;
     private readonly string? executionId;
     private readonly DrawingExecutionResult? result;
+    private readonly string? projectRoot;
     #endregion
 
     #region Constructors
     /// <param name="result">Where this execution's checks are reported back to the caller, as they happen.</param>
-    public StageApi(SessionContext? session, RunEventLog? events, string? executionId, DrawingExecutionResult? result = null)
+    /// <param name="projectRoot">What <c>Stage.book</c> reads from and writes into, contained as <c>outFile</c> is.</param>
+    public StageApi(SessionContext? session, RunEventLog? events, string? executionId, DrawingExecutionResult? result = null,
+        string? projectRoot = null)
     {
         this.session = session;
         this.events = events;
         this.executionId = executionId;
         this.result = result;
+        this.projectRoot = projectRoot;
     }
     #endregion
 
@@ -121,6 +126,69 @@ public sealed class StageApi
         events?.Append("stage.begin", clean, executionId);
 
         return clean;
+    }
+
+    /// <summary>
+    /// The run's process book: a multi-page PDF of the work in order — the brief, the concepts, the boards, the frames, the
+    /// finished piece — written to <paramref name="filePath"/>. <c>options</c>: <c>{ title, pages }</c>, each page
+    /// <c>{ title?, image?, caption?, text?, file? }</c>, <c>image</c> and <c>file</c> project paths (a still, and a text or
+    /// Markdown file such as <c>concepts.md</c>). Returns <c>{ path, pages, bytes }</c>.
+    /// </summary>
+    /// <remarks>
+    /// What a studio hands its client beside the work, and what the run hands its reader: Lupton's concept presentation,
+    /// sequential, simple and headed on every page (<i>Graphic Design Thinking</i>, pp. 108–109). It assembles what the run
+    /// already made; it draws nothing new.
+    /// </remarks>
+    public Dictionary<string, object?> Book(string filePath, object? options)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+        if (!filePath.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException($"Stage.book writes a PDF: name it '….pdf', not '{filePath}'.");
+        var o = JsInterop.AsDict(options) ?? throw new ArgumentException("Stage.book needs { title, pages: [{ title, image, caption, text, file }] }.");
+        var title = Clean(o["title"]?.ToString() ?? "", MaxNameLength);
+        if (title.Length == 0) throw new ArgumentException("Stage.book needs a title: the project, as every page's header names it.");
+        if (o["pages"] is not System.Collections.IEnumerable given || o["pages"] is string)
+            throw new ArgumentException("Stage.book's pages is a list: [{ title, image, caption, text, file }].");
+
+        var pages = new List<Polson.Drawing.Skia.PdfBook.Page>();
+        foreach (var item in given)
+        {
+            var p = JsInterop.AsDict(item) ?? throw new ArgumentException("Each of Stage.book's pages is an object: { title, image, caption, text, file }.");
+            foreach (var key in p.Keys.Cast<object>().Select(k => k.ToString()!))
+                if (key is not ("title" or "image" or "caption" or "text" or "file"))
+                    throw new ArgumentException($"Stage.book: a page takes title, image, caption, text and file, not '{key}'.");
+            byte[]? image = null;
+            if (p["image"]?.ToString() is { Length: > 0 } imagePath)
+            {
+                var full = ProjectPath.Resolve(projectRoot, imagePath, "image", "Read");
+                if (!File.Exists(full)) throw new ArgumentException($"Stage.book: '{imagePath}' is not in the project. Name a still you rendered, e.g. 'artifacts/03_concepts_a.png'.");
+                if (!System.Text.RegularExpressions.Regex.IsMatch(full, @"\.(png|jpe?g|webp)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                    throw new ArgumentException($"Stage.book's pages show stills (.png, .jpg, .webp), not '{imagePath}'. For a film, render a frame of it.");
+                image = File.ReadAllBytes(full);
+            }
+            var text = p["text"]?.ToString();
+            if (p["file"]?.ToString() is { Length: > 0 } filePart)
+            {
+                var full = ProjectPath.Resolve(projectRoot, filePart, "file", "Read");
+                if (!File.Exists(full)) throw new ArgumentException($"Stage.book: '{filePart}' is not in the project.");
+                text = (text is null ? "" : text + "\n\n") + File.ReadAllText(full);
+            }
+            pages.Add(new(p["title"]?.ToString(), image, p["caption"]?.ToString(), text));
+        }
+        if (pages.Count is 0 or > 60) throw new ArgumentException($"Stage.book takes 1 to 60 pages, not {pages.Count}.");
+
+        var (pdf, count) = Polson.Drawing.Skia.PdfBook.Write(title, pages);
+        var output = ProjectPath.Resolve(projectRoot, filePath, nameof(filePath), "Write to");
+        Directory.CreateDirectory(Path.GetDirectoryName(output)!);
+        File.WriteAllBytes(output, pdf);
+        events?.Append("render", session?.Stage, executionId, new Dictionary<string, object?>
+        {
+            ["artifact"] = events.Relativize(output),
+            ["format"] = "pdf",
+            ["bytes"] = pdf.Length,
+            ["pages"] = count,
+        });
+        return new() { ["path"] = filePath, ["pages"] = count, ["bytes"] = (long)pdf.Length };
     }
 
     /// <summary>Ends the current stage. Harmless when none is open.</summary>

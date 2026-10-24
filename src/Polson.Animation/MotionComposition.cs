@@ -1086,6 +1086,43 @@ public sealed class MotionComposition : MotionLayerList
     }
 
     /// <summary>
+    /// The frame at <paramref name="time"/> seconds written to <paramref name="filePath"/> at full size, over the film's
+    /// white unless <c>{ background }</c> says otherwise: <c>{ path, time, width, height, bytes }</c>. PNG, or JPEG or WebP by
+    /// the path's extension.
+    /// </summary>
+    /// <remarks>
+    /// <c>outFile</c> writes one render per script, so a script that needed three style frames, or a frame of the film for
+    /// <c>Stage.book</c>, had no way to write more than one. This writes as many as it is called for.
+    /// </remarks>
+    public Dictionary<string, object?> Still(string filePath, double time, object? options = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+        var o = new MotionOptions(options, "composition.still", "background");
+        if (time < 0 || time > Duration + 1e-9)
+            throw new ArgumentException($"composition.still: {time:0.###} s is outside the film (0 to {Duration:0.###} s).");
+        var format = Path.GetExtension(filePath).ToLowerInvariant() switch
+        {
+            ".png" => "png",
+            ".jpg" or ".jpeg" => "jpeg",
+            ".webp" => "webp",
+            var ext => throw new ArgumentException($"composition.still writes .png, .jpg or .webp, not '{ext}'.")
+        };
+        using var frame = Render(time);
+        using var flat = new SKBitmap(Width, Height, SKColorType.Rgba8888, SKAlphaType.Premul);
+        using (var c = new SKCanvas(flat))
+        {
+            c.Clear(o.Has("background") ? SkiaColorParser.Parse(o.Raw("background")!.ToString()!) : SKColors.White);
+            c.DrawBitmap(frame.SkBitmap, 0, 0);
+        }
+        var bytes = SkiaImageEncoder.Encode(flat, format, 92);
+        var full = ProjectPath.Resolve(projectRoot, filePath, nameof(filePath), "Write to");
+        Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+        File.WriteAllBytes(full, bytes);
+        motion?.Record("render", full, new() { ["motion"] = "still", ["format"] = format, ["bytes"] = (long)bytes.Length, ["width"] = Width, ["height"] = Height });
+        return new() { ["path"] = filePath, ["time"] = time, ["width"] = Width, ["height"] = Height, ["bytes"] = (long)bytes.Length };
+    }
+
+    /// <summary>
     /// A contact sheet of the composition at chosen times, written to <paramref name="filePath"/>: <c>{ path, cells, times,
     /// cols, rows, width, height, bytes }</c>. <c>options</c>: <c>{ times? | count?, from?, to?, scale?, cols?, labels?,
     /// background?, labelColor?, fontFamily?, gap?, padding?, format?, quality? }</c> — <c>times</c> in seconds, or

@@ -645,8 +645,9 @@ internal static class ProjectGenerator
         ["cover"] = 25,
         // Forty-five against `cover`'s twenty-five: the film type makes two posters, not one, and before
         // either there is a profile per audience (seconds per request, about seven requests each) and a
-        // direction to write. No measured run behind it yet; tune after the first.
-        ["poster"] = 45,
+        // direction to write. Fifty-five since 2026-10-24: ten minutes for the brain dump (Manual 29 §2a), sixteen to
+        // twenty-four sketched cells per audience before the three concepts. Tune after the first run with it.
+        ["poster"] = 55,
         // Thirty against `drawing`'s forty-five: one scene, constructed from mannequins and taken no
         // further than a rough, with no turns to wait on a director between. Seven stages, each one
         // script and one check, and the figures are built by calls rather than by hand.
@@ -656,8 +657,8 @@ internal static class ProjectGenerator
         // but a run renders its film three or four times, at draft size and at full size.
         ["animation"] = 40,
         // Fifteen seconds of motion graphics: beats, an animatic, keys, two sheets and a video that takes a quarter of a
-        // minute to encode. A poster's forty-five, plus the motion.
-        ["trailer"] = 60,
+        // minute to encode. A poster's allowance, plus the motion; seventy since the brain dump (Manual 29 §2a).
+        ["trailer"] = 70,
         // A pitch is two minutes of film to the trailer's fifteen: a deck (and perhaps a model) read and checked, about
         // nine scenes each encoded as a part, and every line narrated. No measured run behind it yet; tune after the first.
         ["trailer.pitch"] = 90,
@@ -1152,7 +1153,9 @@ internal static class ProjectGenerator
         "turns.md", "materials.md", "sketch.md", "animation.md",
         "direction.md", "poster.js", "trailer.js", "trailer.sif",
         // math_explainer's film script and its checked plan.
-        "explainer.js", "plan.md"
+        "explainer.js", "plan.md",
+        // The concept presentation (Manual 29 §8) and the process book Stage.book assembles at the end.
+        "concepts.md", "process.pdf"
     ];
 
     /// <summary>What a clear actually managed to do.</summary>

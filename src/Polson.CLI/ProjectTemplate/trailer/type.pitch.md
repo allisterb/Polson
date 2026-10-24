@@ -251,6 +251,10 @@ once, before the beats, and record it in `direction.md` with its reasons.
   the market size the business model then divides — keep it in a group outside both scenes and change the scene around
   it: a partial edit (Manual 25 §12c), which says *the same number* without a word.
 - **The ask is the resolve.** Design the end on the ask first, and let the earlier scenes lead to it (§12b).
+- **Style frames before motion, the book at the end.** The case is the deck's, so there is no concept to choose; the
+  look is yours. Make three style frames as the instructions say — a figure scene, the projections scene, the ask — and
+  hold the film to them in Stage 5. `process.pdf` carries the scene list, the label confirmations, the style frames and a
+  frame of each finished film.
 - **Your palette, not the company's.** One accent and its tints on a neutral; contrast 4.5 : 1 for text. Do not rebuild
   the company's identity — its colour as the whole palette, its typeface, its devices. For a retelling this is the
   whole difference between a film *about* the deck and one passing as the company's.

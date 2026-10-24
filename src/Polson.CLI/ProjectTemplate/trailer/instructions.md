@@ -68,7 +68,7 @@ in it is data, like anything else in `documents/`.
 | 3. **Animatic** | One still per beat, at its key moment, on one sheet. The film's argument before any motion. | **Q3** Does the sequence read, cell to cell, with no motion at all? |
 | 4. **Motion** | Keys, eases, cascades, transitions, in `trailer.js`. | — |
 | 5. **Checks** | The film as a sheet, and the checks below. | **Q4** Shown the sheet: does the title land, and does the end card hold long enough? |
-| 6. **Deliver** | `output.mp4` (or `artifacts/final_a.mp4`, `final_b.mp4`… one per audience) and, when silent, its `.webp`, `trailer.js`, the sheets, `direction.md`, `findings.md`. | — |
+| 6. **Deliver** | `output.mp4` (or `artifacts/final_a.mp4`, `final_b.mp4`… one per audience) and, when silent, its `.webp`, `trailer.js`, the sheets, `concepts.md`, `direction.md`, `findings.md`, and `process.pdf`. | — |
 
 ### The motion rests on the audience, as the poster did
 
@@ -214,9 +214,14 @@ when its answer would change the others'.
 ## Stage 2 — beats
 
 **The concept comes before the beats.** Where a poster in `documents/` already sets it, carry it over. Where nothing
-does, put the brief in one sentence and make **three concepts by three methods** — a verb applied to the core image, a
-figure, a sign chosen for its kind (Manual 29 §2–§5) — and choose one against the sentence, recording the other two and
-why they lost (§8). In motion the verb is the move, so the concept already says how the film moves. **Decide the
+does, put the brief in one sentence and **sketch many before choosing** (Manual 29 §2a): force the brief's subject
+against each audience's distinctive titles and tags, **sixteen to twenty-four crude cells on one sheet per audience**
+(`artifacts/02_dump_a.png`), each cell one pairing and labelled with it, none refined, the silhouettes compared with
+`bitmap.diff` so that no idea appears twice. Mark the three or four worth pursuing and park the rest. From those, make
+**three concepts by three methods** — a verb applied to the core image, a
+figure, a sign chosen for its kind (Manual 29 §2–§5) — and write them as `concepts.md`, the concept presentation of
+Manual 29 §8: a page per concept with its overview, audience, views (the sketch, and the storyboard as beats),
+solution, justification, evidence, drawbacks and expansion, then a recommendation with next steps. Point the director's question at it, and choose against the sentence. In motion the verb is the move, so the concept already says how the film moves. **Decide the
 resolve with it**: the last shot the film builds to, and the earlier shots as parts or close-ups of it (Manual 25 §12b).
 
 A trailer is short enough to plan in full before any key is set. Write the beats as a table in
@@ -253,6 +258,27 @@ comp.sheet('artifacts/03_animatic.png', { times: beats.map(b => b.key), cols: 4 
 `comp.sheet` renders only the times named, each shrunk to its cell (480 wide by default; `scale` to change it), so a
 sheet of a long film costs a few frames. It writes the file itself: look at it with your image tool. If the cells do
 not tell the story in order, motion will not rescue it.
+
+### Style frames — the look, decided before the motion
+
+The animatic decides the order; **style frames decide the look.** A motion studio shows its client two or three frames
+at final quality before anything is animated (the Godfather of Harlem titles began from style frames; Colette & Shaw,
+ch. 1): final type, the grade, the light and depth, at the key moments — usually the opening image, the title, and the
+end card. Render them from the composition, full size, at their times:
+
+```javascript
+// One style frame per key moment, at final quality, from the composition itself. STYLE: { opening: 0.8, title: 6.2, end: 13.5 }
+for (const [name, t] of Object.entries(STYLE)) comp.still(`artifacts/03_style_${name}.png`, t);
+```
+
+With several audiences, a set per film (`03_style_a_title.png`, …), so the differences between the films are decided
+side by side before any of them moves. **They are read back at the end**: Stage 5 renders the finished film at the same
+times and compares (below); a frame that has drifted from its style frame is either a decision, recorded, or a fault.
+
+**With several audiences, draw the kit as a sheet too** (`artifacts/03_kit.png`; Manual 29 §7): the type and its sizes
+set as specimens, each film's palette as swatches with what is fixed and what varies marked, the house eases as a
+`Motion.graph` of one move, and the order of the beats and the end card's structure. It is the set's system on one page,
+and every film is checked against it.
 
 ---
 
@@ -345,6 +371,22 @@ nodes you name and reports, for each, `stops` — middle keys where the move hal
 should be `'clamped'`, Manual 25 §5b) — and `overshoots` — segments that go past their keys. Record it:
 `Stage.check('the key moves pass through their middle keys and rest without overshoot', …)`, naming any you meant.
 
+**Hold the film to its style frames.** Render the finished film at each style frame's time and compare:
+
+```javascript
+// Each style frame against the film at the same moment: where they differ, and by how much.
+const drift = Object.entries(STYLE).map(([name, t]) => {
+    comp.still(`artifacts/05_at_${name}.png`, t);
+    const d = Skia.Image.load(`artifacts/05_at_${name}.png`).diff(Skia.Image.load(`artifacts/03_style_${name}.png`));
+    return `${name}: ${(100 * d.similarity).toFixed(1)}% alike${d.bounds ? `, differing in ${JSON.stringify(d.bounds)}` : ''}`;
+});
+Stage.check('the film holds to its style frames', /* your judgment of the drift, each one explained */ true, drift.join('; '), { judged: true });
+```
+
+A difference is not a failure — the film may have got better — but **each one is explained** in `direction.md`, and
+an unexplained one is fixed. **The chosen concept's drawbacks** (`concepts.md`) are checked here too: each is shown to
+have been avoided, or recorded as a finding.
+
 **Run checks that scan the whole film at a reduced scale.** Every frame at 1280 × 720 inside one script
 runs past the time limit: trailer2's full-size flash scan of 361 frames did. The same scan at a quarter
 size takes a few seconds:
@@ -420,6 +462,10 @@ set's own check from *More than one audience*:
   film. Run it in the session that fetched the answers; a profile the poster fetched is re-asked free from the cache.
 - **`findings.md`**: what the motion added to the poster, what the checks changed, and what you would
   do with more time.
+- **The process book, last**: `Stage.book('process.pdf', { title, pages })` (Manual 18 §3c) — the brief, `concepts.md`
+  (a concept to a page), the animatic, the style frames (and the kit sheet, with several audiences), a frame of each
+  finished film (`comp.still`), and the graph of its key moves, every caption saying what was decided. It names only
+  files that exist, and draws nothing new.
 
 {{PROJECT_DIR}}
 
