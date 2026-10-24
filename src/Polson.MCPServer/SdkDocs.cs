@@ -44,6 +44,8 @@ public static class SdkDocs
         new("Layout", ["Layout", "layout"], "Layout (Page Composition)"),
         new("Css", ["Css", "css", "Stylesheet"], "Css (Design Languages)"),
         new("Scale", ["Scale", "scale"], "Scale (Data to Pixels)"),
+        // Before Motion: a call's area is the first slice naming it, and comp.number's format names Locale.number.
+        new("Locale", ["Locale", "locale", "lakh", "crore", "currency"], "Locale (Numbers as Places Write Them)"),
         new("Random", ["Random", "random", "seed", "seeded", "procedural"], "Random (Reproducible Randomness)"),
         new("Scene", ["Scene", "scene", "staging", "layers", "mood"], "Scene (Staged Composition)"),
         // Chart is its own area rather than a keyword on Scale, and the difference is not

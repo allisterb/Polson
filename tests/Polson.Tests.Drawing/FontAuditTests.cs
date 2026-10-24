@@ -3,6 +3,7 @@ namespace Polson.Tests.Drawing;
 using System;
 using System.Linq;
 using Polson.Drawing.Svg;
+using Polson.MCPServer;
 using Xunit;
 
 /// <summary>
@@ -95,6 +96,41 @@ public class FontAuditTests : TestsRuntime
         var warning = Assert.Single(FontAudit.Check(Svg("""<text font-family="'Polson Nonexistent Face 7Q'">x</text>""")));
 
         Assert.Contains("names no installed family", warning);
+    }
+
+    /// <summary>
+    /// lanternkeepercloud1 set a poster's English in <c>sans-serif</c>, which the audit passes over and a browser resolves
+    /// its own way. Where a paper's family is set, a generic-only list and a list of absent faces are refused; a generic
+    /// after an installed face is a fallback and passes, as do <c>inherit</c> and an empty value.
+    /// </summary>
+    [Theory]
+    [InlineData("sans-serif", "only a generic family")]
+    [InlineData("serif, monospace", "only a generic family")]
+    [InlineData("'Absent Face', sans-serif", "names no installed family")]
+    [InlineData("'Noto Serif CJK KR', 'Noto Sans CJK KR', serif", null)]
+    [InlineData("'Absent Face', Inter, sans-serif", null)]
+    [InlineData("inherit", null)]
+    [InlineData("", null)]
+    public void TestAPapersFamilyMustNameAnInstalledFace(string list, string? refusal)
+    {
+        static bool Installed(string f) => f is "Inter" or "Noto Serif CJK KR" or "Noto Sans CJK KR";
+        if (refusal is null)
+        {
+            Assert.Equal(list, FontAudit.Require(list, Installed));
+            return;
+        }
+        var e = Assert.Throws<ArgumentException>(() => FontAudit.Require(list, Installed));
+        Assert.Contains(refusal, e.Message);
+    }
+
+    /// <summary>The refusal reaches a script through <c>attr()</c>, naming the list.</summary>
+    [Fact]
+    public void TestAScriptSettingAGenericOnlyFamilyIsRefused()
+    {
+        var result = new JsDrawingEngine().Execute("const p = Snap(100, 40); p.text(10, 30, 'Hi').attr({ 'font-family': 'sans-serif' }); p;",
+            100, 40, null, "png", 90);
+        Assert.False(result.Success);
+        Assert.Contains("font-family \"sans-serif\" names only a generic family", result.Error);
     }
     #endregion
 }

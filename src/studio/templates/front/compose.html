@@ -31,11 +31,15 @@
 
       {% if card.audiences %}
       {%- set given = form.audiences if form.audiences is defined else [] -%}
-      <details class="fr-pop" data-audiences>
-        <summary class="ps-field"><span class="ps-field-label">Audience<span class="ps-req" aria-hidden="true"> *</span></span><span class="ps-field-value" data-summary>Who is it for?</span>{{ m.icon('chevron-down', 18) }}</summary>
+      <details class="fr-pop" data-audiences {% if card.audiences_optional %}data-optional{% endif %}>
+        <summary class="ps-field"><span class="ps-field-label">Audience{% if not card.audiences_optional %}<span class="ps-req" aria-hidden="true"> *</span>{% endif %}</span><span class="ps-field-value" data-summary>{{ 'Anyone (optional)' if card.audiences_optional else 'Who is it for?' }}</span>{{ m.icon('chevron-down', 18) }}</summary>
         <section class="ps-ogrid fr-panel fr-narrow" aria-label="Audience">
           <h3 class="ps-ogrid-title">Who is it for?</h3>
+          {% if card.audiences_optional %}
+          <p class="ps-ogrid-hint">Optional. Name a place, and an age band if it matters, and the {{ card.piece }} is made in that audience's conventions: paced from what they watch, its figures written as they write them. With more than one, a {{ card.piece }} for each, the figures the same.</p>
+          {% else %}
           <p class="ps-ogrid-hint">A place and an age band for each audience. With more than one, the studio makes {{ 'an' if card.piece == 'ad' else 'a' }} {{ card.piece }} for each and compares what they love.</p>
+          {% endif %}
           <div class="fr-audiences">
             {% for i in range(max_audiences) %}
             {%- set a = given[i] if i < given|length else {} -%}

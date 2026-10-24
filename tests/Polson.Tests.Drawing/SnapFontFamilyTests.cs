@@ -22,7 +22,7 @@ public class SnapFontFamilyTests : TestsRuntime
     [InlineData("\"Bodoni MT\", \"Georgia\", serif", "'Bodoni MT', 'Georgia', serif")]
     [InlineData("'Agency FB', sans-serif", "'Agency FB', sans-serif")]
     [InlineData("Arial", "Arial")]
-    [InlineData("\"Ma'ruf Sans\", sans-serif", "\"Ma'ruf Sans\", sans-serif")]   // an apostrophe keeps its double quotes
+    [InlineData("\"Ma'ruf Sans\", Arial, sans-serif", "\"Ma'ruf Sans\", Arial, sans-serif")]   // an apostrophe keeps its double quotes; Arial so the list names an installed face
     public void TestDoubleQuotedNamesAreSingleQuoted(string written, string stored)
     {
         var paper = Snap.Create(200, 100);

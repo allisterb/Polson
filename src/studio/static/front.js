@@ -37,7 +37,7 @@
           var place = row.querySelector('input').value.trim(), age = row.querySelector('select');
           return place ? place + (age.value ? ' (' + age.selectedOptions[0].textContent + ')' : '') : '';
         }).filter(Boolean);
-        out.textContent = who.length ? who.join(', ') : 'Who is it for?';
+        out.textContent = who.length ? who.join(', ') : pop.hasAttribute('data-optional') ? 'Anyone (optional)' : 'Who is it for?';
         out.classList.toggle('is-empty', !who.length);
         return;
       }
@@ -117,7 +117,8 @@
     form.addEventListener('submit', function (e) {
       var sizes = form.querySelectorAll('input[name=sizes]:checked').length || form.querySelector('[data-custom]').value.trim();
       var formats = form.querySelectorAll('input[name=formats]:checked').length;
-      var who = !audiences || Array.prototype.some.call(audiences.querySelectorAll('input[name=aud_place]'), function (i) { return i.value.trim(); });
+      var who = !audiences || audiences.hasAttribute('data-optional')
+        || Array.prototype.some.call(audiences.querySelectorAll('input[name=aud_place]'), function (i) { return i.value.trim(); });
       if (!who) { e.preventDefault(); audiences.open = true; audiences.querySelector('input').focus(); return; }
       if (!sizes || !formats) {
         e.preventDefault();

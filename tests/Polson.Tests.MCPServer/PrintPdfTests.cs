@@ -212,19 +212,50 @@ public class PrintPdfTests : TestsRuntime, IDisposable
 
     #region Methods (private)
     /// <summary>
-    /// A family Skia does not have is warned about on every paper render, asked for a print file or not, and recorded.
+    /// A family Skia does not have is refused where <c>attr()</c> sets it, and warned about on every paper render when it
+    /// arrives another way — here in parsed markup — asked for a print file or not, and recorded.
     /// </summary>
     [Fact]
     public async Task TestAMissingFontFamilyIsWarnedOnAnyPaperRender()
     {
-        var result = await Tools().ExecuteScript(
+        var refused = await Tools().ExecuteScript(
             "const p = Snap(400, 200); p.text(10, 50, 'x').attr({ id: 'title', 'font-family': \"'Polson Nonexistent Face 7Q', serif\" }); p;",
+            outFile: "artifacts/a.png");
+        Assert.False(refused.Success);
+        Assert.Contains("names no installed family", refused.Error);
+
+        var result = await Tools().ExecuteScript(
+            "const p = Snap.parse(\"<svg xmlns='http://www.w3.org/2000/svg' width='400' height='200'><text id='title' x='10' y='50' "
+            + "font-family=\\\"'Polson Nonexistent Face 7Q', serif\\\">x</text></svg>\"); p;",
             outFile: "artifacts/a.png");
 
         Assert.True(result.Success, result.Error);
         var warning = Assert.Single(result.Logs, l => l.StartsWith("[WARN] font-family", StringComparison.Ordinal));
         Assert.Contains("(#title) names no installed family", warning);
         Assert.Contains("render.fontsubstituted", File.ReadAllText(Path.Combine(root, "events", "server.jsonl")), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// lanternkeepercloud1 delivered 1000 × 1500 posters to a brief asking for 1200 × 1800. A deliverable at a size the
+    /// brief does not name is warned about and recorded; a draft is not, and neither is a deliverable at the size asked.
+    /// </summary>
+    [Fact]
+    public async Task TestADeliverableAtASizeTheBriefDoesNotNameIsWarned()
+    {
+        File.WriteAllText(Path.Combine(root, "brief.md"), "# Brief\n\n- Sizes: Portrait 1200 × 1800 px\n- Formats: .png\n");
+        Directory.CreateDirectory(Path.Combine(root, "artifacts"));
+        async Task<IList<string>> Render(int w, int h, string file)
+        {
+            var r = await Tools().ExecuteScript($"const c = createCanvas({w}, {h}); c.getContext('2d').fillRect(0, 0, 10, 10); c;", outFile: file);
+            Assert.True(r.Success, r.Error);
+            return r.Logs;
+        }
+
+        var off = Assert.Single(await Render(1000, 1500, "artifacts/final_b.png"), l => l.Contains("the brief asks for", StringComparison.Ordinal));
+        Assert.Contains("artifacts/final_b.png is 1000 × 1500 px, and the brief asks for 1200 × 1800", off);
+        Assert.Contains("render.offsize", File.ReadAllText(Path.Combine(root, "events", "server.jsonl")), StringComparison.Ordinal);
+        Assert.DoesNotContain(await Render(1000, 1500, "artifacts/draft_b.png"), l => l.Contains("the brief asks for", StringComparison.Ordinal));
+        Assert.DoesNotContain(await Render(1200, 1800, "artifacts/final_b.png"), l => l.Contains("the brief asks for", StringComparison.Ordinal));
     }
 
     private DrawingMcpTools Tools() => new(null, null, null, root);

@@ -558,6 +558,21 @@ public partial class ProjectGeneratorTests : TestsRuntime, IDisposable
         Assert.DoesNotContain(data, product, StringComparison.Ordinal);
         Assert.Equal(1, report.Split(data).Length - 1);
     }
+
+    /// <summary>A pitch is a trailer of figures and projections: Manual 13, its own type section, and its own allowance.</summary>
+    [Fact]
+    public void TestAPitchCarriesTheDataManualAndItsOwnDeadline()
+    {
+        Assert.True(ProjectGenerator.Create(Options("pitch", o => { o.Workflow = "trailer"; o.Type = "pitch"; })));
+
+        var pitch = File.ReadAllText(Path.Combine(root, "pitch", "GEMINI.md"));
+        Assert.Contains("## The type: pitch", pitch, StringComparison.Ordinal);
+        Assert.Contains("A projection looks like a projection", pitch, StringComparison.Ordinal);
+        Assert.Contains($"### Manual 13 — {PolsonManuals.Find("13")!.Title}", pitch, StringComparison.Ordinal);
+        Assert.Equal(90, ProjectGenerator.DeadlineFor("trailer", null, "pitch"));
+        Assert.Equal(60, ProjectGenerator.DeadlineFor("trailer", null, "report"));
+        Assert.Equal(30, ProjectGenerator.DeadlineFor("trailer", 30, "pitch"));
+    }
     #endregion
 
     #region Test-Mode Tests

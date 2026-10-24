@@ -105,6 +105,9 @@ class Card:
     style_label: str = "Style"      # what the workflow's types are called on this card
     type_labels: dict[str, str] = field(default_factory=dict)
     audiences: bool = False         # asks who it is for: a place and an age band per audience, A, B…
+    #: Audiences may be left out: a report explainer for "shareholders" has no place to measure, one for Mumbai and Tokyo
+    #: does, and gets a film per audience in its conventions (pace from Qloo, numbers as the place writes them).
+    audiences_optional: bool = False
     #: The workflow types this card offers, when not all of them: `()` for none, one for a card that *is* that type.
     #: A film trailer and a product ad are one workflow; without this each card would offer the other's type, and a
     #: lone type is chosen for the visitor (`front.commissioned`), so every film trailer would become an ad.
@@ -175,13 +178,29 @@ CARDS: tuple[Card, ...] = (
          audiences=True, types=("product",)),
     # An audience's questions answered from a long document the director attaches — an annual report, a 10-K. The
     # trailer workflow's `report` type: Nemotron reads the PDF as page text through `Documents.ask`, and every figure
-    # on screen is one the engine found on its page. No audience fields: who is watching is said in words.
+    # on screen is one the engine found on its page. Audiences are optional: with places, a film for each, paced from
+    # its Qloo profile and with its figures written as that place writes them (Locale.number); without, one film.
     Card("report-explainer", "Report explainer", "video", "Video · 45 seconds, questions answered from a report",
          (Route("trailer", "Motion graphics explainer"),),
          extras=(Extra("viewer", "Who is watching", placeholder="Who they are, and what they already know", long=True),
                  Extra("questions", "Their questions", placeholder="One question a line, up to five", long=True),
                  Extra("duration", "Duration", ("45 seconds", "60 seconds"), "45 seconds")),
-         types=("report",), needs=".pdf"),
+         audiences=True, audiences_optional=True, types=("report",), needs=".pdf"),
+    # A startup's case told to investors from its own pitch deck, and a financial model or metrics where it has them. The
+    # trailer workflow's `pitch` type: the documents read and checked as a report's are, every projection drawn and
+    # labelled as one, the ask as stated. With places, a film per investor audience in its conventions; without, one.
+    Card("startup-pitch", "Startup pitch", "video", "Video · 2 minutes from the deck, one film per investor audience",
+         (Route("trailer", "Motion graphics pitch"),),
+         extras=(Extra("company", "Company", placeholder="Its name, as the deck gives it"),
+                 Extra("told_as", "Told as", ("The company's own pitch", "A retelling of a past deck"),
+                       "The company's own pitch"),
+                 Extra("stage", "Stage", ("As the deck says", "Pre-seed", "Seed", "Series A", "Series B or later"),
+                       "As the deck says"),
+                 Extra("raise", "The raise", placeholder="Amount and instrument, as the company states it; blank for the deck's words"),
+                 Extra("use_of_funds", "Use of funds", placeholder="What the money is for, if the deck does not say", long=True),
+                 Extra("duration", "Duration", ("90 seconds", "2 minutes", "3 minutes"), "2 minutes"),
+                 Extra("narration", "Narration", ("A voice", "None: every word on screen"), "A voice")),
+         audiences=True, audiences_optional=True, types=("pitch",), needs=".pdf"),
     # A theorem or concept explained in a film: equations, graphs and narration, every formula and claim checked before
     # it is drawn and the film read back after. The Nebius entry's; the `math_explainer` workflow.
     Card("maths-explainer", "Maths explainer", "video", "Video · a theorem or concept, every step checked",
@@ -395,7 +414,7 @@ def parse(card_slug: str, title: str, route: str, kind: str, sizes: list[str], c
             pairs.append((extra.label, value))
 
     audiences = parse_audiences(places or [], ages or []) if card.audiences else []
-    if card.audiences and not audiences:
+    if card.audiences and not audiences and not card.audiences_optional:
         raise StudioError(f"Say who the {card.title.lower()} is for: a place and, if it matters, an age band.")
 
     if not (brief or "").strip():

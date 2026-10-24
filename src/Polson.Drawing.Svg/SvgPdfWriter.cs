@@ -174,7 +174,7 @@ public static partial class SvgPdfWriter
         Widen(document, box, bleedX, bleedY);
 
         using var skSvg = new SKSvg();
-        skSvg.FromSvgDocument(document);
+        skSvg.FromSvgDocument(SvgTracking.ForRender(document));
         if (skSvg.Picture is null)
             throw new InvalidOperationException("The document produced nothing to draw, so no PDF was written.");
 
@@ -401,7 +401,7 @@ public static partial class SvgPdfWriter
             foreach (var t in texts) t.Display = shown.Contains(t) ? display[t] : "none";
 
             using var skSvg = new SKSvg();
-            skSvg.FromSvgDocument(document);
+            skSvg.FromSvgDocument(SvgTracking.ForRender(document));
             foreach (var t in texts) t.Display = display[t];
             if (skSvg.Picture is null) continue;
 

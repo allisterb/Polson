@@ -856,7 +856,7 @@ _show_retries()
 #: The first segment of a name that is the JavaScript SDK's, not a tool: `Stage.begin`, `Snap(...)`.
 _SDK_GLOBALS = frozenset({
     "Stage", "Snap", "Skia", "Motion", "Taste", "Documents", "Video", "Assets", "Drawing", "Session", "Scene", "Photo",
-    "Research", "Project", "Canvas", "console", "log",
+    "Research", "Project", "Canvas", "console", "log", "Locale", "Equation", "Verify",
 })
 
 

@@ -73,6 +73,33 @@ public static class FontAudit
 
     /// <summary>Whether <paramref name="family"/> is installed under that name, rather than substituted.</summary>
     public static bool Installed(string family) => IsInstalled(family);
+
+    /// <summary>
+    /// <paramref name="list"/>, when it names an installed family; refused when it names only generics or only families
+    /// that are not installed, as Motion text refuses a substitute face.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Check"/> warns and passes over a generic-only list, and lanternkeepercloud1 (2026-10-24) set a poster's
+    /// English lines in <c>sans-serif</c> at weight 300: the render drew a stock face at regular weight, a browser would
+    /// draw its own, and neither was chosen. A paper is a deliverable, so the list is refused where it is set. A generic
+    /// after an installed family is a fallback doing its job and passes; <c>inherit</c> and an empty value pass.
+    /// </remarks>
+    public static string Require(string list, Func<string, bool>? installed = null)
+    {
+        if (string.IsNullOrWhiteSpace(list) || list.Trim() is "inherit" or "initial" or "unset") return list;
+        installed ??= IsInstalled;
+        var concrete = Names(list).Where(n => !Generic.Contains(n)).ToList();
+        if (concrete.Any(installed)) return list;
+
+        var advice = concrete.Select(Suggestion).FirstOrDefault(s => s is not null)
+            ?? "Skia.Font.families() lists what is installed; Skia.Font.has(name) checks one.";
+        throw new ArgumentException(concrete.Count == 0
+            ? $"font-family \"{list}\" names only a generic family, which each viewer resolves to a face of its own, so the render "
+              + $"here and the SVG in a browser would disagree and neither face was chosen. Name an installed family first and "
+              + $"keep the generic as the last fallback. {advice}"
+            : $"font-family \"{list}\" names no installed family, so it would draw in a substitute face and the type would not be "
+              + $"the one chosen. {advice}");
+    }
     #endregion
 
     #region Methods (private)

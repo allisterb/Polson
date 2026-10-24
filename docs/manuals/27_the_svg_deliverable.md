@@ -110,29 +110,29 @@ The table below is measured, not asserted: every row renders the same shape with
 
 **Ignored by *this* renderer — the declaration reaches the file and changes nothing you can see:**
 
-`font-style` · `letter-spacing` *(but see §4a — `paper.trackedText(...)` does the job)* · `dominant-baseline` · `baseline-shift` · `fill-rule` · `mix-blend-mode` · `vector-effect` · `stroke-miterlimit` · any `em`-valued `font-size`
+`font-style` · `dominant-baseline` · `baseline-shift` · `fill-rule` · `mix-blend-mode` · `vector-effect` · `stroke-miterlimit` · any `em`-valued `font-size`
 
 > [!WARNING]
 > **These are renderer limits, not invalid CSS, and the difference is a trap rather than a reassurance.** Every one of them is valid SVG that a browser opening the delivered file would very likely honour. So the tempting move — set the property anyway, since the *file* will be right — is exactly the move to avoid: **the peek would show you one thing and every other viewer another**, and you would have no way to verify the deliverable you actually shipped. This studio's whole method is checking the render.
 >
-> Worse, the two can compound. Set `letter-spacing` *and* position the glyphs to compensate for a peek that ignores it, and a browser applies both — a wordmark tracked twice. Prefer the construction that renders the same everywhere, which for tracking is §4a.
+> Worse, the two can compound. Compensate in the geometry for a property the peek ignores, and a browser applies both. Prefer the construction that renders the same everywhere.
 
 > [!IMPORTANT]
 > **The two routes agree about *which properties* are honoured; they differ about *value syntax*.** Everything above behaves the same whether it arrives through `attr(...)` or through a stylesheet — the sheet is not a weaker channel. What is stylesheet-specific is how a value is written: a `url(...)` reference has to be salvaged from the source text because the CSS parser drops it, and a unit suffix was once silently discarded. Both are pinned by tests. Write `px`, never `em`.
 
 ### 4a. The three that change a deliverable
 
-Most of the ignored list is a detail. Three are not.
+Most of the ignored list is a detail. Two are not, and a third used to be.
 
-**`letter-spacing` is canvas-only — use `paper.trackedText(...)` instead.** `ctx.letterSpacing` works; the SVG property serialises perfectly and changes not one pixel. So a wordmark tracked with the attribute is correct on canvas and **untracked as vector**, on the surface a wordmark is most likely to ship on, with no error anywhere.
+**`letter-spacing` renders now, on a plain run.** It used to be canvas-only: the SVG property serialised perfectly and changed not one pixel, so a wordmark tracked with it was **untracked as vector**, and a poster's PNG disagreed with its own SVG (lanternkeepercloud1, 2026-10-24). The renderer still ignores the property, so the render pipeline converts a `<text>` with no `<tspan>` or `textPath` into positioned glyphs on a copy of the document; the peek, the PNG and the PDF show what a browser shows, and the saved SVG keeps the attribute. A run with `<tspan>`s is not converted: track it with `paper.trackedText(...)`.
 
-The remedy converts the tracking into the one thing the renderer does honour — positions — and takes the same value `ctx.letterSpacing` takes, so the em fraction from `LogoType.computeWordmarkTracking(...)` applies unchanged:
+`trackedText` sets the positions explicitly — the same arithmetic — and takes the same value `ctx.letterSpacing` takes, so the em fraction from `LogoType.computeWordmarkTracking(...)` applies unchanged:
 
 ```javascript
 const paper = Snap(800, 160);
 const style = { 'font-family': 'Arial', 'font-size': 48, fill: '#15151a', 'text-anchor': 'middle' };
 
-// The attribute that looks right and does nothing:
+// The attribute draws the same pixels on a plain run:
 //   paper.text(400, 90, 'AURELIA').attr({ ...style, 'letter-spacing': '0.18em' });
 paper.trackedText(400, 90, 'AURELIA', LogoType.computeWordmarkTracking(48, true) + 'em', style);
 paper;
@@ -243,7 +243,7 @@ An honest list, because each of these is discovered late otherwise.
 | `paper.style(...)` returns a healthy count and the property does nothing | The count means *matched*, not *honoured* | Check §4's list; the two questions are different |
 | The style count is higher than the number of elements | It counts rule-to-element applications; three rules over five elements can return 10 | Do not compare it to an element count (§4) |
 | Cropping to `getBBox()` leaves one copy of a repeated motif | `getBBox()` is blind to `<use>` | Compute the extent from the motif's box and your offsets (§2) |
-| A wordmark's tracking vanishes when built as vector | The `letter-spacing` attribute is inert | `paper.trackedText(x, y, text, tracking, attrs)` (§4a) |
+| A wordmark's tracking vanishes when built as vector | The run has `<tspan>`s, which the render does not convert | `paper.trackedText(x, y, text, tracking, attrs)` (§4a) |
 | `dominant-baseline` does nothing | It is the dead one of the pair, contrary to every reference | Use `alignment-baseline` (§4a) |
 | A stylesheet edit in Illustrator has no effect | The declarations were written as `style` attributes, which beat CSS | Nothing to do here — `paper.style` writes presentation attributes for exactly this reason (§5) |
 | `font-size: 2.5em` renders at the wrong size | `em` survives parsing and is dropped by the renderer | Write `px` |

@@ -46,6 +46,7 @@ public class CssSupportMatrixTests : TestsRuntime
     [InlineData("visibility", "box", "visibility: 'hidden'")]
     [InlineData("display", "box", "display: 'none'")]
     [InlineData("transform", "box", "transform: 'translate(30,0)'")]
+    [InlineData("letter-spacing", "words", "'letter-spacing': '8px'")]
     public void TestPropertyReachesTheRenderViaAttr(string property, string shape, string declaration)
     {
         Assert.True(Changes(shape, declaration, null),
@@ -66,7 +67,6 @@ public class CssSupportMatrixTests : TestsRuntime
     [InlineData("fill-rule", "holed", "'fill-rule': 'evenodd'")]
     [InlineData("mix-blend-mode", "box", "'mix-blend-mode': 'multiply'")]
     [InlineData("font-style", "words", "'font-style': 'italic'")]
-    [InlineData("letter-spacing", "words", "'letter-spacing': '8px'")]
     [InlineData("dominant-baseline", "words", "'dominant-baseline': 'hanging'")]
     [InlineData("vector-effect", "box", "'vector-effect': 'non-scaling-stroke'")]
     [InlineData("stroke-miterlimit", "vee", "'stroke-miterlimit': 1")]
@@ -79,28 +79,38 @@ public class CssSupportMatrixTests : TestsRuntime
     }
 
     /// <summary>
-    /// <c>letter-spacing</c> is the one whose absence changes a deliverable rather than a detail.
+    /// <c>letter-spacing</c> renders, by the same placement as <c>paper.trackedText(...)</c>, and stays in the markup.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// <c>ctx.letterSpacing</c> works and is documented, so a tracked wordmark is correct on canvas
-    /// and loses its tracking the moment the same design is built as vector — which is the surface a
-    /// wordmark is most likely to be delivered on. Called out separately so it is not just one row in
-    /// a table of seven.
-    /// </para>
-    /// <para>
-    /// <b>The property is still inert; the gap is not.</b> <c>paper.trackedText(...)</c> converts
-    /// tracking into per-glyph positions, which the renderer does honour, and measures identically to
-    /// the canvas — see <c>VectorTrackedTextTests</c>. This case stays because the property itself is
-    /// what an author will reach for first, and it still fails silently.
-    /// </para>
+    /// Svg.Skia still ignores the property; the render pipeline converts a tracked run into positioned glyphs on a copy
+    /// of the document (<c>SvgTracking</c>). lanternkeepercloud1 (2026-10-24) tracked its title, tag line and credits
+    /// with the attribute and the PNG showed none of it while the SVG beside it did. So the two routes must now draw
+    /// the same pixels, and the saved SVG must keep the attribute a browser honours.
     /// </remarks>
-    [Fact]
-    public void TestTrackingIsCanvasOnly()
+    [Theory]
+    [InlineData("12px", "start")]
+    [InlineData("0.2em", "middle")]
+    public void TestTrackingRendersAsTrackedTextDoesAndStaysInTheMarkup(string tracking, string anchor)
     {
-        Assert.False(Changes("words", "'letter-spacing': '12px'", null),
-            "SVG letter-spacing now renders natively — paper.trackedText's per-glyph placement is no "
-            + "longer the only route, so say so in Manual 27 §4a");
+        var result = Execute($$"""
+            function shot(tracked) {
+                const p = Snap(260, 80);
+                p.rect(0, 0, 260, 80).attr({ fill: '#ffffff' });
+                const attrs = { 'font-size': 24, fill: '#111111', 'text-anchor': '{{anchor}}' };
+                if (tracked) p.trackedText(130, 50, 'Handgloves', '{{tracking}}', attrs);
+                else p.text(130, 50, 'Handgloves').attr(Object.assign({ 'letter-spacing': '{{tracking}}' }, attrs));
+                return { image: Skia.Image.fromBytes(p.toImageBytes(260, 80, 'png', 100)), svg: p.toString() };
+            }
+            const byAttr = shot(false), byGlyphs = shot(true);
+            log('same=' + byAttr.image.diff(byGlyphs.image, { tolerance: 1 }).identical);
+            log('kept=' + byAttr.svg.includes('letter-spacing'));
+            exit('done');
+            """);
+
+        Assert.True(result.Success, result.Error);
+        var logs = string.Join(" ", result.Logs);
+        Assert.Contains("same=true", logs);
+        Assert.Contains("kept=true", logs);
     }
     #endregion
 

@@ -368,6 +368,39 @@ public partial class DrawingMcpTools
     /// one format and whose bytes are another is opened by whatever trusts the name, so a mismatch either way is refused
     /// rather than written.
     /// </remarks>
+    /// <summary>
+    /// A deliverable's pixel size against the sizes the brief asks for, as a warning and the two sizes; null when it is not
+    /// a deliverable (<c>final*</c> or <c>output*</c>), the brief names no size, or the size is one it names.
+    /// </summary>
+    /// <remarks>
+    /// lanternkeepercloud1 (2026-10-24) delivered its posters at 1000 × 1500 to a brief asking for 1200 × 1800: the same
+    /// shape, 69% of the pixels, and nothing compared them. The brief's sizes are the composer's <c>- Sizes:</c> line in
+    /// <c>brief.md</c>. Drafts and probes are left alone, since drafting small is the advice.
+    /// </remarks>
+    internal static (string Warning, string Size, string[] Asked)? OffSize(string outFile, byte[] image, string? projectRoot)
+    {
+        var name = Path.GetFileNameWithoutExtension(outFile.Trim());
+        if (!name.StartsWith("final", StringComparison.OrdinalIgnoreCase) && !name.StartsWith("output", StringComparison.OrdinalIgnoreCase))
+            return null;
+        var brief = projectRoot is null ? null : Path.Combine(projectRoot, "brief.md");
+        if (brief is null || !File.Exists(brief)) return null;
+        var line = File.ReadLines(brief).FirstOrDefault(l => l.TrimStart().StartsWith("- Sizes:", StringComparison.OrdinalIgnoreCase));
+        if (line is null) return null;
+        var asked = BriefSize().Matches(line).Select(m => (W: int.Parse(m.Groups[1].Value), H: int.Parse(m.Groups[2].Value))).ToArray();
+        if (asked.Length == 0) return null;
+
+        using var codec = SkiaSharp.SKCodec.Create(new SkiaSharp.SKMemoryStream(image));
+        if (codec is null) return null;
+        var (w, h) = (codec.Info.Width, codec.Info.Height);
+        if (asked.Any(a => a.W == w && a.H == h)) return null;
+        var names = asked.Select(a => $"{a.W} × {a.H}").ToArray();
+        return ($"{outFile} is {w} × {h} px, and the brief asks for {string.Join(" or ", names)}: render the deliverable at a size "
+            + $"the brief names (pass width and height, or build the paper or canvas at it). Draft small; deliver at size.", $"{w} × {h}", names);
+    }
+
+    [GeneratedRegex(@"(\d{2,5})\s*[×xX]\s*(\d{2,5})")]
+    private static partial Regex BriefSize();
+
     internal static string OutputFormat(string? format, string? outFile)
     {
         var ext = string.IsNullOrWhiteSpace(outFile) ? "" : Path.GetExtension(outFile.Trim()).ToLowerInvariant();
@@ -966,6 +999,18 @@ public partial class DrawingMcpTools
                     ["format"] = result.ImageFormat,
                     ["bytes"] = result.ImageBytes.Length
                 });
+
+                if (OffSize(outFile, result.ImageBytes, ProjectRoot) is { } offSize)
+                {
+                    result.Logs.Add("[WARN] " + offSize.Warning);
+                    Events.Append("render.offsize", session.Stage, executionId, new Dictionary<string, object?>
+                    {
+                        ["script"] = scriptPath,
+                        ["artifact"] = Events.Relativize(fullOutPath),
+                        ["size"] = offSize.Size,
+                        ["asked"] = offSize.Asked,
+                    });
+                }
             }
 
             if (!string.IsNullOrWhiteSpace(outSvg) && !string.IsNullOrWhiteSpace(result.SvgXml))

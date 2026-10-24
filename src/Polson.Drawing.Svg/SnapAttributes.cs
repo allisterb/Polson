@@ -172,7 +172,7 @@ public static partial class SnapAttributes
 
             case "fontfamily":
             case "font-family":
-                element.FontFamily = SingleQuoted(valStr);
+                element.FontFamily = SingleQuoted(FontAudit.Require(valStr));
                 break;
 
             case "fontsize":

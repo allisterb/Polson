@@ -132,6 +132,32 @@ public class MotionNumberTests(ITestOutputHelper output) : TestsRuntime
         Assert.Throws<ArgumentException>(() => comp.Number(Opts(("value", 1d), ("family", "Arial"), ("text", "1"))));
     }
 
+    /// <summary>
+    /// A number counts in its audience's conventions: 130.5 billion lands as crore in Mumbai and 億 in Tokyo, the figure the
+    /// same. Synfig's realstring cannot say crore, so the .sif is refused; a place the data does not carry is refused at once.
+    /// </summary>
+    [Fact]
+    public void TestANumberCountsInItsPlacesConventions()
+    {
+        if (!Installed("Arial")) return;
+        var motion = new MotionToolkit();
+        var comp = Make(motion);
+        var revenue = motion.Nodes.Animated("real", new object[] { Opts(("time", 0d), ("value", 0d)), Opts(("time", 2d), ("value", 130497000000d)) });
+        var mumbai = comp.Number(Opts(("value", revenue), ("family", "Arial"),
+            ("format", Opts(("locale", "en-IN"), ("compact", "long"), ("decimals", 1d), ("prefix", "$")))));
+        Assert.Equal("$13,049.7 crore", mumbai.TextAt(3));
+        Assert.Equal("$0", mumbai.TextAt(0));
+        var tokyo = comp.Number(Opts(("value", 130497000000d), ("family", "Arial"),
+            ("format", Opts(("locale", "ja-JP"), ("compact", "short"), ("currency", "USD"), ("decimals", 1d)))));
+        Assert.Equal("$1305億", tokyo.TextAt(0));
+        Assert.Contains("en-IN's conventions", Assert.Throws<InvalidOperationException>(() => comp.ToSif()).Message);
+
+        var unknown = Assert.Throws<ArgumentException>(() => comp.Number(Opts(("value", 1d), ("family", "Arial"), ("format", Opts(("locale", "ru-RU"))))));
+        Assert.Contains("carries these locales", unknown.Message);
+        var placeless = Assert.Throws<ArgumentException>(() => comp.Number(Opts(("value", 1d), ("family", "Arial"), ("format", Opts(("compact", "long"))))));
+        Assert.Contains("give format.locale too", placeless.Message);
+    }
+
     /// <summary>Synfig counts the same digits from the .sif: realstring inside join, on the same frames.</summary>
     [Fact]
     public void SynfigCountsTheSameDigits()
