@@ -35,14 +35,18 @@ public static class PdfBook
     #endregion
 
     #region Methods
-    /// <summary>The book as PDF bytes, and how many pages it came to.</summary>
-    public static (byte[] Pdf, int Pages) Write(string title, IReadOnlyList<Page> pages)
+    /// <summary>
+    /// The book as PDF bytes, how many pages it came to, and for each of <paramref name="pages"/> how many continuation pages
+    /// its text overflowed onto. A page a top-level heading opens is not a continuation: a concept to a page is the format.
+    /// </summary>
+    public static (byte[] Pdf, int Pages, int[] Overflows) Write(string title, IReadOnlyList<Page> pages)
     {
         using var stream = new MemoryStream();
         var count = 0;
+        var parts = pages.Select(p => Paginate(p).ToList()).ToArray();
         using (var document = SKDocument.CreatePdf(stream, new SKDocumentPdfMetadata { Title = title, Creator = "Polson Studio" }))
         {
-            var layouts = pages.SelectMany(Paginate).ToList();
+            var layouts = parts.SelectMany(p => p).ToList();
             foreach (var (page, lines, continued, overflow) in layouts)
             {
                 count++;
@@ -52,7 +56,7 @@ public static class PdfBook
             }
             document.Close();
         }
-        return (stream.ToArray(), count);
+        return (stream.ToArray(), count, [.. parts.Select(p => p.Count(part => part.Overflow))]);
     }
     #endregion
 

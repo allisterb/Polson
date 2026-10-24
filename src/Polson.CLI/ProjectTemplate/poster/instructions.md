@@ -298,7 +298,8 @@ of a family's name — `'Franklin Gothic Heavy'` is `'Franklin Gothic'` at `font
   rather than calling it press-ready.
 - **The process book, last**: `Stage.book('process.pdf', { title, pages })` (Manual 18 §3c) — the brief in a page, each
   audience's concept sheet with `concepts.md` beside it, the comps that changed the direction, and each final poster,
-  every caption saying what was decided. It names only files that exist, and draws nothing new.
+  every caption saying what was decided. It names only files that exist, and draws nothing new. **It is the client's
+  book**: ten to twenty pages; the direction as a page of its decisions in your words, not the file; `findings.md` left out.
 
 ---
 

@@ -79,7 +79,7 @@ public sealed partial class VerifyToolkit
         var full = ProjectPath.Resolve(projectRoot, videoPath, "video", "Read");
         if (!File.Exists(full)) throw new FileNotFoundException($"Verify.film: '{videoPath}' is not in the project. Encode it first.", full);
 
-        var answer = await video.Ask(videoPath, Question, new DocumentOptions { Schema = Schema });
+        var answer = await video.Ask(videoPath, Question(comp.Duration), new DocumentOptions { Schema = Schema(comp.Duration) });
         if (!answer.Success)
             return Failed(answer.FailureName, answer.Error, answer.FailureName == "Pending"
                 ? "The watcher is still reading; it finishes into the cache. Run the same call again, unchanged."
@@ -97,6 +97,10 @@ public sealed partial class VerifyToolkit
                 [.. ((object?[])t["intervals"]!).OfType<double[]>()]))
             .ToArray();
         var sources = new FilmSources(projectRoot, session);
+        // Read in the unit the texts best match, should the watcher have answered in another (see Question).
+        var timeScale = FilmReadBack.TimeScale(expected, read, comp.Duration);
+        if (timeScale != 1)
+            read = [.. read.Select(r => r with { From = r.From * timeScale, To = r.To * timeScale })];
         var match = FilmReadBack.Match(expected, read);
         // A counting number caught mid-count is on the film, though not a claim. The watcher samples frames of its own, so it
         // reads values no frame of ours drew exactly ($380M and $924M on a count to $974M, 2026-10-23): a reading counts as
@@ -138,7 +142,7 @@ public sealed partial class VerifyToolkit
         }).ToList();
 
         return Hold(new FilmCheck(videoPath, comp.Duration, items, strays, answer.Provenance?.Model, answer.Provenance?.Endpoint)
-            { Hash = Hash(full), Ignored = ignored });
+            { Hash = Hash(full), Ignored = ignored, TimeScale = timeScale });
     }
 
     /// <summary>
@@ -526,18 +530,32 @@ public sealed partial class VerifyToolkit
     #endregion
 
     #region Fields
-    /// <summary>What the watcher is asked. Every text, as written, and when: the transcription the ground truth is held against.</summary>
-    internal const string Question =
+    /// <summary>
+    /// What the watcher is asked. Every text, as written, and when, in seconds of a film it is told the length of: the
+    /// transcription the ground truth is held against.
+    /// </summary>
+    /// <remarks>
+    /// "The second it first appears" with no length and no unit came back from Nemotron on nightshift1 (2026-10-24) as every
+    /// true time divided by ten, then by a hundred on a second encode — 5 s as 0.5, then as 0.05, as if a clock's 0:05 had
+    /// been read as a decimal — and every text was reported missed and stray. So the unit, the range and an example are
+    /// stated, and the schema bounds the numbers.
+    /// </remarks>
+    internal static string Question(double duration) =>
         "List every piece of text that appears on screen in this video, each exactly as it is written — keep numbers, units, "
-        + "currency signs and punctuation as shown — with the second it first appears and the second it disappears. Give "
-        + "lines that appear at different times as separate items. Small text counts: axis and tick labels, legends, "
-        + "footnotes. Write any mathematical expression or equation as one "
-        + "item, however many lines it spans, in LaTeX. Only text: do not describe pictures.";
+        + "currency signs and punctuation as shown — with when it first appears and when it disappears. "
+        + $"The video is {Seconds(duration)} seconds long. Give from and to as plain numbers of seconds from the start, between "
+        + $"0 and {Seconds(duration)}: a line on screen from five seconds in until eight and a half is from 5, to 8.5 — not "
+        + "0.05, not 0:05, not a fraction of the length. Give lines that appear at different times as separate items. Small "
+        + "text counts: axis and tick labels, legends, footnotes. Write any mathematical expression or equation as one item, "
+        + "however many lines it spans, in LaTeX. Only text: do not describe pictures.";
 
-    internal const string Schema =
+    internal static string Schema(double duration) =>
         "{\"type\":\"object\",\"required\":[\"items\"],\"properties\":{\"items\":{\"type\":\"array\",\"items\":{\"type\":\"object\","
-        + "\"required\":[\"text\",\"from\",\"to\"],\"properties\":{\"text\":{\"type\":\"string\"},\"from\":{\"type\":\"number\"},"
-        + "\"to\":{\"type\":\"number\"}}}}}}";
+        + "\"required\":[\"text\",\"from\",\"to\"],\"properties\":{\"text\":{\"type\":\"string\"},"
+        + $"\"from\":{{\"type\":\"number\",\"minimum\":0,\"maximum\":{Seconds(duration)},\"description\":\"seconds from the start\"}},"
+        + $"\"to\":{{\"type\":\"number\",\"minimum\":0,\"maximum\":{Seconds(duration)},\"description\":\"seconds from the start\"}}}}}}}}}}}}";
+
+    private static string Seconds(double s) => Math.Round(s, 2).ToString(CultureInfo.InvariantCulture);
 
     /// <summary>What the reader of a still is asked: every line, as written. A line repeated may be listed once.</summary>
     internal const string ImageQuestion =
@@ -711,7 +729,8 @@ public abstract class ReadBackCheck(string name, Dictionary<string, object?>[] i
             + (unsourced == 0 ? "" : $" {unsourced} figure{(unsourced == 1 ? " has" : "s have")} no source: find it in a document or the brief, or pass its working as computed.")
             + (pending == 0 ? "" : $" {pending} reading{(pending == 1 ? "" : "s")} of text the {Piece} never set: look at {evidence} ({string.Join(", ", Strays.Where(s => s.Verdict is null).Select(s => s.Frame ?? "none saved"))}), then Verify.stray(n, 'misread' | 'real').")
             + (real == 0 ? "" : $" {real} confirmed fault{(real == 1 ? "" : "s")} in the {Piece}: fix and {Again} again.")
-            + (Ignored.Length == 0 ? "" : $" {Ignored.Length} computed entr{(Ignored.Length == 1 ? "y was" : "ies were")} not used, as the working shows no arithmetic ({string.Join(", ", Ignored.Take(4).Select(k => $"'{Clip(k)}'"))}): a figure from a document is found on its page without one.");
+            + (Ignored.Length == 0 ? "" : $" {Ignored.Length} computed entr{(Ignored.Length == 1 ? "y was" : "ies were")} not used, as the working shows no arithmetic ({string.Join(", ", Ignored.Take(4).Select(k => $"'{Clip(k)}'"))}): a figure from a document is found on its page without one.")
+            + Note;
         var result = new Dictionary<string, object?>
         {
             ["ok"] = true,
@@ -728,6 +747,9 @@ public abstract class ReadBackCheck(string name, Dictionary<string, object?>[] i
 
     /// <summary>Where the texts are, for the summary: <c>on screen</c>.</summary>
     protected abstract string Where { get; }
+
+    /// <summary>Anything the reading itself needs said, appended to the summary; empty by default.</summary>
+    internal virtual string Note => "";
 
     /// <summary>What a fault asks for: <c>encode</c> or <c>render</c>.</summary>
     protected abstract string Again { get; }
@@ -760,10 +782,17 @@ public sealed class FilmCheck(string video, double duration, Dictionary<string, 
     protected override string Where => "on screen";
     protected override string Again => "encode";
 
+    /// <summary>What the watcher's times were multiplied by to be seconds: 1 unless it answered in another unit.</summary>
+    public double TimeScale { get; init; } = 1;
+
+    internal override string Note => TimeScale == 1 ? ""
+        : $" The watcher's times came back in the wrong unit and were read ×{TimeScale:0.##} to match the film; its seconds are approximate.";
+
     internal override Dictionary<string, object?> Event()
     {
         var e = base.Event();
         e["duration"] = duration;
+        if (TimeScale != 1) e["timeScale"] = TimeScale;
         return e;
     }
 
@@ -870,6 +899,37 @@ internal static class FilmReadBack
             return new Unmatched(x.r, near, near is not null && MatchFigures(near).Length > 0 ? "different figure" : "never set");
         }).ToArray();
         return new Outcome(seen, strays);
+    }
+
+    /// <summary>
+    /// What the watcher's times must be multiplied by to be seconds: 1, or 10, 60 or 100 where that unit matches clearly more
+    /// of the set texts and puts no reading past the film's end.
+    /// </summary>
+    /// <remarks>
+    /// The question states the unit (<see cref="VerifyToolkit.Question"/>); this is for when the watcher answers in another
+    /// anyway. nightshift1's readings were every true time over ten, then over a hundred: in order and in proportion, so
+    /// the transcription was right and only its unit wrong. A scale is taken only when it sees clearly more, so a correct
+    /// reading with a few misses is never stretched to fit.
+    /// </remarks>
+    internal static double TimeScale(IReadOnlyList<Shown> shown, IReadOnlyList<Reading> read, double duration)
+    {
+        var times = read.SelectMany(r => new[] { r.From, r.To }).OfType<double>().ToArray();
+        if (times.Length == 0 || duration <= 0) return 1;
+
+        // How many texts a scale sees, and how far off its matched readings land: the true unit sees most and lands closest.
+        (int Seen, double Error) Score(double k)
+        {
+            var seen = Match(shown, [.. read.Select(r => r with { From = r.From * k, To = r.To * k })]).Seen;
+            var errors = shown.Zip(seen).Where(p => p.Second?.From is not null && p.First.From is not null)
+                .Select(p => Math.Abs(p.Second!.From!.Value - p.First.From!.Value)).ToArray();
+            return (errors.Length, errors.Length == 0 ? double.MaxValue : errors.Average());
+        }
+
+        var asRead = Score(1);
+        var best = new[] { 10d, 60d, 100d }.Where(k => times.Max() * k <= duration * 1.1 + Slack)
+            .Select(k => (Scale: k, Score: Score(k))).OrderByDescending(c => c.Score.Seen).ThenBy(c => c.Score.Error)
+            .FirstOrDefault();
+        return best.Scale > 0 && best.Score.Seen > asRead.Seen + Math.Max(1, shown.Count / 5) ? best.Scale : 1;
     }
 
     /// <summary>The best unused reading of <paramref name="text"/> on screen with <paramref name="shown"/>, or -1.</summary>

@@ -48,6 +48,30 @@ public class ProcessBookTests : TestsRuntime, IDisposable
         Assert.Equal("%PDF", System.Text.Encoding.ASCII.GetString(pdf, 0, 4));
     }
 
+    /// <summary>
+    /// nightshift1's book was 46 pages, 27 of them direction.md and findings.md pasted whole. A page that runs on, and the
+    /// findings, are named; a concepts file a concept to a page is the format, and is not.
+    /// </summary>
+    [Fact]
+    public void TestAPastedFileAndTheFindingsAreWarnedButAConceptToAPageIsNot()
+    {
+        File.WriteAllText(Path.Combine(root, "direction.md"), string.Join("\n\n", Enumerable.Range(1, 80).Select(i =>
+            $"Decision {i}: the amber stays under the claim because the profile's local-only brands lean to the evening register.")));
+        File.WriteAllText(Path.Combine(root, "findings.md"), "# Findings\nThe cutout cache took 8 s on a repeat.");
+
+        var warned = Run("""
+            const b = Stage.book('process.pdf', { title: 'Harbour', pages: [
+                { title: 'Concepts', file: 'concepts.md' }, { title: 'Direction', file: 'direction.md' }, { title: 'Findings', file: 'findings.md' }] });
+            log('warnings ' + b.warnings.length);
+            """);
+
+        Assert.True(warned.Success, warned.Error);
+        Assert.Contains(warned.Logs, l => l.Contains("warnings 2"));
+        Assert.Contains(warned.Logs, l => l.StartsWith("[WARN] Stage.book: 'Direction' runs on for", StringComparison.Ordinal));
+        Assert.Contains(warned.Logs, l => l.Contains("findings.md is the run's report to the studio"));
+        Assert.DoesNotContain(warned.Logs, l => l.Contains("'Concepts' runs on"));
+    }
+
     [Theory]
     [InlineData("{ title: 'X', pages: [{ image: 'artifacts/missing.png' }] }", "is not in the project")]
     [InlineData("{ title: 'X', pages: [{ title: 'Y', picture: 'artifacts/frame.png' }] }", "not 'picture'")]
