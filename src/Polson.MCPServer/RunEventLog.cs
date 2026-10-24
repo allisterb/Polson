@@ -132,7 +132,7 @@ public sealed class RunEventLog : Runtime
 
     /// <summary>
     /// Whether a project-relative render is research — a sheet of Qloo's pictures, other people's posters and logos
-    /// (Manual 29 §2a) — which the studio never serves and the process book never shows.
+    /// (Manual 29 §2b) — which the studio's pages never show and the process book refuses.
     /// </summary>
     /// <remarks>
     /// Research is any render made by a script that took a Qloo picture's pixels (its execution recorded

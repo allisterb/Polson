@@ -462,7 +462,7 @@ public sealed class TasteToolkit
     /// <summary>
     /// Records <c>taste.pictures</c> once per script, the first time it takes a Qloo picture's pixels. Every render
     /// that script makes is then research to the studio, whatever the file is called, and is never served: the
-    /// pictures are other people's posters and logos (Manual 29 §2a). Names only reach the record, never pixels.
+    /// pictures are other people's posters and logos (Manual 29 §2b). Names only reach the record, never pixels.
     /// </summary>
     private void Taken(TasteImage picture)
     {

@@ -185,6 +185,9 @@ if MARKDOWN is not None:
 #: worth. That is the order a judge wants them in, and the page shows them in the order given.
 DELIVERABLES: tuple[tuple[str, str], ...] = (
     ("brief.md", "the commission, as the agent received it"),
+    # The mind map's outline (Manual 29 §2a): the brief's associations, and each audience's, measured or assumed. Before
+    # the concepts, because it is where their trails start.
+    ("mindmap.md", "the brief mapped: its associations, and each audience's, with which were measured and which assumed"),
     # The concept presentation (Manual 29 §8): the ideas weighed before any was made, each with its evidence and its
     # drawbacks, and the recommendation. After the brief, because it is the step between what was asked and what was made.
     ("concepts.md", "the concepts weighed, each with its evidence and drawbacks, and why one was chosen"),

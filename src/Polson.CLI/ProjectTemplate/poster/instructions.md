@@ -127,13 +127,28 @@ groupings at most**; unequal areas rather than equal ones; white space over fill
 central image in open ground holds the eye and is cut off from the posters beside it; a surface
 divided into blocks running to its edges leaks into its neighbours.
 
-### First, the field
+### First, the map
 
-**Before sketching, look at what this audience already loves** (Manual 29 §2a; Lupton's *Visual Research*, after 2x4).
+**Map the brief before anything is drawn** (Manual 29 §2a; Lupton's *Mind Mapping*, after Tony Buzan). Write
+`mindmap.md`, quickly. Put the film in a few words under a `#` heading at the centre, then nested `-` bullets:
+- **The trunk is the film's**, one for the whole set: at least four branches of Lupton's kinds (synonyms, antonyms,
+  clichés, stock phrases, related words), two levels deep.
+- **Then a branch per audience**:
+  - its distinctive titles and tags, each with the handle of the answer that returned it, `*Suspiria* (t2)`;
+  - the film's key words in that audience's language, with what they bring to mind there, each marked
+    `(assumed)`, because neither Qloo nor a native speaker checked them.
+
+Draw it with `Stage.mindMap('mindmap.md', ctx)` to `artifacts/00_map.png`, and
+`Stage.check` its floor: `m.branches.length >= 4 + audiences`, `m.depth >= 2`, and `m.unverified` empty. A
+node in `unverified` is cited to an answer that did not return it: find the right answer, or drop the node.
+
+### Then, the field
+
+**Before sketching, look at what this audience already loves** (Manual 29 §2b; Lupton's *Visual Research*, after 2x4).
 In one script per audience, `await Taste.images(profile, { type: 'film', take: 16 })` fetches Qloo's poster for each
 of its distinctive films. Then draw two sheets:
 - `artifacts/01_research_a.png`: the posters with their lead colours, for you to look at;
-- `artifacts/01_field_a.png`: the **research board** of Manual 29 §2a, a card per film (name, year, rank, the colours
+- `artifacts/01_field_a.png`: the **research board** of Manual 29 §2b, a card per film (name, year, rank, the colours
   its poster measured, the Qloo words it shares with the set) beside `Taste.colourField(...)`'s wheel, with **no
   poster on it**. Draw it again once the concepts exist, naming on each card the concept it fed.
 
@@ -143,9 +158,9 @@ they are research, not material, and only the field sheet goes in the process bo
 
 ### Then, the brain dump
 
-**Before any concept, sketch many** (Manual 29 §2b; Lupton's *Visual Brain Dumping*, after Luba Lukova). Make two lists
-— the brief's subject and its elements, and this audience's distinctive titles and tags from its profile — and force them
-together: **sixteen to twenty-four crude cells on one sheet per audience**, `artifacts/02_dump_a.png`, each cell one
+**Before any concept, sketch many** (Manual 29 §2c; Lupton's *Visual Brain Dumping*, after Luba Lukova). Take the two
+lists from the map, `Stage.mindMap('mindmap.md').leaves`: the trunk's leaves, and this audience's branch's leaves. Force
+them together: **sixteen to twenty-four crude cells on one sheet per audience**, `artifacts/02_dump_a.png`, each cell one
 pairing, labelled with it in a few words. **Each cell stages a little scene**, not a symbol: the subject as an object,
 in a place, with a figure, or at a moment, and the paired thing drawn as what it is. A floor or horizon, flat tones, a
 mannequin's mass for a person. **Cover the label**: if the pairing can't be named from the picture, the cell is a glyph,
@@ -165,7 +180,8 @@ evidence objected to it. It never objects, and the pair came out as one poster t
   key** — not one of the three. Where the dominant element sits and at what scale; light ground or
   dark; which colour leads. One composition recoloured, recropped or retyped is one concept.
 - **Each uses a different operation** from the lists above, and **each starts from a different item in
-  that audience's profile** — name it. **Each grows from a cell of the brain dump**, named by its pairing.
+  that audience's profile** — name it. **Each grows from a cell of the brain dump**, named by its pairing and by the
+  map's trail to it (`m.leaves[i].trail`); one grown from an `(assumed)` node says so among its drawbacks.
 - **Each later audience's concepts come from its own profile, drawn before you look back at the choices
   already made.** Holding the system (grid, type, title) is decided afterwards, in stage 8.
 - **Thumbnails are rough**: tone blocks, the dominant shape, one line for the title. Three on one sheet
@@ -294,7 +310,7 @@ of a family's name — `'Franklin Gothic Heavy'` is `'Franklin Gothic'` at `font
    most focal points about a third of the way down from the top left — a soft check, not a rule; say
    where yours is and why.
 5. **Contrast** — WCAG, as above, for every text-on-colour pair.
-6. **The field** (Manual 29 §2a). Measure the final with `bitmap.palette`, read its leading colour's hue with
+6. **The field** (Manual 29 §2b). Measure the final with `bitmap.palette`, read its leading colour's hue with
    `Taste.oklch(color).sector`, and `Stage.check` that it stands where `direction.md` said it would — in an open sector or apart in lightness if
    it was to stand apart, in the crowd if it was to belong.
 
@@ -318,7 +334,7 @@ of a family's name — `'Franklin Gothic Heavy'` is `'Franklin Gothic'` at `font
 - **The print file is RGB and screen-grade** — sized, bled and checked, but not CMYK or PDF/X. Say so
   rather than calling it press-ready.
 - **The process book, last**: `Stage.book('process.pdf', { title, pages })` (Manual 18 §3c) — the brief in a page, each
-  audience's research board (`01_field_a.png`, never the sheet of posters), each audience's concept sheet with `concepts.md` beside it, the comps that changed the direction, and each final poster,
+  mind map (`00_map.png`), each audience's research board (`01_field_a.png`, never the sheet of posters), each audience's concept sheet with `concepts.md` beside it, the comps that changed the direction, and each final poster,
   every caption saying what was decided. It names only files that exist, and draws nothing new. **It is the client's
   book**: ten to twenty pages; the direction as a page of its decisions in your words, not the file; `findings.md` left out.
 

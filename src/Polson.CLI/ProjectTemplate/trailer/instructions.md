@@ -213,14 +213,25 @@ when its answer would change the others'.
 
 ## Stage 2 — beats
 
-**Look at the field first** (Manual 29 §2a; Lupton's *Visual Research*, after 2x4). In one script per audience,
+**Map the brief first** (Manual 29 §2a; Lupton's *Mind Mapping*, after Tony Buzan). Write `mindmap.md`, quickly. Put
+the film or product in a few words under a `#` heading at the centre, then nested `-` bullets:
+- **The trunk is the subject's**, one for the whole set: at least four branches of Lupton's kinds (synonyms, antonyms,
+  clichés, stock phrases, related words), two levels deep.
+- **Then a branch per audience**:
+  - its distinctive titles and tags, each with the handle of the answer that returned it, `*Suspiria* (t2)`;
+  - the key words in that audience's language, with what they bring to mind there, each marked `(assumed)`.
+
+Draw it with `Stage.mindMap('mindmap.md', ctx)` to `artifacts/00_map.png`, and `Stage.check` its floor:
+`m.branches.length >= 4 + audiences`, `m.depth >= 2`, and `m.unverified` empty.
+
+**Then look at the field** (Manual 29 §2b; Lupton's *Visual Research*, after 2x4). In one script per audience,
 `await Taste.images(answer, { type, take: 16 })` fetches Qloo's picture of what this audience already loves:
 - for a film, the posters of its distinctive films (`type: 'film'`);
 - for a product, the logos of its buyers' distinctive brands there, chosen from the brand insights for the ones in the
   product's category (`type: 'brand'`).
 
 Draw `artifacts/01_research_a.png` (the pictures and their lead colours, for you to look at) and
-`artifacts/01_field_a.png`, the **research board** of Manual 29 §2a: a card per film or brand (name, year, rank, the
+`artifacts/01_field_a.png`, the **research board** of Manual 29 §2b: a card per film or brand (name, year, rank, the
 colours its picture measured, the Qloo words it shares with the set) beside `Taste.colourField`'s wheel, with **no
 picture on it**. Draw the board again once the concepts exist, naming on each card the concept it fed. Then write in `direction.md`, in one sentence citing the answer's handle and the field's `summary`: where
 it crowds, where it is empty, and whether this film stands apart or belongs. **Never draw, trace or imitate a fetched
@@ -228,8 +239,8 @@ picture**; only the research board goes in the process book. At the end, place t
 `Taste.oklch(...)` and `Stage.check` that they stand where you said.
 
 **The concept comes before the beats.** Where a poster in `documents/` already sets it, carry it over. Where nothing
-does, put the brief in one sentence and **sketch many before choosing** (Manual 29 §2b): force the brief's subject
-against each audience's distinctive titles and tags, **sixteen to twenty-four crude cells on one sheet per audience**
+does, put the brief in one sentence and **sketch many before choosing** (Manual 29 §2c): force the map's trunk leaves
+against each audience's branch leaves (`Stage.mindMap('mindmap.md').leaves`), **sixteen to twenty-four crude cells on one sheet per audience**
 (`artifacts/02_dump_a.png`), each cell one pairing and labelled with it, none refined. **Each cell stages a little
 scene, not a symbol**: the subject as an object, in a place, with a figure, or at a moment, with the paired thing drawn as
 what it is. Prefer a moment where one fits: it already says what the film will move. **Cover the label**: a
@@ -237,7 +248,8 @@ cell whose pairing can't be named from the picture is a glyph, and so is one wit
 silhouettes with `bitmap.diff`, the staged things black and the setting white, so that no idea appears twice. Mark the three or four worth pursuing and park the rest. From those, make
 **three concepts by three methods** — a verb applied to the core image, a
 figure, a sign chosen for its kind (Manual 29 §2–§5) — and write them as `concepts.md`, the concept presentation of
-Manual 29 §8: a page per concept with its overview, audience, views (the sketch, and the storyboard as beats),
+Manual 29 §8: a page per concept with its overview, audience, views (the sketch, the storyboard as beats, and the map's
+trail to its cell; a concept grown from an `(assumed)` node says so among its drawbacks),
 solution, justification, evidence, drawbacks and expansion, then a recommendation with next steps. Point the director's question at it, and choose against the sentence. In motion the verb is the move, so the concept already says how the film moves. **Decide the
 resolve with it**: the last shot the film builds to, and the earlier shots as parts or close-ups of it (Manual 25 §12b).
 
@@ -480,7 +492,8 @@ set's own check from *More than one audience*:
   film. Run it in the session that fetched the answers; a profile the poster fetched is re-asked free from the cache.
 - **`findings.md`**: what the motion added to the poster, what the checks changed, and what you would
   do with more time.
-- **The process book, last**: `Stage.book('process.pdf', { title, pages })` (Manual 18 §3c) — the brief, `concepts.md`
+- **The process book, last**: `Stage.book('process.pdf', { title, pages })` (Manual 18 §3c) — the brief, the mind map
+  (`00_map.png`), each audience's research board, `concepts.md`
   (a concept to a page), the animatic, the style frames (and the kit sheet, with several audiences), a frame of each
   finished film (`comp.still`), and the graph of its key moves, every caption saying what was decided. It names only
   files that exist, and draws nothing new. **It is the client's book**: ten to twenty pages; the direction as a page of
