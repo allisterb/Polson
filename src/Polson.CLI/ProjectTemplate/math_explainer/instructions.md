@@ -75,29 +75,42 @@ Write `plan.md` as a table of scenes, then a section per scene:
 
 Each scene's section holds, **in exact LaTeX**, every formula it shows; each derivation as its steps in order;
 each claim it makes in words; the picture (axes, curve, shading, a counting number); and the narration line by
-line. Then **check all of it in one script**, at the top of `explainer.js` so every later run checks again:
+line. Then **check all of it once**, in `explainer.js`'s `plan` mode, with `SCENES` at the top of the file so the
+film draws the formulas that were checked:
 
 ```javascript
-// Every formula parses; every derivation follows; every claim in words is checked by code Nemotron writes.
+// MODE 'plan': every formula parses; every derivation follows; every claim in words is checked by code Nemotron writes.
 const SCENES = [
     { name: 'the area', steps: ['\\int_0^2 \\frac{x^2}{2}\\,dx', '\\left[\\frac{x^3}{6}\\right]_0^2', '\\frac{8}{6}', '\\frac{4}{3}'],
       claims: ['The area under y = x²/2 from 0 to 2 is 4/3.'] },
 ];
-for (const s of SCENES) {
+const checked = SCENES.filter(s => !ARGS.scene || s.name === ARGS.scene);
+const derivations = checked.map(s => {
     for (const f of s.steps) { const p = Equation.parse(f); if (!p.ok) error(`${s.name}: ${p.error}`); }
-    const d = Verify.derivation(s.steps, { name: s.name });
-    log(`${s.name}: ${d.summary}`);
-}
-const claims = await Promise.all(SCENES.flatMap(s => s.claims.map(c => Verify.claim(c, { name: s.name }))));
-for (const c of claims) log(c.ok ? `${c.verdict}: ${c.summary}` : `${c.failureName}: ${c.error}`);
+    return Verify.derivation(s.steps, { name: s.name });
+});
+const claims = await Promise.all(checked.flatMap(s => s.claims.map(c => Verify.claim(c, { name: s.name }))));
+// The verdict is what the checks returned: every derivation passed and every claim holds. A claim still Pending is
+// not a pass; run the script again.
+const failing = [...derivations.filter(d => !d.passed).map(d => d.name + ': ' + d.summary),
+                 ...claims.filter(c => !c.passed).map(c => (c.name ?? 'claim') + ': ' + (c.ok ? c.summary : c.failureName))];
+Stage.check('every formula parsed and every step checked', failing.length === 0, failing.length ? failing.join(' | ')
+    : derivations.length + ' derivations follow step by step, ' + claims.length + ' claims hold');
 ```
+
+**Run the whole plan once, then only what changed.** After fixing a scene, check that scene alone
+(`args: { mode: 'plan', scene: 'the area' }`), and never put the checks where every run of the film repeats them:
+each check is a turn that resends the whole context, and ftcexplainer3 spent its run's token budget re-checking a
+plan it had already checked, re-running one claim six times, and was stopped before its film was built. A claim already checked
+is served from cache, but the turn that asks again is not.
 
 - **`Equation.parse` first.** A LaTeX error is the second most common reason a generated explainer fails (Ku et
   al. §4.3); it costs nothing to find before the scene is built.
 - **`Verify.derivation` on every derivation**, the steps exactly as they will appear. A step that **differs** is a
   wrong step: fix it, or take it out. One that **agrees** without a proof is evidence, not proof — keep it only if
   you say so in `plan.md`. One that is **unsettled** is split into smaller steps, or given the domain it holds on.
-  Two equations in a row are a step of a solution, checked as equivalent equations: dividing by a variable, or
+  A chain of equations, each beginning where the last ended, is checked step by step, each identity holding on its
+  own. Two equations in a row are a step of a solution, checked as equivalent equations: dividing by a variable, or
   keeping one factor of a product, loses a solution and is refused.
 - **A counterexample at a negative `x` usually means the step holds only where `x` is positive.** Pass that domain
   (`{ domain: { x: [0, 10] } }`) and **say it on screen too**: an identity shown without its condition is a wrong
@@ -112,7 +125,11 @@ for (const c of claims) log(c.ok ? `${c.verdict}: ${c.summary}` : `${c.failureNa
   read-back sources each figure to its working, which you pass as `computed` (stage 6).
 - **No history you cannot source.** Who proved it and when is a claim like any other; with no source for it in
   `documents/` or the brief, leave it out rather than recall it.
-- **Record it**: `Stage.check('every formula parsed and every step checked', …, 'N steps proved, M agree, K claims hold')`.
+- **Record it as the code above does**: the check's verdict is `failing.length === 0`, computed from what
+  `Verify.derivation` and `Verify.claim` returned, never `true` with a description. ftcexplainer4 recorded this check
+  as `true` beside the words "N steps proved, claims hold" while three of its derivations were unread. A derivation
+  you have deliberately replaced by a claim (one with `A′(x)` in it, say) comes out of `SCENES`' steps, so the check
+  is of what the film will show.
 
 **Q1** is the plan with these verdicts beside each scene: the director sees the mathematics before the motion.
 
@@ -155,7 +172,12 @@ What the model gives a maths explainer — `polson://sdk/core/Motion` (*Layers*:
   group around it. **Keep each equation's handle**: `comp.texts()` lists it by its linear form, and stage 6 checks the
   derivation as the watcher read it from these handles.
 - **`comp.axes({ x: [min, max, step], y: [min, max, step], origin, size })`** — axes in data coordinates, ticks
-  labelled. `axes.plot(f)` draws a function, sampled once, and keying its `trimEnd` from 0 to 1 draws it on;
+  labelled. **`origin` is the centre of the axes' box**, not its lower-left corner and not where the data's 0 falls: a
+  480 × 320 box whose corner is at (80, 480) has `origin: [320, 320]`. **Its tick labels are text**: dim the lines
+  with `color` if you like, but give the labels a `labelColor` that reads against the ground, and list it in the
+  contrast check (stage 5). **Say what each axis measures**: `xLabel: '\\text{Time}'`, `yLabel: '\\text{Amplitude}'`,
+  and `arrows: true` for a tip on each far end; a graph whose axes are named reads at a glance, and one whose axes are
+  only numbered has to be worked out. `axes.plot(f)` draws a function, sampled once, and keying its `trimEnd` from 0 to 1 draws it on;
   `axes.area(f, a, b)` shades under it; `axes.riemann(f, a, b, n)` stands rectangles under it **and returns their
   total**; `axes.tangent(f, x)` **returns the slope it drew**. Print those returned values, never retyped ones.
 - **`comp.number({ value, format, family })`** — a number that counts, keyed from one value to another: a Riemann sum
@@ -193,6 +215,15 @@ model). Plan each scene's places on a grid before keying anything: the derivatio
 another, nothing overlapping, everything inside the central 90% of the frame. Keep each equation's box —
 `origin`, `orient`, `equation.width`, `equation.height` — and check them (stage 5).
 
+**Build a whole from its parts, on the same axes.** Where the idea is that something is made of pieces — a signal of
+sines, an area of strips, a polynomial of terms — draw each piece on, one after another, then the whole over them, so
+the viewer watches the sum being made rather than being told it. Then, if the idea has a second view (time and
+frequency, a function and its derivative), show the same pieces there.
+
+**A piece keeps its colour wherever it appears.** The 1 Hz component that is red on the signal's axes is the red dot on
+the spectrum's, and the red term in the formula: the colour is how the viewer knows it is the same thing in a new
+view, without a word. Choose the colours in the plan, one per piece, and never reuse one for something else.
+
 **Style.** One family for words, the equations in Latin Modern (the default), a dark or light neutral ground and one
 accent for the thing being explained; the accent means the same thing in every scene. Motion has a job — it writes a
 step, points at a term, draws a curve — and eases `halt` at both ends of a move that settles. Cuts between scenes,
@@ -217,24 +248,72 @@ the join. Time a few frames with `comp.render(t)` first: a part that runs out of
 ## Stage 5 — checks
 
 **The sheet is how you see the film**: a cell every half second onto one sheet, `artifacts/05_sheet.png`, read in
-order. Then record each of these with `Stage.check`:
+order. Then measure each of these and record it with `Stage.check`.
 
-1. **Every step held long enough.** From `comp.texts()`: every equation (`kind: 'equation'`) on screen at least two
-   seconds, the result longer; every line of words about three words a second plus half a second.
-2. **Nothing overlaps.** The boxes of everything on screen at the same moment — equations from their handles, text
-   from `text.boundsAt(t, { frame: true })`, the axes from their `origin` and `size` — never intersect, and all sit
-   inside the central 90% of the frame.
-3. **Flashes**: `comp.flashes()` passes (WCAG 2.3.1).
-4. **Contrast**: text and equations against their ground at 4.5 : 1 or better (`Motion.contrast`).
-5. **The narration fits**: every line ends before its scene's part does, and `saveVideo`'s `warnings` say no sound was
-   cut.
+**Every check is measured.** `Stage.check(claim, passed, detail)` records whatever `passed` is, so `passed` is
+something the script computed — a comparison, a routine's own `passed` — **never the literal `true`**, which records
+a belief as a measurement. What only an eye can judge, such as whether the sheet reads in order, is recorded with
+`{ judged: true }`, and the record shows it as a judgement. **Read a result by the names its entry gives**:
+`comp.flashes()` returns `passed`, and a name a result does not have reads as `undefined`, so `flashes.ok ?? true`
+passes every film ever made. The first `math_explainer` run did exactly that, and wrote its holds and contrast as
+`true` beside a description; its graphs ran off the frame, and nothing it recorded could have said so.
+
+```javascript
+// MODE 'checks': the composition rebuilt, then each check from what the routines return.
+const texts = comp.texts();
+const step = 1 / 12;                                    // comp.texts() samples twelve times a second
+const shortest = t => Math.min(...t.intervals.map(i => i[1] - i[0] + step));
+const equations = texts.filter(t => t.kind === 'equation' && t.intervals.length);
+const brief = equations.filter(t => shortest(t) < 2);
+Stage.check('every step held long enough', brief.length === 0, brief.length
+    ? brief.map(t => t.text + ' for ' + shortest(t).toFixed(1) + ' s').join('; ')
+    : equations.length + ' equations, each on screen 2 s or more at a time');
+
+const flashes = comp.flashes();
+Stage.check('flashes pass WCAG 2.3.1', flashes.passed, 'general ' + flashes.generalFlashes + ', red ' + flashes.redFlashes + ' a second at most');
+
+const GROUND = '#0f172a';                               // the film's ground
+const INK = ['#e2e8f0', '#38bdf8', '#94a3b8'];          // every colour a word, an equation or a tick label is set in
+const ratios = INK.map(c => Motion.contrast(c, GROUND));
+Stage.check('contrast passes WCAG AA', Math.min(...ratios) >= 4.5, INK.map((c, i) => c + ' ' + ratios[i].toFixed(1) + ' : 1').join(', '));
+
+// Every formula the plan checked is on screen: a planned step shows when its linear form is in an equation the film sets.
+const onScreen = equations.map(t => t.text);
+const unshown = SCENES.flatMap(s => s.steps).map(f => Equation.parse(f).linear).filter(l => !onScreen.some(t => t.includes(l)));
+Stage.check('every planned formula is on screen', unshown.length === 0, unshown.length
+    ? 'never shown: ' + unshown.join('; ') : onScreen.length + ' equations carry every planned step');
+
+const blank = comp.blank({ background: GROUND });
+Stage.check('the screen is never empty for more than a second', blank.passed,
+    blank.stretches.map(s => s.from + ' to ' + s.to + ' s').join(', ') || 'no empty stretch');
+```
+
+1. **Every step held long enough** — every equation on screen at least two seconds each time it shows, the result
+   longer, as above; every line of words about three words a second plus half a second.
+2. **Nothing overlaps** — the boxes of everything on screen at the same moment (equations from their handles, text from
+   `text.boundsAt(t, { frame: true })`, the axes from their `origin`, which is the box's centre, and `size`) never
+   intersect, and all sit inside the central 90% of the frame. `passed` is the count of intersections being 0, with the
+   pairs that do in the detail. `comp.axes` refuses a box that is never in the frame at all, but not one that crowds an
+   equation.
+3. **Flashes** and 4. **contrast**, as above, over every colour type is set in.
+5. **The narration fits** — `passed` is `joined.warnings.length === 0` on what `Motion.joinVideos` returned, with the
+   warnings as the detail: a warning there is sound that was cut.
+6. **Every planned formula is on screen**, as above. A generated explainer of the Fourier transform planned the
+   transform's integral and never showed it, ending on a list of applications instead; the plan is what was checked,
+   so the film must show it. A step dropped on purpose comes out of `SCENES` too.
+7. **The screen is never empty for more than a second**, as above (`comp.blank`). The same film was an empty screen for
+   9.8 of its 44 seconds, a fade out and a wait between every scene. Cut between scenes; do not fade to nothing.
 
 ---
 
 ## Stage 6 — deliver
 
 - **Encode** the parts and join them with the narration, as stage 4 says. Read the result's `warnings`.
-- **Read the film back**, in a script that rebuilds the composition (`MODE = 'checks'`):
+- **Read the film back, straight after the join and before anything is written up.** The film is not delivered until
+  `Verify.film` has read it: it is the one check made from the encoded film itself, by a model that did not make it,
+  and it catches what the composition's own checks cannot — a formula on screen too briefly to read, a tick label off
+  the edge of the frame. **Budget for it**: when the run is short of tokens or time, cut polish, not the read-back. In a
+  script that rebuilds the composition (`MODE = 'checks'`):
   ```javascript
   const v = await Verify.film(comp, 'output.mp4', { computed: { /* 'figure as set': 'its working' */ } });
   if (!v.ok) exit(v.remedy);          // 'Pending': the watcher is still reading; run the same script again
@@ -248,7 +327,8 @@ order. Then record each of these with `Stage.check`:
   'misread' | 'real')` in a later script. **The derivation as read** checks the steps as the watcher read them: a
   reading that breaks the chain is the film's to fix (hold it longer, set it larger), not the mathematics'.
 - **Each check records its own verdict.** Do not write one for it: `Stage.check` refuses the names `Read-back of`,
-  `Derivation` and `Claim checked:`.
+  `Derivation` and `Claim checked:`. Nor restate stage 5's checks here as `Stage.check(..., true, ...)`: they were
+  measured where they were made, and a second, asserted copy only hides which one was measured.
 - **`explainer.js`**, runnable on its own; **`plan.md`** as finished, every scene's formulas with their verdicts;
   **`direction.md`**: the scenes and each choice — the example, the order, the pictures, the pace, the voice — with
   its reason, in the `Choice | Evidence | Kind` table (Kind: *Brief*, *Check*, *Research*, *Rule*, *Assumed*); and

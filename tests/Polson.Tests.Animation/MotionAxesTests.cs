@@ -109,5 +109,80 @@ public class MotionAxesTests : TestsRuntime
         Assert.Throws<ArgumentException>(() => axes.Plot(v => 100 + v));                     // never inside the y range
         Assert.Throws<ArgumentException>(() => axes.Riemann(v => v, 0, 1, 0));
     }
+
+    /// <summary>
+    /// What each axis measures, typeset at its far end and listed as kind 'axis'; a tip at each far end when asked. Titles
+    /// are drawn with the tick labels turned off, since they say what the axis is and the ticks only how far.
+    /// </summary>
+    [Fact]
+    public void TestAxesCarryTitlesAndArrowTips()
+    {
+        var motion = new MotionToolkit();
+        var comp = motion.Composition(Opts(("width", 1280d), ("height", 720d), ("fps", 12d), ("duration", 1d)));
+        comp.Fill(Opts(("color", "#ffffff")));
+        var axes = comp.Axes(Opts(("x", new[] { 0d, 10d, 2d }), ("y", new[] { -2d, 2d, 1d }), ("origin", new[] { 640d, 360d }), ("size", new[] { 800d, 400d }),
+            ("color", "#000000"), ("xLabel", @"\text{Time}"), ("yLabel", @"\text{Amplitude}"), ("arrows", true)));
+        var titles = comp.Texts().Cast<Dictionary<string, object?>>().Where(t => (string)t["kind"]! == "axis").Select(t => (string)t["text"]!).ToArray();
+        Assert.Equal(["Time", "Amplitude"], titles);
+        var tip = axes.Point(10, 0);
+        Assert.True(Dark(comp.Render(0), tip[0] + 6, tip[1], 1), "no arrow tip past the x axis's end");
+
+        var bare = motion.Composition(Opts(("width", 1280d), ("height", 720d), ("fps", 12d), ("duration", 1d)));
+        bare.Fill(Opts(("color", "#ffffff")));
+        bare.Axes(Opts(("x", new[] { 0d, 10d, 2d }), ("y", new[] { 0d, 2d, 1d }), ("origin", new[] { 640d, 360d }), ("size", new[] { 800d, 400d }),
+            ("labels", false), ("xLabel", "t")));
+        Assert.Equal(["axis"], bare.Texts().Cast<Dictionary<string, object?>>().Select(t => (string)t["kind"]!));
+        Assert.False(Dark(bare.Render(0), axes.Point(10, 0)[0] + 6, 360, 1), "a tip drawn without arrows: true");
+    }
+
+    /// <summary>
+    /// ftcexplainer4 dimmed its axes to #475569 and the tick labels went with them, at 2.4 : 1 on its ground: the read-back
+    /// missed all eleven. Labels take their own labelColor, and a size below 16 px at 720 lines is refused.
+    /// </summary>
+    [Fact]
+    public void TestTickLabelsTakeTheirOwnColourAndAReadableSize()
+    {
+        var motion = new MotionToolkit();
+        var comp = motion.Composition(Opts(("width", 1280d), ("height", 720d), ("fps", 12d), ("duration", 1d)));
+        comp.Fill(Opts(("color", "#0f172a")));
+        comp.Axes(Opts(("x", new[] { 0d, 2d, 1d }), ("y", new[] { 0d, 4d, 1d }), ("origin", new[] { 640d, 360d }), ("size", new[] { 400d, 300d }),
+            ("color", "#475569"), ("labelColor", "#ffffff"), ("labelSize", 24d)));
+        var frame = comp.Render(0);
+        var label = comp.Texts().Cast<Dictionary<string, object?>>().First(t => (string)t["kind"]! == "tick" && (string)t["text"]! == "2");
+        Assert.NotNull(label["from"]);
+        // The x axis label "2" sits under (840, 510); somewhere near it a pixel is near white, which the dim line colour is not.
+        var bright = Enumerable.Range(500, 40).SelectMany(y => Enumerable.Range(825, 30).Select(x => frame.SkBitmap.GetPixel(x, y))).Max(c => c.Red);
+        Assert.True(bright > 200, $"the brightest pixel near the label is {bright}");
+
+        var e = Assert.Throws<ArgumentException>(() => comp.Axes(Opts(("x", new[] { 0d, 2d, 1d }), ("y", new[] { 0d, 4d, 1d }),
+            ("origin", new[] { 640d, 360d }), ("size", new[] { 400d, 300d }), ("labelSize", 12d))));
+        Assert.Contains("below 16", e.Message);
+        comp.Axes(Opts(("x", new[] { 0d, 2d, 1d }), ("y", new[] { 0d, 4d, 1d }), ("origin", new[] { 640d, 360d }), ("size", new[] { 160d, 120d })));
+        Assert.Contains(comp.Texts().Cast<Dictionary<string, object?>>(), t => (string)t["kind"]! == "tick");   // a small box's default is raised, not refused
+    }
+
+    /// <summary>
+    /// ftcexplainer1 gave origin as the box's lower-left corner, [80, 480] for a 480 × 320 box in 1280 × 720, and every graph
+    /// ran 160 px off the left. A box never wholly in the frame is refused, saying where it is and what the corner reading
+    /// meant; axes that slide in, through a keyed group, are in the frame at the end and pass.
+    /// </summary>
+    [Fact]
+    public void TestABoxNeverInTheFrameIsRefusedAndOneThatSlidesInIsNot()
+    {
+        var motion = new MotionToolkit();
+        var comp = motion.Composition(Opts(("width", 1280d), ("height", 720d), ("fps", 12d), ("duration", 2d)));
+        var options = Opts(("x", new[] { 0d, 3d, 1d }), ("y", new[] { 0d, 5d, 1d }), ("origin", new[] { 80d, 480d }), ("size", new[] { 480d, 320d }));
+        var e = Assert.Throws<ArgumentException>(() => comp.Group().Axes(options));
+        Assert.Contains("off the left of the frame", e.Message);
+        Assert.Contains("(-160, 320) to (320, 640)", e.Message);
+        Assert.Contains("origin is [320, 320]", e.Message);
+        comp.Axes(Opts(("x", new[] { 0d, 3d, 1d }), ("y", new[] { 0d, 5d, 1d }), ("origin", new[] { 320d, 320d }), ("size", new[] { 480d, 320d })));
+
+        var sliding = comp.Group(Opts(("offset", motion.Nodes.Animated("vector", new object[]
+            { Opts(("time", 0d), ("value", new[] { -1000d, 0d })), Opts(("time", 2d), ("value", new[] { 0d, 0d })) }))));
+        sliding.Axes(Opts(("x", new[] { 0d, 3d, 1d }), ("y", new[] { 0d, 5d, 1d }), ("origin", new[] { 320d, 320d }), ("size", new[] { 480d, 320d })));
+        var gone = comp.Group(Opts(("offset", new[] { -1000d, 0d })));
+        Assert.Throws<ArgumentException>(() => gone.Axes(Opts(("x", new[] { 0d, 3d, 1d }), ("y", new[] { 0d, 5d, 1d }), ("origin", new[] { 320d, 320d }), ("size", new[] { 480d, 320d }))));
+    }
     #endregion
 }

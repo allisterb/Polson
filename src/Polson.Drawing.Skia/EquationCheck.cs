@@ -66,12 +66,33 @@ internal static partial class EquationCheck
             return new("unread", linearA, linearB, convertTimedOut ? "converting the LaTeX took too long." : Explain(converted.Error) ?? "the LaTeX is not an expression.")
                 { Side = converted.Side };
         var (left, right) = (converted.Left, converted.Right);
-        if (converted.Equations) return EquationStep(left, right, linearA, linearB, options, Seed(a, b));
+        if (converted.Equations)
+        {
+            // An identity holds whatever came before it: ftcexplainer3 wrote ∫₀² x² dx = [x³/3]₀², then [x³/3]₀² = 2³/3 − 0³/3,
+            // then 2³/3 − 0³/3 = 8/3 (2026-10-23), and as steps of a solution each lhs − rhs is 0, so their ratio is 0/0 and
+            // every pair was unsettled. The second equation is checked as an identity first; one that is false with nothing
+            // free in it is a false statement, and any other is an equation with solutions, compared as a step.
+            var own = Compare(right, Entity.Number.Integer.Zero, null, null, options with { BudgetMs = Math.Max(200, options.BudgetMs / 3) }, Seed(a, b));
+            if (own.Kind is "proved" or "agrees")
+                return own with
+                {
+                    A = linearA, B = linearB,
+                    Detail = $"the second is an identity, so it holds whatever came before it: {own.Detail}",
+                };
+            if (own.Kind == "differs" && right.Vars.Count == 0)
+                return own with { A = linearA, B = linearB, Detail = "the second is false: its two sides are different numbers." };
+            return EquationStep(left, right, linearA, linearB, options with { BudgetMs = Math.Max(200, options.BudgetMs * 2 / 3) }, Seed(a, b));
+        }
         if (b is null) (linearA, linearB) = Halves(linearA!);
+        return Compare(left, right, linearA, linearB, options, Seed(a, b));
+    }
 
+    /// <summary>Two expressions compared: simplified, then sampled; a counterexample outranks a symbolic 0.</summary>
+    private static Verdict Compare(Entity left, Entity right, string? linearA, string? linearB, Options options, int seed)
+    {
         var symbolicMs = Math.Max(100, options.BudgetMs * 2 / 5);
         var symbolic = OnOwnStack(_ => Symbolic(left, right), symbolicMs, out var symbolicTimedOut);
-        var numeric = OnOwnStack(token => Numeric(left, right, options, Seed(a, b), token), options.BudgetMs - symbolicMs, out var numericTimedOut);
+        var numeric = OnOwnStack(token => Numeric(left, right, options, seed, token), options.BudgetMs - symbolicMs, out var numericTimedOut);
 
         var points = numeric?.Agreed ?? 0;
         var approximate = numeric?.Approximate ?? false;

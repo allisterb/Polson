@@ -112,7 +112,7 @@ public sealed partial class VerifyToolkit
         var items = expected.Select((e, i) =>
         {
             // An axis label comp.axes drew is a ruler, not a claim: sourced as a scale without being declared.
-            var source = texts[i].GetValueOrDefault("kind") as string == "tick" ? (Kind: "scale", Detail: (string?)"axis label") : sources.Classify(e.Text, computed, scale);
+            var source = texts[i].GetValueOrDefault("kind") as string is "tick" or "axis" ? (Kind: "scale", Detail: (string?)"axis label") : sources.Classify(e.Text, computed, scale);
             var seen = match.Seen[i];
             return new Dictionary<string, object?>
             {

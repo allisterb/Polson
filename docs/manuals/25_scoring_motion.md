@@ -462,6 +462,10 @@ is Synfig's, and the craft follows from it:
   transition, so a run of hard cuts shows up as the number it is. Type must also stand off its ground —
   `Motion.contrast(text, ground)` at 4.5 or more, 3 for display size — and a ground that moves under the type is
   checked at its worst frame, not its first.
+- **A screen with nothing on it is time the viewer spends waiting.** A fade to the ground, a pause, a fade up between
+  every scene reads as a film that has stopped; `comp.blank()` finds every stretch where the frame is only its ground
+  and fails one longer than a second. Cut from scene to scene, or let the next scene's first element arrive as the
+  last one leaves.
 - **Make a line of dialogue from its text: `Motion.speech('The cat in the hat.', { start: 0.4 })`.** Which sounds a
   sentence has is the dictionary's business, and mouth charts are coarse enough that accents and weak forms mostly
   land on the same mouth; only the timing has to be chosen, and with no recording to match, natural timing is correct

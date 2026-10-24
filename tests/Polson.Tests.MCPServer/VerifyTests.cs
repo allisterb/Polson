@@ -529,6 +529,21 @@ public class VerifyTests : TestsRuntime, IDisposable
         Assert.Equal(["2x + 3 = 7", "2x = 4", "x = 2"], ((object?[])verify.Derivation(new object[] { "2x + 3 = 7", "2x = 4", "x = 2" })["steps"]!).Cast<string>());
         Assert.Equal([@"\sum_{k=1}^{n} k", @"\frac{n(n+1)}{2}"], VerifyToolkit.Sides(@"\sum_{k=1}^{n} k = \frac{n(n+1)}{2}"));
         Assert.Equal([@"\{x : x = 1\}"], VerifyToolkit.Sides(@"\{x : x = 1\}"));
+
+        // ftcexplainer3: a chain of equations, each beginning where the last ended. Each is an identity, which holds on
+        // its own; as steps of a solution their lhs − rhs are all 0, and every pair was unsettled.
+        var identities = verify.Derivation(new object[]
+        {
+            @"\int_0^2 x^2\,dx = \left[\frac{x^3}{3}\right]_0^2", @"\left[\frac{x^3}{3}\right]_0^2 = \frac{2^3}{3} - \frac{0^3}{3}",
+            @"\frac{2^3}{3} - \frac{0^3}{3} = \frac{8}{3}",
+        });
+        Assert.True((bool)identities["passed"]!, (string)identities["summary"]!);
+        Assert.Contains("identity", (string)((Dictionary<string, object?>)((object?[])identities["pairs"]!)[0]!)["detail"]!);
+        Assert.True((bool)verify.Derivation(new object[] { @"A = \frac{x^3}{3}", @"\frac{d}{dx}\left(\frac{x^3}{3}\right) = x^2" })["passed"]!);
+        var falseStep = verify.Derivation(new object[] { @"\left[\frac{x^3}{3}\right]_0^2 = \frac{2^3}{3}", @"\frac{2^3}{3} = 3" });
+        Assert.False((bool)falseStep["passed"]!);
+        Assert.Contains("different numbers", (string)falseStep["summary"]!);
+        Assert.False((bool)verify.Derivation(new object[] { "x^2 = 4", "x = 2" })["passed"]!);     // still a lost root, not an identity
         Assert.Equal(["a", "b", "c"], VerifyToolkit.Sides("a = b = c"));
         Assert.Equal(["x = "], VerifyToolkit.Sides("x = "));
     }

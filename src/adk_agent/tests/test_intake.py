@@ -381,6 +381,13 @@ class WorkflowTypeTests(unittest.TestCase):
         with mock.patch.object(intake, "_base_token_cap", return_value=None):
             self.assertIsNone(intake.token_budget("poster", brief), "an uncapped host stays uncapped")
 
+    def test_a_workflow_that_checks_every_step_gets_its_multiple_of_the_cap(self):
+        """ftcexplainer3 spent the host's 2M before its build stage was done; a maths explainer gets twice it."""
+        with mock.patch.object(intake, "_base_token_cap", return_value=2_000_000):
+            self.assertEqual(intake.token_budget("math_explainer", "Explain the fundamental theorem."), 4_000_000)
+        with mock.patch.object(intake, "_base_token_cap", return_value=None):
+            self.assertIsNone(intake.token_budget("math_explainer", "x"), "an uncapped host stays uncapped")
+
     def test_every_declined_type_says_why(self):
         """The entry is the record. A blank reason is the same as having forgotten."""
         for (workflow, kind), why in intake.NOT_OFFERED.items():
@@ -856,6 +863,28 @@ class ThoughtSummaryTests(unittest.TestCase):
 
         self.assertIn(429, retry.http_status_codes)
         self.assertEqual(studio.RETRY_ATTEMPTS, retry.attempts)
+
+    def test_a_hung_call_times_out_and_is_retried(self):
+        """ftcexplainer2 waited eight minutes on one call with no timeout. An attempt now ends at the timeout, and genai's
+        own retry policy, built from these options, retries a timeout as it retries a 429."""
+        import httpx
+        from google.genai import _api_client
+
+        http = studio._retry_config().http_options
+        self.assertEqual(int(studio.REQUEST_TIMEOUT_SECONDS * 1000), http.timeout)
+        retry = _api_client.retry_args(http.retry_options)["retry"]
+        outcome = mock.Mock(failed=True)
+        outcome.exception.return_value = httpx.ReadTimeout("hung")
+        self.assertTrue(retry(mock.Mock(outcome=outcome)))
+
+    def test_only_retries_are_printed_from_genai(self):
+        """So a slow turn can be told from a quick one behind 429s, without genai's other INFO lines."""
+        import logging
+        log = logging.getLogger("google_genai._api_client")
+        handler = next(h for h in log.handlers if getattr(h, "polson", False))
+        record = lambda m: logging.LogRecord(log.name, logging.INFO, __file__, 1, m, None, None)
+        self.assertTrue(handler.filter(record("Retrying x in 4.0 seconds as it raised ReadTimeout")))
+        self.assertFalse(handler.filter(record("Sending request")))
 
 
 class SessionUserTests(unittest.TestCase):

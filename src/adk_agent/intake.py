@@ -259,16 +259,28 @@ def _base_token_cap() -> int | None:
         return None
 
 
-def token_budget(workflow: str, brief: str) -> int | None:
-    """This commission's own token cap when it is a set of more than two audiences, else None for the host's.
+#: Workflows whose runs need more than the host's cap, as a multiple of it, so they follow the host's when it changes.
+#:
+#: `math_explainer` at twice: every stage checks before it draws, and each check is a turn that resends the whole
+#: context (55k tokens at the start, 172k by the end). ftcexplainer1 (3.7 Flash, 2026-10-23) had spent 1.8M of 2M by
+#: Deliver and had not written its findings; ftcexplainer3 (3.5 Flash) hit 2M in its build stage after 57 turns.
+TOKEN_SCALE: dict[str, float] = {"math_explainer": 2.0}
 
-    **Scaled, not added to.** The host's cap is sized for the two-audience pair these workflows were built
-    for, so a set of n gets n/2 of it. None also means *leave it alone*: an uncapped host stays uncapped.
+
+def token_budget(workflow: str, brief: str) -> int | None:
+    """This commission's own token cap when its workflow or its audiences need more, else None for the host's.
+
+    **Scaled, not added to.** The host's cap is sized for the two-audience pair the audience workflows were built
+    for, so a set of n gets n/2 of it; a workflow in `TOKEN_SCALE` gets its multiple. None also means *leave it
+    alone*: an uncapped host stays uncapped.
     """
+    scale = TOKEN_SCALE.get(workflow, 1.0)
     n = audiences_in(brief)
-    if workflow not in PER_AUDIENCE_MINUTES or n <= 2 or (base := _base_token_cap()) is None:
+    if workflow in PER_AUDIENCE_MINUTES and n > 2:
+        scale *= n / 2
+    if scale == 1.0 or (base := _base_token_cap()) is None:
         return None
-    return base * n // 2
+    return int(base * scale)
 
 #: Types a workflow ships that this form deliberately does **not** offer, and why.
 #:
