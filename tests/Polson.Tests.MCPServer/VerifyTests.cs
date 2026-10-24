@@ -106,6 +106,47 @@ public class VerifyTests : TestsRuntime, IDisposable
         Assert.Single(near.Strays);
     }
 
+    /// <summary>
+    /// nightshift1: the watcher read every line right and dated it in the wrong unit — each true time over ten, then over a
+    /// hundred. Read at the scale that matches, every line is seen; a reading already in seconds is left alone.
+    /// </summary>
+    [Theory]
+    [InlineData(0.1)]
+    [InlineData(0.01)]
+    public void TestTimesInTheWrongUnitAreReadInTheOneThatMatches(double unit)
+    {
+        var shown = new[] { Shown("NIGHTSHIFT", 5.0, 8.67), Shown("COLD BREW", 6.25, 8.67), Shown("Steeped for twenty hours.", 8.83, 11.92),
+            Shown("Find it chilled.", 13.0, 15.0) };
+        FilmReadBack.Reading Scaled(string text, double at) => new(text, at * unit, (at + 1) * unit);
+        var read = new[] { Scaled("NIGHTSHIFT", 5.2), Scaled("COLD BREW", 6.4), Scaled("Steeped for twenty hours.", 9.0), Scaled("Find it chilled.", 13.2) };
+
+        var scale = FilmReadBack.TimeScale(shown, read, 15);
+
+        Assert.Equal(1 / unit, scale, 3);
+        var outcome = FilmReadBack.Match(shown, [.. read.Select(r => r with { From = r.From * scale, To = r.To * scale })]);
+        Assert.All(outcome.Seen, Assert.NotNull);
+        Assert.Empty(outcome.Strays);
+    }
+
+    [Fact]
+    public void TestAReadingInSecondsIsNotStretchedToFitEvenWithAMiss()
+    {
+        var shown = new[] { Shown("TITLE", 0.5, 3), Shown("A LINE", 4, 6), Shown("END", 7, 9.5) };
+        var read = new[] { Read("TITLE", 1), Read("END", 7.5) };              // "A LINE" missed, honestly
+
+        Assert.Equal(1d, FilmReadBack.TimeScale(shown, read, 10));
+        Assert.Equal(1d, FilmReadBack.TimeScale(shown, [], 10));
+    }
+
+    [Fact]
+    public void TestTheFilmQuestionStatesTheUnitAndTheSchemaBoundsIt()
+    {
+        Assert.Contains("The video is 15 seconds long", VerifyToolkit.Question(15));
+        Assert.Contains("from 5, to 8.5", VerifyToolkit.Question(15));
+        Assert.Contains("\"maximum\":87.25", VerifyToolkit.Schema(87.25));
+        System.Text.Json.Nodes.JsonNode.Parse(VerifyToolkit.Schema(15));     // still a valid schema
+    }
+
     [Theory]
     [InlineData("$40.4 billion (282 million)", new[] { "40.4", "282" })]
     [InlineData("102,718 units, up 4.5%.", new[] { "102718", "4.5" })]

@@ -32,6 +32,9 @@ public sealed class StageApi
     private const int MaxNameLength = 80;
 
     private const int MaxNoteLength = 2000;
+
+    /// <summary>Continuation pages one book page's text may run onto before <c>Stage.book</c> says it is a file pasted.</summary>
+    private const int MaxOverflow = 2;
     #endregion
 
     #region Fields
@@ -151,6 +154,7 @@ public sealed class StageApi
             throw new ArgumentException("Stage.book's pages is a list: [{ title, image, caption, text, file }].");
 
         var pages = new List<Polson.Drawing.Skia.PdfBook.Page>();
+        var warnings = new List<string>();
         foreach (var item in given)
         {
             var p = JsInterop.AsDict(item) ?? throw new ArgumentException("Each of Stage.book's pages is an object: { title, image, caption, text, file }.");
@@ -172,12 +176,23 @@ public sealed class StageApi
                 var full = ProjectPath.Resolve(projectRoot, filePart, "file", "Read");
                 if (!File.Exists(full)) throw new ArgumentException($"Stage.book: '{filePart}' is not in the project.");
                 text = (text is null ? "" : text + "\n\n") + File.ReadAllText(full);
+                // A test run's findings are its report to the studio about the studio: friction, gaps, defects. A client's
+                // book that carries them hands over the workshop's notes with the work (nightshift1: 17 of 46 pages).
+                if (Path.GetFileName(full).Equals("findings.md", StringComparison.OrdinalIgnoreCase))
+                    warnings.Add("findings.md is the run's report to the studio, not part of the work: leave it out of the book.");
             }
             pages.Add(new(p["title"]?.ToString(), image, p["caption"]?.ToString(), text));
         }
         if (pages.Count is 0 or > 60) throw new ArgumentException($"Stage.book takes 1 to 60 pages, not {pages.Count}.");
 
-        var (pdf, count) = Polson.Drawing.Skia.PdfBook.Write(title, pages);
+        var (pdf, count, overflows) = Polson.Drawing.Skia.PdfBook.Write(title, pages);
+        // A page whose text runs on for pages is a file pasted, not a page written: nightshift1 put the whole of
+        // direction.md in, ten pages of it. Summarise it in a page of your own — the decisions, each with its evidence.
+        for (var i = 0; i < pages.Count; i++)
+            if (overflows[i] > MaxOverflow)
+                warnings.Add($"'{pages[i].Title ?? $"page {i + 1}"}' runs on for {overflows[i] + 1} pages: a book page is read at a glance. "
+                    + "Write its substance as a page of text — the decisions and their evidence — rather than passing the whole file.");
+        foreach (var w in warnings) result?.Logs.Add("[WARN] Stage.book: " + w);
         var output = ProjectPath.Resolve(projectRoot, filePath, nameof(filePath), "Write to");
         Directory.CreateDirectory(Path.GetDirectoryName(output)!);
         File.WriteAllBytes(output, pdf);
@@ -187,8 +202,13 @@ public sealed class StageApi
             ["format"] = "pdf",
             ["bytes"] = pdf.Length,
             ["pages"] = count,
+            ["warnings"] = warnings.Count == 0 ? null : warnings.ToArray(),
         });
-        return new() { ["path"] = filePath, ["pages"] = count, ["bytes"] = (long)pdf.Length };
+        return new()
+        {
+            ["path"] = filePath, ["pages"] = count, ["bytes"] = (long)pdf.Length,
+            ["warnings"] = warnings.Cast<object?>().ToList(),
+        };
     }
 
     /// <summary>Ends the current stage. Harmless when none is open.</summary>

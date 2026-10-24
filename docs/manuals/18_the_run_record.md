@@ -187,6 +187,12 @@ from what the run already made:
   profile"*, not *"the second style frame"*.
 - **Make it last, in Deliver**, when every page it names exists. A book that names a missing file is refused, which is
   the point: it cannot claim a step the run did not take.
+- **It is the client's book, so it holds the work, not the workshop.** The brief, the concepts (a page each), the boards,
+  the style frames, frames of the finished piece — ten to twenty pages, each read at a glance. A long file is not pasted
+  in: **write its substance as a page** — the direction's decisions, each with its evidence in a line. **`findings.md`
+  stays out**: a test run's report on the studio's own tools is for the studio. One book page whose text runs on for
+  more than three pages, or a `findings.md`, comes back as a warning; nightshift1's book was 46 pages, 27 of them its two
+  longest files.
 
 ---
 

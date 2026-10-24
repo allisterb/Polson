@@ -465,7 +465,8 @@ set's own check from *More than one audience*:
 - **The process book, last**: `Stage.book('process.pdf', { title, pages })` (Manual 18 §3c) — the brief, `concepts.md`
   (a concept to a page), the animatic, the style frames (and the kit sheet, with several audiences), a frame of each
   finished film (`comp.still`), and the graph of its key moves, every caption saying what was decided. It names only
-  files that exist, and draws nothing new.
+  files that exist, and draws nothing new. **It is the client's book**: ten to twenty pages; the direction as a page of
+  its decisions in your words, not the file; `findings.md` left out.
 
 {{PROJECT_DIR}}
 
