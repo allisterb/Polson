@@ -378,8 +378,8 @@ class FrontRoutingTests(unittest.TestCase):
         """Stands in for the CLI: writes a project directory and keeps the brief it was handed."""
         handed = {}
 
-        async def create(root, project_id, workflow, kind, brief):
-            handed.update(project_id=project_id, workflow=workflow, kind=kind, brief=brief)
+        async def create(root, project_id, workflow, kind, brief, auto=False):
+            handed.update(project_id=project_id, workflow=workflow, kind=kind, brief=brief, auto=auto)
             return project_dir(root, project_id, workflow=workflow)
         return handed, mock.patch.object(projects, "create", create)
 
@@ -560,10 +560,10 @@ class FakeCommissioner:
     def free_name(self, title: str) -> str:
         return catalogue.slugify(title).replace("-", "_")
 
-    async def commission(self, name, workflow, kind, brief, documents):
+    async def commission(self, name, workflow, kind, brief, documents, auto=False):
         if self.refuse is not None:
             raise self.refuse
-        self.made.append({"name": name, "workflow": workflow, "kind": kind, "brief": brief,
+        self.made.append({"name": name, "workflow": workflow, "kind": kind, "brief": brief, "auto": auto,
                           "documents": [Path(d).name for d in documents],
                           "contents": [Path(d).read_bytes() for d in documents]})
         project_dir(self.root, name, workflow=workflow, policy=False)
@@ -664,6 +664,15 @@ class CommissionedComposerTests(unittest.TestCase):
         self.assertEqual((made["workflow"], made["kind"], made["documents"]), ("trailer", "pitch", ["deck.pdf"]))
         self.assertIn("- Audience A: Singapore", made["brief"])
         self.assertIn("- One film per audience", made["brief"])
+        self.assertFalse(made["auto"], "asking is the default")
+
+    def test_decide_everything_commissions_an_autonomous_run(self):
+        reply = self.client.post("/requests", data=self.trailer("film-trailer", auto="1"), follow_redirects=False)
+        self.assertEqual(reply.status_code, 303, reply.text[:300])
+        self.assertTrue(self.commissioner.made[0]["auto"])
+        page = self.client.get("/compose/film-trailer").text
+        self.assertIn('name="auto" value="1"', page)
+        self.assertIn('name="auto" value="" checked', page)
 
     def test_a_film_trailer_is_not_given_the_workflows_lone_type(self):
         """The host offers `trailer` one type; the film trailer's card offers none, and the card decides."""

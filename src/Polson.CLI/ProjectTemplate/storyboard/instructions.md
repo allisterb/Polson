@@ -192,6 +192,8 @@ is the deliverable; one file per panel is not a board.
 
 {{DEADLINE}}
 
+{{AUTO}}
+
 {{DELIVERABLES}}
 
 {{TEST}}

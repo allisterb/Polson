@@ -106,6 +106,9 @@ public class CreateProjectOptions : Options
     [Option("test", Required = false, HelpText = "Run this workflow as an evaluation of the framework as well as a commission: the agent reports friction, errors and gaps in findings.md, and reading Polson's own source is denied so the run can say whether the published API was sufficient. Applies to any workflow, each of which exercises a different part of the stack.")]
     public bool Test { get; set; }
 
+    [Option("auto", Required = false, HelpText = "Autonomous mode: the agent asks the director nothing and waits for no one. Where the workflow would ask, it takes the answer it would have proposed and records the decision for review afterwards. For a director who wants to see what a workflow makes and leave it alone; omit it for the full director-in-the-loop run. Not kept across --reset unless given again.")]
+    public bool Auto { get; set; }
+
     [Option("inline-manuals", Required = false, HelpText = "The default, and kept so that commands which ask for it still parse: the workflow's judgment manuals are written into the instructions file — for Claude Code as files under manuals/ that CLAUDE.md imports. See --no-inline-manuals.")]
     public bool InlineManuals { get; set; }
 

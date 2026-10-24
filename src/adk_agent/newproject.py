@@ -120,7 +120,7 @@ class GenerateError(RuntimeError):
 def _run_create_project(
     projects_dir: Path, project_id: str, workflow: str,
     prompt: str | None, type_: str | None, force: bool, test: bool = False,
-    deadline: int | None = None, inline_manuals: bool = True,
+    deadline: int | None = None, inline_manuals: bool = True, auto: bool = False,
 ) -> Path:
     """Shells out to the one thing that knows how to build a project."""
     if not CLI_DLL.is_file():
@@ -153,6 +153,9 @@ def _run_create_project(
     # escape it, so an ADK test run is isolated by tool design rather than by host policy.
     if test:
         args += ["--test"]
+    # Nobody will answer: the project records it, and `studio.build` then gives the agent no `ask_director`.
+    if auto:
+        args += ["--auto"]
     # Minutes for the whole commission. Worth setting explicitly on this runtime: a
     # workflow default plus its breaker grace can exceed **Cloud Run's 3600s request
     # timeout**, and then the wall kills the run before the breaker can halt it cleanly —
@@ -262,7 +265,7 @@ def create(
     type_: str | None = None, force: bool = False, test: bool = False,
     deadline: int | None = None, documents: list[str] | None = None,
     projects_dir: Path = PROJECTS_DIR, apps_dir: Path = APPS_DIR, budget_tokens: int | None = None,
-    inline_manuals: bool = True,
+    inline_manuals: bool = True, auto: bool = False,
 ) -> tuple[Path, Path]:
     """Generates the project and its app. Returns `(project_dir, app_package)`."""
     if not VALID_APP_NAME.match(project_id):
@@ -271,7 +274,7 @@ def create(
             "letters, digits, underscores and dashes."
         )
     project = _run_create_project(
-        projects_dir, project_id, workflow, prompt, type_, force, test, deadline, inline_manuals)
+        projects_dir, project_id, workflow, prompt, type_, force, test, deadline, inline_manuals, auto)
     stage_documents(project, documents)
     return project, write_app(project, project_id, apps_dir, budget_tokens)
 
@@ -307,6 +310,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-inline-manuals", dest="inline_manuals", action="store_false",
                         help="Leave the workflow's manuals to be looked up instead of writing them into GEMINI.md "
                              "(the default writes them in).")
+    parser.add_argument("--auto", action="store_true",
+                        help="Autonomous: the agent asks the director nothing and waits for no one, deciding where "
+                             "the workflow would ask and recording each decision for review afterwards.")
     parser.add_argument("--projects-dir", type=Path, default=PROJECTS_DIR)
     args = parser.parse_args(argv)
 
@@ -315,7 +321,7 @@ def main(argv: list[str] | None = None) -> int:
             args.project_id, workflow=args.workflow, prompt=args.prompt,
             type_=args.type_, force=args.force, test=args.test,
             deadline=args.deadline, documents=args.documents,
-            projects_dir=args.projects_dir, inline_manuals=args.inline_manuals)
+            projects_dir=args.projects_dir, inline_manuals=args.inline_manuals, auto=args.auto)
     except GenerateError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1

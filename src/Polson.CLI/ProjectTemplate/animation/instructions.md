@@ -455,4 +455,6 @@ with the one you critiqued.
 
 {{DEADLINE}}
 
+{{AUTO}}
+
 {{TEST}}

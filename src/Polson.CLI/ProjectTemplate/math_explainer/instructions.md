@@ -349,6 +349,8 @@ verdict, every claim with the code that checked it, and every formula and word o
 
 {{DEADLINE}}
 
+{{AUTO}}
+
 {{DELIVERABLES}}
 
 {{TEST}}

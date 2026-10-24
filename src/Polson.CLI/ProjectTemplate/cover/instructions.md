@@ -206,6 +206,8 @@ quiet cover cannot tell a considered register from a palette that was simply des
 
 {{DEADLINE}}
 
+{{AUTO}}
+
 {{DELIVERABLES}}
 
 {{TEST}}

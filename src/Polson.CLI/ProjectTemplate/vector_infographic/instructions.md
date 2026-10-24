@@ -47,6 +47,8 @@ not a source.
 
 {{DEADLINE}}
 
+{{AUTO}}
+
 {{TEST}}
 
 {{PROJECT_DIR}}

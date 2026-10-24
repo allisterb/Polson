@@ -43,6 +43,8 @@ legitimate brief remains.
 
 {{DEADLINE}}
 
+{{AUTO}}
+
 {{TEST}}
 
 {{PROJECT_DIR}}

@@ -470,13 +470,15 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
                      card: str = Form(...), title: str = Form(""), route: str = Form("0"),
                      kind: str = Form(""), sizes: list[str] = Form([]), custom_size: str = Form(""),
                      formats: list[str] = Form([]), brief: str = Form(""), action: str = Form("save"),
-                     aud_place: list[str] = Form([]), aud_age: list[str] = Form([]),
+                     aud_place: list[str] = Form([]), aud_age: list[str] = Form([]), auto: str = Form(""),
                      files: list[UploadFile] = File([])) -> Any:
         state = request.app.state
         form_data = await request.form()
         extras = {k[2:]: str(v) for k, v in form_data.items() if k.startswith("x_")}
+        # "Decide everything": the project is made with `--auto`, so the agent asks nothing and waits on no one.
+        autonomous = bool(auto.strip())
         form = {"title": title, "route": route, "kind": kind, "sizes": sizes, "custom_size": custom_size,
-                "formats": formats, "brief": brief, "extras": extras,
+                "formats": formats, "brief": brief, "extras": extras, "auto": "1" if autonomous else "",
                 "audiences": [{"place": p, "age": aud_age[i] if i < len(aud_age) else ""}
                               for i, p in enumerate(aud_place)]}
 
@@ -488,7 +490,7 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
                 return composer(request, chosen, form, "This studio can watch requests but not make them. "
                                 "Use the create page instead.", 409)
             return await commissioned(request, chosen, form, title, route, kind, sizes, custom_size, formats,
-                                      extras, brief, aud_place, aud_age, files)
+                                      extras, brief, aud_place, aud_age, files, autonomous)
 
         scratch = Path(tempfile.mkdtemp(prefix="polson-request-"))
         try:
@@ -498,7 +500,7 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
             commission.card.check_files([p.name for p in staged])
             project_id = unique_id(state.root, commission.title)
             made = await projects.create(state.root, project_id, commission.workflow, commission.kind,
-                                         commission.brief_text([p.name for p in staged]))
+                                         commission.brief_text([p.name for p in staged]), auto=autonomous)
         except StudioError as exc:
             shutil.rmtree(scratch, ignore_errors=True)
             note = " Files have to be chosen again." if any((f.filename or "").strip() for f in files) else ""
@@ -528,7 +530,7 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
     async def commissioned(request: Request, chosen: catalogue.Card, form: dict[str, Any], title: str,
                            route: str, kind: str, sizes: list[str], custom_size: str, formats: list[str],
                            extras: dict[str, str], brief: str, aud_place: list[str], aud_age: list[str],
-                           files: list[UploadFile]) -> Any:
+                           files: list[UploadFile], autonomous: bool = False) -> Any:
         """The composer on a host that commissions rather than drives: the ADK runtime.
 
         The commission is checked, staged and named here and made by the host's commissioner, which applies
@@ -557,7 +559,7 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
             commission.card.check_files([p.name for p in staged])
             name = commissioner.free_name(commission.title)
             await commissioner.commission(name, commission.workflow, commission.kind,
-                                          commission.brief_text([p.name for p in staged]), staged)
+                                          commission.brief_text([p.name for p in staged]), staged, auto=autonomous)
         except Exception as exc:                                 # noqa: BLE001 - refusals carry a status
             status = 409 if isinstance(exc, StudioError) else getattr(exc, "status", None)
             if status is None:

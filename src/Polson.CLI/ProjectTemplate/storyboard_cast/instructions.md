@@ -244,6 +244,8 @@ as **one** file. A contact sheet is the deliverable; one file per panel is not a
 
 {{DEADLINE}}
 
+{{AUTO}}
+
 {{DELIVERABLES}}
 
 {{TEST}}

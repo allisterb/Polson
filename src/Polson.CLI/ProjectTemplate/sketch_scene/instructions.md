@@ -259,4 +259,6 @@ there, and re-run the stages after it. **A critique that finds nothing was not r
 
 {{DEADLINE}}
 
+{{AUTO}}
+
 {{TEST}}

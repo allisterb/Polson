@@ -1112,7 +1112,13 @@ class CommissionTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(where, "nothing is watched when nothing was started")
         create.assert_called_once_with("lighthouse", workflow="drawing", prompt="A lighthouse.", type_="review",
                                        deadline=intake.DEADLINES["drawing"], documents=[str(doc)],
-                                   budget_tokens=None)
+                                   budget_tokens=None, auto=False)
+
+    async def test_an_autonomous_commission_is_created_with_auto(self):
+        with mock.patch.object(intake, "archived_names", return_value=[]), \
+             mock.patch.object(intake, "create") as create:
+            await intake.commission(None, "lighthouse", "drawing", "A lighthouse.", "review", start=False, auto=True)
+        self.assertTrue(create.call_args.kwargs["auto"])
 
     async def test_what_the_form_refuses_commission_refuses_before_creating_anything(self):
         cases = (("lighthouse", "comic", "review", "x", 400, "not offered here"),

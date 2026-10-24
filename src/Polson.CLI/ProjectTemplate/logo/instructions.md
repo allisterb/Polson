@@ -36,6 +36,8 @@ refuse and report, not one you should guess around.
 
 {{DEADLINE}}
 
+{{AUTO}}
+
 {{TEST}}
 
 {{PROJECT_DIR}}

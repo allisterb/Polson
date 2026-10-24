@@ -177,8 +177,13 @@ async def run_turn(
     director_log = EventLog(project.director_events, "director", sink)
 
     transcript = Transcript(agent_log)
-    director = (director_factory(director_log) if director_factory
-                else director_mod.for_run(director_log, interactive=interactive))
+    # A project made with `create-project --auto` promised nobody would be needed, so nobody is attached, whoever is
+    # watching: every question is recorded and skipped, and the agent runs AUTONOMOUS.
+    if project.agent_behavior == "autonomous":
+        director = director_mod.AbsentDirector(director_log)
+    else:
+        director = (director_factory(director_log) if director_factory
+                    else director_mod.for_run(director_log, interactive=interactive))
     attended = director.attended
 
     config = build_config(

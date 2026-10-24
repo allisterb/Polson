@@ -164,6 +164,23 @@
         </label>
         {% endif %}
       {% endfor %}
+
+      <details class="fr-pop">
+        <summary class="ps-field"><span class="ps-field-label">Questions</span><span class="ps-field-value" data-summary>{{ 'Decide everything' if form.auto else 'Ask me' }}</span>{{ m.icon('chevron-down', 18) }}</summary>
+        <section class="ps-ogrid fr-panel fr-narrow" aria-label="Questions">
+          <h3 class="ps-ogrid-title">Questions</h3>
+          <p class="ps-ogrid-hint">Ask me: the studio stops at its few big decisions and waits a little for your click. Decide everything: it asks nothing, takes the answer it would have proposed, and lists each decision for you to review afterwards. For seeing what a workflow makes without waiting on it.</p>
+          <div class="ps-ogrid-tiles" style="--cols: 2">
+            {% for value, label in (('', 'Ask me'), ('1', 'Decide everything')) %}
+            <label class="ps-otile fr-plain" data-label="{{ label }}">
+              <input class="fr-vh" type="radio" name="auto" value="{{ value }}" {{ 'checked' if (form.auto or '') == value }}>
+              <span class="ps-otile-check" aria-hidden="true">{{ m.icon('check', 14) }}</span>
+              <span class="ps-otile-text"><span class="ps-otile-label">{{ label }}</span></span>
+            </label>
+            {% endfor %}
+          </div>
+        </section>
+      </details>
     </div>
   </header>
 

@@ -16,6 +16,8 @@ happens through files rather than through conversation.
 
 {{DEADLINE}}
 
+{{AUTO}}
+
 {{TEST}}
 
 ---

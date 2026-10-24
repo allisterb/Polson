@@ -113,6 +113,8 @@ call**, in their own script. On a clock this short that is real money and real t
 
 {{DEADLINE}}
 
+{{AUTO}}
+
 {{DELIVERABLES}}
 
 {{TEST}}
