@@ -108,6 +108,11 @@ def status_of(project: Path, run: Run | None, events: list[dict[str, Any]],
             if e.get("error") or how not in ("", "completed", "done"):
                 return "stopped"
             break
+    # A run this server did not start, whose record is still moving, is running: nightshift1, launched with `claude -p`,
+    # read as Stopped on the home page while its server wrote an event every few seconds, because only a watched run
+    # was ever called live. Judged by the record's own last timestamp, and only before its end.
+    if not agent_ended(project) and not any(e.get("type") == "run.end" for e in after) and recently_moved(after):
+        return "running"
     # A finished piece is the evidence that matters: Claude Code ends a run by stopping the MCP server, which
     # writes no run.end, so a run that delivered `final_a.mp4` would otherwise read as stopped.
     if any(e.get("type") == "render" and FINAL.fullmatch(Path(e.get("artifact") or "").stem) for e in after):
@@ -115,6 +120,23 @@ def status_of(project: Path, run: Run | None, events: list[dict[str, Any]],
     if any(e.get("type") == "run.end" for e in after) and any(e.get("type") == "render" for e in events):
         return "delivered"
     return "stopped"
+
+
+#: How recently a record must have moved for a run this server did not start to read as running. Longer than a model turn
+#: or an encode usually leaves it still (minutes, not seconds), shorter than a run that has died and left its record.
+LIVE_WINDOW_SECONDS = 300.0
+
+
+def recently_moved(events: list[dict[str, Any]], now: float | None = None) -> bool:
+    """Whether the newest timestamped event is within `LIVE_WINDOW_SECONDS` of `now`. An event with no `ts` says nothing."""
+    stamps = [e.get("ts") for e in events if e.get("ts")]
+    if not stamps:
+        return False
+    try:
+        newest = datetime.fromisoformat(max(stamps).replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return False
+    return (now if now is not None else time.time()) - newest <= LIVE_WINDOW_SECONDS
 
 
 def agent_ended(project: Path) -> bool:

@@ -266,6 +266,10 @@ public abstract record RequisitionResult
     /// </remarks>
     public string FailureName => Failure.ToString();
 
+    /// <summary>Whether the generation was served from the cache, so cost nothing: <c>provenance.fromCache</c>, at the top.</summary>
+    /// <remarks>nightshift1 read <c>cutout.fromCache</c>, found it undefined, and could not branch on whether a call was free.</remarks>
+    public bool FromCache => Provenance?.FromCache ?? false;
+
     /// <summary>What to do next, phrased for the agent reading it.</summary>
     public virtual string Remedy => ImageGenerationResult.RemedyFor(Failure);
 
@@ -576,8 +580,14 @@ public sealed record CutoutAsset : RequisitionResult, IDataUriSource
     /// Null rather than a throw, because a panel loop asks this about every character it might show
     /// — the same reason <c>Shot.element(name)</c> answers a question rather than raising an error.
     /// </remarks>
+    /// <remarks>
+    /// A cutout of one view has one cell, named <c>subject</c>, whatever view it shows; asked for by a view's name it answers
+    /// with that cell, as nightshift1 expected, rather than null — which surfaced seven lines later as a property of null.
+    /// A sheet of several answers only to its own names.
+    /// </remarks>
     public CutoutCell? Cell(string name) =>
-        Cells.FirstOrDefault(c => string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase));
+        Cells.FirstOrDefault(c => string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase))
+        ?? (Cells is [{ Name: "subject" } only] ? only : null);
 
     /// <summary>The whole sheet as a data URI. Usually you want a cell instead.</summary>
     public string ToDataUri() => Bytes.Length > 0
