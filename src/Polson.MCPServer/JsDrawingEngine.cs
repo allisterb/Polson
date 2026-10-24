@@ -788,7 +788,7 @@ public partial class JsDrawingEngine : Runtime
             // use an explicit `return`, which is what the reference tells it to do.
             needsAwait = AwaitPattern().IsMatch(jsScript);
             var source = needsAwait
-                ? $"(async () => {{\n{jsScript}\n}})();"
+                ? $"(async () => {{\n{ReturnTrailingName(jsScript)}\n}})();"
                 : jsScript;
 
             // The opener is its own line, so every position Jint reports for a wrapped script is
@@ -796,6 +796,8 @@ public partial class JsDrawingEngine : Runtime
             // nothing: an off-by-one sends a reader to the line above the mistake, which in a
             // long file is usually a plausible-looking statement they will then try to fix.
 
+            // The same limit Jint enforces between statements, made visible to native work that runs between them.
+            using var deadline = ScriptDeadline.Begin(TimeSpan.FromSeconds(ScriptTimeoutSeconds));
             var evalResult = await engine.EvaluateAsync(source, null, ct);
             sw.Stop();
 
@@ -841,11 +843,13 @@ public partial class JsDrawingEngine : Runtime
                 result.ReturnValue = evalResult.ToObject();
                 result.ResultCanvas = lastCanvas;
                 result.ImageBytes = Encode(() => lastCanvas.ToImageBytes(format, quality));
+                WarnOfFallback(result, needsAwait, evalResult, canvases.Count + papers.Count, "canvas");
             }
             else if (papers.Count > 0)
             {
                 finalPaper = papers.Last();
                 result.ReturnValue = evalResult.ToObject();
+                WarnOfFallback(result, needsAwait, evalResult, canvases.Count + papers.Count, "paper");
             }
             else
             {
@@ -1161,6 +1165,51 @@ public partial class JsDrawingEngine : Runtime
             "bitmap.palette(...) measure natively, and Skia.Shader / Skia.ImageFilter transform " +
             "natively.";
     }
+
+    /// <summary>
+    /// Notes when an awaiting script returned nothing and the render fell back to the last surface it made, of several.
+    /// </summary>
+    /// <remarks>
+    /// The wrapper makes a bare trailing <c>sheet;</c> a statement, so the render is whatever was created last: a scratch
+    /// canvas drawn into a contact sheet's cells was shown in place of the sheet, silently, and a run spent its time
+    /// debugging scaling that worked. With one surface the fallback is right. Recorded rather than logged here, because
+    /// only <c>ExecuteScript</c> knows whether the render goes anywhere: <see cref="FallbackWarning"/>.
+    /// </remarks>
+    private static void WarnOfFallback(DrawingExecutionResult result, bool wrapped, JsValue returned, int surfaces, string kind)
+    {
+        if (wrapped && returned.IsUndefined() && surfaces >= 2) result.FallbackSurfaces = surfaces;
+    }
+
+    /// <summary>
+    /// An awaiting script whose last line is only a name — <c>sheet;</c> — with that line made <c>return sheet;</c>, so it
+    /// renders what it names, as the same line does in a script that does not await. Line numbers are unchanged.
+    /// </summary>
+    /// <remarks>
+    /// The documented way to hand back a drawing is a bare trailing name, and the async wrapper silently turned it into a
+    /// statement: uberpitch1's <c>RESULT;</c> rendered a scratch canvas instead of its sheet. Only a lone name or member
+    /// chain is rewritten — the whole line, or its last statement after a semicolon — never a keyword; anything else
+    /// still needs its own <c>return</c>.
+    /// </remarks>
+    internal static string ReturnTrailingName(string script)
+    {
+        var lines = script.Split('\n');
+        for (var i = lines.Length - 1; i >= 0; i--)
+        {
+            var line = lines[i].TrimEnd('\r');
+            if (line.Trim().Length == 0 || line.TrimStart().StartsWith("//", StringComparison.Ordinal)) continue;
+            var m = TrailingName().Match(line);
+            if (!m.Success || NotAName.Contains(m.Groups["name"].Value.Split('.')[0])) return script;
+            lines[i] = $"{m.Groups["head"].Value}return {m.Groups["name"].Value};{m.Groups["comment"].Value}";
+            return string.Join('\n', lines);
+        }
+        return script;
+    }
+
+    /// <summary>The warning for a render that fell back to the last of several surfaces, or null.</summary>
+    internal static string? FallbackWarning(DrawingExecutionResult result) => result.FallbackSurfaces < 2 ? null
+        : $"[WARN] This script uses await and returned nothing, so the render is the last surface it created, of "
+            + $"{result.FallbackSurfaces} — which may be a scratch surface rather than the one you meant. In a script that "
+            + "awaits, a bare last line is not the result: end it with `return sheet;`, naming what to render.";
 
     /// <summary>A rejected promise, explained as fully as a thrown error is.</summary>
     /// <remarks>
@@ -1661,6 +1710,14 @@ public partial class JsDrawingEngine : Runtime
     /// numbering. They cannot drift while both read this.
     /// </remarks>
     private const int WrapperLines = 1;
+
+    /// <summary>Words a lone trailing line may be that are not a value to return.</summary>
+    private static readonly HashSet<string> NotAName = ["return", "break", "continue", "debugger", "this", "undefined", "null",
+        "true", "false", "let", "const", "var", "async", "await", "yield"];
+
+    /// <summary>A line whose last statement is only a name or member chain, its semicolon and comment optional.</summary>
+    [System.Text.RegularExpressions.GeneratedRegex(@"^(?<head>\s*|.*;\s*)(?<name>[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*;?\s*(?<comment>//.*)?$")]
+    private static partial System.Text.RegularExpressions.Regex TrailingName();
 
     [System.Text.RegularExpressions.GeneratedRegex(@"\bawait\s")]
     private static partial System.Text.RegularExpressions.Regex AwaitPattern();

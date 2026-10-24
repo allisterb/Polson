@@ -5,11 +5,14 @@ stages, the reasoning it wrote into `Stage.note`, the scripts it ran, the artifa
 the failures — and none of it is in your context, because you did not have that run.
 
 Call it before you plan, and again whenever you are about to attempt something an earlier pass may
-already have an answer for:
+already have an answer for. **`Recall` is a tool, like `ExecuteScript` and `Search` — not a function inside a
+script**: call it directly, with the question as its `query`.
 
-```javascript
-Recall('how the arcade proportions were set')
+```text
+Recall  query: "how the arcade proportions were set"
 ```
+
+Written as `Recall(...)` inside `ExecuteScript` it fails with *"Recall is not defined"*, and costs a script to learn so.
 
 Read the `runs` field first, because three outcomes look alike and are not:
 

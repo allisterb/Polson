@@ -1,6 +1,6 @@
 # Studio Manual 25: Scoring Motion
 
-> **Credits & Theoretical Foundation**: **§11 distils Walt Stanchfield's *Drawn to Life* (vol. 1 ch. 41 and others), cited by chapter there; §1–§10 distil no book in `reference/`.** This header used to say the corpus held no animation text. That was wrong: Stanchfield taught at Disney, and his lectures, ledgered on 2026-09-25 and first read only for gesture, include chapters on timing, phrasing and overlap. §5's received practices are corroborated there. The rest comes from three places, each named where it is used: the **position paradigm** is GSAP's, adopted deliberately and credited (it is not from the corpus and no claim is made about the rest of that library); the **cost figures** are our own measurements, recorded in `docs/motion-score-api.md` §3; and the **seek-rather-than-play** model is the studio's own, argued from the medium — an agent renders frames, it does not watch them. Where this manual states a principle of timing craft that animators have long known, it is stated as received practice without attribution to a source we have not read. The calls are documented at `polson://sdk/core/Motion`.
+> **Credits & Theoretical Foundation**: **§5 distils John Lasseter, "Principles of Traditional Animation Applied to 3D Computer Animation" (*Computer Graphics* 21(4), SIGGRAPH '87, pp. 35–44) and John Colette & Austin Shaw, *Motion Design Toolkit* (Routledge, 2023), ch. 1, 2 and 8; §12 distils Colette & Shaw ch. 1, 7 and 11; both ledgered 2026-10-24 and cited by section or chapter where used. §11 distils Walt Stanchfield's *Drawn to Life* (vol. 1 ch. 41 and others), cited by chapter there; §1–§4 and §6–§10 distil no book in `reference/`.** Lasseter's source, Thomas & Johnston's *The Illusion of Life* (1981), is not in `reference/` and is cited only through him. This header used to say the corpus held no animation text. That was wrong: Stanchfield taught at Disney, and his lectures, ledgered on 2026-09-25 and first read only for gesture, include chapters on timing, phrasing and overlap. §5's received practices are corroborated there. The rest comes from three places, each named where it is used: the **position paradigm** is GSAP's, adopted deliberately and credited (it is not from the corpus and no claim is made about the rest of that library); the **cost figures** are our own measurements, recorded in `docs/motion-score-api.md` §3; and the **seek-rather-than-play** model is the studio's own, argued from the medium — an agent renders frames, it does not watch them. Until 2026-10-24 §5 stated its timing craft as received practice without a source; it is now sourced, and anything in it that is the studio's own is marked as ours. The calls are documented at `polson://sdk/core/Motion`.
 > **Purpose**: How to build a piece of motion that can be inspected, revised and resumed — why a score is a function of time rather than a sequence of events, how to place beats so that editing one does not break the rest, and how to look at a result you cannot watch. **It governs the building of a score, not the decision that the piece should move**; see the scope note below.
 
 ---
@@ -24,8 +24,9 @@
 >
 > **And read the firmness here differently from `polson://manual/13`.** That manual is prescriptive
 > because §2 is about *truth* — a bar's length makes a claim that can be false. **Motion makes no
-> such claim, so this manual has no §2 and is mostly craft.** §5 in particular is received practice,
-> corroborated by Stanchfield (§11) but not measured; treat it as advice from a tradition rather than as a finding.
+> such claim, so this manual has no §2 and is mostly craft.** §5 in particular is the animation tradition's craft —
+> sourced to Lasseter and to Colette & Shaw, corroborated by Stanchfield (§11) — but not measured; treat it as advice
+> from a tradition rather than as a finding.
 > The one part that behaves like a correctness rule is §1's purity property, and even that binds
 > **conditionally** — it is what makes seeking work, so it applies exactly when you want seeking.
 >
@@ -206,17 +207,131 @@ The watching is a judgment, and the check records it as one itself. Settle a str
 
 ## 5. Timing Craft
 
-> **Implemented by**: the `easing` and `each` options, and `mina`'s curves.
+> **Implemented by**: on a timeline, the `easing` and `each` options and `mina`'s curves; in a `Motion.composition`, each
+> waypoint's `ease` (`'clamped'`, `'halt'`, `'linear'`, `'constant'`, `'auto'`), a layer's `scale`, and nested groups.
 
-The mechanics above will produce motion that is technically correct and lifeless. Four received practices fix most of it:
+The mechanics above produce motion that is technically correct and lifeless. The craft that fixes it is old: the Disney
+studio named it in the 1930s, Lasseter carried it into keyframed computer animation in 1987, and Colette and Shaw restate
+it for motion designers (ch. 8). What follows is that craft, as it lands in this engine.
 
-**Nothing starts and stops abruptly.** Linear motion reads as mechanical because almost nothing in the world moves that way. `mina.easeinout` is the default worth reaching for; `mina.easein` for something departing, `mina.easeout` for something arriving.
+### 5a. Timing is weight, and it is meaning
 
-**Overlap, do not queue.** Beats that abut exactly read as a list of events. Start the next one slightly before the last has settled — `'-=200'` — and they read as one movement. This is the single change that most improves a mechanical-looking score.
+**The spacing of a move, not the drawing of it, decides what it weighs** (Lasseter §2.2). A heavy thing is slow to start
+and slow to stop; a light one starts at a flick and is stopped by the air. Two identical shapes read as a cannonball and a
+balloon by timing alone. The same holds for size — a giant moves slower than a man — and for mood: lethargic, nervous,
+relaxed and excited are differences of speed before they are differences of pose.
 
-**Let things overshoot and settle.** `mina.backout` carries a move past its target and brings it back; `mina.elastic` does it repeatedly. Used on an arrival it reads as weight. Used everywhere it reads as a toy.
+Timing is also meaning. Lasseter reprints Thomas and Johnston's demonstration: one head, turned from one shoulder to the
+other between two fixed drawings. With no inbetween the character has been struck by a huge force; with one, hit by a
+thrown pan; with four, he is giving a crisp order; with eight, searching a shelf; with ten, stretching a sore muscle. The
+poses never change. **So a move's length in frames is a choice of meaning: count it, and say what it is for**, rather
+than taking whatever duration a beat happened to get.
 
-**Stagger anything that repeats.** Four bars arriving together are one event; arriving 90 ms apart they are a sequence the eye can follow. `each` between 60 and 120 ms is usually right — below that it reads as simultaneous, above it as four separate events.
+Spend **enough time and no more** on each of the three parts of an action — the preparation, the action, the reaction —
+for the audience to read it: too long and attention wanders, too short and the idea is gone before it is noticed
+(§2.2). **Rhythm is the alternation** (Colette & Shaw, ch. 1): slower *hero* moments hold the compositions that carry the
+information, faster moves bring things in and change the scene. A film that is all one speed has no hero moments.
+
+### 5b. Eases: how a move starts, passes and stops
+
+**Nothing starts and stops abruptly.** Linear motion reads as mechanical because almost nothing in the world moves that
+way (Lasseter §2.7, *slow in and out*; Colette & Shaw, ch. 2). On a timeline, `mina.easeinout` is the default worth
+reaching for; `mina.easein` for something departing, `mina.easeout` for something arriving.
+
+> [!WARNING]
+> **The words are reversed between tools.** `mina` follows the web's naming, where *ease-in* means a slow start. After
+> Effects, and Colette and Shaw with it, call a slow start an *ease-out* — easing out of the first key — and a slow
+> arrival an *ease-in*. Read a source by what the motion does, not by the word.
+
+In a composition, the ease belongs to each waypoint, and the choice is between five behaviours:
+
+| Want | `ease` | Why |
+| :--- | :--- | :--- |
+| a move that starts or stops at this key | `'halt'` | slow out of it, slow into it — the classic ease |
+| a move that **passes through** this key without stopping | `'clamped'` (default) | smooth, and never overshoots its neighbours. A middle key set to `'halt'` makes the move stop and restart there, a stutter Colette and Shaw single out (ch. 2); ease the ends, pass through the middle |
+| constant speed | `'linear'` | for the mechanical only — a conveyor, a ticker, a turning dial |
+| a cut on one element | `'constant'` | holds, then jumps: a hold key. A letter or a shape that jumps on the beat while everything else flows reads as an edit inside the frame (ch. 2) |
+| a move that may swing past and settle | `'auto'` | a TCB spline: `tension`, `continuity` and `bias` shape it, and it **can overshoot** |
+
+**Overshoot is a choice, never an accident.** Lasseter's Luxo Jr. had a heavy base that should sit, pop up, arc and land
+dead; the spline overshot every held key and sent the base through the floor before and after each hop (§2.7). He fixed
+it by locking the keys. Here `'clamped'` is that lock: use it for anything resting on a surface or reaching a limit, and
+reach for `'auto'` — or, on a timeline, `mina.backout`, which carries a move past its target and brings it back — only
+where the overshoot is the point. On an arrival it reads as weight; everywhere, it reads as a toy.
+
+**Move together with one curve.** When position, scale and rotation change as one action, give them the same keys and
+the same eases (Colette & Shaw, ch. 2): different curves on parts of one move make it wobble.
+
+### 5c. The path is not the timing
+
+**A natural move travels on an arc** (Lasseter §2.8). When one spline carries both the path and the timing, a fast move
+flattens its arc into a straight line — the faster, the flatter — and the life goes out of it. Colette and Shaw make the
+same split, *spatial* against *temporal* interpolation (ch. 2). This engine has no path to move along, so keep the arc
+yourself: **put a key at the arc's high point** with `'clamped'`, which passes through smoothly, and time the move with
+the eases at its ends. For a throw or a hop, key the rise and fall separately from the travel across.
+
+### 5d. Squash and stretch keep their volume
+
+Living and soft things change shape as they move; the rule that makes it read is that **the volume stays the same**
+(Lasseter §2.1): a squash that does not widen looks like shrinking, a stretch that does not narrow looks like growing.
+With `scale`, stretch along the direction of travel by `s` and narrow across it by `1/s`, turning the layer to its path
+first. The more it squashes, the softer the material reads; a rigid object squashes only by folding at its joints, as
+Luxo Jr. does.
+
+**Stretch also hides strobing.** In a fast move, successive positions stop overlapping and the eye sees separate copies
+(§2.1). Motion blur is the realistic cure; stretching the shape along its path until its positions nearly overlap is the
+other. **Never on text**: a stretched or blurred figure is an unreadable one.
+
+### 5e. Anticipation, sized to the action
+
+Every action has three parts: the preparation, the action, and its end (§2.3). The preparation tells the audience what
+is about to happen and where to look. **Its size follows the action's speed**: a very fast action needs a larger
+anticipation, or the audience misses it — Wally B.'s zip-off lasts three or four frames, after a wind-up long enough that
+no one doubts what is coming — and a slow action needs almost none. A small pull back before a figure lands, or a beat
+of stillness before a reveal, is anticipation in motion graphics.
+
+### 5f. Staging: one idea at a time
+
+**Present one idea at a time, in the strongest and simplest way, before the next** (§2.4). Where several things move at
+once the eye does not know where to look, and the main idea is upstaged. Two facts decide where the eye goes: **in a
+still scene it goes to what moves; in a busy scene, to what is still.** In Luxo Jr. only one lamp did anything important
+at a time, and the other's motion was turned down to let it. And **stage in silhouette**: an action that would read only
+in front of the body is moved to the side, where its outline carries it.
+
+### 5g. Follow-through, overlap, and the order of keying
+
+**Overlap, do not queue.** Beats that abut exactly read as a list of events. Start the next one slightly before the
+last has settled — `'-=200'` on a timeline — and they read as one movement. This is the single change that most
+improves a mechanical-looking score. Lasseter's account of why (§2.5): a character who knows what he is doing next does
+not finish one action before thinking of the next — the door is still closing as the hand reaches for the key — so the
+actions of one intention overlap.
+
+**Loose parts follow, by their weight** (§2.5). A move begins at its lead — the hips in a walk, the wrist in a gesture,
+the eyes before the head — and the rest follows. Appendages drag behind and keep going after the lead stops; **the
+heavier they are, the further they drag and the longer they take to settle.** Give each part its own lag and settle, and
+the material reads without a word.
+
+**Stagger anything that repeats.** Four bars arriving together are one event; arriving 90 ms apart they are a sequence
+the eye can follow. `each` between 60 and 120 ms is usually right — below that it reads as simultaneous, above it as four
+separate events. Colette and Shaw call the composition version *duplicate and offset*: build one passage, then reuse it
+later (ch. 1) — a group's `timeOffset` here.
+
+**Key from the trunk down** (§2.6). Lasseter found that keying whole poses at once in a hierarchy made the inbetweens
+unpredictable; instead he keyed one transformation at a time, starting at the root and working out along the branches,
+with fewer keys on each. Here: key the scene group's move first, then the group inside it, then the parts.
+
+### 5h. Secondary action stays secondary
+
+A secondary action results from the primary one — a cord rippling behind a hop, feet dragging behind a body — and adds
+life **only while it stays subordinate** (§2.10). One that competes is the wrong choice or badly staged. A change of
+facial expression during a large body move is not seen at all: **put it before the move or after**, and stage it where it
+can be read.
+
+### 5i. Appeal, and no twins
+
+Appeal is what the eye wants to stay on: clear design, simple shapes, a readable move (§2.11). Its commonest killer in a
+pose is **twins** — both arms or both legs doing the same thing, one side of a face mirroring the other — which reads as
+stiff. Vary each side: one arm leads, one shoulder rises, the head turns off the axis.
 
 > [!TIP]
 > **A hold is a beat.** Motion that never rests gives the reader nowhere to look. Leave gaps — a `'+=400'` before a reveal is not wasted time, it is the pause that makes the reveal land.
@@ -828,3 +943,61 @@ comp.render(stress.frame / FPS);
 ```
 
 **For the critique, take Stanchfield's order** (chs. 55, 56): before judging anything, name the two or three moments the scene is for; then look at the extremes in order, and again in reverse, which shows an awkward pose the forward order hides.
+
+---
+
+## 12. Cutting, Resolving and Sound
+
+> **Implemented by**: parts joined with `Motion.joinVideos`, `comp.switch` for cuts, a wipe (a keyed `rectangle` with `blend: 'alphaOver'`), groups that stay across a change, and a line of speech placed at the join.
+
+A score decides how things move inside a shot. A film is also decided by how one shot follows another, and by the sound
+under them. Colette and Shaw borrow the editor's vocabulary for motion design (ch. 7) and the sound designer's (ch. 11).
+
+### 12a. Continuity or montage
+
+**Continuity** cuts so that the audience feels one uninterrupted flow: a wide shot that establishes, closer shots that
+focus, each placed so it follows from the last. **Montage** juxtaposes, without needing a continuous time or place, and
+comes in three kinds (ch. 7):
+
+- **Additive** — several shots of one subject building one impression;
+- **Comparative** — different places or ideas set side by side for the viewer to resolve the contrast;
+- **Rhythmic** — cuts on a fixed interval, so the edit itself becomes a beat the audience anticipates.
+
+An explainer that answers question after question is continuity; a trailer's opening of quick, unrelated images is
+montage. Choose which the piece is before the beats, and keep to it.
+
+### 12b. The resolve
+
+**The resolve, or lock-up, is a film's last shot, and the earlier shots are often close-ups of it** (ch. 1). A run of
+tight vignettes introduces the colours, the style and the elements; the camera pulls back, or the pieces assemble, and
+the final frame — the title, the logo, the product, the ask — answers the question the vignettes posed. Sports openers
+and main titles do this constantly (ch. 7). Plan the resolve first and design the shots that lead to it as parts of it;
+Manual 29 §8 makes the same point from the concept's side.
+
+### 12c. The partial edit
+
+**A cut is not the only change.** In motion, some elements can stay while others change around them — a kind of partial
+edit that smooths a transition, keeps one element emphasised across it, or gives a gentler rhythm (ch. 7, *spatial
+editing*), as one instrument holds while the others change chords. Here: keep the element in a group outside both scenes'
+groups, and change the scenes around it. **A figure carried across a change of scene stays one figure**, which is
+clearer than the same figure set again after a wipe.
+
+### 12d. Sound leads and trails
+
+**A J cut brings the sound of the next shot in before its picture; an L cut lets the sound of this shot run on over the
+next** (ch. 7). Both bind shots together. With narration, start a scene's first line a beat before its picture cuts in,
+or let a closing line finish over the next scene's first frames, rather than cutting voice and picture on the same
+frame. Give each line once, at the join, with its own start.
+
+### 12e. Which leads: the sound or the image
+
+**Close your eyes: if the piece still makes sense, it is audio-dominant**, and the images illustrate the soundtrack — a
+narrated explainer, a voiced pitch. If not, it is image-dominant, and sound heightens what is seen (ch. 11). Neither is
+better, but they are designed differently: an audio-dominant film times its pictures to the voice; an image-dominant
+one places its sounds on the movements. Sound born in the scene — a whoosh as a shape passes, an impact — is diegetic;
+music added over it is not.
+
+**Many viewers will have the sound off.** Social feeds and screens in public places mostly play silent (ch. 11), so a
+film meant for them must make its case with the sound off — every claim on screen, not only in the voice — and should
+still be cut to a track, so that even silent it moves to a rhythm. A silent film with no track behind its timing tends
+to have none.

@@ -75,6 +75,13 @@ public class DrawingExecutionResult
     [JsonIgnore]
     public bool RenderedFromPaper { get; set; }
 
+    /// <summary>
+    /// How many surfaces an awaiting script made when it returned nothing and the render fell back to the last; 0 otherwise.
+    /// Above one, the render may be a scratch surface, and <c>ExecuteScript</c> says so when it hands the render back.
+    /// </summary>
+    [JsonIgnore]
+    public int FallbackSurfaces { get; set; }
+
     /// <summary>The canvas whose pixels are the result, when a canvas is; its layout is audited as a paper's is.</summary>
     [JsonIgnore]
     public SkiaCanvas? ResultCanvas { get; set; }

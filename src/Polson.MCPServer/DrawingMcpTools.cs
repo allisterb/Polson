@@ -956,6 +956,9 @@ public partial class DrawingMcpTools
             var runTask = Task.Run(() => Engine.Execute(script, width ?? 800, height ?? 600, session, fmt, q, executionId, render ?? true, scriptPath, scriptArgs?.ToJsonString()), cancellationToken);
             var result = await RunWithHeartbeatAsync(runTask, progress, HeartbeatInterval, cancellationToken);
 
+            // The render is handed back (and to outFile): say when it may be a scratch surface rather than the one meant.
+            if (result.ImageBytes is { Length: > 0 } && JsDrawingEngine.FallbackWarning(result) is { } fallback) result.Logs.Add(fallback);
+
             // outFile names a file the caller will open next. A script that rendered nothing used to
             // report success and write nothing, so the file simply was not there and nothing said why.
             if (!string.IsNullOrWhiteSpace(outFile) && result.Success && result.ImageBytes is not { Length: > 0 })

@@ -1417,12 +1417,12 @@ internal static class ProjectGenerator
         // across panels, and a cover is one frame — offering it would advertise a sequence this
         // workflow cannot compose. 16 is here rather than in any other workflow because this is the
         // only one where buying material is the intended route rather than a last resort.
-        ["cover"] = ["09", "16", "20"],
+        ["cover"] = ["09", "16", "20", "29"],
         // Composition and type are the craft; 14 because its §3a is the print file every comp writes and
         // its size arithmetic. 16 (requisition) and 13 (cultural research) are named by URI where they
         // apply rather than imported. With the film type this comes to ~164k, past the 150k total at which
         // Claude Code warns — a warning, not truncation (see ImportedManuals), and kept on purpose.
-        ["poster"] = ["09", "11", "14"],
+        ["poster"] = ["09", "11", "14", "29"],
         // Gesture is the method and the line of action is its first step; composition carries the
         // mood family, staging the camera if the brief implies one. 23 is absent: at sketch size the
         // head's tilt and the look carry the expression, and the instructions name it by URI.
@@ -1431,16 +1431,18 @@ internal static class ProjectGenerator
         // action and the pose method supply the keys. Composition and staging are left out: one
         // figure, one action, and the frame is not what is being judged.
         ["animation"] = ["25", "24", "28"],
+        // 29 (concepts: verbs, figures, signs, the kit) to the four workflows that start from a concept — a cover, a
+        // poster, a trailer, a mark — and the kit of parts is how a set across audiences holds together.
         // Scoring motion is the method; composition and type are what a trailer moves. 24 and 28 (the figure) are absent:
         // a trailer here is shapes and type, not a character.
-        ["trailer"] = ["25", "09", "11"],
+        ["trailer"] = ["25", "09", "11", "29"],
         // Scoring motion carries *Mathematics on screen* (equations, axes, counting numbers, the checks); composition and
         // type lay out a scene of formulas. No figure manuals: an explainer is formulas and graphs, not a character.
         ["math_explainer"] = ["25", "09", "11"],
         ["painting"] = ["09", "07"],
         ["vector_infographic"] = ["09", "13"],
         ["infographic"] = ["09", "13"],
-        ["logo"] = ["09", "11"],
+        ["logo"] = ["09", "11", "29"],
     };
 
     /// <summary>The judgment manuals for one workflow, in full, as one Markdown block, or empty.</summary>

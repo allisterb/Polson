@@ -54,7 +54,7 @@ concepts when a comp fails is normal, and is recorded rather than hidden.
 | 5. **Direction** | `direction.md`: every choice with its evidence (below). | — decide and cite |
 | 6. **Comps** | Two or three comps on the paper, then the checks. | **Q7** In a two-second glance, what must a passer-by take in — and does the focal point deliver it? |
 | 7. **Feedback** | The director looks fresh; revise. | **Q8** Does it hold from across the room? — answered with the distance renders beside the comp |
-| 8. **Variant / series** | Across the audiences: hold the system (grid, type, title) if it serves all of them — never the image, its composition or the palette, which are what each audience's evidence decides. | — |
+| 8. **Variant / series** | Across the audiences: hold the system (grid, type, title) if it serves all of them — never the image, its composition or the palette, which are what each audience's evidence decides. The set is a kit, fixed and variable parts written down (Manual 29 §7); words every audience reads carry no slang, rhyme or puns, and a translated line is marked not checked by a native speaker (§6). | — |
 | 9. **Deliver** | Picture, print file, `direction.md`, `findings.md`. | — |
 
 **Ask all of a stage's questions at once, each with your proposed answer**, so the director can accept
@@ -117,6 +117,10 @@ it uses so `direction.md` can say why:
   overlap, activate the diagonal, manipulate scale, use text as image, tell a story, double the
   meaning, amplify, make eye contact, make a system — and, where the type allows, overwhelm the eye
   and assault the surface.
+- **Activation and signs** (Lupton, *Graphic Design Thinking*; Manual 29 §3, §5): apply a verb to the obvious image —
+  magnify, multiply, invert, dissect, combine, melt — or choose the sign's kind on purpose: an icon that resembles, an
+  index that traces, a symbol that stands by convention. For a set across audiences, a symbol is the riskiest kind:
+  check it against each audience.
 
 What carries: **one dominant element**, never everything at equal weight; **three objects or
 groupings at most**; unequal areas rather than equal ones; white space over filling the frame. A
