@@ -15,6 +15,9 @@ public class VectorLogoToolkit
 {
     #region Constants
     public const float Phi = 1.61803398875f;
+
+    /// <summary>Construction labels' face: Arial where Windows has it, Liberation Sans or DejaVu Sans in the Linux image.</summary>
+    internal const string GuideFamily = "Arial, 'Liberation Sans', 'DejaVu Sans', sans-serif";
     #endregion
 
     #region Mathematical SVG Path Generators
@@ -604,7 +607,8 @@ public class VectorLogoToolkit
             group.Append(sq);
 
             var txt = paper.Text(cx + margin * 0.35f, cy + margin * 0.65f, "X");
-            txt.Attr(new Dictionary<string, object?> { ["fill"] = csStyle.Line, ["font-size"] = "11px", ["font-family"] = "sans-serif" });
+            // An installed face first: a paper refuses a generic-only family (FontAudit.Require), guide labels included.
+            txt.Attr(new Dictionary<string, object?> { ["fill"] = csStyle.Line, ["font-size"] = "11px", ["font-family"] = GuideFamily });
             group.Append(txt);
         }
 

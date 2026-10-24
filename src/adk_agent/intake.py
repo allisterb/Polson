@@ -106,7 +106,9 @@ WORKFLOWS: dict[str, tuple[str, ...]] = {
     # `product` is a product ad; `report` explains a long document the director attached (a 10-K) — the Nebius entry,
     # read by Nemotron through `Documents.ask` and needing no Qloo. **No type is a film trailer**, so it is in
     # `UNTYPED_IS_A_CHOICE` below.
-    "trailer": ("product", "report"),
+    # `pitch` tells a startup's case from its own deck (and model) to investors, every projection marked as one; with
+    # places, a film per investor audience in its conventions.
+    "trailer": ("pitch", "product", "report"),
     # **The Nebius entry's.** A theorem or concept explained in the model's own argument, every formula and claim checked
     # before it is drawn (`Equation`, `Verify.derivation`, `Verify.claim`, whose code Nemotron writes) and the film read
     # back after. Untyped. Documents are optional material (lecture notes, a textbook page), never the subject.
@@ -224,6 +226,9 @@ DEADLINES: dict[str, int] = {
     # The craft defaults. They need the keepalive: without it the ceiling is 38 and `check` clamps them to it.
     "poster": 45,
     "trailer": 60,
+    # A type's own entry, `workflow.type`, wins over its workflow's: a pitch is two minutes of narrated film to a
+    # trailer's fifteen seconds. The CLI's craft default agrees (`ProjectGenerator.WorkflowDeadlines`).
+    "trailer.pitch": 90,
     "math_explainer": 60,
 }
 
@@ -264,17 +269,19 @@ def _base_token_cap() -> int | None:
 #: `math_explainer` at twice: every stage checks before it draws, and each check is a turn that resends the whole
 #: context (55k tokens at the start, 172k by the end). ftcexplainer1 (3.7 Flash, 2026-10-23) had spent 1.8M of 2M by
 #: Deliver and had not written its findings; ftcexplainer3 (3.5 Flash) hit 2M in its build stage after 57 turns.
-TOKEN_SCALE: dict[str, float] = {"math_explainer": 2.0}
+#: `trailer.pitch` at twice, keyed like `DEADLINES`: about nine scenes and their narration against a trailer's handful, and
+#: no measured run behind it yet.
+TOKEN_SCALE: dict[str, float] = {"math_explainer": 2.0, "trailer.pitch": 2.0}
 
 
-def token_budget(workflow: str, brief: str) -> int | None:
+def token_budget(workflow: str, brief: str, kind: str = "") -> int | None:
     """This commission's own token cap when its workflow or its audiences need more, else None for the host's.
 
     **Scaled, not added to.** The host's cap is sized for the two-audience pair the audience workflows were built
     for, so a set of n gets n/2 of it; a workflow in `TOKEN_SCALE` gets its multiple. None also means *leave it
     alone*: an uncapped host stays uncapped.
     """
-    scale = TOKEN_SCALE.get(workflow, 1.0)
+    scale = TOKEN_SCALE.get(f"{workflow}.{kind}", TOKEN_SCALE.get(workflow, 1.0))
     n = audiences_in(brief)
     if workflow in PER_AUDIENCE_MINUTES and n > 2:
         scale *= n / 2
@@ -704,7 +711,7 @@ def check(name: str, workflow: str, kind: str, brief: str, deadline: str = "",
     # cleanly by the breaker rather than killed mid-flight by the platform.
     # The host's own allowance, clamped to what this host can stop cleanly. Where the two disagree the smaller
     # wins: a poster's 45 is offered whole with the keepalive on and as 38 without it, never past the run limit.
-    minutes = DEADLINES.get(workflow)
+    minutes = DEADLINES.get(f"{workflow}.{kind}", DEADLINES.get(workflow))
     if minutes is not None:
         if (extra := audiences_in(brief) - 2) > 0:
             minutes += PER_AUDIENCE_MINUTES.get(workflow, 0) * extra
@@ -741,7 +748,7 @@ async def commission(app: FastAPI, name: str, workflow: str, brief: str, kind: s
     minutes = check(name, workflow, kind, brief, deadline, start)
     try:
         create(name, workflow=workflow, prompt=brief, type_=kind or None, deadline=minutes,
-               documents=[str(p) for p in documents] or None, budget_tokens=token_budget(workflow, brief))
+               documents=[str(p) for p in documents] or None, budget_tokens=token_budget(workflow, brief, kind))
     except GenerateError as exc:
         raise Refused(400, str(exc)) from exc
 

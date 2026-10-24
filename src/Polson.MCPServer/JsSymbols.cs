@@ -148,6 +148,7 @@ public static class JsSurface
         new("sheet", typeof(Polson.Drawing.Svg.StyleSheetView), "Css", true),
 
         new("Equation", typeof(EquationToolkit), "Equation", false),
+        new("Locale", typeof(LocaleToolkit), "Locale", false),
 
         new("Scale", typeof(ScaleToolkit), "Scale", false),
         new("scale", typeof(LinearScale), "Scale", true),

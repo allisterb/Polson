@@ -347,7 +347,7 @@ internal static class ProjectGenerator
 
         var brief = SanitizeBrief(briefText);
         var createdUtc = DateTime.UtcNow.ToString("O");
-        var deadline = DeadlineFor(workflow, opts.Deadline);
+        var deadline = DeadlineFor(workflow, opts.Deadline, type);
         var reportMinutes = ReportReserve(deadline, opts.Test);
 
         // The orchestrator's session directories. Written for every Antigravity project rather than
@@ -654,6 +654,9 @@ internal static class ProjectGenerator
         // Fifteen seconds of motion graphics: beats, an animatic, keys, two sheets and a video that takes a quarter of a
         // minute to encode. A poster's forty-five, plus the motion.
         ["trailer"] = 60,
+        // A pitch is two minutes of film to the trailer's fifteen: a deck (and perhaps a model) read and checked, about
+        // nine scenes each encoded as a part, and every line narrated. No measured run behind it yet; tune after the first.
+        ["trailer.pitch"] = 90,
         // A minute of film like the trailer's, with a plan whose every formula and claim is checked before anything is
         // drawn, narration spoken line by line, and a read-back. No measured run behind it yet; tune after the first.
         ["math_explainer"] = 60,
@@ -683,10 +686,11 @@ internal static class ProjectGenerator
     internal static int ReportReserve(int deadlineMinutes, bool test) =>
         test && deadlineMinutes > 0 ? Math.Max(5, (int)Math.Round(deadlineMinutes * 0.2)) : 0;
 
-    /// <summary>The deadline for a project, in minutes. Zero means none.</summary>
-    internal static int DeadlineFor(string workflow, int? requested) =>
+    /// <summary>The deadline for a project, in minutes. Zero means none. A type's own entry, <c>workflow.type</c>, wins.</summary>
+    internal static int DeadlineFor(string workflow, int? requested, string type = "") =>
         requested is { } given
             ? Math.Max(0, given)
+            : type.Length > 0 && WorkflowDeadlines.TryGetValue($"{workflow}.{type}", out var forType) ? forType
             : WorkflowDeadlines.TryGetValue(workflow, out var value) ? value : 0;
 
     /// <summary>
@@ -1482,10 +1486,12 @@ internal static class ProjectGenerator
     /// <remarks>
     /// A report explainer is a trailer whose subject is figures, so the data-encoding manual's integrity rules — where
     /// a number comes from, bars from zero, one scale for things compared — are the craft, not a reference to look up.
+    /// A pitch is the same craft with projections in it.
     /// </remarks>
     static readonly Dictionary<string, string[]> TypeManuals = new()
     {
         ["trailer.report"] = ["13"],
+        ["trailer.pitch"] = ["13"],
     };
 
     /// <summary>The judgment manuals' preamble, then one entry per manual, or empty when there are none.</summary>

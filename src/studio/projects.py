@@ -64,8 +64,9 @@ WORKFLOWS: dict[str, tuple[str, ...]] = {
     "animation": (),
     # Motion graphics: shapes and type in the animation model, delivered as a video. **No type is a film
     # trailer**, which is not the same as "the studio's choice": `product` is a fifteen-second product ad, and
-    # `report` an explainer that answers an audience's questions from a document the director attached.
-    "trailer": ("product", "report"),
+    # `report` an explainer that answers an audience's questions from a document the director attached, and `pitch` a
+    # startup's case told to investors from its own deck.
+    "trailer": ("pitch", "product", "report"),
     # A theorem or concept explained in an animated film, every formula checked before it is drawn. No types.
     "math_explainer": (),
     "harness": ("image", "infographic", "logo"),

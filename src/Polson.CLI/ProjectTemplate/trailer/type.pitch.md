@@ -1,0 +1,261 @@
+## The type: pitch
+
+**A motion-graphics pitch made from a startup's own documents** — its pitch deck, and where it has them a financial
+model, a metrics export or a one-pager. Two minutes by default; the deck's case told to investors, in the order
+investors expect it, every figure on screen **read from the documents and checked against the page it came from**,
+and every projection shown as a projection. A good one is what a founder would send ahead of a meeting: short,
+exact, and confident without claiming anything the company did not claim.
+
+Where this type and the instructions above disagree, this type wins: there is no poster to carry over and no film to
+invent. The subject is the company's case. **Audiences are optional.** With none, make one film for the investors the
+brief describes, and no Qloo profile is read (see *Pace* below). With `Audience A`, `Audience B`… lines — investors in
+Singapore, in London — make **one film per audience**: the case the same in every film, read once from the
+documents, and the telling of it each audience's own (see *More than one audience* below).
+
+### What the brief gives
+
+The documents, in `documents/` (find them with `Documents.list()`); the company; the stage; the raise and the use of
+funds, **when the brief states them**; how it is told (below); the length; narration or none. Fill the brief table in
+`brief.md` with these rows in place of the film ones, and ask for what is missing:
+
+| Parameter | Value |
+| :--- | :--- |
+| The documents — file, what each is (deck, model, metrics), and its date | |
+| The company, as its documents name it | |
+| Told as — the company's own pitch, or a retelling of a past deck | |
+| Stage, raise and use of funds — each from the brief, from the deck, or not stated | |
+| Length (2 minutes by default) and narration (a voice, or none) | |
+| Anything explicitly ruled out | |
+
+**Told as** decides the voice, and nothing else changes with it:
+- **The company's own pitch** speaks as the company — *"we"*, the present tense — and ends on its ask.
+- **A retelling of a past deck** (a famous seed deck, a case study) speaks *about* the company, **dated**: *"In 2008,
+  UberCab's founders projected…"*. It is the deck as of its date. **No hindsight**: nothing about what became of the
+  company, its valuation or its later rounds — none of it is in the documents, and a retelling that knows the ending
+  is a different film. The title says what it is (*"Based on UberCab's 2008 pitch deck"*), and the end card says
+  *"A retelling for illustration. Not affiliated with <company>."*
+
+### Stage 1 — the reading: the deck in one call
+
+`Documents.ask` reads a PDF **as text, page by page**, with Nemotron 3.5 Super VL, OCRs a page that is a scan, and
+returns **evidence**: the page and the exact figures each answer used, **each already looked for on its page by the
+engine**. Read each document in **one** call, with a schema, and **keep the calls at the top of `trailer.js`**: the
+same question of the same document is served from the cache for nothing, so every later run asks again rather than
+copying numbers by hand.
+
+```javascript
+const DECK = 'documents/<the deck>.pdf';
+const ASK = 'This is a startup pitch deck. Summarise its case section by section, for investors. For each section give '
+    + 'the page, one plain sentence of what the deck claims, and every figure the deck prints for it, exactly as printed, '
+    + 'with its unit and the period or date it refers to. Mark each figure\'s kind: "actual" for a result already '
+    + 'achieved, "projection" for a forecast, "scenario" for one of several outcomes the deck sets side by side, '
+    + '"target" for a goal, "estimate" for a market size or other outside estimate. Where the deck states how a figure '
+    + 'is reached (an assumption, a multiplication, a source), give that as printed in basis. List only what the deck '
+    + 'says: no figure, team member, competitor or claim it does not contain.';
+const KINDS = ['actual', 'projection', 'scenario', 'target', 'estimate'];
+const SECTIONS = ['problem', 'solution', 'product', 'why_now', 'market', 'traction', 'business_model', 'competition',
+    'go_to_market', 'team', 'financials', 'ask', 'use_of_funds', 'other'];
+const SHAPE = { type: 'object', required: ['sections'], properties: { sections: { type: 'array', items: {
+    type: 'object', required: ['section', 'page', 'claim', 'figures'], properties: {
+        section: { type: 'string', enum: SECTIONS },
+        page: { type: 'integer' },
+        claim: { type: 'string', description: 'what the deck claims here, in one plain sentence' },
+        figures: { type: 'array', items: { type: 'object', required: ['label', 'printed', 'unit', 'period', 'kind', 'basis'],
+            properties: { label: { type: 'string' }, printed: { type: 'string' }, unit: { type: 'string' },
+                period: { type: 'string' }, kind: { type: 'string', enum: KINDS }, basis: { type: 'string' } } } } } } } } };
+
+const read = await Documents.ask(DECK, ASK, { schema: SHAPE });
+// 'Pending': the read outlived this script and is finishing into the cache. Run the script again, unchanged.
+if (!read.success) { error(read.remedy); exit(read.failureName); }
+if (read.warnings.length) for (const w of read.warnings) error('SCAN: ' + w);
+const sections = JSON.parse(read.text).sections;
+
+// A figure is usable when every number in it, as printed, is in a quote the engine found on its page — each number
+// separately: "$20-30M+ per year" is two numbers.
+const numbersIn = s => (String(s).match(/\d[\d,]*(?:\.\d+)?/g) || []).map(n => n.replace(/,/g, ''));
+const onPage = new Set(read.evidence.filter(e => e.found).flatMap(e => numbersIn(e.quote)));
+for (const s of sections) for (const f of s.figures)
+    f.found = numbersIn(f.printed).length > 0 && numbersIn(f.printed).every(n => onPage.has(n));
+log(`${read.provenance.model} via ${read.provenance.route}, ${read.provenance.pages} pages; unverified: ${JSON.stringify(read.unverified)}`);
+```
+
+**A financial model, a metrics export or a one-pager is read the same way, in a call of its own**, asking for the
+figures the film will use — revenue, burn, runway, gross margin, unit economics, by period — each with its kind. Where
+the model and the deck disagree on a figure, both are the company's: show neither until the director says which (Q1).
+
+- **The check reads digits, not signs.** A figure printed with a minus or in parentheses is negative: carry the sign
+  over as printed, and compare it with the page yourself.
+- **Find a figure by its section and its place in the answer, never by its label**, which a second reading words
+  differently.
+- **`read.provenance.model` says who read it.** When it is not Nemotron, `read.provenance.fallback` says why, and
+  `read.evidence` is empty: **every figure is then unchecked.** Say so in `direction.md` and to the director in Q1.
+- **A figure not `found` stays off the screen.** Ask again, narrowly, naming the page — one figure a call.
+- **A reading of a picture is not a checked figure.** A deck carries much of its case in images — a chart, a diagram,
+  a slide photographed — and what the model read from them is in `read.fromImages`, **unchecked even when found**.
+  Put each in Q1 for the director to confirm, label it in `direction.md` as *read from the image on p. N*, and never
+  let it stand as checked. A caption too small or blurred to read is not read: leave it out and say so.
+- **Record it**: `Stage.check('every figure on screen was found on its page', …, 'N found, M computed, K from the brief, L left out')`.
+
+### The rules of a pitch
+
+- **Every number on screen is printed in the documents and found on its page, computed in the script from ones that
+  were, or stated in the brief** (the raise, when the form gave it). Compute a share or a multiple in `trailer.js`,
+  show the working in `direction.md`, and **never take the model's arithmetic**.
+- **A projection looks like a projection.** Actuals are solid; a projection, target or scenario is drawn open — an
+  outlined bar, a dashed line continuing a solid one — **and labelled with its kind and its date in words on screen**:
+  *"Projected, 2011"*, *"Target"*, *"Best case"*. A viewer must never be able to read a forecast as a result, with the
+  sound off, from a single frame. Record it: `Stage.check('every forward-looking figure is marked as one', …)`.
+- **Scenarios travel together.** Where the deck sets outcomes side by side — best, realistic, worst — show them side
+  by side, each labelled as the deck labels it. The best case alone is a different claim from the deck's.
+- **The basis comes with the figure.** A projection the deck derives — *10.6M trips × $20 average fee* — shows its
+  derivation, because an investor discounts a number with no assumptions behind it. Where the deck prints none, the
+  figure stands as the company's, attributed.
+- **The company's arithmetic stays the company's.** Where a derivation and its printed result disagree (10.6M × $20 is
+  $212M; the deck says $200M), the screen shows **the figure the deck printed**, attributed, and the working stays
+  off it. Record the difference in `direction.md` and put it to the director in Q1: correcting a founder's number on
+  screen is a decision, not a fix.
+- **The company's claims stay the company's.** *"Patent-pending"*, *"first to market"*, a market size from an outside
+  estimate — each is the deck's claim, in its words. **Add nothing**: no market figure, competitor, trend, customer
+  or team member the documents do not name, however well known. The film argues the case the documents make; it
+  does not make a better one.
+- **The ask is as stated.** The amount, the instrument and the use of funds come from the brief or the deck, in their
+  words. Where neither gives an amount — *"raise a few million"* — the film says that, not a number.
+- **Market size honestly.** Total, serviceable and obtainable markets as the deck gives them, each with its kind
+  (*estimate*). Nested circles are drawn **by area** (`Scale.radiusFor`): 10.6M inside 1.9B is a dot, and that is the
+  point. A dot too small to see gets a label, never a larger radius.
+- **People in type, never in pictures.** The team by name and role as the deck gives them; no faces, no photographs, no
+  likeness of a real person, unless supplied in `documents/` and placed as given. The company's name in type is
+  fine; its logo and marks are not unless supplied, and in a retelling not even then.
+- **Honest charts** (Manual 13 is in front of you): bars start at zero; two figures compared share one scale; a
+  single figure needs no chart — set it large. **Never red and green for up and down — and a loss is never red**:
+  showing investors losses in red rather than black measurably cuts their risk-taking (Bazley, Cronqvist & Mormann
+  2021, *Management Science* 67(9)), and which colour means a rise is a market's convention (red in mainland China:
+  Zhang & Han 2014, *PLoS ONE* 9(2)). Direction is carried by sign and shape. Colour is kept for the answer, in the
+  accent, and means one thing for the whole film.
+
+### Scenes
+
+The deck has more than the film can hold. **Choose by an investor's questions, in an investor's order**, and drop a
+section rather than rush one:
+
+1. **Title** (3–4 s): the company and one line of what it does — and, for a retelling, *"Based on <company>'s <year>
+   pitch deck"*.
+2. **The problem** — who has it and what it costs them, with the deck's figure for it.
+3. **The solution** — what the company does about it, shown as simply as the deck shows it.
+4. **The market** — total, serviceable, obtainable, by area.
+5. **Traction or progress** — results so far, solid; or, at the earliest stage, the milestones reached.
+6. **The business model** — how it makes money, with its basis (fee × volume).
+7. **Competition or advantage**, if the deck has it.
+8. **The team**, if the deck has it — names and roles in type.
+9. **The projections** — open marks, labelled, scenarios together, basis shown.
+10. **The ask** — the amount and what it buys, in the company's words. The film ends on it.
+11. **End card** (4 s): the sources (the documents and the pages used), *"Projections are the company's estimates."*,
+    and for a retelling *"A retelling for illustration. Not affiliated with <company>."*
+
+**About ten seconds a scene**, a little more where a projection's basis must be read. Ninety seconds holds about seven
+of these; two minutes about nine; three minutes all of them. Put the scene list, with its length per scene, in Q1.
+
+**One scene per encoded part.** A two-minute film will not encode inside one script: encode each scene with
+`comp.saveVideo('artifacts/part1.mp4', { from, to })` in a script of its own, the parts silent, then
+`Motion.joinVideos([...], 'output.mp4', { audio })`, as stage 4 says. Plan the beats so every part boundary falls on
+a cut.
+
+### Narration
+
+**A voice, unless the brief says none.** A pitch is told; the screen carries the figures and the voice the argument.
+Speak each scene's lines with `Assets.speak`, one line a call, in the language of the film's words, and time the
+scene to the recording:
+
+```javascript
+const spoken = await Assets.speak('Cabs in most cities still run on radio dispatch.', { voice: 'Charon', path: 'audio/s2-1.wav' });
+if (!spoken.success) error(spoken.remedy);
+const line = Motion.speech(spoken.text, { audio: spoken.path, start: 1.0 });
+if (line.unsaid.length) error('the recording says more than the line: ' + line.unsaid.join(' '));
+```
+
+- **The scene's length is its narration's length**, plus the holds: a figure is on screen before it is spoken and
+  stays after. About 140 words a minute; a two-minute film is under 300 words. Never cut a line to fit a beat.
+- **Say the figure on screen, as it is on screen.** A voice that says "two hundred million" over "$200M" is one claim;
+  a voice that rounds differently, or names a figure the screen does not show, is two — and the second is unchecked.
+- **The voice makes no claim the screen could not carry.** Every sentence is the deck's, attributed in a retelling.
+- The same line in the same voice is served from the cache for nothing. Give every line once, at the join.
+
+### Visual style — produced, not plain
+
+A pitch is judged in seconds by people who see a great many. **Exact is the floor, not the finish.** Decide the style
+once, before the beats, and record it in `direction.md` with its reasons.
+
+- **A ground with depth**, not a flat fill: a `comp.radialGradient` vignette under everything, and one slow move per
+  scene with `comp.camera()`, eased `halt` at both ends, **never while a figure is being read**.
+- **Light on the one thing that matters**: one glow a scene, on its figure, keyed up as it arrives and down to 0 after.
+- **Figures arrive whole.** A figure rises, fades or scales into place as the number it is — **never a counter that
+  ticks up** and **no character cascade on a figure**: both put numbers on screen the documents never printed.
+- **Type as the design.** One family; figures heavy, units smaller beside them; the claim in a calmer weight; the
+  source line small and steady, **at 32 px or more at 1080p**, naming the deck and its page (*"Pitch deck, p. 7"*).
+- **Cuts and wipes, not dissolves**: a dissolve lays one scene's figures over the next one's. No motion blur on text.
+- **Your palette, not the company's.** One accent and its tints on a neutral; contrast 4.5 : 1 for text. Do not rebuild
+  the company's identity — its colour as the whole palette, its typeface, its devices. For a retelling this is the
+  whole difference between a film *about* the deck and one passing as the company's.
+- **Budget the frame**: time `comp.render(t)` on each scene's busiest moment before encoding.
+
+### More than one audience
+
+The instructions' *More than one audience* holds: every profile first, compared, `Taste.contrast` for a pair, one
+`build(audience)` and the films `artifacts/final_a.mp4`, `final_b.mp4`… What a pitch adds is the rule that keeps a
+set honest: **the case is shared and only its telling is the audience's.**
+
+- **One reading, every film.** The same scenes, the same figures, the same projections with the same marks, the same
+  ask. A film that drops a risk, a scenario or a figure for its audience makes a different claim to different
+  investors — the one thing a pitch must never do.
+- **Figures written as the audience writes them, in the language of the film's words.** `Locale.number(value, {
+  locale, compact: 'long' })` gives `20 crore` (`en-IN`), `2億` (`ja-JP`), `200 Millionen` (`de-DE`) for 200 million;
+  with `currency: 'USD'` the currency's own compact form, `$20Cr`, `$2億`, `200 Mio. $`, whatever the length. Where the
+  long word reads better, keep `compact: 'long'` and set the currency in the words around it. Choose the locale from
+  the place **and the film's language**: an English film for Tokyo writes `$200M`. `Locale.locales` lists what is
+  carried.
+- **Never convert a currency.** A dollar raise stays in dollars in every film: a conversion is a figure with a rate and
+  a date the documents do not give.
+- **Tell the read-back how each written figure was written**: `{ computed: { '$2億': '200,000,000 / 100,000,000 = 2
+  (an oku is a hundred million; the deck prints $200M)' } }`.
+- **Pace, grade and voice are each film's own**, from its profile; the holds never drop below the reading time a figure
+  needs.
+
+### Pace
+
+**With no place in the brief, there is no Qloo profile to read**: pace from Manual 25 and the reading time, and mark it
+*assumed* in `direction.md`. **With a place and an age band**, profile the audience for pace and grade exactly as the
+instructions above say. Investors read a figure slower than a word: hold a number at least a second longer than its
+words would need.
+
+### The read-back — after delivery
+
+**`Verify.film(comp, 'output.mp4', { computed })`** is the instructions' read-back. **Every figure on screen must come
+back with a source**: for `document`, its digits on a page of the deck or the model; for `computed`, each derived
+value with its working, exactly as set; a figure from the brief goes in `computed` too, its working *"stated in the
+brief"*. An `unsourced figure` comes off the screen. A `'different figure'` stray is a line you set, read with another
+number: look at its frame before deciding. The check records its own verdict; do not write one for it.
+
+### Questions, for a pitch
+
+- **Q1** (after the reading, before any design): the scene list with its length per scene; each scene's claim and
+  figures, each marked found, computed, from the brief, from an image, or left out, **with its kind**; every
+  disagreement between a derivation and its printed result, and between the deck and the model; and the sections
+  dropped for length. The director confirms the case before anything moves.
+- **Q2** the tone, pace and voice.
+- **Q3** and **Q4** as the instructions say: the animatic, then the sheet.
+
+### direction.md
+
+The documents (file, what each is, its date, pages), **who read them** (`provenance.model`, `route`, any fallback),
+how the film is told and why, then **one section per scene**: the claim, every figure with its kind, page and the quote
+it was found in, every computed value with its working, every figure from the brief, anything left out and why. Then
+the shared system — type, palette, the marks for actual and projected — with its reasons. The read-back's result goes
+last.
+
+**The audience gets a section of its own, before the scenes**: who is watching and where, as the brief has it, then
+one row per choice made for them in the `Choice | Evidence | Kind` table the instructions describe — **Brief**,
+**Qloo** (pace and grade from a profile), **Research** (Bazley et al., Zhang & Han), **Rule** (this type's: projections
+marked, scenarios together, figures in the audience's conventions with Unicode CLDR as the evidence), and **Assumed**.
+A choice the audience did not change says so. **With several audiences, one such section per audience**, then the
+instructions' *Between the audiences*, which for a pitch says first what every film shares: the scenes, the figures,
+the projections and the ask.

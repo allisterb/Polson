@@ -116,6 +116,9 @@ public class ManualCoverageTests : TestsRuntime
         // surface yet. The math_explainer workflow's manual is the passage that will (docs/internal/math-explainer-design.md
         // §10), and this floor goes up with it.
         ["Equation"] = 0,
+
+        // Numbers as places write them (2026-10-24); Manual 25's report passage names both members as they arrive.
+        ["Locale"] = 100,
         ["Snap"] = 82,
         ["Canvas2D"] = 75,
         ["VectorLogo"] = 74,

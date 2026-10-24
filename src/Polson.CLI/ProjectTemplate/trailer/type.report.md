@@ -5,8 +5,11 @@ an annual report, a 10-K, an earnings release, a fund factsheet. One question, o
 read from the document and **checked against the page it came from**. A good one is what an investor-relations team
 or a business desk would publish beside the filing: short, exact, and sourced on screen.
 
-Where this type and the instructions above disagree, this type wins: there is no poster to carry over, no film, and
-**no Qloo audience unless the brief gives a place and an age band** (see *Pace* below). The subject is the document.
+Where this type and the instructions above disagree, this type wins: there is no poster to carry over and no film to
+invent. The subject is the document. **Audiences are optional.** With none, make one film for whoever the brief
+describes, and no Qloo profile is read (see *Pace* below). With `Audience A`, `Audience B`… lines, make **one film per
+audience**: the facts the same in every film, read once from the document, and the writing of them each audience's
+own (see *More than one audience* below).
 
 ### What the brief gives
 
@@ -201,6 +204,35 @@ once, before the beats, and record it in `direction.md` with its reasons.
   encoding, and keep a scene's part inside its script — one glow and one gradient ground are cheap; five blurs at
   1080p are not.
 
+### More than one audience
+
+The instructions' *More than one audience* holds: every profile first, compared, `Taste.contrast` for a pair, one
+`build(audience)` and the films `artifacts/final_a.mp4`, `final_b.mp4`… What a report adds is the rule that keeps a
+set of films honest: **the facts are shared and only their writing is the audience's.**
+
+- **One reading, every film.** Stage 1 reads the document once; every film answers the same questions with the same
+  figures from the same pages. A film that drops or changes a figure for its audience is a different claim, not an
+  adaptation.
+- **Figures written as the audience writes them, in the language of the film's words.** `Locale.number(value, {
+  locale, compact: 'long' })` returns the scale word: `13,049.7 crore` for an English film in Mumbai (`en-IN`), `1305億`
+  for a Japanese film in Tokyo (`ja-JP`), `130,5 Milliarden` for a German one in Berlin. With `currency: 'USD'` the
+  currency's own compact form is used whatever the length — `$13KCr`, `$1305億`, `130,5 Mrd. $` — which is terse in
+  `en-IN`; where the long word reads better, keep `compact: 'long'` and set the currency sign in the words around it. Choose the
+  locale from the place **and the language the film's words are in**: an English film for Tokyo writes `$130.5B`,
+  since 億 inside English words reads as a foreign word. `Locale.locales` lists what is carried; for a place with no
+  entry, keep the brief's language's own forms and say so. A counter takes the same `locale`, `compact` and `currency`
+  in its `format`.
+- **Never convert a currency.** A dollar figure stays in dollars in every film: converting it would be a new figure
+  with a rate and a date the document does not give, and the read-back would find it on no page.
+- **Tell the read-back how each written figure was written.** A figure in crore or 億 has digits the page does not
+  print, so pass it in `computed` with its working: `{ computed: { '13,049.7 crore': '130,497,000,000 / 10,000,000
+  = 13,049.7 (a crore is ten million; the page prints $130,497 million)' } }`.
+- **Direction colours stay a rule** (above): sign and shape carry direction in every film. Only if the brief asks for
+  direction colours does each film use its audience's convention, and only with a source for it (Zhang & Han 2014 for
+  red as a rise in mainland China).
+- **Pace and grade are each film's own**, from its profile, as the instructions say; the figures' holds follow the
+  pace, and never drop below the reading time a figure needs.
+
 ### Pace
 
 **With no place and age band in the brief, there is no Qloo profile to read**: pace from Manual 25 and the reading
@@ -244,8 +276,12 @@ made for them, in the `Choice | Evidence | Kind` table the instructions describe
 - **Brief**: what the brief asked for.
 - **Qloo**: the pace and grade, from a profile, when the brief gives a place and an age band.
 - **Research**: a checked source, such as Bazley et al. and Zhang & Han for direction colours.
-- **Rule**: this type's rules, such as no red and green for direction and figures arriving whole.
+- **Rule**: this type's rules, such as no red and green for direction and figures arriving whole, and **the figures
+  written in the audience's conventions**, with Unicode CLDR named as the evidence for the place's forms (`en-IN`:
+  lakh and crore, Indian grouping).
 - **Assumed**: anything decided without evidence, such as pace with no profile.
 
 A choice the audience did not change says so — *"no red/green: a rule, whatever the place"* — so the reader can
-tell a rule from a reading of these viewers.
+tell a rule from a reading of these viewers. **With several audiences, one such section per audience**, then the
+instructions' *Between the audiences*, which for a report says first what every film shares: the questions, the
+figures and their pages.

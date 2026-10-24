@@ -157,6 +157,24 @@ class CatalogueTests(unittest.TestCase):
             catalogue.parse("report-explainer", "Long", "0", "", ["1920x1080"], "", [".mp4"],
                             {"questions": "Why? " * 500}, "Explain.", [], [])
 
+    def test_a_startup_pitch_is_a_trailer_of_type_pitch_with_its_terms_in_the_brief(self):
+        c = catalogue.parse("startup-pitch", "UberCab retold", "0", "", ["1920x1080"], "", [".mp4"],
+                            {"company": "UberCab", "told_as": "A retelling of a past deck", "raise": "$1.25M seed"},
+                            "Tell the 2008 deck.", [], [])
+        self.assertEqual((c.workflow, c.kind), ("trailer", "pitch"))
+        text = c.brief_text(["uber-2008.pdf"])
+        for line in ("- Company: UberCab", "- Told as: A retelling of a past deck", "- Stage: As the deck says",
+                     "- The raise: $1.25M seed", "- Duration: 2 minutes", "- Narration: A voice",
+                     "- Files supplied, in documents/: uber-2008.pdf"):
+            self.assertIn(line, text)
+        self.assertNotIn("Use of funds", text, "a field left blank is not asked for")
+        card = catalogue.BY_SLUG["startup-pitch"]
+        self.assertTrue(card.audiences_optional)
+        with self.assertRaisesRegex(StudioError, "attach the PDF"):
+            card.check_files(["model.csv"])
+        with self.assertRaisesRegex(StudioError, "told as from the list"):
+            catalogue.parse("startup-pitch", "X", "0", "", ["1920x1080"], "", [".mp4"], {"told_as": "Both"}, "A pitch.")
+
     def test_a_report_explainer_needs_its_pdf(self):
         card = catalogue.BY_SLUG["report-explainer"]
         with self.assertRaisesRegex(StudioError, "attach the PDF"):
@@ -175,6 +193,19 @@ class CatalogueTests(unittest.TestCase):
                                     (list("ABCDEFG"), [""] * 7, "up to 6")):
             with self.subTest(places=places), self.assertRaisesRegex(StudioError, words):
                 catalogue.parse_audiences(places, ages)
+
+    def test_a_report_explainers_audiences_are_optional(self):
+        """With places, a film per audience in its conventions; without, one film for whoever the brief describes."""
+        none = catalogue.parse("report-explainer", "NVDA", "0", "", ["1920x1080"], "", [".mp4"], {}, "Explain the 10-K.")
+        self.assertEqual([], none.audiences)
+        two = catalogue.parse("report-explainer", "NVDA", "0", "", ["1920x1080"], "", [".mp4"], {}, "Explain the 10-K.",
+                              places=["Mumbai", "Tokyo"], ages=["35_to_44", ""])
+        self.assertEqual([("Mumbai", "35_to_44"), ("Tokyo", "")], two.audiences)
+        text = two.brief_text([])
+        self.assertIn("Audience A: Mumbai", text)
+        self.assertIn("One film per audience", text)
+        self.assertTrue(catalogue.BY_SLUG["report-explainer"].audiences_optional)
+        self.assertFalse(catalogue.BY_SLUG["poster"].audiences_optional)
 
     def test_slugify_gives_a_valid_project_id(self):
         for title in ("Harbour festival trailer", "!!!", "Ünïcode café — poster", "x" * 200):
@@ -396,6 +427,14 @@ class FrontRoutingTests(unittest.TestCase):
             self.assertNotIn(f'<input class="fr-inline" name="x_{key}"', page)
         self.assertIn('name="x_duration"', page[:brief])      # a choice stays in the header
 
+    def test_the_startup_pitch_composer_asks_for_its_terms_and_makes_audiences_optional(self):
+        page = self.client.get("/compose/startup-pitch").text
+        brief = page.index('id="brief"')
+        for key in ("company", "told_as", "stage", "raise", "duration", "narration"):
+            self.assertIn(f'name="x_{key}"', page[:brief], f"{key} should be in the header")
+        self.assertGreater(page.index('<textarea id="x_use_of_funds" name="x_use_of_funds"'), brief)
+        self.assertIn("data-audiences data-optional", page)
+
     def test_the_composer_offers_mp4_among_the_files_it_takes(self):
         page = self.client.get("/compose/poster")
         self.assertIn(".mp4", page.text)
@@ -510,7 +549,7 @@ class FakeCommissioner:
     """Stands in for `adk_agent.intake.Commissioner`: offers drawing (review only) and the infographics."""
 
     TYPES = {"drawing": ("review",), "vector_infographic": ("editorial", "swiss"), "infographic": ("editorial",),
-             "trailer": ("product", "report")}
+             "trailer": ("pitch", "product", "report")}
 
     def __init__(self, root: Path, refuse: Exception | None = None) -> None:
         self.root, self.refuse, self.made = root, refuse, []
@@ -615,6 +654,16 @@ class CommissionedComposerTests(unittest.TestCase):
         made = self.commissioner.made[0]
         self.assertEqual((made["workflow"], made["kind"], made["documents"]), ("trailer", "report", ["nvda-10k.pdf"]))
         self.assertIn("  1. How big was revenue?", made["brief"])
+
+    def test_a_startup_pitch_is_commissioned_as_a_pitch_trailer_with_its_deck(self):
+        data = self.trailer("startup-pitch", x_company="UberCab", aud_place=["Singapore", "London"])
+        reply = self.client.post("/requests", data=data, files=[("files", ("deck.pdf", b"%PDF-1.4", "application/pdf"))],
+                                 follow_redirects=False)
+        self.assertEqual(reply.status_code, 303, reply.text[:300])
+        made = self.commissioner.made[0]
+        self.assertEqual((made["workflow"], made["kind"], made["documents"]), ("trailer", "pitch", ["deck.pdf"]))
+        self.assertIn("- Audience A: Singapore", made["brief"])
+        self.assertIn("- One film per audience", made["brief"])
 
     def test_a_film_trailer_is_not_given_the_workflows_lone_type(self):
         """The host offers `trailer` one type; the film trailer's card offers none, and the card decides."""

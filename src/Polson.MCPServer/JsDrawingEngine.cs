@@ -425,6 +425,9 @@ public partial class JsDrawingEngine : Runtime
             // Equations from LaTeX, measured; drawing is ctx.fillEquation. Not `Math`, which is JavaScript's own.
             engine.SetValue("Equation", new EquationToolkit());
 
+            // Numbers as a place writes them (CLDR): crore, 億, Mrd. The figure is unchanged; only its writing follows the place.
+            engine.SetValue("Locale", new LocaleToolkit());
+
             // Reproducible randomness. `Math.random` is still there and still works; this is the one
             // a run can be re-rendered from, which is what the saved script in `scripts/` promises.
             var randomToolkit = new RandomToolkit();

@@ -266,7 +266,8 @@ of a family's name — `'Franklin Gothic Heavy'` is `'Franklin Gothic'` at `font
 
 - The final poster for each audience: `outFile` PNG, `outSvg`, and `outPdf` at the brief's size. Name
   them by audience letter — `final_a.png` / `final_a.svg` / `final_a.pdf`, then `final_b`, … — and do
-  not overwrite comps. **Budget the clock per poster**: the deadline already counts the size of the set,
+  not overwrite comps. **The brief's size is the deliverable's**: a `final_` file at another size comes back with
+  a `[WARN] … the brief asks for …`, which is a fault to fix, not a note to keep. **Budget the clock per poster**: the deadline already counts the size of the set,
   so a set of four has more time than a pair, not the same time shared four ways.
 - `direction.md` complete: every choice, its evidence, and any warning you kept with the reason.
 - **Its Qloo references checked**, in the session that fetched them:

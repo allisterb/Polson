@@ -40,7 +40,7 @@ public static class SvgRenderPipeline
         ArgumentNullException.ThrowIfNull(document);
 
         using var skSvg = new SKSvg();
-        skSvg.FromSvgDocument(document);
+        skSvg.FromSvgDocument(SvgTracking.ForRender(document));
         SeekTo(skSvg, atTime);
         return Encode(skSvg, width, height, format, quality, background);
     }
@@ -57,6 +57,10 @@ public static class SvgRenderPipeline
                 svgXml = svgXml[(idx + 2)..].TrimStart();
             }
         }
+
+        // Tracked markup goes the document route, where letter-spacing becomes positions (SvgTracking); the rest as before.
+        if (SvgTracking.Mentions(svgXml) && SvgDocument.FromSvg<SvgDocument>(svgXml) is { } parsed)
+            return RenderToImage(parsed, width, height, format, quality, background, atTime);
 
         using var skSvg = new SKSvg();
         skSvg.FromSvg(svgXml);
@@ -112,7 +116,7 @@ public static class SvgRenderPipeline
         ArgumentNullException.ThrowIfNull(document);
 
         using var skSvg = new SKSvg();
-        skSvg.FromSvgDocument(document);
+        skSvg.FromSvgDocument(SvgTracking.ForRender(document));
         SeekTo(skSvg, atTime);
 
         var pictureBounds = skSvg.Picture?.CullRect ?? SKRect.Create(0, 0, 800, 600);

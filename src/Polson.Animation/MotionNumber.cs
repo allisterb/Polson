@@ -6,6 +6,8 @@ using System.Globalization;
 using System.Linq;
 using System.Xml.Linq;
 
+using Polson.Drawing.Skia;
+
 /// <summary>
 /// A number in a composition that counts, as <c>comp.number(...)</c> returns it: a text whose string follows a real node.
 /// </summary>
@@ -95,14 +97,23 @@ public sealed class MotionNumber : IShownText
 /// A negative value that rounds to zero shows as 0, where Synfig's <c>printf</c> writes <c>-0</c>: on those frames alone
 /// the two differ.
 /// </remarks>
-internal sealed record NumberFormat(int Decimals, string Prefix, string Suffix, bool Grouping)
+internal sealed record NumberFormat(int Decimals, string Prefix, string Suffix, bool Grouping, string? Locale = null, string? Compact = null,
+    string? Currency = null)
 {
     public static NumberFormat Read(object? options, string who)
     {
-        var o = new MotionOptions(options, $"{who}'s format", "decimals", "prefix", "suffix", "grouping");
+        var o = new MotionOptions(options, $"{who}'s format", "decimals", "prefix", "suffix", "grouping", "locale", "compact", "currency");
         var d = o.Number("decimals", 0);
         if (d is < 0 or > 6 || d != Math.Floor(d)) throw new ArgumentException($"{who}'s format.decimals is a whole number from 0 to 6.");
-        return new((int)d, o.Raw("prefix")?.ToString() ?? "", o.Raw("suffix")?.ToString() ?? "", o.Bool("grouping", false));
+        var locale = o.Raw("locale")?.ToString();
+        var compact = o.Raw("compact") switch { null or false => null, true => "short", var c => c.ToString() };
+        var currency = o.Raw("currency")?.ToString();
+        if (locale is null && (compact is not null || currency is not null))
+            throw new ArgumentException($"{who}'s format.compact and format.currency are a place's conventions: give format.locale too, as 'en-IN'.");
+        var format = new NumberFormat((int)d, o.Raw("prefix")?.ToString() ?? "", o.Raw("suffix")?.ToString() ?? "", o.Bool("grouping", false),
+            locale, compact, currency);
+        if (locale is not null) format.Format(0);       // a locale, compact or currency the data does not carry is refused here
+        return format;
     }
 
     /// <remarks>
@@ -112,6 +123,10 @@ internal sealed record NumberFormat(int Decimals, string Prefix, string Suffix, 
     /// </remarks>
     public string Format(double value)
     {
+        // A place's conventions are CLDR's (Locale.number): crore, 億, Mrd., its grouping and separators. Decimals is then
+        // ICU's most fraction digits, so trailing zeros drop as the place writes them.
+        if (Locale is not null)
+            return Prefix + LocaleNumbers.Format(value, Locale, Compact, Currency, false, Decimals) + Suffix;
         var spec = (Grouping ? "N" : "F") + Decimals;
         var a = Math.Abs(value);
         var beyond = a.ToString("F" + (Decimals + 25), CultureInfo.InvariantCulture)[^25..];
@@ -129,6 +144,10 @@ internal sealed record NumberFormat(int Decimals, string Prefix, string Suffix, 
             throw new InvalidOperationException(
                 $"The number{(desc is null ? "" : $" '{desc}'")} groups its digits, which Synfig's realstring cannot: export it with "
                 + "grouping off, or capture the composition as frames.");
+        if (Locale is not null)
+            throw new InvalidOperationException(
+                $"The number{(desc is null ? "" : $" '{desc}'")} is written in {Locale}'s conventions, which Synfig's realstring cannot: "
+                + "export it without format.locale, or capture the composition as frames.");
         var real = new XElement("realstring", new XAttribute("type", "string"),
             sif.Link("real", value),
             new XElement("width", new XElement("integer", new XAttribute("value", 0))),

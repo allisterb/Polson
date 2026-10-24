@@ -178,6 +178,15 @@ half a second or more, and those are the claims the film is checked on. A value 
 `counter.textAt(t)` gives the string shown at a time and `counter.valueAt(t)` the value, so a caption can quote what
 the counter landed on.
 
+**A figure is written the way its audience writes it.** The same 130.5 billion dollars is `$130.5B` in New York,
+`13,049.7 crore` in Mumbai, `1305億` in Tokyo and `130,5 Mrd. $` in Berlin. A viewer reads their own scale words
+without effort and has to convert anyone else's, so for an audience in a place, write its figures that place's way:
+`Locale.number(value, { locale: 'en-IN', compact: 'long', currency: 'USD' })` returns the string, and a counter takes
+the same `locale`, `compact` and `currency` in its `format`. `Locale.locales` lists the places carried. The figure
+itself never changes: a dollar amount stays in dollars, since converting it would be a new figure with a rate and a
+date the document does not give, so the read-back still finds it on its page. Only the words around it are yours to
+put in the audience's language.
+
 ### Reading the film back
 
 > **Implemented by**: `comp.texts()`, `Verify.film(...)`, `Verify.stray(...)`.
