@@ -484,9 +484,15 @@ public partial class AssetRequisitionToolkit : Runtime
         List<byte[]> references = [];
         foreach (var id in referenceIds)
         {
+            var hex = (KeyGround(opts) ?? ("magenta", "#FF00FF")).Hex;
+            if (grounded.TryGetValue($"{id}|{hex}", out var laid))
+            {
+                references.Add(laid);
+                continue;
+            }
             if (await cache.Get(id) is { ImageBytes: { Length: > 0 } bytes })
             {
-                references.Add(OnGround(bytes, (KeyGround(opts) ?? ("magenta", "#FF00FF")).Hex));
+                references.Add(grounded[$"{id}|{hex}"] = OnGround(bytes, hex));
                 continue;
             }
 
@@ -528,6 +534,12 @@ public partial class AssetRequisitionToolkit : Runtime
             return new CutoutAsset { Success = false, Failure = generated.Failure, Error = generated.Error };
         }
 
+        // The same sheet keyed and split the same way is the same cutout: served from this process's memory, so a repeat
+        // is free in time as the cache already made it free in money.
+        var processedKey = $"{generated.Hash}|{opts.Background}|{KeyGround(opts)!.Value.Name}|{opts.Tolerance}|{opts.Size}|{string.Join(",", variants)}";
+        if (processed.TryGetValue(processedKey, out var done))
+            return done with { Provenance = ProvenanceOf(generated, null) };
+
         using var master = SKBitmap.Decode(generated.ImageBytes);
         if (master is null)
         {
@@ -558,7 +570,7 @@ public partial class AssetRequisitionToolkit : Runtime
                 + "that view rather than building on it.")
             .ToList();
 
-        return new CutoutAsset
+        var asset = new CutoutAsset
         {
             Success = true,
             Id = generated.Hash,
@@ -573,6 +585,9 @@ public partial class AssetRequisitionToolkit : Runtime
             BackgroundColor = $"#{background.Red:X2}{background.Green:X2}{background.Blue:X2}",
             Provenance = ProvenanceOf(generated, null),
         };
+        if (processed.Count >= MaxProcessed) processed.Clear();
+        processed[processedKey] = asset;
+        return asset;
     }
 
     /// <summary>
@@ -1338,6 +1353,21 @@ public partial class AssetRequisitionToolkit : Runtime
     #endregion
 
     #region Fields
+    /// <summary>
+    /// Cutouts already keyed and split in this process, by sheet and keying options; and references already laid on their
+    /// ground, by id and colour.
+    /// </summary>
+    /// <remarks>
+    /// The cache made a repeat free in money and not in time: decoding, keying, splitting and encoding the sheet ran again on
+    /// every call, 4–6 s here and 8–21 s on nightshift1's busy machine, inside scripts with a 30-second limit, and the agent
+    /// stored the cell on disk to get round it. The server lives for the session, so a run's repeats come from here.
+    /// </remarks>
+    readonly System.Collections.Concurrent.ConcurrentDictionary<string, CutoutAsset> processed = new();
+    readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte[]> grounded = new();
+
+    /// <summary>Processed cutouts held at once; past it the memo starts again. A run uses a handful.</summary>
+    const int MaxProcessed = 24;
+
     static readonly string[] FormNouns =
     [
         "ship", "boat", "vessel", "building", "house", "tower", "castle", "car", "vehicle",

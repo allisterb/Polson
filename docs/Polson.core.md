@@ -4634,7 +4634,11 @@ Session.kitCrouch = kit.toDataUri();      // the guide's own frame, figure where
 - `cutout.success` · `cutout.failureName` · `cutout.remedy` · `cutout.retryable` · `cutout.error`
 - `cutout.cells` → `CutoutCell[]` — One per variant, in the order they were asked for.
 - `cutout.cell(name: string)` → `CutoutCell?` — By variant name, case-insensitively, or **`null`**. A
-  question rather than an error, because a panel loop asks it about every character it might show.
+  question rather than an error, because a panel loop asks it about every character it might show. **A cutout of one
+  view has one cell, named `subject`**, and answers any name with it, so `hero.cell('front')` works whichever form made it.
+- `cutout.fromCache` → `boolean` — True when the generation came from the cache and cost nothing (the same as
+  `provenance.fromCache`). The first call in a session keys and splits the sheet, a few seconds; a repeat with the same
+  descriptor and options in the same session is then immediate.
 - `cutout.bytes` → `byte[]`, `cutout.width` / `cutout.height` → `number` — The whole keyed sheet.
 - `cutout.toDataUri()` → `string` — The sheet, as PNG. Usually you want a cell instead.
 - `cutout.split` → `string` — `'single'`, `'gaps'`, or `'even'`. See above.

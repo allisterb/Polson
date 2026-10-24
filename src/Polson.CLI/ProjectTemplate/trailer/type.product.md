@@ -119,8 +119,10 @@ and place it as given. **With none**, make one: the model generates the vessel, 
    - **No text, no logo, no brand on the generated can.** Generated lettering comes back garbled and is not yours;
      the wordmark is set in type in step 4. Not the shape, colours or band of a real brand's can either — the
      comparables are signals, never imagery.
-   - The same descriptor and options are served from the cache for nothing, so a later script asks again rather
-     than storing the sheet. One generation from the run's asset budget; a regeneration is another.
+   - The same descriptor and options are served from the cache at no cost, so a later script asks again rather
+     than storing the sheet: the first call in a session keys and splits it (a few seconds), and every repeat in the
+     session is then immediate — `fromCache` says which. One generation from the run's asset budget; a regeneration is
+     another.
    - **A cell is only as large as the sheet allows.** Three views share one generated image, so each came back
      about 220 × 390 px whatever `size` asked — soft once a can stands 700 px tall in a 1080p frame. When the
      product is large on screen, ask once more for the front alone, shown the sheet so it stays the same can:

@@ -267,6 +267,26 @@ class StatusTests(unittest.TestCase):
             {"ts": "2026-10-18T10:00:09.000Z", "type": "run.end", "status": "incomplete", "error": "429"}) + "\n")
         self.assertEqual(self.status(p), "stopped")
 
+    def test_a_run_started_elsewhere_reads_as_running_while_its_record_moves(self):
+        """nightshift1 (claude -p) read as Stopped while its server wrote every few seconds: a moving record is a live run."""
+        from datetime import datetime, timedelta, timezone
+
+        def stamp(seconds_ago):
+            return (datetime.now(timezone.utc) - timedelta(seconds=seconds_ago)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+        live = project_dir(self.root, "live")
+        events(live, {"type": "run.start", "ts": stamp(600)}, {"type": "script.ok", "ts": stamp(20)})
+        self.assertEqual(self.status(live), "running")
+
+        cold = project_dir(self.root, "cold")
+        events(cold, {"type": "run.start", "ts": stamp(4000)}, {"type": "script.ok", "ts": stamp(3600)})
+        self.assertEqual(self.status(cold), "stopped")
+
+        done = project_dir(self.root, "done")
+        events(done, {"type": "run.start", "ts": stamp(600)}, {"type": "render", "artifact": "output.png", "ts": stamp(30)},
+               {"type": "run.end", "ts": stamp(20)})
+        self.assertEqual(self.status(done), "delivered")
+
     def test_a_later_session_without_an_end_is_not_delivered(self):
         p = project_dir(self.root, "d")
         events(p, {"type": "run.start"}, {"type": "render", "artifact": "artifacts/x.webp", "format": "webp"},
