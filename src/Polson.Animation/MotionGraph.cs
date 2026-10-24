@@ -251,6 +251,9 @@ public sealed class MotionAnimated : MotionNode
 
     /// <summary>When the last waypoint is, in seconds.</summary>
     public double End => waypoints[^1].Time;
+
+    /// <summary>The waypoints in time order, for <c>Motion.graph</c>'s measurements.</summary>
+    internal IReadOnlyList<MotionWaypoint> Waypoints => waypoints;
     #endregion
 
     #region Methods
