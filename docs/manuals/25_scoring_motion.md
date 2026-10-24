@@ -262,13 +262,35 @@ where the overshoot is the point. On an arrival it reads as weight; everywhere, 
 **Move together with one curve.** When position, scale and rotation change as one action, give them the same keys and
 the same eases (Colette & Shaw, ch. 2): different curves on parts of one move make it wobble.
 
+**Read the curve, not the frames.** An animator judges a move by the shape of its speed graph (Colette & Shaw, ch. 2)
+and the spacing of its frames on a timing chart (Lasseter §2.7); a still shows one point of it. `Motion.graph(path,
+{ name: node })` draws both and measures them, so the check is a number rather than an impression:
+
+```javascript
+// A slide in three keys: does it pass through the middle, and does anything swing past where it should rest?
+const slide = Motion.nodes.animated('real', [
+    { time: 0, value: 0, ease: 'halt' }, { time: 0.6, value: 280 }, { time: 1.2, value: 560, ease: 'halt' }]);
+const g = Motion.graph('artifacts/slide-graph.png', { slide });
+const c = g.curves[0];
+Stage.check('the slide passes through its middle key and rests without overshoot',
+    c.stops.length === 0 && c.overshoots.length === 0,
+    `peak ${c.peakSpeed}/s at ${c.peakAt.toFixed(2)}s; stops ${JSON.stringify(c.stops)}; overshoots ${JSON.stringify(c.overshoots)}`);
+Skia.Image.load(g.path);   // the graph itself, to look at
+```
+
+`stops` lists middle keys where the move halts though it carries on in the same direction (a `'halt'` that should be
+`'clamped'`); `overshoots` lists segments that go past their keys (`'auto'` on resting keys); `holds` lists the jumps.
+Look at the image too: bunched frame dots are the ease, and the speed curve's shape is the move's character.
+
 ### 5c. The path is not the timing
 
 **A natural move travels on an arc** (Lasseter §2.8). When one spline carries both the path and the timing, a fast move
 flattens its arc into a straight line — the faster, the flatter — and the life goes out of it. Colette and Shaw make the
-same split, *spatial* against *temporal* interpolation (ch. 2). This engine has no path to move along, so keep the arc
-yourself: **put a key at the arc's high point** with `'clamped'`, which passes through smoothly, and time the move with
-the eases at its ends. For a throw or a hop, key the rise and fall separately from the travel across.
+same split, *spatial* against *temporal* interpolation (ch. 2). Here the split is **`Motion.nodes.composite(x, y)`**:
+two keyed reals made one point, each with its own eases. For a throw or a hop, key the travel across on `x` and the rise
+and fall on `y` — `'halt'` at the top, where the rise turns into the fall — and the path is an arc whatever the speed.
+Where a single vector node is simpler, **put a key at the arc's high point** with `'clamped'`, which passes through it
+smoothly.
 
 ### 5d. Squash and stretch keep their volume
 

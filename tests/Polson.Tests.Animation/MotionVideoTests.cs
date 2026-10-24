@@ -226,6 +226,51 @@ public class MotionVideoTests : TestsRuntime, IDisposable
         Assert.Throws<ArgumentException>(() => comp.Sheet("artifacts/bad.png", Opts(("times", new object[] { 5d }))));
     }
 
+    /// <summary>
+    /// A move's graph measures what an animator reads off it: a middle key left on <c>halt</c> stops a move that should pass
+    /// through; <c>clamped</c> passes; <c>auto</c> on resting keys dips below them — Lasseter's Luxo base through the floor.
+    /// </summary>
+    [Fact]
+    public void TestAGraphFindsAStutterAPassAndAnOvershoot()
+    {
+        var motion = new MotionToolkit(root);
+        object Key(double t, double v, string? ease = null) =>
+            ease is null ? Opts(("time", t), ("value", v)) : Opts(("time", t), ("value", v), ("ease", ease));
+        var stutter = motion.Nodes.Animated("real", new[] { Key(0, 0, "halt"), Key(1, 300, "halt"), Key(2, 600, "halt") });
+        var smooth = motion.Nodes.Animated("real", new[] { Key(0, 0, "halt"), Key(1, 300), Key(2, 600, "halt") });
+        var luxo = motion.Nodes.Animated("real", new[] { Key(0, 0, "auto"), Key(0.6, 0, "auto"), Key(1, 120, "auto"), Key(1.4, 0, "auto"), Key(2, 0, "auto") });
+
+        var graph = motion.Graph("artifacts/graph.png", Opts(("stutter", stutter), ("smooth", smooth), ("luxo", luxo)));
+
+        var curves = ((List<object?>)graph["curves"]!).Cast<Dictionary<string, object?>>().ToDictionary(c => (string)c["label"]!);
+        Assert.Equal([1d], ((List<object?>)curves["stutter"]["stops"]!).Cast<double>());
+        Assert.Empty((List<object?>)curves["smooth"]["stops"]!);
+        Assert.Empty((List<object?>)curves["smooth"]["overshoots"]!);
+        Assert.Equal(2, ((List<object?>)curves["luxo"]["overshoots"]!).Count);
+        Assert.InRange((double)curves["smooth"]["peakSpeed"]!, 300, 450);
+        Assert.Equal((0d, 2d), ((double)graph["from"]!, (double)graph["to"]!));
+        using var image = SKBitmap.Decode(File.ReadAllBytes(Path.Combine(root, "artifacts", "graph.png")));
+        Assert.Equal((960, 540), (image.Width, image.Height));
+    }
+
+    /// <summary>A hold is reported as one, and its jump is a cut rather than a peak of speed.</summary>
+    [Fact]
+    public void TestAGraphReportsAHoldAndDoesNotCountItsJumpAsSpeed()
+    {
+        var motion = new MotionToolkit(root);
+        var stepped = motion.Nodes.Animated("real", new object[]
+        {
+            Opts(("time", 0d), ("value", 0d), ("ease", "linear")), Opts(("time", 1d), ("value", 100d), ("before", "linear"), ("after", "constant")),
+            Opts(("time", 1.5), ("value", 400d), ("ease", "linear")), Opts(("time", 2.5), ("value", 500d), ("ease", "linear")),
+        });
+
+        var curve = (Dictionary<string, object?>)((List<object?>)motion.Graph("artifacts/hold.png", stepped)["curves"]!)[0]!;
+
+        Assert.Single((List<object?>)curve["holds"]!);
+        Assert.InRange((double)curve["peakSpeed"]!, 99, 101);           // 100 a second either side of the hold, not the jump
+        Assert.Throws<ArgumentException>(() => motion.Graph("artifacts/none.png", motion.Nodes.Constant("real", 3d)));
+    }
+
     /// <summary><c>from</c> moves the sound with the picture: starts are composition times.</summary>
     [Fact]
     public void TestFromMovesTheSoundWithThePicture()

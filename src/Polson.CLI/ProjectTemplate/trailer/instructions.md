@@ -336,7 +336,14 @@ director and no record. So:
 seconds) onto one sheet, as in stage 3, and write it as `artifacts/05_sheet.png`. Read it in order.
 **A beat shorter than half a second falls between its cells**: give it a sheet of its own, a cell every two
 frames. trailer3's crack write-on looked right on the half-second sheet; frame by frame, it was invisible for
-its first four frames, because each crack began under the bullet hole.
+its first four frames, because each crack began under the bullet hole. `comp.sheet('artifacts/05_sheet.png', { count:
+31, cols: 6 })` draws the half-second sheet of a fifteen-second film; `{ times }` draws a beat's own.
+
+**Read the curves of the moves that carry the film.** A sheet shows where things are; how they move between is a curve.
+`Motion.graph('artifacts/05_moves.png', { title: titleScale, push: cameraPush })` draws the value and speed of the keyed
+nodes you name and reports, for each, `stops` — middle keys where the move halts though it carries on (a `'halt'` that
+should be `'clamped'`, Manual 25 §5b) — and `overshoots` — segments that go past their keys. Record it:
+`Stage.check('the key moves pass through their middle keys and rest without overshoot', …)`, naming any you meant.
 
 **Run checks that scan the whole film at a reduced scale.** Every frame at 1280 × 720 inside one script
 runs past the time limit: trailer2's full-size flash scan of 361 frames did. The same scan at a quarter

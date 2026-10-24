@@ -479,6 +479,58 @@ public class MotionToolkit : IDisposable
     }
 
     /// <summary>
+    /// The speed and value graphs of keyed values, written to <paramref name="filePath"/> and measured:
+    /// <c>{ path, from, to, fps, curves, width, height, bytes }</c>, each curve <c>{ label, type, keys, peakSpeed, peakAt,
+    /// stops, overshoots, holds }</c>. <paramref name="nodes"/> is a node or <c>{ name: node }</c>; <c>options</c>:
+    /// <c>{ from?, to?, fps? (24), width? (960), height? (540) }</c>, the range defaulting to the keys'.
+    /// </summary>
+    /// <remarks>See <see cref="MotionCurves"/>: an agent cannot read a move from stills, and a move is a curve.</remarks>
+    public Dictionary<string, object?> Graph(string filePath, object? nodes, object? options = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+        (string, MotionNode)[] curves = nodes switch
+        {
+            MotionNode one => [("value", one)],
+            _ when JsInterop.AsDict(nodes) is { } d => [.. d.Keys.Cast<object>().Select(k => k.ToString()!).Select(name =>
+                (name, d[name] as MotionNode ?? throw new ArgumentException(
+                    $"Motion.graph's '{name}' is not a node: pass Motion.nodes.animated(...) or another node, as you keyed it.")))],
+            _ => throw new ArgumentException("Motion.graph takes a node, or an object of them: Motion.graph(path, { x: node, scale: other })."),
+        };
+        if (curves.Length is 0 or > 5) throw new ArgumentException($"Motion.graph draws 1 to 5 curves, not {curves.Length}: one graph is read at a glance.");
+
+        var opt = JsInterop.AsDict(options);
+        var span = MotionCurves.Span(curves.Select(c => c.Item2));
+        var from = opt != null && opt.Contains("from") ? Num(opt, "from", 0) : span?.From;
+        var to = opt != null && opt.Contains("to") ? Num(opt, "to", 0) : span?.To;
+        if (from is null || to is null)
+            throw new ArgumentException("Motion.graph needs from and to for values with no keys of their own: { from: 0, to: 2 }.");
+        if (to <= from) throw new ArgumentException($"Motion.graph's to ({to}) must come after its from ({from}).");
+        var fps = Num(opt, "fps", 24f);
+        var width = (int)Math.Clamp(Num(opt, "width", 960f), 320, 2400);
+        var height = (int)Math.Clamp(Num(opt, "height", 540f), 240, 1600);
+        if (fps is <= 0 or > 240) throw new ArgumentException($"Motion.graph's fps is between 0 and 240, not {fps}.");
+
+        var (png, reports) = MotionCurves.Plot(curves, from.Value, to.Value, fps, width, height);
+        var full = ProjectPath.Resolve(projectRoot, filePath, nameof(filePath), "Write to");
+        var directory = Path.GetDirectoryName(full);
+        if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
+        File.WriteAllBytes(full, png);
+        Record("render", full, new() { ["motion"] = "graph", ["format"] = "png", ["bytes"] = (long)png.Length, ["width"] = width, ["height"] = height });
+
+        return new()
+        {
+            ["path"] = filePath,
+            ["from"] = from,
+            ["to"] = to,
+            ["fps"] = (double)fps,
+            ["curves"] = reports.Cast<object?>().ToList(),
+            ["width"] = width,
+            ["height"] = height,
+            ["bytes"] = (long)png.Length,
+        };
+    }
+
+    /// <summary>
     /// Tiles <paramref name="cells"/> into one labelled sheet, each drawn at <paramref name="scale"/>: <c>Motion.sheet</c>'s
     /// layout and <c>comp.sheet</c>'s. <paramref name="opt"/> carries <c>cols, gap, padding, labels, labelHeight,
     /// background, labelColor, fontFamily, format, quality</c>.
