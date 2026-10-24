@@ -127,6 +127,17 @@ groupings at most**; unequal areas rather than equal ones; white space over fill
 central image in open ground holds the eye and is cut off from the posters beside it; a surface
 divided into blocks running to its edges leaks into its neighbours.
 
+### First, the brain dump
+
+**Before any concept, sketch many** (Manual 29 §2a; Lupton's *Visual Brain Dumping*, after Luba Lukova). Make two lists
+— the brief's subject and its elements, and this audience's distinctive titles and tags from its profile — and force them
+together: **sixteen to twenty-four crude cells on one sheet per audience**, `artifacts/02_dump_a.png`, each cell one
+pairing, labelled with it in a few words. Tone blocks and a dominant shape; **no cell gets a second pass**. Draw each cell
+with one function that can also draw it as a black silhouette, and compare the silhouettes with `bitmap.diff`: a pair
+at 0.97 or more is one idea twice, and one of them is replaced by a new pairing.
+`Stage.check('the brain dump is N different ideas', twins.length === 0, …)`. Then mark the three or four worth pursuing,
+and park the rest by name in `concepts.md`.
+
 ### Three concepts per audience, genuinely different
 
 **Draw three concepts for each audience before you choose one**, and render them. Both of this
@@ -137,13 +148,16 @@ evidence objected to it. It never objects, and the pair came out as one poster t
   key** — not one of the three. Where the dominant element sits and at what scale; light ground or
   dark; which colour leads. One composition recoloured, recropped or retyped is one concept.
 - **Each uses a different operation** from the lists above, and **each starts from a different item in
-  that audience's profile** — name it.
+  that audience's profile** — name it. **Each grows from a cell of the brain dump**, named by its pairing.
 - **Each later audience's concepts come from its own profile, drawn before you look back at the choices
   already made.** Holding the system (grid, type, title) is decided afterwards, in stage 8.
 - **Thumbnails are rough**: tone blocks, the dominant shape, one line for the title. Three on one sheet
   per audience, `artifacts/03_concepts_a.png`, `03_concepts_b.png`, … — minutes, not comps.
 
-Then choose, and record all three in `direction.md` (below) with why the other two lost.
+Then write them up as **`concepts.md`**, the concept presentation of Manual 29 §8 — a page per concept: overview,
+audience, views (the thumbnail's path, its operation, the profile item it starts from), solution, justification and
+evidence with their sources, **drawbacks**, and expansion — and a recommendation with next steps. Point Q6 at it, choose, and carry the choice and why the other two
+lost into `direction.md` (below). The chosen concept's drawbacks are checked again before you finish.
 
 ---
 
@@ -282,6 +296,9 @@ of a family's name — `'Franklin Gothic Heavy'` is `'Franklin Gothic'` at `font
   assumed, and what you would do with more clock.
 - **The print file is RGB and screen-grade** — sized, bled and checked, but not CMYK or PDF/X. Say so
   rather than calling it press-ready.
+- **The process book, last**: `Stage.book('process.pdf', { title, pages })` (Manual 18 §3c) — the brief in a page, each
+  audience's concept sheet with `concepts.md` beside it, the comps that changed the direction, and each final poster,
+  every caption saying what was decided. It names only files that exist, and draws nothing new.
 
 ---
 

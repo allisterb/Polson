@@ -173,6 +173,23 @@ The tally you get alongside it, `inspect`, still counts *how much* looking happe
 
 ---
 
+## 3c. `Stage.book` — the Record Handed Over
+
+The notes and checks are the record a reader digs through. A studio also hands its client the record in order: the
+brief, the concepts, the boards, the frames, the finished work. Lupton's *concept presentation* is that document —
+sequential, simple, concise, a header on every page naming the project — and she treats it as a tool for thinking as
+much as for showing (*Graphic Design Thinking*, pp. 108–109). `Stage.book(path, { title, pages })` writes it as a PDF
+from what the run already made:
+
+- **Pages point at artifacts; they draw nothing new.** `image` is a still in the project, `file` a text or Markdown file —
+  `concepts.md` gives each concept its own page, since a top-level `#` heading starts one.
+- **A caption says what was decided**, not what the picture shows: *"the fast-leaning grade, from Singapore's
+  profile"*, not *"the second style frame"*.
+- **Make it last, in Deliver**, when every page it names exists. A book that names a missing file is refused, which is
+  the point: it cannot claim a step the run did not take.
+
+---
+
 ## 4. Logging — Where It Goes and What It Is For
 
 > **Implemented by**: `log(...)`, `error(...)`, `console.log/info/warn/error/debug/trace(...)`, `console.clear()`.

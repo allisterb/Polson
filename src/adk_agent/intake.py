@@ -100,7 +100,7 @@ WORKFLOWS: dict[str, tuple[str, ...]] = {
     # `POLSON_QLOO_KEY` on the host. A poster reads `documents/` from stage 1 (a brand guide, an earlier poster);
     # a trailer builds on a poster found there. `film` is the CLI's default for a poster; `product` makes either one
     # a product ad, the dynamic-creative case (`docs/internal/product-ad-probe.md`).
-    # Their deadlines are the craft defaults (45 and 60): no entry in `DEADLINES` below, since the keepalive's
+    # Their deadlines are the craft defaults (55 and 70, since the brain dump): no entry in `DEADLINES` below, since the keepalive's
     # ceiling (218) holds both, where the old 38 held neither — and a set of six, at +20 or +25 per audience.
     "poster": ("film", "product"),
     # `product` is a product ad; `report` explains a long document the director attached (a 10-K) — the Nebius entry,
@@ -223,9 +223,10 @@ DEADLINES: dict[str, int] = {
     # craft default because a partner run is bounded by the director's attention anyway: this is a
     # workflow with no fixed endpoint, so something has to end it.
     "drawing": 35,
-    # The craft defaults. They need the keepalive: without it the ceiling is 38 and `check` clamps them to it.
-    "poster": 45,
-    "trailer": 60,
+    # The craft defaults. They need the keepalive: without it the ceiling is 38 and `check` clamps them to it. Ten minutes
+    # more each since 2026-10-24, for the brain dump before the concepts (Manual 29 §2a); the CLI's agree.
+    "poster": 55,
+    "trailer": 70,
     # A type's own entry, `workflow.type`, wins over its workflow's: a pitch is two minutes of narrated film to a
     # trailer's fifteen seconds. The CLI's craft default agrees (`ProjectGenerator.WorkflowDeadlines`).
     "trailer.pitch": 90,

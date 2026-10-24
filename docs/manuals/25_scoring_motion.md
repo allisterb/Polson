@@ -994,7 +994,9 @@ montage. Choose which the piece is before the beats, and keep to it.
 tight vignettes introduces the colours, the style and the elements; the camera pulls back, or the pieces assemble, and
 the final frame — the title, the logo, the product, the ask — answers the question the vignettes posed. Sports openers
 and main titles do this constantly (ch. 7). Plan the resolve first and design the shots that lead to it as parts of it;
-Manual 29 §8 makes the same point from the concept's side.
+Manual 29 §8 makes the same point from the concept's side. **Decide its look on a style frame before animating towards
+it** — `comp.still('artifacts/03_style_end.png', t)` writes the frame at full size — and hold the finished film to it:
+a motion studio shows its client style frames before anything moves (Colette & Shaw, ch. 1).
 
 ### 12c. The partial edit
 

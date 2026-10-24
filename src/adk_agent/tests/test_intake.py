@@ -335,7 +335,7 @@ class WorkflowTypeTests(unittest.TestCase):
             self.assertEqual(intake.check("lanternkeeper", "poster", "film", "A film poster."), 38)
         with mock.patch.object(intake, "MAX_DEADLINE_MINUTES", 218), \
              mock.patch.object(intake, "archived_names", return_value=[]):
-            self.assertEqual(intake.check("lanternkeeper", "poster", "film", "A film poster."), 45)
+            self.assertEqual(intake.check("lanternkeeper", "poster", "film", "A film poster."), 55)
 
     def test_a_set_of_audiences_is_given_more_time_per_audience_past_two(self):
         """Each audience is its own profile and its own piece, so a set of four is two more pieces' worth."""
@@ -344,9 +344,9 @@ class WorkflowTypeTests(unittest.TestCase):
 
         with mock.patch.object(intake, "MAX_DEADLINE_MINUTES", 218), \
              mock.patch.object(intake, "archived_names", return_value=[]):
-            self.assertEqual(intake.check("p", "poster", "film", brief(2)), 45)
-            self.assertEqual(intake.check("p", "poster", "film", brief(4)), 45 + 2 * 20)
-            self.assertEqual(intake.check("p", "trailer", "", brief(6)), 60 + 4 * 25)
+            self.assertEqual(intake.check("p", "poster", "film", brief(2)), 55)
+            self.assertEqual(intake.check("p", "poster", "film", brief(4)), 55 + 2 * 20)
+            self.assertEqual(intake.check("p", "trailer", "", brief(6)), 70 + 4 * 25)
             self.assertEqual(intake.check("p", "trailer", "", brief(6), deadline="30"), 30,
                              "a deadline the director typed is theirs")
         with mock.patch.object(intake, "MAX_DEADLINE_MINUTES", 100), \
@@ -368,7 +368,7 @@ class WorkflowTypeTests(unittest.TestCase):
         with mock.patch.object(intake, "MAX_DEADLINE_MINUTES", 218), \
              mock.patch.object(intake, "archived_names", return_value=[]):
             self.assertEqual(intake.check("p", "trailer", "pitch", brief(0)), 90)
-            self.assertEqual(intake.check("p", "trailer", "report", brief(0)), 60, "the workflow's for a type without one")
+            self.assertEqual(intake.check("p", "trailer", "report", brief(0)), 70, "the workflow's for a type without one")
             self.assertEqual(intake.check("p", "trailer", "pitch", brief(6)), 90 + 4 * 25)
         ceiling = intake._max_deadline(keepalive.MAX_HOLD_MINUTES * 60.0)
         self.assertLessEqual(intake.DEADLINES["trailer.pitch"] + 4 * intake.PER_AUDIENCE_MINUTES["trailer"], ceiling)
@@ -794,7 +794,7 @@ class TypeSelectionTests(unittest.TestCase):
 
         self.assertEqual(ceiling, 218)
         self.assertLessEqual(ceiling + intake.AFTER_DEADLINE_SECONDS / 60, keepalive.MAX_HOLD_MINUTES)
-        self.assertGreaterEqual(ceiling, 60, "the trailer's craft default must fit")
+        self.assertGreaterEqual(ceiling, intake.DEADLINES["trailer"], "the trailer's craft default must fit")
 
     def test_a_type_the_workflow_does_not_offer_is_refused(self):
         answer = self.client.post("/projects", data={

@@ -607,7 +607,7 @@ public partial class ProjectGeneratorTests : TestsRuntime, IDisposable
         Assert.Contains("A projection looks like a projection", pitch, StringComparison.Ordinal);
         Assert.Contains($"### Manual 13 — {PolsonManuals.Find("13")!.Title}", pitch, StringComparison.Ordinal);
         Assert.Equal(90, ProjectGenerator.DeadlineFor("trailer", null, "pitch"));
-        Assert.Equal(60, ProjectGenerator.DeadlineFor("trailer", null, "report"));
+        Assert.Equal(70, ProjectGenerator.DeadlineFor("trailer", null, "report"));
         Assert.Equal(30, ProjectGenerator.DeadlineFor("trailer", 30, "pitch"));
     }
     #endregion

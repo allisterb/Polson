@@ -1,6 +1,6 @@
 # Studio Manual 29: Concepts — Verbs, Figures, Signs and the Kit
 
-> **Credits & Theoretical Foundation**: Distilled from Ellen Lupton (ed.), *Graphic Design Thinking: Beyond Brainstorming* (Princeton Architectural Press, 2011) — *Creative Brief* (pp. 56–59) for §2, *Action Verbs* (pp. 74–77, after Alex F. Osborn's *Applied Imagination*, 1953, and Koberg & Bagnall's *The Universal Traveler*, 1972) for §3, *Rhetorical Figures* (pp. 82–87, after Ehses & Lupton's *Design Papers: Rhetorical Handbook*, 1988) for §4, *Icon, Index, Symbol* (pp. 88–91, after Peirce) for §5, *Lost in Translation* (pp. 104–107, Toormix's method) for §6, and *Kit of Parts* (pp. 126–131) and *Brand Languages* (pp. 132–135) for §7 — and from John Colette & Austin Shaw, *Motion Design Toolkit* (Routledge, 2023), ch. 1 for the resolve and ch. 12 for design systems. Both ledgered 2026-10-24; methods in our words, no passage reproduced. **Where a rule is ours rather than theirs, it says so.** The sources Lupton cites (Osborn, Koberg & Bagnall, Ehses & Lupton, Peirce) are not in `reference/` and are cited through her.
+> **Credits & Theoretical Foundation**: §8 also follows L. Galli's slide template of BJ Fogg's "Conceptual Designs" (in B. Laurel, ed., *Design Research*, MIT Press, 2003), ledgered 2026-10-24. Distilled from Ellen Lupton (ed.), *Graphic Design Thinking: Beyond Brainstorming* (Princeton Architectural Press, 2011) — *Creative Brief* (pp. 56–59) for §2, *Action Verbs* (pp. 74–77, after Alex F. Osborn's *Applied Imagination*, 1953, and Koberg & Bagnall's *The Universal Traveler*, 1972) for §3, *Rhetorical Figures* (pp. 82–87, after Ehses & Lupton's *Design Papers: Rhetorical Handbook*, 1988) for §4, *Icon, Index, Symbol* (pp. 88–91, after Peirce) for §5, *Lost in Translation* (pp. 104–107, Toormix's method) for §6, and *Kit of Parts* (pp. 126–131) and *Brand Languages* (pp. 132–135) for §7 — and from John Colette & Austin Shaw, *Motion Design Toolkit* (Routledge, 2023), ch. 1 for the resolve and ch. 12 for design systems. Both ledgered 2026-10-24; methods in our words, no passage reproduced. **Where a rule is ours rather than theirs, it says so.** The sources Lupton cites (Osborn, Koberg & Bagnall, Ehses & Lupton, Peirce) are not in `reference/` and are cited through her.
 > **Purpose**: How to get from a brief to a concept worth drawing — several, made by different methods, before one is chosen — and, for a set made for several audiences, how to make the set one system rather than several separate pieces.
 
 ---
@@ -33,6 +33,68 @@ A concept that serves neither is decoration, however good. Put the sentence at t
 concept against it before choosing.
 
 ---
+
+## 2a. The Brain Dump: Many Small Sketches, Forced Together
+
+> **Implemented by**: the drawing tools you already have — shapes, silhouettes, type — on one sheet of small cells, and
+> `bitmap.diff` to find the cells that are the same idea twice.
+
+The generic design is the first idea, refined. The cure Lupton gives first in her chapter on getting ideas is volume
+before judgement (*Visual Brain Dumping*, pp. 62–63, after Luba Lukova): with the purpose defined, make **many small,
+quick drawings — at least twenty in twenty minutes — several to a page so they can be compared; keep moving, drawing
+another view of an idea rather than erasing and refining one; then review and choose a few to pursue.** Lukova's
+strongest posters come from two ideas colliding into a third meaning, and the collision is what the sketching hunts for.
+
+**Feed it with forced connections** (pp. 68–69, after Koberg & Bagnall): make two lists and force links between them —
+a service with a style, a function with a form. Here the two lists are (ours) **the brief's subject and its elements**,
+and **the audience's distinctive titles and tags from `Taste`**. Each cell forces one pair together and is labelled with
+it in a few words. The ideas then come from this audience's measured taste rather than from what any brief about the
+subject would produce, which is the point of measuring the audience at all.
+
+**Rules for the sheet** (ours, from the method):
+
+- **Sixteen to twenty-four cells**, crude: tone blocks, the dominant shape, a word or two of type. **No cell gets a second
+  pass in this stage** — refinement is what the stage exists to postpone.
+- **One idea per cell.** A cell recoloured, recropped or nudged is the same idea; the sheet is measured for that (below).
+- **Label each cell** with its pairing — *"cold brew × slow-cinema stillness"* — so the review can say what each idea is.
+- **Review on the sheet**: mark the three or four worth pursuing, and park the rest by name in `concepts.md` and a
+  `Stage.note`, so a later run can find them with `Recall` — Lukova keeps her unused sketches for exactly that (p. 62).
+- **Then make the three concepts** (§3–§5) from the chosen cells, and write them up (§8).
+
+```javascript
+// A brain-dump sheet: twelve crude cells, each a forced pairing, then measured for near-duplicates with bitmap.diff.
+const PAIRS = ['cab × film noir rain', 'cab × chess', 'cab × clock', 'cab × swarm', 'cab × keyhole', 'cab × stopwatch',
+    'cab × chess (recoloured)', 'cab × lighthouse', 'cab × medal', 'cab × river', 'cab × pocket', 'cab × crown'];
+const CW = 200, CH = 150, sheet = createCanvas(4 * CW, 3 * CH + 40), out = sheet.getContext('2d');
+out.fillStyle = '#f2efe8'; out.fillRect(0, 0, sheet.width, sheet.height);
+
+// Each cell is drawn by one function, in its colours or as a black silhouette: the silhouette is what is compared.
+function drawCell(ctx, i, silhouette) {
+    const k = i === 6 ? 1 : i;                                       // cell 6 repeats cell 1's idea in another colour
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, CW - 10, CH - 30);
+    ctx.fillStyle = silhouette ? '#000000' : (i === 6 ? '#3a6ea5' : '#15151a');
+    ctx.fillRect(20 + (k * 37) % 90, 25 + (k * 23) % 50, 40 + (k * 13) % 60, 30 + (k * 17) % 40);
+    ctx.beginPath(); ctx.arc(130 - (k * 19) % 60, 70 - (k * 11) % 30, 12 + (k * 7) % 20, 0, Math.PI * 2); ctx.fill();
+}
+const shapes = PAIRS.map((label, i) => {
+    const cell = createCanvas(CW - 10, CH - 30); drawCell(cell.getContext('2d'), i, false);
+    out.drawImage(cell, (i % 4) * CW + 5, Math.floor(i / 4) * CH + 5);
+    out.fillStyle = '#15151a'; out.font = '12px Georgia';
+    out.fillText(label, (i % 4) * CW + 8, Math.floor(i / 4) * CH + CH - 10);
+    const mono = createCanvas(CW - 10, CH - 30); drawCell(mono.getContext('2d'), i, true);
+    return mono.toBitmap();
+});
+// Keep moving, measured: two cells whose silhouettes match are one idea, whatever their colours.
+const twins = [];
+for (let a = 0; a < shapes.length; a++) for (let b = a + 1; b < shapes.length; b++)
+    if (shapes[a].diff(shapes[b]).similarity >= 0.97) twins.push(`${PAIRS[a]} = ${PAIRS[b]}`);
+out.fillStyle = '#9b2c2c'; out.font = '14px Georgia';
+out.fillText(twins.length ? `same idea twice: ${twins.join('; ')}` : 'every cell a different idea', 8, sheet.height - 14);
+sheet;
+```
+
+The check compares silhouettes, not colours: a cell recoloured is the commonest way a sheet repeats itself. Two
+different ideas can share a silhouette by chance — a found pair is looked at, not deleted on sight.
 
 ## 3. Verbs: Activating an Idea
 
@@ -171,19 +233,52 @@ variable parts, and for each variable part the evidence that set it per audience
 
 ---
 
-## 8. Choosing
+## 8. The Concept Presentation
 
-> **Implemented by**: the workflow's question to the director, or, in an autonomous run, its recorded decision.
+> **Implemented by**: `concepts.md` in the project, the workflow's question to the director (or, in an autonomous run,
+> its recorded decision), and `Stage.book`, which lays the file out a concept to a page.
+
+Designers organise and explain concepts as a short sequence of pages — text and pictures, simple and sketchy rather than
+finished, a header on each naming the project — and Lupton presents it as a tool for **thinking** as much as for
+communicating (*Concept Presentations*, pp. 108–109). Her outline comes from BJ Fogg's chapter "Conceptual Designs" in
+Brenda Laurel's *Design Research* (MIT Press, 2003): title, overview, challenge, views, solution, benefits, drawbacks. A
+slide template made from the same chapter (L. Galli's, `reference/decks/`, ledgered 2026-10-24) adds the sections that
+make the file most useful to an agent: **the people's perspective, a storyboard beside the sketch, theoretical
+justifications with their sources, early research results, shortcomings stated self-critically, expansion, and next
+steps.** Fogg's chapter itself is not in `reference/` and is cited through both. Write it as `concepts.md`, one
+top-level heading per concept, before choosing:
+
+```text
+# A — <the concept's name>
+**Overview.** <one sentence: §2's sentence, as this concept answers it>
+**Audience.** <who it is for and what they bring to it, from their measured profile — the people's perspective>
+**Views.** <the sketch: the thumbnail or frame already drawn, by path; for a film, the storyboard — its beats, a line
+each; the method — verb, figure or sign (§3–§5); the resolve>
+**Solution.** <what it does: how it carries the key messages, in order>
+**Justification.** <why these choices — the manual sections and research that support them, cited>
+**Evidence.** <the early results: what the audience's profile and the first renders actually showed, each with its source
+kind — Qloo, research, the brief; and what was assumed>
+**Drawbacks.** <its shortcomings, stated self-critically; this is the field that earns the file>
+**Expansion.** <what else it could do: other audiences, sizes, a still from the film — what the kit (§7) would keep>
+
+# Recommendation
+<the chosen concept and why; why each other lost; the next steps for the chosen one>
+```
 
 - **Three concepts, three methods** (ours, after §1): one from a verb (§3), one from a figure (§4), one from a sign
   chosen for its kind (§5). Three variations of one idea are one concept.
-- **Test each against the sentence (§2).** The one that carries the key messages most directly, to this audience, wins;
-  the others are recorded with why they lost.
-- **Show them rough.** Thumbnails or single frames, one line each naming its method and what it rests on. The
-  director chooses between ideas, not between finishes.
+- **Test each against the sentence (§2).** The one that carries the key messages most directly, to this audience, wins.
+- **Keep it rough.** The views are the thumbnails already made, named by path; nothing new is drawn for the file. The
+  director chooses between ideas, not between finishes, and the question to them points at the file.
+- **The drawbacks are a watch-list** (ours). The chosen concept's drawbacks are what the checks look for at the end: each
+  one is shown to have been avoided, or recorded as a finding. A drawback written and never looked at again is the
+  file's one wasted line.
 - **A film ends on its resolve.** Where a concept builds to a title, a product or an ask, its last shot is the lock-up
   the earlier shots were close-ups of (Colette & Shaw, ch. 1; Manual 25 §12). Decide the resolve with the concept, not
-  after it.
+  after it, and name it in *Views*.
+
+At the end of the run, `Stage.book` makes the file the concepts section of the process book (Manual 18 §3c), each concept
+on its own page.
 
 ### A concepts sheet, run end to end
 
