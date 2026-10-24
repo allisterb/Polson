@@ -1,9 +1,9 @@
 """Research sheets: renders of Qloo's pictures, which the studio never shows.
 
 `Taste.images` fetches Qloo's own picture of each entity an answer named: a film's poster, a brand's logo. An agent
-looks at them on a sheet of its own (Manual 29 §2a), and that sheet is other people's work, with real faces on the
+looks at them on a sheet of its own (Manual 29 §2b), and that sheet is other people's work, with real faces on the
 posters. Qloo's Terms of Use §8 forbid displaying a logo that appears in its service without its say-so. So a run's
-research sheet stays with the agent: never served, never in the stream the page draws from, never the finished piece.
+research sheet stays with the agent: never in the stream the page draws from, never the finished piece or a thumbnail.
 What the client sees instead is the research board, which carries no picture.
 
 **One rule, by execution**, the one `RunEventLog.IsResearch` applies on the .NET side: the engine records

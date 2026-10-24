@@ -169,7 +169,7 @@ public sealed class StageApi
                 // The book is the client's, and a research sheet shows other people's posters and logos.
                 if (projectRoot is not null && events?.IsResearch(Path.GetRelativePath(projectRoot, full)) == true)
                     throw new ArgumentException($"Stage.book: '{imagePath}' is a research sheet of Qloo's pictures — other people's posters and logos — " +
-                        "and the process book is the client's. Show the research board instead, e.g. 'artifacts/01_field_a.png' (Manual 29 §2a).");
+                        "and the process book is the client's. Show the research board instead, e.g. 'artifacts/01_field_a.png' (Manual 29 §2b).");
                 if (!System.Text.RegularExpressions.Regex.IsMatch(full, @"\.(png|jpe?g|webp)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
                     throw new ArgumentException($"Stage.book's pages show stills (.png, .jpg, .webp), not '{imagePath}'. For a film, render a frame of it.");
                 image = File.ReadAllBytes(full);
@@ -212,6 +212,81 @@ public sealed class StageApi
         {
             ["path"] = filePath, ["pages"] = count, ["bytes"] = (long)pdf.Length,
             ["warnings"] = warnings.Cast<object?>().ToList(),
+        };
+    }
+
+    /// <summary>
+    /// The run's mind map (Manual 29 §2a; Lupton, pp. 22–25): reads the outline at <paramref name="filePath"/>, checks
+    /// every measured node against the Taste answer it cites, and — given a <c>ctx</c> — draws it radially, a colour
+    /// per branch. Returns <c>{ centre, depth, branches, leaves, measured, assumed, unverified, typeSize, summary }</c>.
+    /// </summary>
+    /// <param name="ctx">A canvas context to draw into, or null to read the map without drawing it.</param>
+    /// <param name="options"><c>{ x, y, width, height, font, legend }</c>: the box to draw in (the canvas by default).</param>
+    public Dictionary<string, object?> MindMap(string filePath, object? ctx = null, object? options = null)
+    {
+        var full = ProjectPath.Resolve(projectRoot, filePath, nameof(filePath), "Read");
+        if (!File.Exists(full))
+            throw new ArgumentException($"Stage.mindMap: '{filePath}' is not in the project. Write the outline first: a '# ' centre and nested '- ' branches.");
+        var root = Polson.Drawing.Skia.MindMap.Parse(File.ReadAllText(full));
+        var nodes = root.Descendants.ToArray();
+
+        // A measured node is one a Qloo answer returned, checked as Taste.checkReferences checks direction.md: a node
+        // that only remembers being measured is drawn as a fault and listed, never as evidence.
+        var unverified = new List<string>();
+        foreach (var n in nodes.Where(n => n.Kind == Polson.Drawing.Skia.MindMapKind.Measured))
+        {
+            var answer = session?.Taste.Get(n.Handle!);
+            n.Verified = answer is not null && Polson.ExtendedMind.Taste.TasteReferences.Carries(answer, n.Text, n.IsTag);
+            if (n.Verified == false)
+                unverified.Add(answer is null ? $"{n.Trail} ({n.Handle} is not an answer of this session)" : $"{n.Trail} (not returned by {n.Handle})");
+        }
+
+        float typeSize = 0;
+        if (ctx is Polson.Drawing.Skia.CanvasRenderingContext2D context)
+        {
+            var o = JsInterop.AsDict(options);
+            float Option(string key, float fallback) =>
+                o is not null && o.Contains(key) && o[key] is not null ? Convert.ToSingle(o[key], System.Globalization.CultureInfo.InvariantCulture) : fallback;
+            typeSize = Polson.Drawing.Skia.MindMap.Draw(context, root,
+                Option("x", 0), Option("y", 0), Option("width", context.Canvas.Width), Option("height", context.Canvas.Height),
+                o?["font"]?.ToString() ?? "Georgia", 14, o is null || o["legend"] is not false);
+        }
+        else if (ctx is not null)
+            throw new ArgumentException("Stage.mindMap's second argument is a canvas context to draw into — canvas.getContext('2d') — or null.");
+
+        var leaves = root.Leaves.ToArray();
+        int measured = nodes.Count(n => n.Kind == Polson.Drawing.Skia.MindMapKind.Measured),
+            assumed = nodes.Count(n => n.Kind == Polson.Drawing.Skia.MindMapKind.Assumed);
+        var depth = leaves.Max(l => l.Depth);
+        var summary = $"{root.Children.Count} branches, {leaves.Length} leaves, {depth} levels deep; {measured} measured, {assumed} assumed"
+            + (unverified.Count == 0 ? "." : $"; {unverified.Count} cited to an answer that did not return it: {string.Join("; ", unverified)}.");
+
+        events?.Append("mindmap", session?.Stage, executionId, new Dictionary<string, object?>
+        {
+            ["path"] = filePath, ["branches"] = root.Children.Count, ["leaves"] = leaves.Length, ["depth"] = depth,
+            ["measured"] = measured, ["assumed"] = assumed, ["unverified"] = unverified.Count == 0 ? null : unverified.ToArray(),
+        });
+        return new()
+        {
+            ["centre"] = root.Text,
+            ["depth"] = depth,
+            ["branches"] = root.Children.Select((b, i) => (object?)new Dictionary<string, object?>
+            {
+                ["name"] = b.Text, ["colour"] = Polson.Drawing.Skia.MindMap.Palette[i % Polson.Drawing.Skia.MindMap.Palette.Length],
+                ["leaves"] = b.Leaves.Count(),
+                ["measured"] = b.Descendants.Count(n => n.Kind == Polson.Drawing.Skia.MindMapKind.Measured),
+                ["assumed"] = b.Descendants.Count(n => n.Kind == Polson.Drawing.Skia.MindMapKind.Assumed),
+            }).ToArray(),
+            ["leaves"] = leaves.Select(l => (object?)new Dictionary<string, object?>
+            {
+                ["text"] = l.Text, ["branch"] = l.Branch?.Text, ["trail"] = l.Trail, ["kind"] = l.Kind.ToString().ToLowerInvariant(),
+                ["handle"] = l.Handle, ["verified"] = l.Verified,
+            }).ToArray(),
+            ["measured"] = measured,
+            ["assumed"] = assumed,
+            ["unverified"] = unverified.ToArray(),
+            ["typeSize"] = typeSize,
+            ["summary"] = summary,
         };
     }
 

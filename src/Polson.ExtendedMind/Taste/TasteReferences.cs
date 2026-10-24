@@ -120,6 +120,18 @@ public static class TasteReferences
         };
     }
 
+    /// <summary>
+    /// Whether an answer returned <paramref name="name"/> — as an entity (a title) when <paramref name="tag"/> is false,
+    /// as a tag when it is true, as either when it is null. The test <see cref="Check"/> applies to a cited reference,
+    /// for a mind map's measured nodes.
+    /// </summary>
+    public static bool Carries(TasteResult answer, string name, bool? tag = null)
+    {
+        var key = Key(name);
+        return key.Length > 0 && answer.Ok
+            && (tag != true && Returned(answer, key) || tag != false && TagsOf(answer).Any(n => Key(n) == key));
+    }
+
     /// <summary>A name as compared: no accents, case, punctuation, leading article or trailing year.</summary>
     internal static string Key(string? name)
     {
