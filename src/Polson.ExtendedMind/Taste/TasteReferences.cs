@@ -22,7 +22,9 @@ using System.Text.RegularExpressions;
 /// <para>
 /// <b>What counts as found.</b> A title is found when a handle the row cites returned it — as an entity, or in a
 /// profile's shared list — or when its id is in that handle's request, which is how a <c>describe</c> names the films
-/// it was asked about. A tag is found when a cited handle returned it. A title another handle returned is still not
+/// it was asked about. A tag is found when a cited handle returned it, as one of the answer's own tags or on one of its
+/// entities. Something shaped like a tag citation in a form the parser does not know is reported as <c>unread</c> and
+/// fails the check, rather than being skipped in silence. A title another handle returned is still not
 /// found, and says which handle: the row cites the wrong evidence. Matching ignores case, accents, punctuation, a
 /// leading article and a trailing year.
 /// </para>
@@ -47,6 +49,7 @@ public static class TasteReferences
 
         var rows = new List<object?>();
         var unverified = new List<string>();
+        var unread = new List<string>();
         int titles = 0, tags = 0;
 
         foreach (var row in Rows(text))
@@ -84,6 +87,7 @@ public static class TasteReferences
                 return (object?)new Dictionary<string, object?> { ["tag"] = t, ["found"] = found is not null, ["in"] = found?.Id };
             }).ToArray();
 
+            unread.AddRange(row.Unread.Select(u => $"{u}: not read as a tag — write it \"Tag\" (item N) or **\"Tag\"**"));
             titles += titleChecks.Length;
             tags += tagChecks.Length;
             unverified.AddRange(problems.Select(p => $"{Short(row.Choice)}: {p}"));
@@ -98,17 +102,19 @@ public static class TasteReferences
             });
         }
 
-        var passed = rows.Count > 0 && unverified.Count == 0;
+        var passed = rows.Count > 0 && unverified.Count == 0 && unread.Count == 0;
         var summary = rows.Count == 0
             ? "No Qloo rows found: no table whose last column is Kind has a row of kind Qloo."
             : $"{rows.Count} Qloo row{(rows.Count == 1 ? "" : "s")}; {titles} title{(titles == 1 ? "" : "s")} and {tags} tag{(tags == 1 ? "" : "s")} checked"
-              + (unverified.Count == 0 ? "; every one was returned by the query it cites." : $"; {unverified.Count} not verified: {string.Join("; ", unverified)}.");
+              + (unverified.Count == 0 ? "; every one was returned by the query it cites" : $"; {unverified.Count} not verified: {string.Join("; ", unverified)}")
+              + (unread.Count == 0 ? "." : $"; {unread.Count} not read, so not checked at all: {string.Join("; ", unread)}.");
 
         return new Dictionary<string, object?>
         {
             ["passed"] = passed,
             ["rows"] = rows.ToArray(),
             ["unverified"] = unverified.ToArray(),
+            ["unread"] = unread.ToArray(),
             ["checked"] = titles + tags,
             ["summary"] = summary,
         };
@@ -138,17 +144,26 @@ public static class TasteReferences
         idsByName.TryGetValue(key, out var ids) && ids.Any(id => r.Request.Contains(id, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>An answer's entities, with a profile's shared lists, as (id, name).</summary>
-    private static IEnumerable<(string? Id, string? Name)> EntitiesOf(TasteResult r)
+    private static IEnumerable<(string? Id, string? Name)> EntitiesOf(TasteResult r) =>
+        EntityDicts(r).Select(e => (e.GetValueOrDefault("id") as string, e.GetValueOrDefault("name") as string));
+
+    private static IEnumerable<Dictionary<string, object?>> EntityDicts(TasteResult r)
     {
         var shared = r.Profile?.GetValueOrDefault("domains") is object?[] domains
             ? domains.OfType<Dictionary<string, object?>>().SelectMany(d => d.GetValueOrDefault("shared") as object?[] ?? [])
             : [];
-        return r.Entities.Concat(shared).OfType<Dictionary<string, object?>>()
-            .Select(e => (e.GetValueOrDefault("id") as string, e.GetValueOrDefault("name") as string));
+        return r.Entities.Concat(shared).OfType<Dictionary<string, object?>>();
     }
 
+    /// <summary>
+    /// Every tag an answer returned: its own (a <c>describe</c>, a profile's place aesthetics) and those on each entity it
+    /// returned. Until 2026-10-24 only the first were read, so a tag cited from an <c>insights</c> entity — Q-Tip's
+    /// "Jazz Rap" — could never verify, and poster4's 34 real tags all came back unverified.
+    /// </summary>
     private static IEnumerable<string> TagsOf(TasteResult r) =>
-        r.Tags.OfType<Dictionary<string, object?>>().Select(t => t.GetValueOrDefault("name") as string).OfType<string>();
+        r.Tags.Concat(EntityDicts(r).SelectMany(e => e.GetValueOrDefault("tags") as System.Collections.IEnumerable is { } t ? t.Cast<object?>() : []))
+            .Select(t => t switch { Dictionary<string, object?> d => d.GetValueOrDefault("name") as string, string s => s, _ => null })
+            .OfType<string>();
 
     /// <summary>The Qloo rows of every Kind table, with the section each sits under and that section's lead handles.</summary>
     private static IEnumerable<Row> Rows(string text)
@@ -198,7 +213,8 @@ public static class TasteReferences
                     Handles(lines[i]),
                     lead.Distinct().ToArray(),
                     [.. Italics(choice + " " + evidence).Distinct()],
-                    [.. QuotedTags(evidence).Distinct()]);
+                    [.. QuotedTags(evidence).Distinct()],
+                    [.. Unread(evidence).Distinct()]);
             }
             i--;
         }
@@ -214,6 +230,18 @@ public static class TasteReferences
 
     private static IEnumerable<string> QuotedTags(string text) =>
         TagRef.Matches(text).Select(m => (m.Groups[1].Success ? m.Groups[1].Value : m.Groups[2].Value).Trim()).Where(t => t.Length > 0);
+
+    /// <summary>
+    /// Quoted words with a parenthesis after them that <see cref="TagRef"/> did not read: shaped like a tag citation, but
+    /// in a form it does not know, so it would otherwise be skipped in silence and the row would pass unchecked.
+    /// </summary>
+    private static IEnumerable<string> Unread(string text)
+    {
+        var read = TagRef.Matches(text).Select(m => (m.Index, m.Index + m.Length)).ToArray();
+        return NearTag.Matches(text)
+            .Where(m => !read.Any(r => m.Index >= r.Item1 && m.Index < r.Item2))
+            .Select(m => m.Value.Trim());
+    }
 
     /// <summary>A Markdown table row's cells, honouring <c>\|</c> and pipes inside backticks.</summary>
     private static List<string> Cells(string line)
@@ -241,7 +269,7 @@ public static class TasteReferences
     #endregion
 
     #region Types
-    private sealed record Row(string Section, string Choice, string[] Handles, string[] LeadHandles, string[] Titles, string[] Tags);
+    private sealed record Row(string Section, string Choice, string[] Handles, string[] LeadHandles, string[] Titles, string[] Tags, string[] Unread);
 
     private enum Lead { Waiting, Reading, Closed }
     #endregion
@@ -252,9 +280,12 @@ public static class TasteReferences
     private static readonly Regex HandleRef = new(@"(?<![\w-])t(\d{1,3})(?![\w-])", RegexOptions.Compiled);
     private static readonly Regex Italic = new(@"(?<!\*)\*([^*\n]{1,80})\*(?!\*)", RegexOptions.Compiled);
 
-    /// <summary><c>**"Glitzy"**</c>, or <c>"Glitzy" (item 10)</c> / <c>(10)</c> / <c>(t6 item 10)</c>, bold or not.</summary>
+    /// <summary><c>**"Glitzy"**</c>, or <c>"Glitzy" (item 10)</c> / <c>(10)</c> / <c>(t6 item 10)</c> / <c>(`t6` item 10)</c>, bold or not.</summary>
     private static readonly Regex TagRef = new(
-        @"\*\*[""“]([^""”\n]{1,40})[""”]\*\*|[""“]([^""”\n]{1,40})[""”]\**\s*\((?:t\d{1,3},?\s*)?(?:item\s*)?\d+\)", RegexOptions.Compiled);
+        @"\*\*[""“]([^""”\n]{1,40})[""”]\*\*|[""“]([^""”\n]{1,40})[""”]\**\s*\((?:`?t\d{1,3}`?,?\s*)?(?:item\s*)?\d+\)", RegexOptions.Compiled);
+
+    /// <summary>Anything shaped like a tag citation: quoted words, then a short parenthesis.</summary>
+    private static readonly Regex NearTag = new(@"[""“][^""”\n]{1,40}[""”]\**\s*\([^)\n]{1,30}\)", RegexOptions.Compiled);
 
     private static readonly Regex TrailingYear = new(@"\s*\((?:19|20)\d{2}\)\s*$", RegexOptions.Compiled);
     private static readonly Regex LeadingArticle = new(@"^(?:the|a|an)\s+", RegexOptions.Compiled);

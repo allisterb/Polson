@@ -166,6 +166,10 @@ public sealed class StageApi
             {
                 var full = ProjectPath.Resolve(projectRoot, imagePath, "image", "Read");
                 if (!File.Exists(full)) throw new ArgumentException($"Stage.book: '{imagePath}' is not in the project. Name a still you rendered, e.g. 'artifacts/03_concepts_a.png'.");
+                // The book is the client's, and a research sheet shows other people's posters and logos.
+                if (projectRoot is not null && events?.IsResearch(Path.GetRelativePath(projectRoot, full)) == true)
+                    throw new ArgumentException($"Stage.book: '{imagePath}' is a research sheet of Qloo's pictures — other people's posters and logos — " +
+                        "and the process book is the client's. Show the research board instead, e.g. 'artifacts/01_field_a.png' (Manual 29 §2a).");
                 if (!System.Text.RegularExpressions.Regex.IsMatch(full, @"\.(png|jpe?g|webp)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
                     throw new ArgumentException($"Stage.book's pages show stills (.png, .jpg, .webp), not '{imagePath}'. For a film, render a frame of it.");
                 image = File.ReadAllBytes(full);

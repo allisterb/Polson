@@ -52,6 +52,7 @@ from . import direction as direction_mod
 from . import front
 from . import projects
 from . import observe as observe_mod
+from .research import StreamFilter, is_research, research_executions
 from .runs import DEFAULT_PROMPT, Registry, Run, StudioError
 
 #: Where a page looks for projects to run. Overridden by the entry point.
@@ -410,8 +411,13 @@ def create_app(root: Path | None = None, registry: Registry | None = None,
 
         async def stream() -> AsyncIterator[dict[str, str]]:
             subscription = run.attach()
+            research = StreamFilter()
             try:
                 async for event in subscription:
+                    # A research render never reaches the page, which draws every render it is sent: a sheet
+                    # of other people's posters would otherwise be shown as "the latest render" (research.py).
+                    if not research.keep(event):
+                        continue
                     yield {"event": event.get("type", "event"), "data": json.dumps(event)}
             finally:
                 subscription.close()
@@ -774,8 +780,11 @@ def final_renders(run: Run) -> list[dict[str, Any]]:
     describes.
     """
     # Scoped to this run as `final_render` is: a previous run's finals in the same project must not hide this run's piece.
-    letters = sorted({m.group(1) for e in read_events(run.project.server_events)
+    events = read_events(run.project.server_events)
+    executions = research_executions(events)
+    letters = sorted({m.group(1) for e in events
                       if e.get("type") == "render" and not (run.since and (e.get("ts") or "") < run.since)
+                      and not is_research(e, executions)
                       and (e.get("motion") or "").lower() != "sheet"
                       and (m := AUDIENCE_FINAL.fullmatch(Path(e.get("artifact") or "").stem))})
     if not letters:
@@ -813,8 +822,10 @@ def final_render(run: Run, only=None) -> dict[str, Any] | None:
     it came, and only a later moving render replaces it.
     """
     latest: dict[str, tuple[bool, dict[str, Any]]] = {}
-    for event in read_events(run.project.server_events):
-        if event.get("type") != "render":
+    events = read_events(run.project.server_events)
+    executions = research_executions(events)
+    for event in events:
+        if event.get("type") != "render" or is_research(event, executions):
             continue
         # Scoped to this run exactly as the curve is: the event files belong to the project and
         # outlive any one run, so without this an observation shows the previous run's picture.

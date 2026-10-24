@@ -127,14 +127,31 @@ groupings at most**; unequal areas rather than equal ones; white space over fill
 central image in open ground holds the eye and is cut off from the posters beside it; a surface
 divided into blocks running to its edges leaks into its neighbours.
 
-### First, the brain dump
+### First, the field
 
-**Before any concept, sketch many** (Manual 29 §2a; Lupton's *Visual Brain Dumping*, after Luba Lukova). Make two lists
+**Before sketching, look at what this audience already loves** (Manual 29 §2a; Lupton's *Visual Research*, after 2x4).
+In one script per audience, `await Taste.images(profile, { type: 'film', take: 16 })` fetches Qloo's poster for each
+of its distinctive films. Then draw two sheets:
+- `artifacts/01_research_a.png`: the posters with their lead colours, for you to look at;
+- `artifacts/01_field_a.png`: the **research board** of Manual 29 §2a, a card per film (name, year, rank, the colours
+  its poster measured, the Qloo words it shares with the set) beside `Taste.colourField(...)`'s wheel, with **no
+  poster on it**. Draw it again once the concepts exist, naming on each card the concept it fed.
+
+Write one sentence in `direction.md`: where the field crowds, where it is empty, and whether this poster stands apart
+or belongs, citing the profile's handle and the field's `summary`. **Never draw, trace or imitate a fetched poster**:
+they are research, not material, and only the field sheet goes in the process book.
+
+### Then, the brain dump
+
+**Before any concept, sketch many** (Manual 29 §2b; Lupton's *Visual Brain Dumping*, after Luba Lukova). Make two lists
 — the brief's subject and its elements, and this audience's distinctive titles and tags from its profile — and force them
 together: **sixteen to twenty-four crude cells on one sheet per audience**, `artifacts/02_dump_a.png`, each cell one
-pairing, labelled with it in a few words. Tone blocks and a dominant shape; **no cell gets a second pass**. Draw each cell
-with one function that can also draw it as a black silhouette, and compare the silhouettes with `bitmap.diff`: a pair
-at 0.97 or more is one idea twice, and one of them is replaced by a new pairing.
+pairing, labelled with it in a few words. **Each cell stages a little scene**, not a symbol: the subject as an object,
+in a place, with a figure, or at a moment, and the paired thing drawn as what it is. A floor or horizon, flat tones, a
+mannequin's mass for a person. **Cover the label**: if the pairing can't be named from the picture, the cell is a glyph,
+and so is any cell without the subject in it. **No cell gets a second pass**. Draw each cell with one function that can
+also draw it as a silhouette, with the staged things black and the setting (sky, floor) white, and compare the
+silhouettes with `bitmap.diff`: a pair at 0.97 or more is one idea twice, and one of them is replaced by a new pairing.
 `Stage.check('the brain dump is N different ideas', twins.length === 0, …)`. Then mark the three or four worth pursuing,
 and park the rest by name in `concepts.md`.
 
@@ -277,6 +294,9 @@ of a family's name — `'Franklin Gothic Heavy'` is `'Franklin Gothic'` at `font
    most focal points about a third of the way down from the top left — a soft check, not a rule; say
    where yours is and why.
 5. **Contrast** — WCAG, as above, for every text-on-colour pair.
+6. **The field** (Manual 29 §2a). Measure the final with `bitmap.palette`, read its leading colour's hue with
+   `Taste.oklch(color).sector`, and `Stage.check` that it stands where `direction.md` said it would — in an open sector or apart in lightness if
+   it was to stand apart, in the crowd if it was to belong.
 
 ---
 
@@ -290,6 +310,7 @@ of a family's name — `'Franklin Gothic Heavy'` is `'Franklin Gothic'` at `font
 - `direction.md` complete: every choice, its evidence, and any warning you kept with the reason.
 - **Its Qloo references checked**, in the session that fetched them:
   `const r = Taste.checkReferences(); Stage.check('every Qloo reference was returned by its query', r.passed, r.summary);`
+  A citation in `r.unread` was not checked at all: rewrite it as `"Tag" (item N)` and run the check again.
   A title or tag in `r.unverified` is found in an answer and cited to it, or taken out — of `direction.md` and
   of the poster — before you deliver. A reference no answer returned is one you remembered, not one you measured.
 - `findings.md`: what the evidence changed, where it was thin, which questions you asked and which you
@@ -297,7 +318,7 @@ of a family's name — `'Franklin Gothic Heavy'` is `'Franklin Gothic'` at `font
 - **The print file is RGB and screen-grade** — sized, bled and checked, but not CMYK or PDF/X. Say so
   rather than calling it press-ready.
 - **The process book, last**: `Stage.book('process.pdf', { title, pages })` (Manual 18 §3c) — the brief in a page, each
-  audience's concept sheet with `concepts.md` beside it, the comps that changed the direction, and each final poster,
+  audience's research board (`01_field_a.png`, never the sheet of posters), each audience's concept sheet with `concepts.md` beside it, the comps that changed the direction, and each final poster,
   every caption saying what was decided. It names only files that exist, and draws nothing new. **It is the client's
   book**: ten to twenty pages; the direction as a page of its decisions in your words, not the file; `findings.md` left out.
 

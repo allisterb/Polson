@@ -39,6 +39,7 @@ from orchestrator.events import read_events
 from . import archive, catalogue, projects, uploads
 from . import direction as direction_mod
 from . import observe as observe_mod
+from .research import is_research, research_executions
 from .runs import Registry, Run, StudioError
 
 _logger = logging.getLogger("polson.front")
@@ -188,9 +189,12 @@ def still_renders(project: Path, events: list[dict[str, Any]]):
     """The still images the record says were rendered, newest first, inside the project and never from `documents/`,
     whether or not they are on disk."""
     root = project.resolve()
+    executions = research_executions(events)
     for event in reversed(events):
         if event.get("type") != "render" or (event.get("motion") or "").lower() == "sheet":
             continue
+        if is_research(event, executions):
+            continue                                # a sheet of Qloo's pictures is never a request's face (research.py)
         artifact = event.get("artifact") or ""
         if Path(artifact).suffix.lower() not in THUMB_SUFFIXES:
             continue

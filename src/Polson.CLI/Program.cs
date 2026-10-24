@@ -484,6 +484,8 @@ internal class Program : Runtime
 
         SessionContext.TasteBudget = budget;
         SessionContext.TasteMonthlyReserve = reserve;
+        // Qloo's pictures need no key, but come only with an answer, so they are on exactly when answers are.
+        JsDrawingEngine.TasteImages = new Polson.ExtendedMind.Taste.QlooImageSource(Path.Combine(cache.Location, "images"));
         Info("Taste enabled ({0}; budget: {1} requests per session; monthly reserve: {2}; cache: {3}).",
             Setting("Qloo:BaseUrl") ?? Polson.ExtendedMind.Taste.QlooClient.HackathonBaseUrl, budget, reserve, cache.Location);
     }

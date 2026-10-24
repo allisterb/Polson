@@ -213,11 +213,28 @@ when its answer would change the others'.
 
 ## Stage 2 — beats
 
+**Look at the field first** (Manual 29 §2a; Lupton's *Visual Research*, after 2x4). In one script per audience,
+`await Taste.images(answer, { type, take: 16 })` fetches Qloo's picture of what this audience already loves:
+- for a film, the posters of its distinctive films (`type: 'film'`);
+- for a product, the logos of its buyers' distinctive brands there, chosen from the brand insights for the ones in the
+  product's category (`type: 'brand'`).
+
+Draw `artifacts/01_research_a.png` (the pictures and their lead colours, for you to look at) and
+`artifacts/01_field_a.png`, the **research board** of Manual 29 §2a: a card per film or brand (name, year, rank, the
+colours its picture measured, the Qloo words it shares with the set) beside `Taste.colourField`'s wheel, with **no
+picture on it**. Draw the board again once the concepts exist, naming on each card the concept it fed. Then write in `direction.md`, in one sentence citing the answer's handle and the field's `summary`: where
+it crowds, where it is empty, and whether this film stands apart or belongs. **Never draw, trace or imitate a fetched
+picture**; only the research board goes in the process book. At the end, place the film's style frames on the field with
+`Taste.oklch(...)` and `Stage.check` that they stand where you said.
+
 **The concept comes before the beats.** Where a poster in `documents/` already sets it, carry it over. Where nothing
-does, put the brief in one sentence and **sketch many before choosing** (Manual 29 §2a): force the brief's subject
+does, put the brief in one sentence and **sketch many before choosing** (Manual 29 §2b): force the brief's subject
 against each audience's distinctive titles and tags, **sixteen to twenty-four crude cells on one sheet per audience**
-(`artifacts/02_dump_a.png`), each cell one pairing and labelled with it, none refined, the silhouettes compared with
-`bitmap.diff` so that no idea appears twice. Mark the three or four worth pursuing and park the rest. From those, make
+(`artifacts/02_dump_a.png`), each cell one pairing and labelled with it, none refined. **Each cell stages a little
+scene, not a symbol**: the subject as an object, in a place, with a figure, or at a moment, with the paired thing drawn as
+what it is. Prefer a moment where one fits: it already says what the film will move. **Cover the label**: a
+cell whose pairing can't be named from the picture is a glyph, and so is one without the subject. Compare the
+silhouettes with `bitmap.diff`, the staged things black and the setting white, so that no idea appears twice. Mark the three or four worth pursuing and park the rest. From those, make
 **three concepts by three methods** — a verb applied to the core image, a
 figure, a sign chosen for its kind (Manual 29 §2–§5) — and write them as `concepts.md`, the concept presentation of
 Manual 29 §8: a page per concept with its overview, audience, views (the sketch, and the storyboard as beats),
@@ -458,6 +475,7 @@ set's own check from *More than one audience*:
   its `pace()` counts and titles. Qloo lines carry their handle, titles in *italics* and tags in quotes with
   their item number, and are checked before delivery:
   `const r = Taste.checkReferences(); Stage.check('every Qloo reference was returned by its query', r.passed, r.summary);`
+  A citation in `r.unread` was not checked at all: rewrite it as `"Tag" (item N)` and run the check again.
   A title or tag in `r.unverified` is found in an answer and cited to it, or taken out of `direction.md` and the
   film. Run it in the session that fetched the answers; a profile the poster fetched is re-asked free from the cache.
 - **`findings.md`**: what the motion added to the poster, what the checks changed, and what you would

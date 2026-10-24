@@ -645,7 +645,7 @@ internal static class ProjectGenerator
         ["cover"] = 25,
         // Forty-five against `cover`'s twenty-five: the film type makes two posters, not one, and before
         // either there is a profile per audience (seconds per request, about seven requests each) and a
-        // direction to write. Fifty-five since 2026-10-24: ten minutes for the brain dump (Manual 29 §2a), sixteen to
+        // direction to write. Fifty-five since 2026-10-24: ten minutes for the brain dump (Manual 29 §2b), sixteen to
         // twenty-four sketched cells per audience before the three concepts. Tune after the first run with it.
         ["poster"] = 55,
         // Thirty against `drawing`'s forty-five: one scene, constructed from mannequins and taken no
@@ -657,7 +657,7 @@ internal static class ProjectGenerator
         // but a run renders its film three or four times, at draft size and at full size.
         ["animation"] = 40,
         // Fifteen seconds of motion graphics: beats, an animatic, keys, two sheets and a video that takes a quarter of a
-        // minute to encode. A poster's allowance, plus the motion; seventy since the brain dump (Manual 29 §2a).
+        // minute to encode. A poster's allowance, plus the motion; seventy since the brain dump (Manual 29 §2b).
         ["trailer"] = 70,
         // A pitch is two minutes of film to the trailer's fifteen: a deck (and perhaps a model) read and checked, about
         // nine scenes each encoded as a part, and every line narrated. No measured run behind it yet; tune after the first.

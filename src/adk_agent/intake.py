@@ -224,7 +224,7 @@ DEADLINES: dict[str, int] = {
     # workflow with no fixed endpoint, so something has to end it.
     "drawing": 35,
     # The craft defaults. They need the keepalive: without it the ceiling is 38 and `check` clamps them to it. Ten minutes
-    # more each since 2026-10-24, for the brain dump before the concepts (Manual 29 §2a); the CLI's agree.
+    # more each since 2026-10-24, for the brain dump before the concepts (Manual 29 §2b); the CLI's agree.
     "poster": 55,
     "trailer": 70,
     # A type's own entry, `workflow.type`, wins over its workflow's: a pitch is two minutes of narrated film to a
