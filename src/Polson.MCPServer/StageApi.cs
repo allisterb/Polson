@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using SkiaSharp;
 
 /// <summary>
 /// The <c>Stage</c> global: lets a script declare which stage of work it is in, and add notes to the
@@ -182,7 +183,7 @@ public sealed class StageApi
                 image = File.ReadAllBytes(full);
                 shown.Add(Path.GetFileNameWithoutExtension(full));
             }
-            var text = p["text"]?.ToString();
+            var text = PageText(p["text"], "text", paragraphs: true);
             if (p["file"]?.ToString() is { Length: > 0 } filePart)
             {
                 var full = ProjectPath.Resolve(projectRoot, filePart, "file", "Read");
@@ -193,8 +194,20 @@ public sealed class StageApi
                 if (Path.GetFileName(full).Equals("findings.md", StringComparison.OrdinalIgnoreCase))
                     warnings.Add("findings.md is the run's report to the studio, not part of the work: leave it out of the book.");
             }
-            pages.Add(new(p["title"]?.ToString(), image, p["caption"]?.ToString(), text));
+            pages.Add(new(PageText(p["title"], "title"), image, PageText(p["caption"], "caption"), text));
         }
+
+        // A page's words as a string. An array reached the PDF as "System.Object[]" (becool2), so a list of paragraphs is
+        // joined for text and anything else not a string is refused, as an unknown key already is.
+        static string? PageText(object? value, string field, bool paragraphs = false) => value switch
+        {
+            null => null,
+            string s => s,
+            IConvertible c => c.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            System.Collections.IEnumerable list when paragraphs && list.Cast<object?>().All(x => x is string) => string.Join("\n\n", list.Cast<string>()),
+            _ => throw new ArgumentException($"Stage.book: a page's {field} is a string{(paragraphs ? ", or a list of paragraphs" : "")}, "
+                + $"not {(value is System.Collections.IEnumerable ? "a list with something other than strings in it" : value.GetType().Name)}."),
+        };
         if (pages.Count is 0 or > 60) throw new ArgumentException($"Stage.book takes 1 to 60 pages, not {pages.Count}.");
         if (kind == "pitch")
         {
@@ -265,6 +278,121 @@ public sealed class StageApi
             ["path"] = filePath, ["pages"] = count, ["bytes"] = (long)pdf.Length, ["kind"] = kind,
             ["proofs"] = proofs.ToArray(), ["warnings"] = warnings.Cast<object?>().ToList(),
         };
+    }
+
+    /// <summary>
+    /// The work shown where it will live (Manual 30 §4; Lupton, pp. 136–138): <paramref name="options"/> is
+    /// <c>{ design, setting?, size?, width?, height?, label?, onto?, corners?, side?, top?, back?, accent? }</c>. Returns
+    /// <c>{ path, setting, image, corners, size, pixelsPerMm, warnings }</c>; <c>image</c> is a canvas, so a film's
+    /// frames can be shown on a phone one by one. <paramref name="filePath"/> may be null to draw without writing, and
+    /// a file's name says <c>mockup</c>: a simulated placement is never filed as the piece.
+    /// </summary>
+    public Dictionary<string, object?> Mockup(string? filePath, object? options)
+    {
+        var o = JsInterop.AsDict(options) ?? throw new ArgumentException("Stage.mockup needs { design, setting }: the work, and where it is shown.");
+        if (filePath is not null && !Path.GetFileName(filePath).Contains("mockup", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException($"Stage.mockup: name the file as a mock-up, e.g. 'artifacts/mockup_wall_a.png', not '{filePath}'. A simulated placement is never filed as the piece.");
+        if (filePath is not null && !filePath.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException($"Stage.mockup writes a PNG: name it '….png', not '{filePath}'.");
+        using var design = MockupImage(o["design"], "design") ?? throw new ArgumentException("Stage.mockup needs a design: the canvas, bitmap or paper of the finished work.");
+        using var onto = MockupImage(o["onto"], "onto");
+        using var side = MockupImage(o["side"], "side");
+        using var top = MockupImage(o["top"], "top");
+        using var back = MockupImage(o["back"], "back");
+        var setting = o["setting"]?.ToString() ?? (onto is null ? "wall" : "onto");
+        if (onto is not null && setting != "onto") throw new ArgumentException($"Stage.mockup: onto is for setting 'onto', a picture with corners; '{setting}' draws its own.");
+        var (widthMm, heightMm) = MockupSize(o["size"], design.Width >= design.Height);
+        SKColor? accent = o["accent"]?.ToString() is { Length: > 0 } a
+            ? SKColor.TryParse(a, out var c) ? c : throw new ArgumentException($"Stage.mockup's accent is a colour such as '#c8553d', not '{a}'.") : null;
+        var spec = new Polson.Drawing.Skia.Mockup.Spec(setting, widthMm, heightMm,
+            o["width"] is { } w ? Convert.ToInt32(w, System.Globalization.CultureInfo.InvariantCulture) : 1600,
+            o["height"] is { } h ? Convert.ToInt32(h, System.Globalization.CultureInfo.InvariantCulture) : 1000,
+            o["label"]?.ToString() ?? Polson.Drawing.Skia.Mockup.DefaultLabel,
+            onto, MockupCorners(o["corners"]), side, top, back, accent, o["find"] is true);
+
+        var drawn = Polson.Drawing.Skia.Mockup.Render(design, spec);
+        using var picture = drawn.Image;
+        var canvas = new Polson.Drawing.Skia.SkiaCanvas(picture.Width, picture.Height);
+        using (var onCanvas = new SKCanvas(canvas.SkBitmap)) onCanvas.DrawBitmap(picture, 0, 0);
+        foreach (var warning in drawn.Warnings) result?.Logs.Add("[WARN] Stage.mockup: " + warning);
+
+        if (filePath is not null)
+        {
+            var output = ProjectPath.Resolve(projectRoot, filePath, nameof(filePath), "Write to");
+            Directory.CreateDirectory(Path.GetDirectoryName(output)!);
+            using var png = picture.Encode(SKEncodedImageFormat.Png, 100);
+            File.WriteAllBytes(output, png.ToArray());
+            // A sheet, not a render of the work, as a book's proof is: a mock-up must never be taken for the piece.
+            events?.Append("render", session?.Stage, executionId, new Dictionary<string, object?>
+            {
+                ["artifact"] = events.Relativize(output), ["format"] = "png", ["bytes"] = png.Size, ["motion"] = "sheet", ["kind"] = "mockup",
+                ["setting"] = setting,
+            });
+        }
+        return new()
+        {
+            ["path"] = filePath, ["setting"] = setting, ["image"] = canvas,
+            ["corners"] = drawn.Corners.Select(p => (object?)new Dictionary<string, object?> { ["x"] = p.X, ["y"] = p.Y }).ToArray(),
+            ["size"] = new Dictionary<string, object?> { ["width"] = Math.Round(drawn.WidthMm), ["height"] = Math.Round(drawn.HeightMm) },
+            ["pixelsPerMm"] = drawn.PixelsPerMm is { } ppmm ? Math.Round(ppmm, 4) : null,
+            ["warnings"] = drawn.Warnings.Cast<object?>().ToList(),
+        };
+    }
+
+    /// <summary>A picture given to <c>Stage.mockup</c>, as a bitmap it owns; null when none was given.</summary>
+    private SKBitmap? MockupImage(object? value, string field) => value is null ? null : DecodeMockupImage(value, field)
+        ?? throw new ArgumentException($"Stage.mockup's {field} could not be decoded.");
+
+    private SKBitmap? DecodeMockupImage(object value, string field) => value switch
+    {
+        Polson.Drawing.Skia.SkiaCanvas c => c.SkBitmap.Copy(),
+        Polson.Drawing.Skia.SkiaBitmapWrapper b => b.Bitmap.Copy(),
+        Polson.Drawing.Svg.SnapPaper p => SKBitmap.Decode(p.ToImageBytes((int)Math.Ceiling(p.Width > 0 ? p.Width : 800), (int)Math.Ceiling(p.Height > 0 ? p.Height : 600), "png", 100)),
+        ILosslessImageSource l => SKBitmap.Decode(l.ToLosslessBytes()),
+        IDataUriSource d when d.ToDataUri() is { Length: > 0 } uri && uri.IndexOf(";base64,", StringComparison.Ordinal) is var at and > 0
+            => SKBitmap.Decode(Convert.FromBase64String(uri[(at + 8)..])),
+        string path when System.Text.RegularExpressions.Regex.IsMatch(path, @"\.(png|jpe?g|webp)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+            => File.Exists(ProjectPath.Resolve(projectRoot, path, field, "Read"))
+                ? SKBitmap.Decode(File.ReadAllBytes(ProjectPath.Resolve(projectRoot, path, field, "Read")))
+                : throw new ArgumentException($"Stage.mockup: '{path}' is not in the project."),
+        _ => throw new ArgumentException($"Stage.mockup's {field} is a canvas, a bitmap, a paper, a requisitioned picture or a project image path, not a {value.GetType().Name}."),
+    };
+
+    /// <summary>
+    /// A size in millimetres: an ISO name (<c>'A0'</c>–<c>'A6'</c>, turned to the design's orientation), <c>'one-sheet'</c>
+    /// (27 × 40 in), or <c>{ width?, height? }</c>. Either side may be missing; the design's shape gives the other.
+    /// </summary>
+    private static (double? Width, double? Height) MockupSize(object? value, bool landscape)
+    {
+        if (value is null) return (null, null);
+        if (value is string name)
+        {
+            (double Short, double Long)? iso = name.Trim().ToUpperInvariant() switch
+            {
+                "A0" => (841, 1189), "A1" => (594, 841), "A2" => (420, 594), "A3" => (297, 420), "A4" => (210, 297), "A5" => (148, 210), "A6" => (105, 148),
+                "ONE-SHEET" => (686, 1016),
+                _ => null,
+            };
+            if (iso is not { } s) throw new ArgumentException($"Stage.mockup's size is 'A0'–'A6', 'one-sheet', or {{ width, height }} in millimetres; not '{name}'.");
+            return landscape ? (s.Long, s.Short) : (s.Short, s.Long);
+        }
+        var d = JsInterop.AsDict(value) ?? throw new ArgumentException("Stage.mockup's size is a name such as 'A2', or { width, height } in millimetres.");
+        double? Mm(string key) => d.Contains(key) && d[key] is not null ? Convert.ToDouble(d[key], System.Globalization.CultureInfo.InvariantCulture) : null;
+        var (w, h) = (Mm("width"), Mm("height"));
+        if (w is <= 0 || h is <= 0 || (w is null && h is null)) throw new ArgumentException("Stage.mockup's size needs a width or a height above 0, in millimetres.");
+        return (w, h);
+    }
+
+    private static SKPoint[]? MockupCorners(object? value)
+    {
+        if (value is null) return null;
+        if (value is not System.Collections.IEnumerable list || value is string) throw new ArgumentException("Stage.mockup's corners are four points: [topLeft, topRight, bottomRight, bottomLeft].");
+        var points = list.Cast<object?>().Select(p => JsInterop.AsDict(p) is { } d && d.Contains("x")
+            ? new SKPoint(Convert.ToSingle(d["x"], System.Globalization.CultureInfo.InvariantCulture), Convert.ToSingle(d["y"], System.Globalization.CultureInfo.InvariantCulture))
+            : p is System.Collections.IEnumerable xy && p is not string && xy.Cast<object?>().ToArray() is [var x, var y]
+                ? new SKPoint(Convert.ToSingle(x, System.Globalization.CultureInfo.InvariantCulture), Convert.ToSingle(y, System.Globalization.CultureInfo.InvariantCulture))
+                : throw new ArgumentException("Each of Stage.mockup's corners is { x, y } or [x, y].")).ToArray();
+        return points.Length == 4 ? points : throw new ArgumentException($"Stage.mockup's corners are four points, not {points.Length}.");
     }
 
     /// <summary>

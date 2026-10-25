@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using Polson.Drawing.Skia;
 using SkiaSharp;
 
 /// <summary>
@@ -246,8 +247,9 @@ internal static class MotionCurves
             var parts = components == 2 ? " (x solid, y dashed)" : components == 4 ? " (r, g, b, a)" : "";
             var text = $"{c.Label}{parts}: {Num(lo)} to {Num(hi)}, peak {Num(peak)}/s";
             canvas.DrawRect(legendX, height - 14, 10, 10, swatch);
-            canvas.DrawText(text, legendX + 14, height - 5, SKTextAlign.Left, small, ink);
-            legendX += 24 + small.MeasureText(text);
+            // Shaped, as the curve's name is the script's and may be in any script.
+            TextShaper.DrawText(canvas, text, legendX + 14, height - 5, SKTextAlign.Left, small, ink);
+            legendX += 24 + TextShaper.Measure(text, small);
         }
 
         using var image = SKImage.FromBitmap(bitmap);

@@ -15,6 +15,10 @@
          network call each to exercise through the public call. -->
     <InternalsVisibleTo Include="Polson.Tests.ExtendedMind" />
     <InternalsVisibleTo Include="Polson.CLI" />
+    <!-- `VideoReader.MaxClipBytes`: Verify.film reads the watcher's limit, and its test lowers it rather than encode
+         a film over 7.5 MB. Internal so it is not a script-facing `Video.maxClipBytes`. -->
+    <InternalsVisibleTo Include="Polson.MCPServer" />
+    <InternalsVisibleTo Include="Polson.Tests.MCPServer" />
   </ItemGroup>
 
   <ItemGroup>

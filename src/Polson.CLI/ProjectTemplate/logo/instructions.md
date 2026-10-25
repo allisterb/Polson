@@ -106,6 +106,7 @@ record into groups nobody asked for.
 | 5 · Colour Palette & Typographic Harmony | `Palette & Type` |
 | 6 · Multi-Scale Stress Testing | `Stress test` |
 | 7 · Brand Presentation Board | `Presentation` |
+| Manual 30 §4 · the language applied | `Language` |
 
 Restating the stage you are already in is harmless — it records a continuation and leaves the stage
 running — so opening every script with `Stage.begin(...)` is fine. Naming a *different* stage is
@@ -115,7 +116,7 @@ Going back is normal and worth recording: if a stress test sends you back to the
 `Ideation` again rather than carrying on under `Stress test`. A stage that reopens is exactly the
 kind of thing a reader wants to see, and it is invisible if you do not declare it.
 
-Two stages carry requirements this project enforces:
+Three stages carry requirements this project enforces:
 
 ### Stage 2.5 — state the concept before you draw
 
@@ -148,6 +149,31 @@ mark.
 Render each surviving concept as its own monochrome or wireframe candidate, and present each next to
 the concept line it came from. A form that can no longer be traced back to its sentence has drifted.
 
+**Build each candidate from a kit of parts** (Manual 30 §3; Lupton's *Kit of Parts*): a few shapes and line weights —
+a square and a square cut by an arc made a whole alphabet, then figures and patterns (pp. 127–129) — named in a `KIT`
+at the top of the script. Draw `artifacts/03_kit.png`: the parts, then at least six reconfigurations labelled with their
+rules. The mark is one of them, and **a pattern made from the same parts** is the first thing the language below is
+made of. A mark whose parts make nothing else is a closed sign; one whose parts make a family is an identity.
+
+### `Language` — the mark's language, applied (after the presentation board)
+
+A mark is delivered with the small **brand language** it belongs to (Manual 30 §4; Lupton's *Brand Languages*, after
+the FAB case, pp. 134–135): its **vocabulary** (the mark, the pattern from its kit, the palette, the type, a line of words),
+its **order** (what is most prominent, by position, scale and colour), and its **rules** in `dos.md`, measured where they
+can be. Then **apply it to three or four vehicles** chosen for this brand, with `Stage.mockup`:
+
+```javascript
+Stage.mockup('artifacts/mockup_card.png', { design: cardFace, setting: 'card', back: cardBack });
+Stage.mockup('artifacts/mockup_box.png', { design: boxFront, setting: 'box', side: boxSide, top: boxTop });
+Stage.mockup('artifacts/mockup_sign.png', { design: sign, setting: 'frame', size: { width: 600 } });
+Stage.mockup('artifacts/mockup_app.png', { design: appScreen, setting: 'phone' });
+```
+
+Design each face flat at its real shape (a card is 85 × 55 mm), the right way up as it will be seen. **Push it once on
+purpose** — the mark enlarged past an edge, cropped, wrapped round the box's corner — and say in `direction.md` where
+the rules bent and where they broke. **Drawn settings only**: image generation is denied here, so no generated plate.
+Every mock-up is labelled as one and is never evidence that the brand exists anywhere.
+
 ---
 
 ## Verifying, rather than hoping
@@ -176,6 +202,7 @@ re-render that same function (Manual 12 §3 explains the contract and its three 
 1. `Logo.generateFaviconScaleTest(...)` — the 7-tier ladder down to 16px.
 2. `Logo.generateMonochromeTest(...)` — positive, knockout, greyscale, app icon.
 3. `Logo.generateBrandPresentationSheet(...)` — lockups, colour chips, clear space.
+4. The kit sheet (`03_kit.png`) and the language applied: three or four `mockup_*.png` vehicles, one of them the push.
 
 A mark that stops reading when its colour is removed, or closes up at 16px, is not finished — it is
 a mark that has only been seen at one size in one colour. Fix it and re-run the boards.

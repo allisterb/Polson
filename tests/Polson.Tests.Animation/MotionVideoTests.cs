@@ -153,6 +153,33 @@ public class MotionVideoTests : TestsRuntime, IDisposable
     {
         if (!FFmpeg.Available) return;
         const int w = 320, h = 180, fps = 24, frames = 48;
+
+        var result = Noise("grain.mp4", w, h, fps, frames);
+
+        var kbps = w * (double)h * fps * 80 / 500 / 1000;
+        var bound = (kbps * frames / fps + kbps * 2) * 1000 / 8;
+        Assert.True((long)result["bytes"]! <= bound, $"{result["bytes"]} bytes for {frames} frames of noise; the ceiling allows {bound:0}");
+    }
+
+    /// <summary>A watch copy fits the size it was given and is no taller than asked, however grainy the film.</summary>
+    [Fact]
+    public void TestAWatchCopyFitsItsLimit()
+    {
+        if (!FFmpeg.Available) return;
+        Noise("grain.mp4", 320, 180, 24, 48);
+        var copy = Path.Combine(root, "verify", "grain-watch.mp4");
+
+        Assert.Null(FFmpeg.WatchCopy(Path.Combine(root, "grain.mp4"), 2, copy, 90, 40_000));
+
+        Assert.InRange(new FileInfo(copy).Length, 1, 40_000);
+        var (_, count) = Frames(copy, 160, 90);
+        Assert.Equal(48, count);
+        Assert.False(File.Exists(copy + ".part"));
+    }
+
+    /// <summary>A film of grey noise redrawn every frame: nothing for an encoder to predict.</summary>
+    private Dictionary<string, object?> Noise(string name, int w, int h, int fps, int frames)
+    {
         var random = new Random(7);
         using var motion = new MotionToolkit(root);
         for (var f = 0; f < frames; f++)
@@ -168,12 +195,7 @@ public class MotionVideoTests : TestsRuntime, IDisposable
             ctx.PutImageData(image, 0, 0);
             motion.Frame(canvas);
         }
-
-        var result = motion.SaveVideo("grain.mp4", Opts(("fps", (double)fps)));
-
-        var kbps = w * (double)h * fps * 80 / 500 / 1000;
-        var bound = (kbps * frames / fps + kbps * 2) * 1000 / 8;
-        Assert.True((long)result["bytes"]! <= bound, $"{result["bytes"]} bytes for {frames} frames of noise; the ceiling allows {bound:0}");
+        return motion.SaveVideo(name, Opts(("fps", (double)fps)));
     }
 
     /// <summary>Video has no alpha: a transparent frame shows the background, and an odd size is padded, saying so.</summary>

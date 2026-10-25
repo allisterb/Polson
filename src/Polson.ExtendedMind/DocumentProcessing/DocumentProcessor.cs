@@ -177,7 +177,7 @@ public class DocumentProcessor : Runtime, IDisposable
         if (bytes.Length > MaxBytes)
         {
             return Refused(DocumentFailure.TooLarge,
-                $"{named} is {bytes.Length / (1024 * 1024)} MB against a {MaxBytes / (1024 * 1024)} MB inline limit.",
+                $"{named} is {bytes.Length / (1024 * 1024.0):0.#} MB against a {MaxBytes / (1024 * 1024.0):0.#} MB inline limit.",
                 named);
         }
 

@@ -326,8 +326,9 @@ internal static class DocumentRemedy
             "No such document. The path is relative to the project directory, exactly as outFile is — "
             + "check the spelling, and that the file was actually placed there.",
         DocumentFailure.TooLarge =>
-            "Larger than the service accepts inline. Extract the pages you need and ask about those, "
-            + "rather than sending the whole volume.",
+            "Larger than the service accepts inline; the error gives the limit. For a document, extract the pages you need "
+            + "and ask about those, rather than sending the whole volume. For a video, encode a smaller copy (720p, or a "
+            + "lower quality) and ask about that; Verify.film makes one itself.",
         DocumentFailure.UnsupportedType =>
             "This surface does not know what type to declare for that extension, and guessing "
             + "produces a confident answer about nothing. Pass an explicit mimeType, or convert it.",

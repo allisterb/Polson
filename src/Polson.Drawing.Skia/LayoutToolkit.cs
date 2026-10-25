@@ -5,6 +5,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using SkiaSharp;
 
 /// <summary>
 /// Rectangle arithmetic for composing a page: dividing a canvas into panels, padding them, and
@@ -194,6 +195,57 @@ public class LayoutToolkit
         var maxY = all.Max(r => r.Y + r.Height);
 
         return Make(minX, minY, maxX - minX, maxY - minY);
+    }
+
+    /// <summary>
+    /// An alternative grid from a picture's dominant straight lines (Lupton, <i>Graphic Design Thinking</i>, pp. 120–121:
+    /// observe, replicate, organise). <paramref name="options"/>: <c>{ into?, count?, minLength?, fit? }</c> — the
+    /// rectangle the lines are laid over (the picture's own size by default), at most this many lines (12, up to 40),
+    /// the shortest edge that counts as a fraction of the picture's shorter side (0.15), and <c>'cover'</c> (default:
+    /// scaled evenly and centred, as a photograph is cropped onto a page) or <c>'stretch'</c>.
+    /// </summary>
+    public LineGrid LinesFrom(object image, object? options = null)
+    {
+        var bitmap = image switch
+        {
+            SkiaCanvas c => c.SkBitmap,
+            SkiaBitmapWrapper b => b.Bitmap,
+            SKBitmap b => b,
+            string => throw new ArgumentException("Layout.linesFrom takes a picture, not a filename: Skia.Image.load('…') reads one into a bitmap."),
+            _ => throw new ArgumentException($"Layout.linesFrom takes a canvas or a bitmap, not {Describe(image)}."),
+        };
+        var o = JsInterop.AsDict(options);
+        var into = o?["into"] is { } r ? AsRect(r) : new RectValue(0, 0, bitmap.Width, bitmap.Height);
+        var count = o?["count"] is { } n ? Convert.ToInt32(n, CultureInfo.InvariantCulture) : 12;
+        var minLength = o?["minLength"] is { } m ? Convert.ToSingle(m, CultureInfo.InvariantCulture) : 0.15f;
+        var fit = o?["fit"]?.ToString() ?? "cover";
+        if (count is < 1 or > 40) throw new ArgumentException($"Layout.linesFrom finds 1 to 40 lines, not {count}.");
+        if (minLength is <= 0 or > 1) throw new ArgumentException($"Layout.linesFrom's minLength is a fraction of the picture's shorter side, above 0 and at most 1, not {minLength}.");
+        if (fit is not ("cover" or "stretch")) throw new ArgumentException($"Layout.linesFrom's fit is 'cover' or 'stretch', not '{fit}'.");
+        if (into.Width <= 0 || into.Height <= 0) throw new ArgumentException("Layout.linesFrom's into is a rectangle with an area.");
+        return LineGrid.Find(bitmap, SKRect.Create(into.X, into.Y, into.Width, into.Height), count, minLength, fit == "cover");
+    }
+
+    /// <summary>
+    /// An alternative grid from a tessellation over <paramref name="rect"/> (Lupton, pp. 124–125).
+    /// <paramref name="options"/>: <c>{ type?, size?, rotate? }</c> — <c>'triangle'</c> (default), <c>'diamond'</c>,
+    /// <c>'hex'</c> or <c>'rhombille'</c>; a tile's side (an eighth of the shorter side by default); degrees to turn it.
+    /// </summary>
+    public LineGrid Tessellation(object rect, object? options = null)
+    {
+        var r = AsRect(rect);
+        var o = JsInterop.AsDict(options);
+        var type = o?["type"]?.ToString() ?? "triangle";
+        var size = o?["size"] is { } s ? Convert.ToSingle(s, CultureInfo.InvariantCulture) : Math.Min(r.Width, r.Height) / 8f;
+        var rotate = o?["rotate"] is { } d ? Convert.ToSingle(d, CultureInfo.InvariantCulture) : 0f;
+        return LineGrid.Tessellate(SKRect.Create(r.X, r.Y, r.Width, r.Height), type, size, rotate);
+    }
+
+    /// <summary>A grid of lines given by hand over <paramref name="rect"/>: <c>[{ x1, y1, x2, y2 }]</c> or pairs of points.</summary>
+    public LineGrid Lines(object rect, object lines)
+    {
+        var r = AsRect(rect);
+        return LineGrid.Given(SKRect.Create(r.X, r.Y, r.Width, r.Height), lines);
     }
     #endregion
 

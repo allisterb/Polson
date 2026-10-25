@@ -1436,7 +1436,9 @@ internal static class ProjectGenerator
         // its size arithmetic. 16 (requisition) and 13 (cultural research) are named by URI where they
         // apply rather than imported. With the film type this comes to ~164k, past the 150k total at which
         // Claude Code warns — a warning, not truncation (see ImportedManuals), and kept on purpose.
-        ["poster"] = ["09", "11", "14", "29"],
+        // 30 (creating form: alternative grids, the kit, the language, mock-ups, Lupton ch. 3) to the three workflows the
+        // director chose for it on 2026-10-25: poster, motion and logo.
+        ["poster"] = ["09", "11", "14", "29", "30"],
         // Gesture is the method and the line of action is its first step; composition carries the
         // mood family, staging the camera if the brief implies one. 23 is absent: at sketch size the
         // head's tilt and the look carry the expression, and the instructions name it by URI.
@@ -1449,14 +1451,14 @@ internal static class ProjectGenerator
         // poster, a trailer, a mark — and the kit of parts is how a set across audiences holds together.
         // Scoring motion is the method; composition and type are what a trailer moves. 24 and 28 (the figure) are absent:
         // a trailer here is shapes and type, not a character.
-        ["motion"] = ["25", "09", "11", "29"],
+        ["motion"] = ["25", "09", "11", "29", "30"],
         // Scoring motion carries *Mathematics on screen* (equations, axes, counting numbers, the checks); composition and
         // type lay out a scene of formulas. No figure manuals: an explainer is formulas and graphs, not a character.
         ["math_explainer"] = ["25", "09", "11"],
         ["painting"] = ["09", "07"],
         ["vector_infographic"] = ["09", "13"],
         ["infographic"] = ["09", "13"],
-        ["logo"] = ["09", "11", "29"],
+        ["logo"] = ["09", "11", "29", "30"],
     };
 
     /// <summary>The judgment manuals for one workflow, in full, as one Markdown block, or empty.</summary>

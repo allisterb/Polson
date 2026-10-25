@@ -619,25 +619,12 @@ translation step at the end (pp. 104–105). Their method, with what it means he
 
 > **Implemented by**: one `build(audience)` in the workflow's script, the films or pieces made from it.
 
-Andrew Blauvelt's *kit of parts* for the Walker Art Center was an open system rather than a fixed logo: a set of
-elements, and ways to recombine them, producing endless related variations — "designs for making designs"
-(pp. 126–127). Colette and Shaw describe the same move in motion: designing not an image but a process that makes
-images within a considered framework (ch. 12). It is what a set made for several audiences should be.
-
-Lupton's steps for a brand language (p. 133), as they apply to a set:
-
-1. **Define the audience** — here, each audience, measured.
-2. **Make a vocabulary**: type, palette rules, shapes, the motion vocabulary (eases, moves, transitions).
-3. **Decide the order**: what is most prominent, what least, by position, scale and colour.
-4. **Apply it systematically** to every piece, and find how far it bends — scale, cropping, bleeding off the edge.
-5. **Document the family.**
-
-**For a set** (ours): decide, before any piece is made, **what is fixed** — the type, the hierarchy, the figures and their
-order, the end card's structure, and in motion the motion identity (Manual 25 §5j: one ease, three durations, one
-entrance) — and **what each audience may change** — palette temperature, pace, the hero image,
-the allusion (§4). Each piece is then the kit reconfigured, and the set reads as one family whose members differ for a
-reason. Write the kit as its own section of `direction.md`, before the audiences' sections: the fixed parts, the
-variable parts, and for each variable part the evidence that set it per audience.
+**Moved to Manual 30, *Creating Form*** (`polson://manual/30`), which carries Lupton's chapter on making form: the kit of
+parts (§3) is now made for **every** piece, not only a set, and a set across audiences is its case of fixed and variable
+parts (§3c); the brand language is §4. In short: before any piece of a set is made, decide what is fixed — the type, the
+hierarchy, the figures and their order, the end card's structure, the motion identity — and what each audience may
+change — palette temperature, pace, the hero image, the allusion (§4) — and write the kit as its own section of
+`direction.md`, before the audiences', with the evidence for each variable part.
 
 ---
 

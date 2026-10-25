@@ -144,6 +144,8 @@ public static class JsSurface
         new("VectorChart", typeof(VectorChartToolkit), "VectorLogo", false),
         new("LogoType", typeof(LogoTypeToolkit), "LogoType", false),
         new("Layout", typeof(LayoutToolkit), "Layout", false),
+        // What Layout.linesFrom / tessellation / lines return: an alternative grid of lines at any angle.
+        new("grid", typeof(LineGrid), "Layout", true),
 
         new("Css", typeof(Polson.Drawing.Svg.CssToolkit), "Css", false),
         new("sheet", typeof(Polson.Drawing.Svg.StyleSheetView), "Css", true),
