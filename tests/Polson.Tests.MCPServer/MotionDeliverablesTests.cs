@@ -133,6 +133,41 @@ public class MotionDeliverablesTests : TestsRuntime, IDisposable
         Assert.Contains("'process' or 'pitch'", Assert.Throws<ArgumentException>(() => Book("deck", ("Dump", "artifacts/02_dump_a.png", null))).Message);
     }
 
+    /// <summary>
+    /// A book's pictures go in losslessly, and <c>proof</c> writes every page as a PNG to read back. nightshift2's books
+    /// held their stills as quality-0 JPEGs (a struct initialiser left EncodingQuality at 0), and the run could not open
+    /// either PDF to see it.
+    /// </summary>
+    [Fact]
+    public void TestABookKeepsItsPicturesLosslessAndWritesProofs()
+    {
+        using (var fine = new SKBitmap(400, 225))
+        {
+            for (var y = 0; y < 225; y++)
+                for (var x = 0; x < 400; x++) fine.SetPixel(x, y, (x + y) % 2 == 0 ? SKColors.Black : SKColors.White);
+            File.WriteAllBytes(Path.Combine(root, "artifacts", "03_board.png"), fine.Encode(SKEncodedImageFormat.Png, 100).ToArray());
+        }
+        File.WriteAllText(Path.Combine(root, "treatment.md"), "# The story\nNight, then the name, then dawn.");
+
+        var book = Stage().Book("pitch.pdf", new Dictionary<string, object?>
+        {
+            ["title"] = "Nightshift", ["kind"] = "pitch", ["proof"] = "artifacts/pitch_proof",
+            ["pages"] = new object?[]
+            {
+                new Dictionary<string, object?> { ["title"] = "The story", ["file"] = "treatment.md" },
+                new Dictionary<string, object?> { ["title"] = "Design board", ["image"] = "artifacts/03_board.png" },
+            },
+        });
+
+        var pdf = System.Text.Encoding.Latin1.GetString(File.ReadAllBytes(Path.Combine(root, "pitch.pdf")));
+        Assert.DoesNotContain("/DCTDecode", pdf, StringComparison.Ordinal);
+        var proofs = ((object?[])book["proofs"]!).Cast<string>().ToArray();
+        Assert.Equal((int)book["pages"]!, proofs.Length);
+        Assert.Equal("artifacts/pitch_proof_01.png", proofs[0]);
+        using var page = SKBitmap.Decode(File.ReadAllBytes(Path.Combine(root, proofs[^1])));
+        Assert.Equal((1440, 810), (page.Width, page.Height));
+    }
+
     private StageApi Stage() => new(null, null, null, projectRoot: root);
 
     private Dictionary<string, object?> Book(string kind, params (string Title, string? Image, string? File)[] pages) =>

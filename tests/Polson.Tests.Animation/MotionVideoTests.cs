@@ -250,6 +250,10 @@ public class MotionVideoTests : TestsRuntime, IDisposable
     public void TestABoardCaptionsEveryFrameKeepsItsStillsAndCountsItsFrames()
     {
         var comp = Ramp(new MotionToolkit(root), 960);
+        // Before any thumbnails, a board says so; after them, not (nightshift2 drew its roughs after its board).
+        var early = comp.Board("artifacts/early.png", Opts(("frames", new object[] { Opts(("time", 0d), ("caption", "Early."), ("shot", "WS")) })));
+        Assert.Contains("No thumbnails came before this board", string.Join(" | ", ((object?[])early["warnings"]!).Cast<string>()));
+        Thumbnailed(comp);
 
         var board = comp.Board("artifacts/board.png", Opts(("title", "Ramp — design board"), ("stills", "artifacts/board"), ("frames", new object[]
         {
@@ -290,6 +294,7 @@ public class MotionVideoTests : TestsRuntime, IDisposable
     public void TestABoardsShotsAreNamedVariedAndOpenWide()
     {
         var comp = Ramp(new MotionToolkit(root), 96);
+        Thumbnailed(comp);
         IEnumerable<string> Warnings(params (double Time, string? Shot)[] frames) => ((object?[])comp.Board("artifacts/shots.png", Opts(("frames",
             frames.Select(f => (object)(f.Shot is null ? Opts(("time", f.Time), ("caption", "A beat."))
                 : Opts(("time", f.Time), ("caption", "A beat."), ("shot", f.Shot)))).ToArray())))["warnings"]!).Cast<string>();
@@ -405,6 +410,10 @@ public class MotionVideoTests : TestsRuntime, IDisposable
     }
 
     /// <summary>A two-second film whose colour runs red to blue, so every frame is its own.</summary>
+    /// <summary>One rough, so the boards that follow are not warned that no thumbnails came first.</summary>
+    private static void Thumbnailed(MotionComposition comp) =>
+        comp.Thumbnails("artifacts/thumbs.png", Opts(("frames", new object[] { Opts(("image", new SkiaCanvas(comp.Width / 4, comp.Height / 4)), ("shot", "WS")) })));
+
     private MotionComposition Ramp(MotionToolkit motion, int size = 32)
     {
         var comp = motion.Composition(Opts(("width", (double)size), ("height", (double)size), ("fps", 25d), ("duration", 2d)));

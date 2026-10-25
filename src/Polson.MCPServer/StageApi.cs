@@ -135,7 +135,8 @@ public sealed class StageApi
     /// The run's process book: a multi-page PDF of the work in order — the brief, the concepts, the boards, the frames, the
     /// finished piece — written to <paramref name="filePath"/>. <c>options</c>: <c>{ title, pages }</c>, each page
     /// <c>{ title?, image?, caption?, text?, file? }</c>, <c>image</c> and <c>file</c> project paths (a still, and a text or
-    /// Markdown file such as <c>concepts.md</c>). Returns <c>{ path, pages, bytes }</c>.
+    /// Markdown file such as <c>concepts.md</c>). <c>proof: 'artifacts/pitch_proof'</c> also writes every page as a PNG,
+    /// <c>_01.png</c>, <c>_02</c>…, to read back. Returns <c>{ path, pages, bytes, kind, proofs, warnings }</c>.
     /// </summary>
     /// <remarks>
     /// What a studio hands its client beside the work, and what the run hands its reader: Lupton's concept presentation,
@@ -221,7 +222,11 @@ public sealed class StageApi
             throw new ArgumentException($"Stage.book's accent is a colour such as '#c8553d', not '{accent}'.");
         var close = o["close"] is false ? null : o["close"]?.ToString() ?? (kind == "pitch" ? "Thank you." : null);
         bool? contents = o["contents"] is bool b ? b : null;
-        var (pdf, count, overflows) = Polson.Drawing.Skia.PdfBook.Write(title, pages, new(font, accent, cover, contents, close));
+        // nightshift2 could not open either of its books (its host had no PDF renderer), so "read every word back" reached only
+        // the Markdown. `proof` writes every page as a PNG beside the PDF, the same drawing, for the image tool to read.
+        var proof = o["proof"]?.ToString() is { Length: > 0 } prefix ? prefix : null;
+        var (pdf, count, overflows, previews) = Polson.Drawing.Skia.PdfBook.Write(title, pages, new(font, accent, cover, contents, close),
+            proof is null ? 0 : 1.5f);
         // A page whose text runs on for pages is a file pasted, not a page written: nightshift1 put the whole of
         // direction.md in, ten pages of it. Summarise it in a page of your own — the decisions, each with its evidence.
         for (var i = 0; i < pages.Count; i++)
@@ -241,10 +246,24 @@ public sealed class StageApi
             ["book"] = kind,
             ["warnings"] = warnings.Count == 0 ? null : warnings.ToArray(),
         });
+        var proofs = new List<object?>();
+        for (var i = 0; i < previews.Length; i++)
+        {
+            var page = $"{proof}_{i + 1:00}.png";
+            var full = ProjectPath.Resolve(projectRoot, page, "proof", "Write to");
+            Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+            File.WriteAllBytes(full, previews[i]);
+            // A sheet, not a render of the work: a proof page must never be taken for the piece.
+            events?.Append("render", session?.Stage, executionId, new Dictionary<string, object?>
+            {
+                ["artifact"] = events.Relativize(full), ["format"] = "png", ["bytes"] = previews[i].Length, ["motion"] = "sheet", ["kind"] = "proof",
+            });
+            proofs.Add(page);
+        }
         return new()
         {
             ["path"] = filePath, ["pages"] = count, ["bytes"] = (long)pdf.Length, ["kind"] = kind,
-            ["warnings"] = warnings.Cast<object?>().ToList(),
+            ["proofs"] = proofs.ToArray(), ["warnings"] = warnings.Cast<object?>().ToList(),
         };
     }
 

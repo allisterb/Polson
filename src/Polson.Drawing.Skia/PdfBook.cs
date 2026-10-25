@@ -60,8 +60,11 @@ public static class PdfBook
     /// <summary>
     /// The book as PDF bytes, how many pages it came to, and for each of <paramref name="pages"/> how many continuation pages
     /// its text overflowed onto. A page a top-level heading opens is not a continuation: a concept to a page is the format.
+    /// With <paramref name="previewScale"/> above 0, every page is also drawn as a PNG at that multiple of its size, so the
+    /// book can be proofed where a PDF cannot be opened.
     /// </summary>
-    public static (byte[] Pdf, int Pages, int[] Overflows) Write(string title, IReadOnlyList<Page> pages, BookStyle? style = null)
+    public static (byte[] Pdf, int Pages, int[] Overflows, byte[][] Previews) Write(string title, IReadOnlyList<Page> pages,
+        BookStyle? style = null, float previewScale = 0)
     {
         style ??= new BookStyle();
         using var look = new Look(style);
@@ -74,32 +77,49 @@ public static class PdfBook
         var total = layouts.Count + first - 1 + (close ? 1 : 0);
 
         using var stream = new MemoryStream();
-        using (var document = SKDocument.CreatePdf(stream, new SKDocumentPdfMetadata { Title = title, Creator = style.Cover?.Studio ?? "Polson Studio" }))
+        // From Default, never `new`: a struct initialiser leaves EncodingQuality at 0, and Skia then writes every picture as
+        // a quality-0 JPEG — nightshift2's board and research sheet came out blocky and unreadable. Default's 101 is lossless.
+        var metadata = SKDocumentPdfMetadata.Default;
+        metadata.Title = title;
+        metadata.Creator = style.Cover?.Studio ?? "Polson Studio";
+        // Each page as a drawing, so the PDF and the previews are the same pages.
+        var drawn = new List<Action<SKCanvas>>();
+        if (cover) drawn.Add(c => RenderCover(c, title, style.Cover!, look));
+        if (contents)
         {
-            if (cover) Page(document, c => RenderCover(c, title, style.Cover!, look));
-            if (contents)
+            // Each page that opens a section, by its title, at the number it will print with.
+            var entries = layouts.Select((l, i) => (l.Page.Title, Number: first + i, l.Continued)).Where(e => !e.Continued && e.Title is not null);
+            drawn.Add(c => RenderContents(c, title, [.. entries.Select(e => (e.Title!, e.Number))], cover ? 2 : 1, total, look));
+        }
+        var number = first - 1;
+        foreach (var (page, lines, continued, overflow) in layouts)
+        {
+            var n = ++number;
+            drawn.Add(c => Render(c, title, page, lines, continued, overflow, n, total, look));
+        }
+        if (close) drawn.Add(c => RenderClose(c, title, style.Close!, style.Cover?.Studio, total, look));
+
+        using (var document = SKDocument.CreatePdf(stream, metadata))
+        {
+            foreach (var draw in drawn)
             {
-                // Each page that opens a section, by its title, at the number it will print with.
-                var entries = layouts.Select((l, i) => (l.Page.Title, Number: first + i, l.Continued)).Where(e => !e.Continued && e.Title is not null);
-                Page(document, c => RenderContents(c, title, [.. entries.Select(e => (e.Title!, e.Number))], cover ? 2 : 1, total, look));
+                using var canvas = document.BeginPage(Width, Height);
+                draw(canvas);
+                document.EndPage();
             }
-            var number = first - 1;
-            foreach (var (page, lines, continued, overflow) in layouts)
-            {
-                var n = ++number;
-                Page(document, c => Render(c, title, page, lines, continued, overflow, n, total, look));
-            }
-            if (close) Page(document, c => RenderClose(c, title, style.Close!, style.Cover?.Studio, total, look));
             document.Close();
         }
-        return (stream.ToArray(), total, [.. parts.Select(p => p.Count(part => part.Overflow))]);
-
-        static void Page(SKDocument document, Action<SKCanvas> draw)
+        byte[][] previews = previewScale <= 0 ? [] : [.. drawn.Select(draw =>
         {
-            using var canvas = document.BeginPage(Width, Height);
-            draw(canvas);
-            document.EndPage();
-        }
+            using var surface = SKSurface.Create(new SKImageInfo((int)Math.Round(Width * previewScale), (int)Math.Round(Height * previewScale)));
+            surface.Canvas.Clear(SKColors.White);
+            surface.Canvas.Scale(previewScale);
+            draw(surface.Canvas);
+            using var image = surface.Snapshot();
+            using var png = image.Encode(SKEncodedImageFormat.Png, 100);
+            return png.ToArray();
+        })];
+        return (stream.ToArray(), total, [.. parts.Select(p => p.Count(part => part.Overflow))], previews);
     }
 
     /// <summary>Whether a typeface family is installed: a family that is not would be replaced without a word.</summary>
