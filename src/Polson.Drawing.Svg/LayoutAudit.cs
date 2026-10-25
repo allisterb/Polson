@@ -24,8 +24,9 @@ using static System.FormattableString;
 /// </para>
 /// <para>
 /// <b>What is not a collision:</b> type wholly inside a panel or card (text on a button, a label in a swatch), a shape
-/// wholly inside a line's box and small beside it (a bullet), and an underline in the descent below the baseline. A
-/// line, or any group around it, marked <c>data-print-exempt="layout"</c> is left out.
+/// wholly inside a line's box and small beside it (a bullet), an underline in the descent below the baseline, and a shape
+/// painted over — an opaque band laid on it before the type, covering it wherever the line meets it (poster5's mirror
+/// ball under its title band). A line, or any group around it, marked <c>data-print-exempt="layout"</c> is left out.
 /// </para>
 /// </remarks>
 public static class LayoutAudit
@@ -130,27 +131,35 @@ public static class LayoutAudit
         }
     }
 
-    /// <summary>Lines that straddle a visible shape's edge, or that a divider line runs through.</summary>
+    /// <summary>
+    /// Lines that straddle a visible shape's edge, or that a divider line runs through — unless an opaque shape painted
+    /// between the two covers the shape wherever it meets the line, so the crossing is never seen.
+    /// </summary>
     public static IEnumerable<string> AcrossShapes(IReadOnlyList<LayoutShape> shapes, IReadOnlyList<TypeLine> lines)
     {
         foreach (var shape in shapes)
         {
             foreach (var line in lines)
             {
-                if (Collides(shape, line) is { } how)
+                if (Collides(shape, line) is { } how && !Hidden(shape, line, shapes))
                     yield return Invariant($"{PosterTypeAudit.Quote(line.Words)} {how}.");
             }
         }
     }
 
-    /// <summary>The visible shapes a paper draws, in paper units, that the audit can place exactly.</summary>
-    public static IReadOnlyList<LayoutShape> Shapes(SvgDocument document) =>
-    [
-        .. PosterTypeAudit.Descendants(document).OfType<SvgVisualElement>()
-            .Where(e => e is not (SvgTextBase or SvgGroup) && !PosterTypeAudit.IsDefinition(e) && Visible(e)
-                        && !PosterTypeAudit.Exemptions(e).Contains(LayoutCheck))
-            .Select(Shape).OfType<LayoutShape>()
-    ];
+    /// <summary>The visible shapes a paper draws, in paper units, that the audit can place exactly, in paint order.</summary>
+    public static IReadOnlyList<LayoutShape> Shapes(SvgDocument document)
+    {
+        var order = PosterTypeAudit.PaintOrder(document);
+        return
+        [
+            .. PosterTypeAudit.Descendants(document).OfType<SvgVisualElement>()
+                .Where(e => e is not (SvgTextBase or SvgGroup) && !PosterTypeAudit.IsDefinition(e) && Visible(e)
+                            && !PosterTypeAudit.Exemptions(e).Contains(LayoutCheck))
+                .Select(e => Shape(e) is { } s ? s with { Order = order[e], Opaque = Opaque(e) } : null)
+                .OfType<LayoutShape>()
+        ];
+    }
     #endregion
 
     #region Methods (private)
@@ -268,6 +277,78 @@ public static class LayoutAudit
         }
     }
 
+    /// <summary>
+    /// Whether an opaque shape painted after <paramref name="shape"/> and before <paramref name="line"/> covers all of
+    /// <paramref name="shape"/> that lies under the line, so the crossing is painted over before the type goes on.
+    /// </summary>
+    /// <remarks>
+    /// poster5's tagline was reported across a mirror ball that sat behind an opaque band; the reader never sees that
+    /// edge. Conservative by construction: without a known paint order for both, or a shape known to be opaque and
+    /// known to cover, the warning stands.
+    /// </remarks>
+    private static bool Hidden(LayoutShape shape, TypeLine line, IReadOnlyList<LayoutShape> shapes)
+    {
+        if (shape.Order is not { } behind || line.Order is not { } type || type <= behind) return false;
+
+        // The part of the line's box the shape could show in, widened a unit for its stroke and anti-aliasing.
+        var under = SKRect.Intersect(line.Bounds, SKRect.Inflate(shape.Box, 1, 1));
+        if (under.IsEmpty) return false;
+
+        return shapes.Any(o => !ReferenceEquals(o, shape) && o.Opaque && o.Order is { } at && at > behind && at < type && Covers(o, under));
+    }
+
+    /// <summary>Whether an occluding shape's filled area contains the whole of <paramref name="region"/>.</summary>
+    private static bool Covers(LayoutShape occluder, SKRect region)
+    {
+        if (occluder.From is not null) return false;
+        if (occluder.Outline is { } outline)
+        {
+            using var box = new SKPath();
+            box.AddRect(region);
+            using var left = box.Op(outline, SKPathOp.Difference);
+            return left is not null && (left.IsEmpty || Area(left.Bounds) < 1e-3f);
+        }
+        if (occluder.Round)
+        {
+            // An ellipse is convex, so it holds the rectangle when it holds all four corners.
+            var (cx, cy, rx, ry) = (occluder.Box.MidX, occluder.Box.MidY, occluder.Box.Width / 2, occluder.Box.Height / 2);
+            if (rx <= 0 || ry <= 0) return false;
+            bool Inside(float x, float y) => MathF.Pow((x - cx) / rx, 2) + MathF.Pow((y - cy) / ry, 2) <= 1;
+            return Inside(region.Left, region.Top) && Inside(region.Right, region.Top)
+                && Inside(region.Left, region.Bottom) && Inside(region.Right, region.Bottom);
+        }
+        return occluder.Box.Contains(region);
+    }
+
+    /// <summary>
+    /// Whether a shape certainly hides what is under it: a solid, fully opaque fill on an axis-aligned rectangle with
+    /// square corners, a circle or an ellipse, drawn with no opacity, filter, clip, mask or blend on it or any group
+    /// around it. Anything else — a gradient, a pattern, a rotation — is not assumed to hide anything.
+    /// </summary>
+    private static bool Opaque(SvgVisualElement element)
+    {
+        if (element is SvgRectangle r && (r.CornerRadiusX.Value > 0 || r.CornerRadiusY.Value > 0)) return false;
+        if (element is not (SvgRectangle or SvgCircle or SvgEllipse)) return false;
+        if (element.Fill is not SvgColourServer fill || fill == SvgPaintServer.None || fill.Colour.A < 255 || element.FillOpacity < 1) return false;
+
+        var m = PosterTypeAudit.Transform(element);
+        if (MathF.Abs(m.SkewX) > 1e-4f || MathF.Abs(m.SkewY) > 1e-4f) return false;
+
+        for (SvgElement? e = element; e is not null and not SvgDocument; e = e.Parent)
+        {
+            if (e is SvgVisualElement v && (v.Opacity < 1 || v.Filter is not null || v.ClipPath is not null)) return false;
+            foreach (var name in new[] { "mask", "mix-blend-mode", "clip-path", "filter" })
+            {
+                // Svg keeps an attribute it models in one place and one it does not (a mask, a blend) in another.
+                foreach (var value in new[] { e.TryGetAttribute(name, out var known) ? known : null, e.CustomAttributes.TryGetValue(name, out var custom) ? custom : null })
+                {
+                    if (!string.IsNullOrWhiteSpace(value) && value.Trim() is not ("none" or "normal")) return false;
+                }
+            }
+        }
+        return true;
+    }
+
     /// <summary>Whether an element draws anything: not hidden, not transparent, and filled or stroked.</summary>
     private static bool Visible(SvgVisualElement element)
     {
@@ -290,5 +371,9 @@ public static class LayoutAudit
 /// <param name="From">With <paramref name="To"/>, a straight segment rather than an area.</param>
 /// <param name="Outline">The filled area itself, for a shape that is neither a box nor an ellipse — a pie, a mark — in
 /// the same coordinates as <paramref name="Box"/>.</param>
+/// <param name="Order">Where it is painted among the marks it is audited with — later is on top — or null when unknown.</param>
+/// <param name="Opaque">It certainly hides what is under its area: a solid, fully opaque fill, drawn exactly as placed.
+/// A shape painted after another and before a line of type, covering the first where the line meets it, hides that
+/// crossing from the audit.</param>
 public sealed record LayoutShape(string Name, SKRect Box, bool Round, SKPoint? From = null, SKPoint? To = null,
-    SKPath? Outline = null);
+    SKPath? Outline = null, int? Order = null, bool Opaque = false);

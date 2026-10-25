@@ -506,7 +506,9 @@ set's own check from *More than one audience*:
   that exist and drawing nothing new, every caption saying what was decided, `findings.md` in neither:
   - **`pitch.pdf`, `kind: 'pitch'`**: what sells the chosen concept, finished — `treatment.md` beside its shape, the
     design board, the kit sheet with several audiences, and a frame of each finished film (`comp.still`). Short: a page
-    for each, no workshop sheets.
+    for each, no workshop sheets. Give it the film's own typeface and accent (`font`, `accent`) on the neutral ground,
+    and a cover naming the client (`cover: { client, subtitle }`); it closes on *Thank you.* by itself. Read every word
+    of it back before you deliver: nothing here checks spelling.
   - **`process.pdf`, `kind: 'process'`**: how it was arrived at — the brief, the mind map (`00_map.png`), each audience's
     research board and matrix (`03_matrix_a.png`), the dump, `concepts.md` (a concept to a page), `dos.md` and what its
     check found, the graph of the key moves. Ten to twenty pages; the direction as a page of its decisions in your

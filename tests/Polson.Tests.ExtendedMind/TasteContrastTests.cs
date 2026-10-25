@@ -65,14 +65,21 @@ public class TasteContrastTests : TestsRuntime
     }
 
     [Fact]
-    public void TestPaceComesWithTheContrastAndTheSummaryCountsEachDomain()
+    public void TestTheSummaryLeadsWithPaceThenNamesEachDomainsTitlesAndWhereTheListsAre()
     {
-        var a = Profile("t1", "A", Movies(("a1", "Slow", 1, ["Slow burn"])));
-        var b = Profile("t2", "B", Movies(("b1", "Fast", 1, ["Fast paced"])));
+        // poster5 found c.pace, its most decision-changing number, only by dumping Object.keys, and looked for c.onlyA
+        // at the top level, where it is undefined.
+        var a = Profile("t1", "A", Movies(("a1", "Slow", 1, ["Slow burn"]), ("s1", "Both", 2, []), ("a2", "Two", 3, []),
+            ("a3", "Three", 4, []), ("a4", "Four", 5, [])));
+        var b = Profile("t2", "B", Movies(("b1", "Fast", 1, ["Fast paced"]), ("s1", "Both", 2, [])));
 
         var contrast = TasteContrast.Compare(a, b);
+        var summary = (string)contrast["summary"]!;
 
-        Assert.StartsWith("movie: 0 shared, 1 only t1, 1 only t2.", (string)contrast["summary"]!);
+        Assert.StartsWith("Pace — t1 (A): 0% fast (0 fast, 1 slow); t2 (B): 100% fast (1 fast, 0 slow); Fisher's exact p = ", summary);
+        Assert.Contains("movie: 1 shared (Both), 4 only t1 (Slow, Two, Three, …), 1 only t2 (Fast)", summary);
+        Assert.Contains("c.domains[i].shared", summary);
+        Assert.Contains("c.pace.a", summary);
         Assert.NotNull(((Dictionary<string, object?>)contrast["pace"]!)["p"]);
     }
 

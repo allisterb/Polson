@@ -12,7 +12,9 @@ using SkiaSharp;
 
 /// <summary>A bitmap as it prints: its pixels, and the box on the page it is drawn into, in points.</summary>
 /// <param name="Bounds">The drawn box in PDF page space: points, origin at the bottom left of the media.</param>
-public sealed record PlacedBitmap(int PixelWidth, int PixelHeight, float WidthPt, float HeightPt, SKRect Bounds)
+/// <param name="StoredBytes">What the image takes in the file, compressed, with its alpha channel.</param>
+/// <param name="ObjectNumber">The image's PDF object, so one image placed twice is counted once.</param>
+public sealed record PlacedBitmap(int PixelWidth, int PixelHeight, float WidthPt, float HeightPt, SKRect Bounds, long StoredBytes = 0, int ObjectNumber = 0)
 {
     /// <summary>Pixels per printed inch along the poorer of the two axes.</summary>
     public float EffectivePpi => MathF.Min(PixelWidth / (WidthPt / 72f), PixelHeight / (HeightPt / 72f));
@@ -100,7 +102,7 @@ public static partial class PdfRasterAudit
                     if (subtype == "Image")
                     {
                         placedObjects.Add(number);
-                        placed.Add(Place(reader, dict, ctm));
+                        placed.Add(Place(reader, dict, ctm) with { StoredBytes = reader.StoredBytes(dict), ObjectNumber = number });
                     }
                     else if (subtype == "Form")
                     {
@@ -342,6 +344,16 @@ public static partial class PdfRasterAudit
             if (dict is null || !dict.TryGetValue(key, out var raw)) return null;
             var values = Resolve(raw).Trim('[', ']', ' ').Split((char[])[' ', '\n', '\r', '\t'], StringSplitOptions.RemoveEmptyEntries);
             return values.All(IsNumber) ? [.. values.Select(Number)] : null;
+        }
+
+        /// <summary>An image's stream length in the file, plus its soft mask's: what it costs, compressed.</summary>
+        public long StoredBytes(Dictionary<string, string>? image)
+        {
+            var own = (long)(Numbers(image, "Length")?.FirstOrDefault() ?? 0);
+            var mask = image is not null && image.TryGetValue("SMask", out var s) && RefNumber(s) is { } m
+                ? (long)(Numbers(ObjectDict(m), "Length")?.FirstOrDefault() ?? 0)
+                : 0;
+            return own + mask;
         }
 
         public static int? RefNumber(string raw) =>

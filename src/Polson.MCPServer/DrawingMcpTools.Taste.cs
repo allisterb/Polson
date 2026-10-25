@@ -54,7 +54,9 @@ public partial class DrawingMcpTools
         "DISTINCTIVE references — plus the place's aesthetic vocabulary. Give `audience` with a location. Cite the " +
         "distinctive references as the evidence for a direction; derive the look from what those references look and " +
         "sound like. `placeAesthetics` are the PLACE's: Qloo does not vary tags by age, so never present them as this " +
-        "audience's. About 7 requests; a second audience in the same place reuses the cached baseline.\n" +
+        "audience's. `pace` counts its distinctive films and shows tagged fast and slow; with two profiles, " +
+        "Taste.contrast(a, b) tests the difference and leads its summary with it. About 7 requests; a second audience in " +
+        "the same place reuses the cached baseline.\n" +
         "- 'describe': the tags a set of entities share, from `entities` (ids). Give `type` as tag kinds — " +
         "'style', 'theme,archetype', 'plot' — or 'film' for all the kinds that describe a film. With no `type`, " +
         "entities this session knows are films or shows get 'film', said in `note`: UNFILTERED, Qloo's top tags over six " +
@@ -64,7 +66,10 @@ public partial class DrawingMcpTools
         "the tags follow which titles you picked. Use it to explore, never as the basis of a direction.\n" +
         "- 'demographics': who an entity appeals to, by age band and gender, from `entities`. Use it to check a " +
         "reference really skews to your audience before you borrow from it.\n" +
-        "- 'compare': what separates two sets of entities' audiences: `entities` against `versus`.\n" +
+        "- 'compare': what separates two sets of entities: `entities` against `versus`. One row per tag, with how many " +
+        "entities on each side carry it (a, b): `tagsA`/`tagsB` lean to one side, most leaning first — read those; " +
+        "`shared` both carry. Qloo's own scores barely vary, so they are not used. `take` caps each list; the whole " +
+        "answer is Taste.get(id).comparison.\n" +
         "- 'audiences': Qloo's audience ids under a type, e.g. type 'communities', 'life_stage', 'global_issues'.\n" +
         "- 'status': this session's allowance and the key's monthly quota. Free.\n\n" +
         "WHAT QLOO IS NOT. It holds measured taste, not culture's rules: it does not know which colours mean mourning " +
@@ -86,7 +91,7 @@ public partial class DrawingMcpTools
         [Description("insights: further Qloo Insights parameters as a JSON object, e.g. {\"filter.popularity.min\":0.5,\"signal.interests.entities\":[\"<id>\"],\"feature.explainability\":true}. Checked before sending.")] string? query = null,
         [Description("describe, demographics, compare: Qloo entity ids, comma-separated, from 'resolve' or an earlier answer.")] string? entities = null,
         [Description("compare: the second set of entity ids, comma-separated.")] string? versus = null,
-        [Description("How many results (1-50; default 10, 25 for describe).")] int? take = null,
+        [Description("How many results (1-50; default 10, 25 for describe). compare: rows per list in the reply.")] int? take = null,
         [Description("What this is for, in your own words. Recorded, and how a script finds it later with Taste.find(...).")] string? label = null,
         RequestContext<CallToolRequestParams>? context = null,
         CancellationToken cancellationToken = default)
@@ -144,7 +149,7 @@ public partial class DrawingMcpTools
             ["monthlyRemaining"] = registry.Budget.MonthlyRemaining,
         });
 
-        var reply = TasteReply(op, result, response, registry.Budget, Trimmed(name), count);
+        var reply = TasteReply(op, result, response, registry.Budget, Trimmed(name), count, (TasteIds(entities).Length, TasteIds(versus).Length));
         if (note is not null) reply["note"] = note;
         return reply;
     });
@@ -344,6 +349,14 @@ public partial class DrawingMcpTools
             ["distinctiveCount"] = ((object?[])d["distinctive"]!).Length,
             ["sharedCount"] = ((object?[])d["shared"]!).Length,
         })]);
+        // The pace of the distinctive films and shows, in the reply itself: poster5's most decision-changing number was
+        // the pace difference between two audiences, and it found it only by dumping Object.keys on a script result.
+        reply["pace"] = new JsonObject
+        {
+            ["fast"] = (int)pace["fast"]!, ["slow"] = (int)pace["slow"]!, ["n"] = (int)pace["n"]!, ["fastShare"] = (double?)pace["fastShare"],
+            ["note"] = "Of the distinctive films and shows, how many Qloo tags fast-paced and slow. With a second audience's profile, "
+                     + "Taste.contrast(a, b).pace tests whether they differ (Fisher's exact p) and leads its summary.",
+        };
         reply["placeAesthetics"] = new JsonArray([.. placeTags.Cast<Dictionary<string, object?>>().Select(t => (JsonNode?)(string?)t["name"])]);
         if (result.Warnings.Length > 0) reply["warnings"] = new JsonArray([.. result.Warnings.Select(w => (JsonNode?)w)]);
         reply["note"] = "Distinctive = in this audience's list and not in its place's baseline: cite these. placeAesthetics are the "
@@ -575,7 +588,9 @@ public partial class DrawingMcpTools
     /// The reply the agent reads: compact, because it lands in the context window. The full answer — every tag,
     /// every property — is kept on the session for scripts.
     /// </summary>
-    private static JsonObject TasteReply(string op, TasteResult result, QlooResponse response, QlooBudget budget, string? asked, int count)
+    /// <param name="sides">For <c>compare</c>, how many entities each side named.</param>
+    private static JsonObject TasteReply(string op, TasteResult result, QlooResponse response, QlooBudget budget, string? asked, int count,
+        (int A, int B) sides = default)
     {
         var reply = new JsonObject
         {
@@ -634,7 +649,9 @@ public partial class DrawingMcpTools
                     reply["demographics"] = new JsonArray([.. insights.Demographics.Select(d => JsonNode.Parse(d.GetRawText()))]);
                 break;
             case QlooCompareResponse compared when compared.Results is { } raw:
-                reply["comparison"] = JsonNode.Parse(raw.GetRawText());
+                // Never the raw answer: one row per tag per pairing came to 358 KB for seven entities a side (poster5),
+                // which the host refused to deliver. Scripts keep the whole of it on the result.
+                reply["comparison"] = TasteNode(TasteCompare.Summary(raw, count, result.Id, sides.A, sides.B));
                 break;
         }
 

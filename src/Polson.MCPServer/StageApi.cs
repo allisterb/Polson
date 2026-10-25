@@ -207,7 +207,21 @@ public sealed class StageApi
                 warnings.Add("a pitch book opens on the story: pass treatment.md as a page's file.");
         }
 
-        var (pdf, count, overflows) = Polson.Drawing.Skia.PdfBook.Write(title, pages);
+        // Shaw's frame for the book (Manual 25 §13d): a cover unless asked not to, contents when it runs long, a closing page
+        // for a pitch, and the piece's own typeface and accent on the neutral ground if given.
+        var coverGiven = JsInterop.AsDict(o["cover"]);
+        var cover = o["cover"] is false ? null : new Polson.Drawing.Skia.PdfBook.Cover(
+            coverGiven?["client"]?.ToString(), coverGiven?["date"]?.ToString() ?? DateTime.Now.ToString("d MMMM yyyy", System.Globalization.CultureInfo.InvariantCulture),
+            coverGiven?["studio"]?.ToString() ?? "Polson Studio", coverGiven?["subtitle"]?.ToString());
+        var font = o["font"]?.ToString();
+        if (font is { Length: > 0 } && !Polson.Drawing.Skia.PdfBook.Installed(font))
+            warnings.Add($"the typeface '{font}' is not installed, so the book is set in a substitute. Name an installed family, or leave font out for Arial.");
+        var accent = o["accent"]?.ToString();
+        if (accent is { Length: > 0 } && !SkiaSharp.SKColor.TryParse(accent, out _))
+            throw new ArgumentException($"Stage.book's accent is a colour such as '#c8553d', not '{accent}'.");
+        var close = o["close"] is false ? null : o["close"]?.ToString() ?? (kind == "pitch" ? "Thank you." : null);
+        bool? contents = o["contents"] is bool b ? b : null;
+        var (pdf, count, overflows) = Polson.Drawing.Skia.PdfBook.Write(title, pages, new(font, accent, cover, contents, close));
         // A page whose text runs on for pages is a file pasted, not a page written: nightshift1 put the whole of
         // direction.md in, ten pages of it. Summarise it in a page of your own — the decisions, each with its evidence.
         for (var i = 0; i < pages.Count; i++)

@@ -78,26 +78,27 @@ public static partial class PosterTypeAudit
     public static IReadOnlyList<TypeLine> Lines(SvgDocument document)
     {
         var lines = new List<TypeLine>();
+        var order = PaintOrder(document);
 
         // `paper.trackedText(...)` sets a run as one <text> per glyph inside a group. Read one at a time, a tracked
         // title was sixteen one-letter lines: too short for the length check and invisible to the spacing one.
         var runs = Descendants(document).OfType<SvgGroup>().Where(g => !IsDefinition(g) && IsTrackedRun(g)).ToList();
         var inRuns = runs.SelectMany(g => g.Children.OfType<SvgText>()).ToHashSet();
-        foreach (var run in runs) AddRun(lines, run);
+        foreach (var run in runs) AddRun(lines, run, order[run]);
 
         foreach (var text in Descendants(document).OfType<SvgText>().Where(t => !IsDefinition(t) && !inRuns.Contains(t)))
         {
             var spans = text.Children.OfType<SvgTextSpan>().Where(s => s.Y is { Count: > 0 }).ToList();
             if (spans.Count == 0)
             {
-                Add(lines, text, text, Words(text));
+                Add(lines, text, text, Words(text), order[text]);
                 continue;
             }
 
             // Text set directly in the container, before or between the spans, is its own line at the container's origin.
             var own = Collapse(string.Concat(text.Nodes.OfType<SvgContentNode>().Select(n => n.Content)));
-            if (own.Length > 0) Add(lines, text, text, own);
-            foreach (var span in spans) Add(lines, span, text, Words(span));
+            if (own.Length > 0) Add(lines, text, text, own, order[text]);
+            foreach (var span in spans) Add(lines, span, text, Words(span), order[text]);
         }
         return lines;
     }
@@ -302,10 +303,10 @@ public static partial class PosterTypeAudit
 
     /// <summary>A tracked run as one line: its glyphs in reading order, inside the union of their boxes.</summary>
     /// <remarks>A word space is a gap between glyph boxes wider than a quarter of the type size; tracking alone is narrower.</remarks>
-    private static void AddRun(List<TypeLine> lines, SvgGroup run)
+    private static void AddRun(List<TypeLine> lines, SvgGroup run, int order)
     {
         var glyphs = new List<TypeLine>();
-        foreach (var text in run.Children.OfType<SvgText>()) Add(glyphs, text, text, Words(text));
+        foreach (var text in run.Children.OfType<SvgText>()) Add(glyphs, text, text, Words(text), order);
         if (glyphs.Count == 0) return;
 
         var ordered = glyphs.OrderBy(g => g.Bounds.Left).ToList();
@@ -317,10 +318,10 @@ public static partial class PosterTypeAudit
         }
 
         var box = ordered.Skip(1).Aggregate(ordered[0].Bounds, (b, g) => SKRect.Union(b, g.Bounds));
-        lines.Add(new TypeLine(words.ToString(), box, ordered.Max(g => g.SizePaper), ordered.All(g => g.Upright), Exemptions(run)));
+        lines.Add(new TypeLine(words.ToString(), box, ordered.Max(g => g.SizePaper), ordered.All(g => g.Upright), Exemptions(run), order));
     }
 
-    private static void Add(List<TypeLine> lines, SvgTextBase line, SvgText container, string words)
+    private static void Add(List<TypeLine> lines, SvgTextBase line, SvgText container, string words, int order)
     {
         if (words.Length == 0) return;
 
@@ -344,8 +345,12 @@ public static partial class PosterTypeAudit
         var scale = MathF.Sqrt(MathF.Abs(toPaper.ScaleX * toPaper.ScaleY - toPaper.SkewX * toPaper.SkewY));
         var upright = MathF.Abs(toPaper.SkewX) < 1e-4f && MathF.Abs(toPaper.SkewY) < 1e-4f;
 
-        lines.Add(new TypeLine(words, box, size * scale, upright, Exemptions(line)));
+        lines.Add(new TypeLine(words, box, size * scale, upright, Exemptions(line), order));
     }
+
+    /// <summary>Each element's place in the order the document paints: its position in a depth-first walk, parents first.</summary>
+    internal static Dictionary<SvgElement, int> PaintOrder(SvgDocument document) =>
+        Descendants(document).Select((e, i) => (e, i)).ToDictionary<(SvgElement e, int i), SvgElement, int>(p => p.e, p => p.i, ReferenceEqualityComparer.Instance);
 
     /// <summary>The checks an element is excused from, by <see cref="ExemptAttribute"/> on it or any ancestor.</summary>
     internal static HashSet<string> Exemptions(SvgElement element)
@@ -428,10 +433,13 @@ public static partial class PosterTypeAudit
 
 /// <summary>A line of type as it sits on the paper: its words, its line box, its font size after transforms.</summary>
 /// <remarks>A class rather than a record on purpose: two lines with the same words in the same place are still two lines.</remarks>
-public sealed class TypeLine(string words, SKRect bounds, float sizePaper, bool upright, IReadOnlySet<string>? exempt = null)
+public sealed class TypeLine(string words, SKRect bounds, float sizePaper, bool upright, IReadOnlySet<string>? exempt = null, int? order = null)
 {
     #region Properties
     public string Words { get; } = words;
+
+    /// <summary>Where the line is painted among the marks it is audited with — later is on top — or null when unknown.</summary>
+    public int? Order { get; } = order;
 
     /// <summary>From the font's ascent to its descent, in paper units.</summary>
     public SKRect Bounds { get; } = bounds;

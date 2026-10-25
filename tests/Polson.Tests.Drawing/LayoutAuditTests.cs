@@ -88,6 +88,70 @@ public class LayoutAuditTests : TestsRuntime
         Assert.Empty(Paper(Text(40, 620, "Bleeds off on purpose", extra: "data-print-exempt=\"layout\"")));
     }
 
+    /// <summary>poster5's mirror ball, its top edge under the tagline.</summary>
+    private const string Ball = """<circle cx="450" cy="400" r="138" fill="#B8381F"/>""";
+
+    /// <summary>poster5's title band: opaque, painted over the ball's top, down past the tagline.</summary>
+    private const string Band = """<rect x="-10" y="-10" width="920" height="310" fill="#F2E3C4"/>""";
+
+    private static string Tagline() => Text(90, 286, "Nothing personal. It's the music business.", 34);
+
+    [Fact]
+    public void TestTypeAcrossAShapeIsReportedWhenNothingCoversIt()
+    {
+        Assert.Contains(Paper(Ball + Tagline()), w => w.Contains("runs across the edge of a circle"));
+    }
+
+    /// <summary>
+    /// poster5: the tagline was reported across the mirror ball, which sat behind an opaque band painted after it. The
+    /// reader never sees that edge; the band covers the ball wherever the line meets it.
+    /// </summary>
+    [Fact]
+    public void TestAShapePaintedOverByAnOpaqueBandBeforeTheTypeIsNotReported()
+    {
+        Assert.Empty(Paper(Ball + Band + Tagline()));
+        Assert.Empty(Paper(Ball + $"""<g>{Band}</g>""" + $"<g>{Tagline()}</g>"));                // groups do not change the order
+        Assert.Empty(Paper(Ball + """<ellipse cx="450" cy="150" rx="700" ry="200" fill="#F2E3C4"/>""" + Tagline()));
+    }
+
+    [Theory]
+    [InlineData("band under the ball", Band + Ball, "")]                                               // the ball is on top
+    [InlineData("band over the type", Ball, Band)]                                                      // hides the line too: not this audit's call
+    [InlineData("translucent band", Ball + """<rect x="-10" y="-10" width="920" height="310" fill="#F2E3C4" fill-opacity="0.9"/>""", "")]
+    [InlineData("band in a faded group", Ball + """<g opacity="0.95"><rect x="-10" y="-10" width="920" height="310" fill="#F2E3C4"/></g>""", "")]
+    [InlineData("gradient band", Ball + """<defs><linearGradient id="g"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#000"/></linearGradient></defs><rect x="-10" y="-10" width="920" height="310" fill="url(#g)"/>""", "")]
+    [InlineData("rotated band", Ball + """<rect x="-10" y="-10" width="920" height="310" fill="#F2E3C4" transform="rotate(1 450 150)"/>""", "")]
+    [InlineData("rounded band", Ball + """<rect x="-10" y="-10" width="920" height="310" rx="40" fill="#F2E3C4"/>""", "")]
+    [InlineData("band too short", Ball + """<rect x="-10" y="-10" width="920" height="280" fill="#F2E3C4"/>""", "")]
+    [InlineData("band too narrow", Ball + """<rect x="-10" y="-10" width="400" height="310" fill="#F2E3C4"/>""", "")]
+    public void TestACrossingIsStillReportedUnlessAnOpaqueShapeCertainlyCoversIt(string why, string before, string after)
+    {
+        Assert.True(Paper(before + Tagline() + after).Any(w => w.Contains("runs across the edge of a circle")), why);
+    }
+
+    [Fact]
+    public void TestACanvasBandFilledOverAShapeBeforeTheTypeHidesTheCrossing()
+    {
+        string[] Draw(string band)
+        {
+            using var canvas = new SkiaCanvas(900, 600);
+            var ctx = canvas.GetContext("2d");
+            ctx.FillStyle = "#B8381F";
+            ctx.BeginPath();
+            ctx.Arc(450, 400, 138, 0, (float)(2 * System.Math.PI));
+            ctx.Fill();
+            ctx.FillStyle = band;
+            ctx.FillRect(-10, -10, 920, 310);
+            ctx.FillStyle = "#333333";
+            ctx.Font = "34px Arial";
+            ctx.FillText("Nothing personal. It's the music business.", 90, 286);
+            return [.. canvas.AuditLayout()];
+        }
+
+        Assert.DoesNotContain(Draw("#F2E3C4"), w => w.Contains("runs across the edge"));
+        Assert.Contains(Draw("rgba(242, 227, 196, 0.8)"), w => w.Contains("runs across the edge"));     // translucent: the ball shows
+    }
+
     [Fact]
     public void TestACanvasRecordsWhatItDrewAndIsAuditedTheSameWay()
     {

@@ -43,7 +43,7 @@ public class ProcessBookTests : TestsRuntime, IDisposable
             """);
 
         Assert.True(result.Success, result.Error);
-        Assert.Contains(result.Logs, l => l.Contains("pages 5"));      // brief, a page per concept and the recommendation, the film
+        Assert.Contains(result.Logs, l => l.Contains("pages 6"));      // the cover, the brief, a page per concept and the recommendation, the film
         var pdf = File.ReadAllBytes(Path.Combine(root, "process.pdf"));
         Assert.Equal("%PDF", System.Text.Encoding.ASCII.GetString(pdf, 0, 4));
     }
@@ -70,6 +70,28 @@ public class ProcessBookTests : TestsRuntime, IDisposable
         Assert.Contains(warned.Logs, l => l.StartsWith("[WARN] Stage.book: 'Direction' runs on for", StringComparison.Ordinal));
         Assert.Contains(warned.Logs, l => l.Contains("findings.md is the run's report to the studio"));
         Assert.DoesNotContain(warned.Logs, l => l.Contains("'Concepts' runs on"));
+    }
+
+    /// <summary>
+    /// Shaw's frame for a book (Design for Motion, ch. 4): a cover by default and none when refused, contents once it runs
+    /// past eight pages, a closing page for a pitch, and the piece's typeface and accent — a typeface not installed said so.
+    /// </summary>
+    [Fact]
+    public void TestABookHasACoverContentsWhenLongAndAPitchClosesWithThanks()
+    {
+        var many = string.Join(", ", Enumerable.Range(1, 10).Select(i => $"{{ title: 'Scene {i}', text: 'Scene {i}.' }}"));
+
+        var plain = Run("log('plain ' + Stage.book('a.pdf', { title: 'Harbour', cover: false, pages: [{ title: 'One', text: 'x' }] }).pages);");
+        var pitch = Run("log('pitch ' + Stage.book('b.pdf', { title: 'Harbour', kind: 'pitch', accent: '#c8553d', font: 'Georgia', " +
+            "cover: { client: 'Harbour Coffee' }, pages: [{ title: 'One', text: 'x' }] }).pages);");
+        var longBook = Run($"log('long ' + Stage.book('c.pdf', {{ title: 'Harbour', pages: [{many}] }}).pages);");
+        var missing = Run("Stage.book('d.pdf', { title: 'Harbour', font: 'No Such Face 123', pages: [{ title: 'One', text: 'x' }] });");
+
+        Assert.Contains(plain.Logs, l => l.Contains("plain 1"));                // no cover, no contents, no close
+        Assert.Contains(pitch.Logs, l => l.Contains("pitch 3"));                // cover, the page, "Thank you."
+        Assert.Contains(longBook.Logs, l => l.Contains("long 12"));             // cover, contents, ten scenes
+        Assert.Contains(missing.Logs, l => l.Contains("'No Such Face 123' is not installed"));
+        Assert.Contains("is a colour", Run("Stage.book('e.pdf', { title: 'H', accent: 'rust', pages: [{ title: 'One' }] });").Error);
     }
 
     /// <summary>

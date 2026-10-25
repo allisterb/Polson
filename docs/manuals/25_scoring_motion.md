@@ -1104,3 +1104,26 @@ concept: clean, consistent, one typeface, the work given room, and nothing in it
   the finished film's frames. It is warned about if it shows a workshop sheet, or has no board or treatment.
 - `Stage.book('process.pdf', { kind: 'process', … })`: everything else, in the order it was made — the map, the field,
   the dump, the concepts, the matrix, the boards that changed.
+
+**How a book is made** (ch. 4, and Lauren Hartstone's interview there). The book is a container: clean, organised, and
+never competing with what it holds.
+
+- **One typeface**, varied in weight and size, and never set too large. **A neutral ground**, with colour kept for
+  accents. **Room on every edge.** Numbered pages under a consistent header.
+- **A cover** that is simple and clear: the project, who it is for, the date, the studio. **Contents** when it runs
+  long. **A closing page**, a plain word of thanks for a pitch.
+- **Carry the idea's tone.** Hartstone says half of winning a pitch is how the presentation is built — the sequence, the
+  writing, how the reader is led through the idea — and that a book can reflect the idea's tone on every page rather
+  than put six frames on one. The studio's way of doing both: the piece's own typeface (`font`) and accent (`accent`) on
+  the neutral ground.
+- **Lead the reader through the idea in order**: the idea in a sentence, its story, its look, its frames, what is
+  asked. A page is read at a glance; a long file is written as a page of its substance, never pasted.
+- **Spell-check every word** (ch. 4: a misspelling reads as unprofessional at once). The studio has no checker; read
+  the book's text back before delivering it.
+
+```js
+Stage.book('pitch.pdf', { kind: 'pitch', title: 'Nightshift — a fifteen-second film', font: 'Georgia', accent: '#2a9d8f',
+    cover: { client: 'Nightshift Cold Brew', subtitle: 'Treatment and design board' }, pages: [
+    { title: 'The story', file: 'treatment.md', image: 'artifacts/03_shape.png' },
+    { title: 'Design board', image: 'artifacts/03_board.png' }] });            // a cover first, "Thank you." last
+```
