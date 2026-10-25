@@ -250,7 +250,12 @@ silhouettes with `bitmap.diff`, the staged things black and the setting white, s
 figure, a sign chosen for its kind (Manual 29 §2–§5) — and write them as `concepts.md`, the concept presentation of
 Manual 29 §8: a page per concept with its overview, audience, views (the sketch, the storyboard as beats, and the map's
 trail to its cell; a concept grown from an `(assumed)` node says so among its drawbacks),
-solution, justification, evidence, drawbacks and expansion, then a recommendation with next steps. Point the director's question at it, and choose against the sentence. In motion the verb is the move, so the concept already says how the film moves. **Decide the
+solution, justification, evidence, drawbacks and expansion, then a recommendation with next steps. Before choosing,
+**place the three among the field** (Manual 29 §2d; Lupton's *Brand Matrix*): draw each concept's sketch on its own
+canvas, and draw `artifacts/03_matrix_a.png` with `Stage.matrix(ctx, { x: { measure: 'lightness' }, y: { measure:
+'chroma' }, field, concepts: [{ label: 'A', image }, …], chosen })`, `field` being the research board's pictures; cite
+its `summary` in `concepts.md`. Point the director's question at it, and choose against the sentence; then
+`Stage.check` that the chosen concept stands where `direction.md` says, apart from the crowd or with it. In motion the verb is the move, so the concept already says how the film moves. **Decide the
 resolve with it**: the last shot the film builds to, and the earlier shots as parts or close-ups of it (Manual 25 §12b).
 
 A trailer is short enough to plan in full before any key is set. Write the beats as a table in
@@ -493,7 +498,7 @@ set's own check from *More than one audience*:
 - **`findings.md`**: what the motion added to the poster, what the checks changed, and what you would
   do with more time.
 - **The process book, last**: `Stage.book('process.pdf', { title, pages })` (Manual 18 §3c) — the brief, the mind map
-  (`00_map.png`), each audience's research board, `concepts.md`
+  (`00_map.png`), each audience's research board and matrix (`03_matrix_a.png`), `concepts.md`
   (a concept to a page), the animatic, the style frames (and the kit sheet, with several audiences), a frame of each
   finished film (`comp.still`), and the graph of its key moves, every caption saying what was decided. It names only
   files that exist, and draws nothing new. **It is the client's book**: ten to twenty pages; the direction as a page of

@@ -1,6 +1,6 @@
 # Studio Manual 29: Concepts — Verbs, Figures, Signs and the Kit
 
-> **Credits & Theoretical Foundation**: §8 also follows L. Galli's slide template of BJ Fogg's "Conceptual Designs" (in B. Laurel, ed., *Design Research*, MIT Press, 2003), ledgered 2026-10-24. Distilled from Ellen Lupton (ed.), *Graphic Design Thinking: Beyond Brainstorming* (Princeton Architectural Press, 2011) — *Creative Brief* (pp. 56–59) for §2, *Mind Mapping* (pp. 22–25, after Tony Buzan, with Toormix's case study) for §2a, *Visual Research* (pp. 38–41, after the design firm 2x4) for §2b, *Visual Brain Dumping* (pp. 62–63) and *Forced Connections* (pp. 68–69) for §2c, *Action Verbs* (pp. 74–77, after Alex F. Osborn's *Applied Imagination*, 1953, and Koberg & Bagnall's *The Universal Traveler*, 1972) for §3, *Rhetorical Figures* (pp. 82–87, after Ehses & Lupton's *Design Papers: Rhetorical Handbook*, 1988) for §4, *Icon, Index, Symbol* (pp. 88–91, after Peirce) for §5, *Lost in Translation* (pp. 104–107, Toormix's method) for §6, and *Kit of Parts* (pp. 126–131) and *Brand Languages* (pp. 132–135) for §7 — and from John Colette & Austin Shaw, *Motion Design Toolkit* (Routledge, 2023), ch. 1 for the resolve and ch. 12 for design systems. Both ledgered 2026-10-24; methods in our words, no passage reproduced. **Where a rule is ours rather than theirs, it says so.** The sources Lupton cites (Osborn, Koberg & Bagnall, Ehses & Lupton, Peirce) are not in `reference/` and are cited through her.
+> **Credits & Theoretical Foundation**: §8 also follows L. Galli's slide template of BJ Fogg's "Conceptual Designs" (in B. Laurel, ed., *Design Research*, MIT Press, 2003), ledgered 2026-10-24. Distilled from Ellen Lupton (ed.), *Graphic Design Thinking: Beyond Brainstorming* (Princeton Architectural Press, 2011) — *Creative Brief* (pp. 56–59) for §2, *Mind Mapping* (pp. 22–25, after Tony Buzan, with Toormix's case study) for §2a, *Visual Research* (pp. 38–41, after the design firm 2x4) for §2b, *Visual Brain Dumping* (pp. 62–63) and *Forced Connections* (pp. 68–69) for §2c, *Brand Matrix* (pp. 42–45, after Debbie Millman and Sterling Brands) for §2d, *Action Verbs* (pp. 74–77, after Alex F. Osborn's *Applied Imagination*, 1953, and Koberg & Bagnall's *The Universal Traveler*, 1972) for §3, *Rhetorical Figures* (pp. 82–87, after Ehses & Lupton's *Design Papers: Rhetorical Handbook*, 1988) for §4, *Icon, Index, Symbol* (pp. 88–91, after Peirce) for §5, *Lost in Translation* (pp. 104–107, Toormix's method) for §6, and *Kit of Parts* (pp. 126–131) and *Brand Languages* (pp. 132–135) for §7 — and from John Colette & Austin Shaw, *Motion Design Toolkit* (Routledge, 2023), ch. 1 for the resolve and ch. 12 for design systems. Both ledgered 2026-10-24; methods in our words, no passage reproduced. **Where a rule is ours rather than theirs, it says so.** The sources Lupton cites (Osborn, Koberg & Bagnall, Ehses & Lupton, Peirce) are not in `reference/` and are cited through her.
 > **Purpose**: How to get from a brief to a concept worth drawing — several, made by different methods, before one is chosen — and, for a set made for several audiences, how to make the set one system rather than several separate pieces.
 
 ---
@@ -16,7 +16,8 @@ of them, and expects the problem itself to shift as it works; the first idea is 
 So: **narrow the brief to a sentence (§2), map its associations (§2a), look at the field the piece will stand in (§2b),
 sketch many (§2c), then make
 at least three concepts by different methods** — a verb applied to
-the core image (§3), a figure (§4), a sign chosen for its kind (§5) — and choose between them. For one piece that is the
+the core image (§3), a figure (§4), a sign chosen for its kind (§5) — **place them among the field (§2d)**, and choose
+between them. For one piece that is the
 whole of it. For a set across audiences, §6 governs the words and §7 the system.
 
 ---
@@ -455,6 +456,49 @@ recoloured chess cell is found.
 
 **The check finds repeats, not glyphs.** A sheet of single shapes passes it easily, because single shapes differ; the
 label test above is the only check for staging, and it is yours to make on the rendered sheet.
+
+## 2d. The Brand Matrix: Where the Concepts Stand
+
+> **Implemented by**: `Stage.matrix(ctx, { x, y, field, concepts, chosen })`, and `Taste.measure(bitmap)` under it.
+
+Lupton's brand matrix (*Brand Matrix*, pp. 42–43, after Debbie Millman and Sterling Brands) has three steps: **list the
+elements** to diagram — brands, products, people; **find opposites** to organise them by — east/west, formal/informal,
+expensive/cheap, risky/safe; and **connect the dots**: plot the list on the crossed axes, and look for where things
+cluster, the empty space to avoid, and the sweet spot to hit. Her case study (pp. 44–45) mapped the brand space of tea
+on East/West against Formal/Informal, and each new prototype then staked out its own place in it.
+
+**The studio's version** (ours, from the method):
+
+- **Draw it at the choice, not before it.** Once the three concepts exist, plot them with the audience's field — the
+  pictures of §2b — on two axes. It answers the question `concepts.md` otherwise answers in prose: which concept stands
+  apart, which belongs, and is either where the piece should be.
+- **Measure the axes where you can.** `lightness` (dark ↔ light), `chroma` (muted ↔ vivid), `colourful` (monochrome ↔
+  colourful) and `warmth` (cool ↔ warm) are measured on both the field and a concept, the concept by the same code as
+  the field (`Taste.measure`), so the points compare. Lightness against chroma is the default pair: it shows what the
+  research board's hue wheel cannot.
+- **Some axes are the field's only.** `popularity` (niche ↔ mainstream) and `year` (older ↔ newer) read the field
+  well, but a concept has neither, so such a matrix holds the field alone.
+- **A judged axis is allowed, and says so.** Lupton's own axes are judgements: formal/informal, East/West. Give the
+  values yourself — `{ judged: { 'Suspiria': 0.8, A: 0.3 }, low: 'formal', high: 'playful' }` — and the sheet labels
+  the axis *judged by the studio*, as the mind map dashes an assumed node.
+- **Then say where the chosen concept stands, and check it.** The crossing is the middle of these points, so a
+  quadrant means *this field's* dark or vivid. Write in `direction.md` whether the chosen concept stands apart (few of
+  the field in its quadrant) or belongs (with the crowd), citing the matrix's `summary`, and `Stage.check` it.
+- **Draw each concept on its own canvas** before putting it on the concepts sheet, so each can be measured on its own.
+
+```js
+// The audience's films and the three concepts, on lightness against chroma, with A chosen.
+const sheet = createCanvas(1000, 760), ctx = sheet.getContext('2d');
+ctx.fillStyle = '#f2efe8'; ctx.fillRect(0, 0, 1000, 760);
+const field = (await Taste.images(Taste.find('audience A'), { type: 'film', take: 16 })).filter(i => i.success);
+const m = Stage.matrix(ctx, {
+    x: { measure: 'lightness' }, y: { measure: 'chroma' }, field,
+    concepts: [{ label: 'A', image: conceptA }, { label: 'B', image: conceptB }, { label: 'C', image: conceptC }],
+    chosen: 'A' });
+const a = m.concepts.find(c => c.label === 'A');
+Stage.check('A stands apart from the field, as direction.md says', a.fieldInQuadrant <= 1, m.summary);
+return sheet;
+```
 
 ## 3. Verbs: Activating an Idea
 

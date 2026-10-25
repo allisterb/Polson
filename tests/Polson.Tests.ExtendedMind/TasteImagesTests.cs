@@ -185,6 +185,30 @@ public class TasteImagesTests : TestsRuntime
         Assert.All(pictures, p => Assert.Matches("^#[0-9A-F]{6}$", (string)p.Lead!["color"]!));
     }
 
+    /// <summary>A concept is measured by the same code as a Qloo picture, so the two can stand on one matrix.</summary>
+    [Fact]
+    public async Task APictureOfYourOwnIsMeasuredAsAQlooPictureIs()
+    {
+        var png = (await Png(SKColors.Red).Content.ReadAsByteArrayAsync());
+        var (taste, _) = Toolkit(new FakeHost(_ => Png(SKColors.Red)), Entity("R-1", "Redbrand", "urn:entity:brand", Url("r")));
+        var qloo = Assert.Single(await taste.Images("R-1"));
+
+        var mine = taste.Measure(new Lossless(png));
+        var viaUri = taste.Measure("data:image/png;base64," + Convert.ToBase64String(png));
+
+        Assert.Equal(qloo.Lightness, (double)mine["lightness"]!);
+        Assert.Equal(qloo.Chroma, (double)mine["chroma"]!);
+        Assert.Equal(qloo.Neutral, (double)mine["neutral"]!);
+        Assert.Equal(mine["chroma"], viaUri["chroma"]);
+        Assert.True(qloo.Chroma is > 0.02 and < 0.1);                     // a quarter red, the rest white
+        Assert.Contains("canvas.bitmap", Assert.Throws<ArgumentException>(() => taste.Measure(42)).Message);
+    }
+
+    private sealed class Lossless(byte[] png) : global::Polson.ILosslessImageSource
+    {
+        public byte[] ToLosslessBytes() => png;
+    }
+
     [Fact]
     public void AFinishedColourIsPlacedInTheFieldsOwnSectors()
     {

@@ -185,7 +185,14 @@ evidence objected to it. It never objects, and the pair came out as one poster t
 - **Each later audience's concepts come from its own profile, drawn before you look back at the choices
   already made.** Holding the system (grid, type, title) is decided afterwards, in stage 8.
 - **Thumbnails are rough**: tone blocks, the dominant shape, one line for the title. Three on one sheet
-  per audience, `artifacts/03_concepts_a.png`, `03_concepts_b.png`, … — minutes, not comps.
+  per audience, `artifacts/03_concepts_a.png`, `03_concepts_b.png`, … — minutes, not comps. Draw each on its own
+  canvas first, then onto the sheet, so each can be measured.
+
+**Then place them among the field** (Manual 29 §2d; Lupton's *Brand Matrix*). Draw `artifacts/03_matrix_a.png` with
+`Stage.matrix(ctx, { x: { measure: 'lightness' }, y: { measure: 'chroma' }, field, concepts: [{ label: 'A', image },
+…], chosen })`. `field` is the same pictures as the research board. Choose other measured axes if they say more, or a
+judged one, labelled as judged. The matrix's `summary` is evidence in `concepts.md`, and once you choose,
+`Stage.check` that the chosen concept stands where `direction.md` says: apart from the crowd, or with it.
 
 Then write them up as **`concepts.md`**, the concept presentation of Manual 29 §8 — a page per concept: overview,
 audience, views (the thumbnail's path, its operation, the profile item it starts from), solution, justification and
@@ -334,7 +341,8 @@ of a family's name — `'Franklin Gothic Heavy'` is `'Franklin Gothic'` at `font
 - **The print file is RGB and screen-grade** — sized, bled and checked, but not CMYK or PDF/X. Say so
   rather than calling it press-ready.
 - **The process book, last**: `Stage.book('process.pdf', { title, pages })` (Manual 18 §3c) — the brief in a page, each
-  mind map (`00_map.png`), each audience's research board (`01_field_a.png`, never the sheet of posters), each audience's concept sheet with `concepts.md` beside it, the comps that changed the direction, and each final poster,
+  mind map (`00_map.png`), each audience's research board (`01_field_a.png`, never the sheet of posters) and matrix
+  (`03_matrix_a.png`), each audience's concept sheet with `concepts.md` beside it, the comps that changed the direction, and each final poster,
   every caption saying what was decided. It names only files that exist, and draws nothing new. **It is the client's
   book**: ten to twenty pages; the direction as a page of its decisions in your words, not the file; `findings.md` left out.
 
