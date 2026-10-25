@@ -24,7 +24,7 @@ public class MotionBlendTests(ITestOutputHelper output) : TestsRuntime
 {
     private static readonly string[] Methods =
         ["composite", "onto", "behind", "multiply", "divide", "screen", "overlay", "hardLight",
-         "brighten", "darken", "add", "subtract", "difference", "alphaOver"];
+         "brighten", "darken", "add", "subtract", "difference", "alphaOver", "color", "hue", "saturation", "luminance"];
 
     #region Oracle
     /// <summary>
@@ -154,11 +154,41 @@ public class MotionBlendTests(ITestOutputHelper output) : TestsRuntime
     }
     #endregion
 
+    #region YUV
+    /// <summary>
+    /// The YUV methods replace one component of the backdrop's colour: over mid grey, a red layer blended by `color`
+    /// tints it red at the grey's brightness, by `luminance` takes the red's brightness and stays grey, and by `saturation`
+    /// leaves a grey alone (it has no chroma to scale). Synfig's own formulas; the oracle test checks them against it. A
+    /// soft red, because pure red's chroma at mid grey's brightness passes 1 and clips, losing brightness on 8 bits.
+    /// </summary>
+    [Fact]
+    public void TheYuvMethodsReplaceOneComponent()
+    {
+        SKColor Over(string blend)
+        {
+            var comp = new MotionToolkit().Composition(Opts(("width", 8d), ("height", 8d)));
+            comp.Fill(Opts(("color", "#808080")));
+            comp.Fill(Opts(("color", "#c06060"), ("blend", blend)));
+            using var frame = comp.Render(0);
+            return frame.SkBitmap.GetPixel(4, 4);
+        }
+        static double Y(SKColor c) => 0.299 * c.Red + 0.587 * c.Green + 0.114 * c.Blue;
+
+        var tinted = Over("color");
+        Assert.True(tinted.Red > tinted.Green + 60 && Math.Abs(tinted.Green - tinted.Blue) <= 2, $"color gave {tinted}");
+        Assert.InRange(Y(tinted), 128 - 3, 128 + 3);
+        var lit = Over("luminance");
+        Assert.True(Math.Abs(lit.Red - lit.Green) <= 2 && Math.Abs(lit.Green - lit.Blue) <= 2, $"luminance gave {lit}");
+        Assert.InRange(Y(lit), Y(new SKColor(0xc0, 0x60, 0x60)) - 3, Y(new SKColor(0xc0, 0x60, 0x60)) + 3);
+        Assert.Equal(new SKColor(128, 128, 128), Over("saturation"));
+    }
+    #endregion
+
     #region Refusals
     [Theory]
     [InlineData("multipy", "has no blend 'multipy'")]
     [InlineData("straight", "not available")]
-    [InlineData("hue", "not ported yet")]
+    [InlineData("alpha", "not available")]
     public void AnUnknownOrUnportedBlendIsRefusedByName(string blend, string expected)
     {
         var comp = new MotionToolkit().Composition();

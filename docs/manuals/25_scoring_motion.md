@@ -1,6 +1,6 @@
 # Studio Manual 25: Scoring Motion
 
-> **Credits & Theoretical Foundation**: **§5 distils John Lasseter, "Principles of Traditional Animation Applied to 3D Computer Animation" (*Computer Graphics* 21(4), SIGGRAPH '87, pp. 35–44) and John Colette & Austin Shaw, *Motion Design Toolkit* (Routledge, 2023), ch. 1, 2 and 8; §12 distils Colette & Shaw ch. 1, 7 and 11; both ledgered 2026-10-24 and cited by section or chapter where used. §13 distils Austin Shaw, *Design for Motion: Motion Design Techniques & Fundamentals* (Focal Press, 2016), ch. 2–4, 7 and 8, ledgered 2026-10-24 (the same retrieval clause: methods in our words, never its text); §14 distils its ch. 9, and restates Manual 21 §1's depth rules (Glebas, after Perkins) because no motion workflow loads Manual 21; §15 distils its ch. 10 (with two points from ch. 11), and its camera mappings (tilt, roll, the laid-down plane) are ours, measured on the engine. §11 distils Walt Stanchfield's *Drawn to Life* (vol. 1 ch. 41 and others), cited by chapter there; §1–§4 and §6–§10 distil no book in `reference/`.** Lasseter's source, Thomas & Johnston's *The Illusion of Life* (1981), is not in `reference/` and is cited only through him. This header used to say the corpus held no animation text. That was wrong: Stanchfield taught at Disney, and his lectures, ledgered on 2026-09-25 and first read only for gesture, include chapters on timing, phrasing and overlap. §5's received practices are corroborated there. The rest comes from three places, each named where it is used: the **position paradigm** is GSAP's, adopted deliberately and credited (it is not from the corpus and no claim is made about the rest of that library); the **cost figures** are our own measurements, recorded in `docs/motion-score-api.md` §3; and the **seek-rather-than-play** model is the studio's own, argued from the medium — an agent renders frames, it does not watch them. Until 2026-10-24 §5 stated its timing craft as received practice without a source; it is now sourced, and anything in it that is the studio's own is marked as ours. The calls are documented at `polson://sdk/core/Motion`.
+> **Credits & Theoretical Foundation**: **§5 distils John Lasseter, "Principles of Traditional Animation Applied to 3D Computer Animation" (*Computer Graphics* 21(4), SIGGRAPH '87, pp. 35–44) and John Colette & Austin Shaw, *Motion Design Toolkit* (Routledge, 2023), ch. 1, 2 and 8; §12 distils Colette & Shaw ch. 1, 7 and 11; both ledgered 2026-10-24 and cited by section or chapter where used. §13 distils Austin Shaw, *Design for Motion: Motion Design Techniques & Fundamentals* (Focal Press, 2016), ch. 2–4, 7 and 8, ledgered 2026-10-24 (the same retrieval clause: methods in our words, never its text); §14 distils its ch. 9, and restates Manual 21 §1's depth rules (Glebas, after Perkins) because no motion workflow loads Manual 21; §16 distils its ch. 13, and its costs are our measurements; §15 distils its ch. 10 (with two points from ch. 11), and its camera mappings (tilt, roll, the laid-down plane) are ours, measured on the engine. §11 distils Walt Stanchfield's *Drawn to Life* (vol. 1 ch. 41 and others), cited by chapter there; §1–§4 and §6–§10 distil no book in `reference/`.** Lasseter's source, Thomas & Johnston's *The Illusion of Life* (1981), is not in `reference/` and is cited only through him. This header used to say the corpus held no animation text. That was wrong: Stanchfield taught at Disney, and his lectures, ledgered on 2026-09-25 and first read only for gesture, include chapters on timing, phrasing and overlap. §5's received practices are corroborated there. The rest comes from three places, each named where it is used: the **position paradigm** is GSAP's, adopted deliberately and credited (it is not from the corpus and no claim is made about the rest of that library); the **cost figures** are our own measurements, recorded in `docs/motion-score-api.md` §3; and the **seek-rather-than-play** model is the studio's own, argued from the medium — an agent renders frames, it does not watch them. Until 2026-10-24 §5 stated its timing craft as received practice without a source; it is now sourced, and anything in it that is the studio's own is marked as ours. The calls are documented at `polson://sdk/core/Motion`.
 > **Purpose**: How to build a piece of motion that can be inspected, revised and resumed — why a score is a function of time rather than a sequence of events, how to place beats so that editing one does not break the rest, and how to look at a result you cannot watch. **It governs the building of a score, not the decision that the piece should move**; see the scope note below.
 
 ---
@@ -1374,3 +1374,93 @@ opening[0];
 
 Pick from the sheet with your image tool, record why in `direction.md`, and keep the sheet: it belongs in the process
 book (§13d).
+
+## 16. Compositing: Making Many Sources One World
+
+> **Implemented by**: `blend: 'onto'` and `'alphaOver'`, `comp.lumaKey`, `comp.blur`, `comp.colorCorrect`, the YUV blends
+> (`'color'`, `'hue'`, `'saturation'`, `'luminance'`), `comp.noise`, and `comp.image` for what `Assets` brings in.
+
+A film here is rarely one source. A drawn ground, a generated packshot, a requisitioned texture and set type have to
+read as one picture. Shaw calls that **compositing: combining distinct elements so they feel they belong together**
+(*Design for Motion*, ch. 13). It runs from **concrete**, where the result must pass as real and the rules of
+perspective, light, value and colour are strict, to **abstract**, where the rules bend but a visual pattern must still
+hold the image together. Most of this studio's films are towards the abstract end.
+
+### 16a. Read the sources before combining them
+
+Before anything is combined, answer for each source what Shaw asks: **where does its light come from, which way do its
+shadows fall, what is its range of values, what is its perspective, is there depth of field?** (ch. 13). A packshot lit
+from the left on a ground lit from the right is a collage, not a composite. The answers are §14's: value bands for each
+plane, one light, one horizon, blur by depth.
+
+### 16b. Mattes
+
+**A matte isolates part of an image** (ch. 13): the figure lifted from its ground, a landscape held inside a silhouette
+(the double exposure of *True Detective*'s titles). Three kinds, each one group:
+
+- **Alpha matte**: a shape, then what should fill it with `blend: 'onto'`. Its inverse is the shape with
+  `blend: 'alphaOver'` above what it should cut.
+- **Luma matte**: a picture whose greys say where (an `Assets.matte`, a drawn gradient, a photograph of smoke or ink),
+  then `comp.lumaKey()`, then what shows through with `blend: 'onto'`.
+- **A matte in time**: the matte wipe, `comp.wipe({ type: 'matte', image, completion })` (see *What you can bring in*).
+
+**Feather to match the source** (ch. 13): an edge sharper or softer than the image around it is what gives a composite
+away. A `blur` in the matte's group, before what goes onto it, softens the edge. Size it to the softness of the
+nearest edge in the picture.
+
+### 16c. Grade to one palette
+
+**Colour correction makes sources match; grading gives them one look** (ch. 13): hue, saturation and value moved,
+often only slightly, until each source sits in the same colour space. Shaw's example is a title sequence held to red,
+yellow, black and grey at one saturation throughout. Two ways to do it here:
+
+- **A grade over everything**: one `comp.colorCorrect` at the top of the stack, as the films already do.
+- **A tint to the palette**: desaturate a source (`colorCorrect({ saturation: 0 })` in its group), then a flat palette
+  colour over it with `blend: 'color'`. That takes the colour's hue and chroma and keeps the source's own light and
+  shade. `amount` sets how far. A generated picture brought into a drawn film this way stops looking pasted in.
+
+### 16d. Texture and grain unify
+
+**Gradients, noise and texture help a composite read as one surface** (ch. 13). The same grain over drawn and
+generated parts is the strongest single cue that they were made together. `comp.noise` is Synfig's noise, matched to it
+pixel for pixel. For grain, a new one-pixel pattern every frame, use the native composite rather than `overlay`: about
+30 ms a frame at 1280 × 720, where `overlay` adds about 135 ms at 1080 (the SDK's *Blend methods*):
+
+```js
+comp.noise({ size: 2, detail: 1, smooth: 'nearest', speed: 24, stops: ['#00000020', '#80808000', '#ffffff20'] });
+```
+
+Put it last, above everything, so the type is grained with the picture. Keep it faint: grain that can be noticed is a
+style, not a unifier. A still texture is an `Assets.material` tiled with `blend: 'overlay'`, at the cost of one
+full-frame blend.
+
+### 16e. Duplication and restraint
+
+**Digital duplication is free, so it is easy to overuse** (ch. 13): one scanned material can be recoloured into a set,
+which is a script loop over a copy with its own `colorCorrect`. But exact repetition is what makes retouching and
+composites look fake, so vary each copy (the `Random` toolkit, seeded).
+
+```javascript
+// A luma matte, a tint to the palette and grain: a drawn "plate" shown through a soft drawn matte, graded, grained.
+const comp = Motion.composition({ width: 640, height: 360, duration: 1 });
+comp.linearGradient({ point1: [0, 0], point2: [0, 360], stops: ['#14202b', '#1c2430'] });   // the ground
+
+// The matte: a soft bright disc on black. In a run this could be an Assets.matte or a photograph of ink.
+const m = createCanvas(320, 180), mx = m.getContext('2d');
+const disc = mx.createRadialGradient(160, 90, 10, 160, 90, 80);
+disc.addColorStop(0, '#ffffff'); disc.addColorStop(1, '#000000');
+mx.fillStyle = disc; mx.fillRect(0, 0, 320, 180);
+
+// What shows through it, tinted to the palette: desaturated, then the amber laid over by colour.
+const inside = comp.group();
+inside.image({ image: m, tl: [0, 0], br: [640, 360] });
+inside.lumaKey();
+const plate = inside.group({ blend: 'onto' });
+plate.linearGradient({ point1: [0, 0], point2: [640, 360], stops: ['#3a7ca5', '#f2efe8', '#c8553d'] });
+plate.colorCorrect({ saturation: 0 });
+plate.fill({ color: '#c9802f', blend: 'color', amount: 0.8 });
+
+// Grain over everything, last, on the native composite.
+comp.noise({ size: 2, detail: 1, smooth: 'nearest', speed: 24, stops: ['#00000020', '#80808000', '#ffffff20'] });
+comp.render(0.5);
+```
