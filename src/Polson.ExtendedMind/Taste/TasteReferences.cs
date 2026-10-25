@@ -174,8 +174,18 @@ public static class TasteReferences
     /// </summary>
     private static IEnumerable<string> TagsOf(TasteResult r) =>
         r.Tags.Concat(EntityDicts(r).SelectMany(e => e.GetValueOrDefault("tags") as System.Collections.IEnumerable is { } t ? t.Cast<object?>() : []))
+            .Concat(ComparisonTags(r))
             .Select(t => t switch { Dictionary<string, object?> d => d.GetValueOrDefault("name") as string, string s => s, _ => null })
             .OfType<string>();
+
+    /// <summary>
+    /// A <c>compare</c> answer's tags: Qloo's pairing rows and each side's own list. The workflows say to write a comparison
+    /// into <c>direction.md</c> as Qloo rows, and until 2026-10-25 none of its tags could verify: poster6 cited five that
+    /// <c>t7</c> returned and all five came back "not returned by t7".
+    /// </summary>
+    private static IEnumerable<object?> ComparisonTags(TasteResult r) => r.Comparison is Dictionary<string, object?> c
+        ? new[] { "tags", "a", "b" }.SelectMany(k => c.GetValueOrDefault(k) as object?[] ?? [])
+        : [];
 
     /// <summary>The Qloo rows of every Kind table, with the section each sits under and that section's lead handles.</summary>
     private static IEnumerable<Row> Rows(string text)
@@ -219,14 +229,17 @@ public static class TasteReferences
 
                 var evidence = string.Join(" | ", cells.Take(cells.Count - 1).Skip(1));
                 var choice = cells[0];
+                // Backticks are formatting, never part of a tag: `"Boom Bap"` (item 8) matched neither the reader nor the
+                // unread net and vanished, and the check passed with 0 tags read (poster6, 2026-10-25).
+                var plain = evidence.Replace("`", "");
                 yield return new Row(
                     section,
                     Space.Replace(choice.Replace("*", ""), " ").Trim(),
                     Handles(lines[i]),
                     lead.Distinct().ToArray(),
                     [.. Italics(choice + " " + evidence).Distinct()],
-                    [.. QuotedTags(evidence).Distinct()],
-                    [.. Unread(evidence).Distinct()]);
+                    [.. QuotedTags(plain).Distinct()],
+                    [.. Unread(plain).Distinct()]);
             }
             i--;
         }

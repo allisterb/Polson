@@ -875,9 +875,9 @@ public class CanvasRenderingContext2D
         if (paint.Color.Alpha > 0 || paint.Shader is not null)
         {
             var m = Canvas.SkCanvas.TotalMatrix;
-            var box = m.MapRect(new SKRect(startX, baseline + metrics.Ascent, startX + line.Width, baseline + metrics.Descent));
+            var box = Clipped(m.MapRect(new SKRect(startX, baseline + metrics.Ascent, startX + line.Width, baseline + metrics.Descent)));
             var scale = MathF.Sqrt(MathF.Abs(m.ScaleX * m.ScaleY - m.SkewX * m.SkewY));
-            Canvas.RecordText(text, box, font.Size * scale, MathF.Abs(m.SkewX) < 1e-4f && MathF.Abs(m.SkewY) < 1e-4f);
+            if (!box.IsEmpty) Canvas.RecordText(text, box, font.Size * scale, MathF.Abs(m.SkewX) < 1e-4f && MathF.Abs(m.SkewY) < 1e-4f);
         }
     }
 
@@ -886,8 +886,24 @@ public class CanvasRenderingContext2D
     private void RecordBox(SKRect local, bool round, SKPaint paint, bool exact = true)
     {
         if (paint.Color.Alpha == 0 && paint.Shader is null) return;
-        var box = Canvas.SkCanvas.TotalMatrix.MapRect(local);
-        Canvas.RecordShape(new LayoutShape(round ? "ellipse" : "rectangle", box, round, Opaque: exact && Hides(paint, box)));
+        var whole = Canvas.SkCanvas.TotalMatrix.MapRect(local);
+        var box = Clipped(whole);
+        if (box.IsEmpty) return;
+        // A clipped oval is no longer an oval: recorded as its box, which overstates the corners and never misses ink.
+        var cut = box != whole;
+        Canvas.RecordShape(new LayoutShape(round && !cut ? "ellipse" : "rectangle", box, round && !cut, Opaque: exact && !(round && cut) && Hides(paint, box)));
+    }
+
+    /// <summary>
+    /// What of a box lands inside an explicit clip. poster6's kit sheet (2026-10-25) drew discs magnified past their clipped
+    /// tiles and got 26 collisions with captions outside them, where nothing was drawn. With no clip set — the clip is the
+    /// whole canvas — the box is left whole, so a shape or a line of type running off the canvas is still seen to.
+    /// </summary>
+    private SKRect Clipped(SKRect box)
+    {
+        var c = Canvas.SkCanvas.DeviceClipBounds;
+        if (c.Left <= 0 && c.Top <= 0 && c.Right >= Canvas.Width && c.Bottom >= Canvas.Height) return box;
+        return SKRect.Intersect(box, SKRect.Create(c.Left, c.Top, c.Width, c.Height));
     }
 
     /// <summary>
@@ -935,8 +951,10 @@ public class CanvasRenderingContext2D
                 if (start is { } s && end is { } e && segments == 1)
                 {
                     var (from, to) = (m.MapPoint(s), m.MapPoint(e));
-                    Canvas.RecordShape(new LayoutShape("line", SKRect.Create(MathF.Min(from.X, to.X), MathF.Min(from.Y, to.Y),
-                        MathF.Abs(to.X - from.X), MathF.Abs(to.Y - from.Y)), false, from, to));
+                    var span = SKRect.Create(MathF.Min(from.X, to.X), MathF.Min(from.Y, to.Y), MathF.Abs(to.X - from.X), MathF.Abs(to.Y - from.Y));
+                    // A rule wholly outside the clip is not drawn; one crossing it is kept whole, as a divider is.
+                    if (Clipped(SKRect.Inflate(span, 1, 1)).IsEmpty) { (start, end, segments) = (null, null, 0); return; }
+                    Canvas.RecordShape(new LayoutShape("line", span, false, from, to));
                 }
                 (start, end, segments) = (null, null, 0);
             }
@@ -958,7 +976,15 @@ public class CanvasRenderingContext2D
             // Any other filled outline — a pie, a mark — by its own area, in canvas pixels.
             var outline = new SKPath(path);
             outline.Transform(Canvas.SkCanvas.TotalMatrix);
-            if (!outline.Bounds.IsEmpty) Canvas.RecordShape(new LayoutShape("shape", outline.Bounds, false, Outline: outline, Opaque: Hides(paint, outline.Bounds)));
+            var clip = Clipped(outline.Bounds);
+            if (clip != outline.Bounds && !clip.IsEmpty)
+            {
+                // Only what lands inside the clip: the outline cut to it.
+                using var window = new SKPath();
+                window.AddRect(clip);
+                if (outline.Op(window, SKPathOp.Intersect) is { } cut) { outline.Dispose(); outline = cut; }
+            }
+            if (!clip.IsEmpty && !outline.Bounds.IsEmpty) Canvas.RecordShape(new LayoutShape("shape", outline.Bounds, false, Outline: outline, Opaque: Hides(paint, outline.Bounds)));
             else outline.Dispose();
         }
     }
