@@ -218,6 +218,29 @@ public partial class ProjectGeneratorTests : TestsRuntime, IDisposable
         }
     }
 
+    /// <summary>
+    /// A Claude hook command opens with a bare launcher, because headless <c>claude -p</c> runs hooks in PowerShell.
+    /// </summary>
+    /// <remarks>
+    /// PowerShell parses a leading quoted path as a string expression, so <c>"C:/…/Polson.CLI.exe"
+    /// preserve-chatlog …</c> failed with "Unexpected token" and no headless run kept its chatlog.
+    /// The test host's own path decides whether the quotes can go, so this only asserts when it has
+    /// no spaces.
+    /// </remarks>
+    [Fact]
+    public void TestTheClaudeHookCommandRunsUnderPowerShell()
+    {
+        Assert.True(ProjectGenerator.Create(Options("hookpwsh", o => o.Sdk = "claude")));
+        if (AppContext.BaseDirectory.Any(char.IsWhiteSpace)) return;
+
+        foreach (var command in Commands(File.ReadAllText(
+            Path.Combine(root, "hookpwsh", ".claude/settings.local.json"))))
+        {
+            Assert.False(command.StartsWith('"'), $"a leading quote is a string to PowerShell: {command}");
+            Assert.Matches(@"^(dotnet )?[A-Za-z]:/\S+ preserve-chatlog ", command);
+        }
+    }
+
     /// <summary>Every hook command in a generated config file, whatever shape the host's file takes.</summary>
     static string[] Commands(string json)
     {
