@@ -271,7 +271,15 @@ public abstract record RequisitionResult
     public bool FromCache => Provenance?.FromCache ?? false;
 
     /// <summary>What to do next, phrased for the agent reading it.</summary>
-    public virtual string Remedy => ImageGenerationResult.RemedyFor(Failure);
+    /// <remarks>
+    /// A request refused here, before the network, carries its own reason as the remedy: the generic one for
+    /// <c>InvalidRequest</c> says to simplify the descriptor, and a probe of a coloured <c>conditionOn</c> was told exactly
+    /// that while the actual fault, an image that was not a blocking, sat in <c>error</c>.
+    /// </remarks>
+    public virtual string Remedy => Refusal ?? ImageGenerationResult.RemedyFor(Failure);
+
+    /// <summary>Why the studio refused the request before sending it, in words that say what to change; null otherwise.</summary>
+    internal string? Refusal { get; init; }
 
     /// <summary>Whether repeating the identical requisition could plausibly succeed.</summary>
     public bool Retryable => ImageGenerationResult.IsRetryable(Failure);

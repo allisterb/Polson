@@ -87,7 +87,7 @@ public abstract partial class MotionLayerList
     /// <c>'cosine'</c> (the default), <c>'spline'</c> or <c>'cubic'</c>, <c>speed</c> cycles per second (0, still).
     /// </summary>
     /// <remarks>
-    /// Synfig's noise layer. Grain: <c>{ size: 2, detail: 1, smooth: 'nearest', speed: fps, stops: ['#00000020', '#80808000', '#ffffff20'] }</c>,
+    /// Synfig's noise layer. Grain: <c>{ size: 2, detail: 1, smooth: 'nearest', speed: fps, stops: ['#00000010', '#80808000', '#ffffff10'] }</c>,
     /// a new one-pixel pattern every frame on the native composite.
     /// </remarks>
     public MotionLayerList Noise(object? options = null)

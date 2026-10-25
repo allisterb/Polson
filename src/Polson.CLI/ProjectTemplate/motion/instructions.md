@@ -173,7 +173,7 @@ any film is planned, and the shared parts are shared on purpose.
 - **Budget the time for every film.** One film took about a quarter of a 60-minute run. The deadline already
   counts the size of the set, so each film has about the same time a pair's would — not a pair's time shared.
 - **The set is a kit** (Manual 29 §7): before any film, decide what is fixed — type, hierarchy, the order of the
-  beats, the end card's structure — and what each audience may change — grade, pace, the hero image, any allusion.
+  beats, the end card's structure, the motion identity (Manual 25 §5j) — and what each audience may change — grade, pace, the hero image, any allusion.
   Write the kit as its own section of `direction.md`, before the audiences', with the evidence for each variable part.
 - **Words that cross languages** (Manual 29 §6): no slang, rhyme or puns in a line more than one audience will read;
   prefer names, years and numbers, which need no translation; a translated line is recorded as not checked by a
@@ -266,6 +266,8 @@ A film this short can be planned in full before any key is set. Write the beats 
 | Open | 0–2.5 (0–60) | EWS, low | … | … | … |
 
 - **One idea a beat.** The eye reads one thing at a time; a beat that asks for two gets neither.
+- **Decide the motion identity with the beats** (Manual 25 §5j): one signature ease, three durations in frames
+  (quick, standard, slow), one entrance pattern. Write them in `direction.md`; every move takes one of them.
 - **Each beat names its shot and angle** (Manual 25 §15a–b): `EWS` to `ECU`, and `low`, `high`, `dutch` or `bird`
   where it is not eye level. Open wide unless the film opens close on purpose, a mystery it resolves; vary the
   distance, because nearer is more intense; and know which beats are **heroes** (slow, the type legible and balanced)
@@ -323,7 +325,7 @@ full are at `polson://sdk/core/Assets`; how to word a request is Manual 16 (`pol
 | Source | What it gives | In a film | Fits |
 | :-- | :-- | :-- | :-- |
 | `Assets.material(descriptor)` | a seamless tiling surface | a ground with grain or texture; a fill inside a shape | every type |
-| `Assets.backdrop(descriptor, { width, height, keepQuiet })` | a background plate with a quiet area for type | the far plane; the world of an opening wide | a film or a product; a pitch or report only as atmosphere that states nothing |
+| `Assets.backdrop(descriptor, { width, height, keepQuiet, conditionOn })` | a background plate with a quiet area for type; **with `conditionOn`, built around your composition**: the chosen thumbnail's foreground as flat black silhouettes on `#808080` (`canvas.toBitmap().toPngBytes()`) | the far plane; the world of an opening wide; light the foreground from `plate.metrics.keyLightX`/`Y` (Manual 25 §16f) | a film or a product; a pitch or report only as atmosphere that states nothing |
 | `Assets.matte(descriptor, { hardEdge })` | a greyscale mask, or a stencil | **a matte wipe** — `comp.wipe({ type: 'matte', image: matte, completion })` wipes by the greys, darkest first, and keyed 1 → 0 reveals lightest first: ink blooming, smoke clearing, paper tearing, light spreading | every type |
 | `Assets.cutout(descriptor, { variants })` | elements with real alpha, several views from one generation | layers on planes, parallax under a camera move; an object that moves on its own | a film; a product (the packshot) |
 | `Photo.of(subject)` | a licensed photograph; the credit is owed, `Photo.credits()` on the end card | a real place or object, framed | a film, where the brief allows it |
@@ -339,6 +341,20 @@ full are at `polson://sdk/core/Assets`; how to word a request is Manual 16 (`pol
   desaturated; and grain everything last with `comp.noise`, §16d's recipe, on the native composite.
 - **Qloo's pictures stay research.** `Taste.images` is never in the film.
 - **Say what you brought in**, in `direction.md`: each asset's `id`, its descriptor, and what it is for.
+
+### Setting the type
+
+**Cast it, set it for the screen, and build it into the picture** (Manual 25 §17; Shaw, ch. 17; Carter et al.):
+- **Cast the face from adjectives**: write the qualities the concept and treatment give before choosing, then audition
+  from **`Skia.Font.families()`**, every installed face, not a list of names you hope for; for an audience that reads
+  another script, `Skia.Font.families('<a line in it>')` lists the faces that set it. Say in `direction.md` what the
+  chosen face connotes, for each audience.
+- **For the screen**: capitals tracked open (`compress` about 1.1–1.2); leading generous (`vcompress` near 1.2); ranged
+  left unless the frame is a symmetric lock-up; no hairline serifs at small sizes; real italics and weights only; at
+  most two families.
+- **Into the picture, not on it**: type on a plane at its own `z`; graded and grained with everything; a surface inside
+  the letters (`'onto'` the text) or the letters cut as windows (`invert`) where the concept wants it.
+- **Animate what the words mean**: choose each animator for the word, not only for its entrance.
 
 Then build the composition with every layer **at its key pose for each beat** before you add motion between them, and draw
 the **design board** (Manual 25 §13a; Shaw, ch. 3): one finished frame per beat, captioned with what happens and what the
@@ -359,8 +375,8 @@ renders the finished film at the same times and compares (below); a frame that h
 decision, recorded, or a fault.
 
 **With several audiences, draw the kit as a sheet too** (`artifacts/03_kit.png`; Manual 29 §7): the type and its sizes
-set as specimens, each film's palette as swatches with what is fixed and what varies marked, the house eases as a
-`Motion.graph` of one move, and the order of the beats and the end card's structure. It is the set's system on one page,
+set as specimens, each film's palette as swatches with what is fixed and what varies marked, the house ease as a
+`Motion.graph` of one move with the three durations beside it, and the order of the beats and the end card's structure. It is the set's system on one page,
 and every film is checked against it.
 
 ---
@@ -447,6 +463,8 @@ seconds) onto one sheet, as in stage 3, and write it as `artifacts/05_sheet.png`
 frames. trailer3's crack write-on looked right on the half-second sheet; frame by frame, it was invisible for
 its first four frames, because each crack began under the bullet hole. `comp.sheet('artifacts/05_sheet.png', { count:
 31, cols: 6 })` draws the half-second sheet of a fifteen-second film; `{ times }` draws a beat's own.
+**Read it against Manual 25 §4's table, *What the sheet shows***: for what you see (mechanical, stuttering, too much at
+once, unread, flat, no personality), it names the usual cause, the fix and the check that measures it.
 
 **Read the curves of the moves that carry the film.** A sheet shows where things are; how they move between is a curve.
 `Motion.graph('artifacts/05_moves.png', { title: titleScale, push: cameraPush })` draws the value and speed of the keyed

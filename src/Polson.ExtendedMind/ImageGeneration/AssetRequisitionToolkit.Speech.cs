@@ -53,7 +53,7 @@ public partial class AssetRequisitionToolkit
             RequisitionScope.Record(new RequisitionRecord("speech", text, Success: false, Failure: failure.ToString(),
                 Reason: reason, Model: null, FromCache: false, Refused: true));
             RecordBudgetState();
-            return new SpeechAsset { Success = false, Failure = failure, Error = reason, Text = text, Voice = opts.Voice ?? "", Style = opts.Style };
+            return new SpeechAsset { Success = false, Failure = failure, Error = reason, Refusal = failure == ImageGenerationFailure.InvalidRequest ? reason : null, Text = text, Voice = opts.Voice ?? "", Style = opts.Style };
         }
 
         if (text.Length == 0)
