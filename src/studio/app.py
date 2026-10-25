@@ -191,6 +191,9 @@ DELIVERABLES: tuple[tuple[str, str], ...] = (
     # The concept presentation (Manual 29 §8): the ideas weighed before any was made, each with its evidence and its
     # drawbacks, and the recommendation. After the brief, because it is the step between what was asked and what was made.
     ("concepts.md", "the concepts weighed, each with its evidence and drawbacks, and why one was chosen"),
+    # A motion run's story in words and its creative borders (Manual 25 §13b–c), read before the film.
+    ("treatment.md", "the film's story in words, as the client reads it before seeing anything"),
+    ("dos.md", "the creative borders: what belongs in the film and what does not, and which were measured"),
     # The poster workflow's: every visual choice and the evidence it rests on, Qloo or research. Second,
     # because it is what a judge of a taste-grounded poster reads straight after the brief.
     ("direction.md", "why it looks like this: every choice and the evidence behind it"),
@@ -788,7 +791,7 @@ def final_renders(run: Run) -> list[dict[str, Any]]:
     letters = sorted({m.group(1) for e in events
                       if e.get("type") == "render" and not (run.since and (e.get("ts") or "") < run.since)
                       and not is_research(e, executions)
-                      and (e.get("motion") or "").lower() != "sheet"
+                      and (e.get("motion") or "").lower() not in ("sheet", "board")
                       and (m := AUDIENCE_FINAL.fullmatch(Path(e.get("artifact") or "").stem))})
     if not letters:
         return [piece] if (piece := final_render(run)) else []
@@ -835,7 +838,8 @@ def final_render(run: Run, only=None) -> dict[str, Any] | None:
         if run.since and (event.get("ts") or "") < run.since:
             continue
         motion = (event.get("motion") or "").lower()
-        if motion == "sheet":
+        # A board (comp.board) is a deliverable but not the piece: the film it storyboards is.
+        if motion in ("sheet", "board"):
             continue
         fmt, artifact = (event.get("format") or "").lower(), event.get("artifact")
         if fmt and artifact and (only is None or only(artifact)):

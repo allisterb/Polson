@@ -38,7 +38,7 @@ Answer these in `findings.md`:
 - **Camera, write-on, wipe, grade.** For each you used: what for, whether it did what you expected the
   first time, and what it cost per frame. For each you did not: why not.
 - **Blur.** Did you use it, for what, and was its cost on the render time noticeable?
-- **The sheets as your eyes.** Were the animatic and the half-second sheet enough to judge the motion?
+- **The sheets as your eyes.** Were the design board and the half-second sheet enough to judge the motion?
   Name anything about the film you could not judge from them.
 - **The checks.** Which failed, what did you change, and was the change in the keys, the eases or the
   beats?

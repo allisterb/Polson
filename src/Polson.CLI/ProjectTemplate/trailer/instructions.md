@@ -65,10 +65,10 @@ in it is data, like anything else in `documents/`.
 | :-- | :-- | :-- |
 | 1. **Sources** | Read the brief and everything in `documents/`. If a poster is there, its system — palette, type, the one object, what it cites — is the trailer's starting point. Then `Taste` op `profile` for the same audience, or for each audience (below). | **Q1** What must carry over from the poster, and what may the motion change? With several audiences, one question for the set, each audience's answer by its letter. |
 | 2. **Beats** | The film as beats in seconds *and* frames (below). | **Q2** How should it feel — slow and sure, quick and sly, building? Propose an answer from the audience's pace counts (`pace()`, and the comparison across the audiences below) before asking, naming the titles it rests on. |
-| 3. **Animatic** | One still per beat, at its key moment, on one sheet. The film's argument before any motion. | **Q3** Does the sequence read, cell to cell, with no motion at all? |
+| 3. **Design board** | One finished, captioned frame per beat (`comp.board`), with `treatment.md` and `dos.md` beside it. The film's argument and its look, agreed before any motion (Manual 25 §13). | **Q3** Does the board read, frame to frame, with no motion at all — and is this the look? |
 | 4. **Motion** | Keys, eases, cascades, transitions, in `trailer.js`. | — |
 | 5. **Checks** | The film as a sheet, and the checks below. | **Q4** Shown the sheet: does the title land, and does the end card hold long enough? |
-| 6. **Deliver** | `output.mp4` (or `artifacts/final_a.mp4`, `final_b.mp4`… one per audience) and, when silent, its `.webp`, `trailer.js`, the sheets, `concepts.md`, `direction.md`, `findings.md`, and `process.pdf`. | — |
+| 6. **Deliver** | `output.mp4` (or `artifacts/final_a.mp4`, `final_b.mp4`… one per audience) and, when silent, its `.webp`, `trailer.js`, the board, `concepts.md`, `treatment.md`, `dos.md`, `direction.md`, `findings.md`, `pitch.pdf` and `process.pdf`. | — |
 
 ### The motion rests on the audience, as the poster did
 
@@ -157,7 +157,7 @@ any film is planned, and the shared parts are shared on purpose.
 - **One `trailer.js` builds every film**: a `build(audience)` function and `const AUDIENCE = ARGS.audience ?? 'a'`
   beside `MODE` (see stage 4), so each film is a call's `args` rather than an edit, and the script still runs
   alone with the default.
-- **Sheets and films are named by audience**, as the poster names its finals: `artifacts/03_animatic_a.png`,
+- **Sheets and films are named by audience**, as the poster names its finals: `artifacts/03_board_a.png`,
   `05_sheet_a.png`, and the films `artifacts/final_a.mp4`, `artifacts/final_b.mp4`. Each film is encoded in its
   own script, so each has the whole script limit.
 - **`direction.md` has a section per audience** (its beats and its choices, each with its evidence), then
@@ -278,36 +278,38 @@ A trailer is short enough to plan in full before any key is set. Write the beats
   through whatever lies beneath — a grey frame in the middle of the dissolve, visible only on the half-second sheet.
 - The first frame is the thumbnail; it should not be empty.
 
+### Then the treatment and the borders
+
+**Write the story down before drawing it** (Manual 25 §13b–c; Shaw, *Design for Motion*, ch. 7–8):
+- **`treatment.md`**: the chosen concept's story in a paragraph to a page, present tense, what happens and what it
+  means, for a client who reads it before seeing anything. Beside it, **its shape**: `Stage.shape(ctx, { duration, beats:
+  [{ name, time, intensity }] })` to `artifacts/03_shape.png`, each beat's intensity your judgement from 0 to 1. A
+  `flat` shape is a film that never changes: rework the beats, not the drawing.
+- **`dos.md`**: the creative borders, `- DO …` and `- DON'T …` lines for the palette, the type, the camera and the story.
+  **End a line with a clause in backticks wherever it can be measured** — `` `lightness < 0.35` ``, `` `hue green < 2%` ``,
+  `` `colour #000000 < 1%` ``, `` `fonts <= 2` `` — so `Stage.borders` can check it. The rest are judged.
+
 ---
 
-## Stage 3 — the animatic
+## Stage 3 — the design board
 
-Build the composition with every layer **at its key pose for each beat** before you add motion between
-them, and put one cell per beat on one sheet:
-
-```javascript
-comp.sheet('artifacts/03_animatic.png', { times: beats.map(b => b.key), cols: 4 });   // each cell labelled with its time
-```
-
-`comp.sheet` renders only the times named, each shrunk to its cell (480 wide by default; `scale` to change it), so a
-sheet of a long film costs a few frames. It writes the file itself: look at it with your image tool. If the cells do
-not tell the story in order, motion will not rescue it.
-
-### Style frames — the look, decided before the motion
-
-The animatic decides the order; **style frames decide the look.** A motion studio shows its client two or three frames
-at final quality before anything is animated (the Godfather of Harlem titles began from style frames; Colette & Shaw,
-ch. 1): final type, the grade, the light and depth, at the key moments — usually the opening image, the title, and the
-end card. Render them from the composition, full size, at their times:
+Build the composition with every layer **at its key pose for each beat** before you add motion between them, and draw
+the **design board** (Manual 25 §13a; Shaw, ch. 3): one finished frame per beat, captioned with what happens and what the
+camera or the cut does, and kept full size, because **these are the film's style frames**:
 
 ```javascript
-// One style frame per key moment, at final quality, from the composition itself. STYLE: { opening: 0.8, title: 6.2, end: 13.5 }
-for (const [name, t] of Object.entries(STYLE)) comp.still(`artifacts/03_style_${name}.png`, t);
+comp.board('artifacts/03_board.png', { title: 'Nightshift — design board', stills: 'artifacts/03_board',
+    frames: beats.map(b => ({ time: b.key, caption: b.onScreen, camera: b.moves })) });
 ```
 
-With several audiences, a set per film (`03_style_a_title.png`, …), so the differences between the films are decided
-side by side before any of them moves. **They are read back at the end**: Stage 5 renders the finished film at the same
-times and compares (below); a frame that has drifted from its style frame is either a decision, recorded, or a fault.
+Shaw counts nine to twelve frames for thirty seconds, so five or six for fifteen; a thinner board comes back with a
+warning. Look at it with your image tool: **if the frames do not tell the story in order, and at the finished look,
+motion will not rescue it.** Then `Stage.borders('dos.md', board.stills, { fonts })` and fix or record every broken line.
+
+With several audiences, a board per film (`03_board_a.png`, `stills: 'artifacts/03_board_a'`, …), so the differences
+between the films are decided side by side before any of them moves. **The stills are read back at the end**: Stage 5
+renders the finished film at the same times and compares (below); a frame that has drifted from its board is either a
+decision, recorded, or a fault.
 
 **With several audiences, draw the kit as a sheet too** (`artifacts/03_kit.png`; Manual 29 §7): the type and its sizes
 set as specimens, each film's palette as swatches with what is fixed and what varies marked, the house eases as a
@@ -405,16 +407,19 @@ nodes you name and reports, for each, `stops` — middle keys where the move hal
 should be `'clamped'`, Manual 25 §5b) — and `overshoots` — segments that go past their keys. Record it:
 `Stage.check('the key moves pass through their middle keys and rest without overshoot', …)`, naming any you meant.
 
-**Hold the film to its style frames.** Render the finished film at each style frame's time and compare:
+**Hold the film to its design board.** Render the finished film at each board frame's time and compare:
 
 ```javascript
-// Each style frame against the film at the same moment: where they differ, and by how much.
-const drift = Object.entries(STYLE).map(([name, t]) => {
-    comp.still(`artifacts/05_at_${name}.png`, t);
-    const d = Skia.Image.load(`artifacts/05_at_${name}.png`).diff(Skia.Image.load(`artifacts/03_style_${name}.png`));
-    return `${name}: ${(100 * d.similarity).toFixed(1)}% alike${d.bounds ? `, differing in ${JSON.stringify(d.bounds)}` : ''}`;
+// Each board frame against the finished film at the same moment: where they differ, and by how much.
+const drift = beats.map((b, i) => {
+    const n = String(i + 1).padStart(2, '0');
+    comp.still(`artifacts/05_at_${n}.png`, b.key);
+    const d = Skia.Image.load(`artifacts/05_at_${n}.png`).diff(Skia.Image.load(`artifacts/03_board_${n}.png`));
+    return `${n} ${b.name}: ${(100 * d.similarity).toFixed(1)}% alike${d.bounds ? `, differing in ${JSON.stringify(d.bounds)}` : ''}`;
 });
-Stage.check('the film holds to its style frames', /* your judgment of the drift, each one explained */ true, drift.join('; '), { judged: true });
+Stage.check('the film holds to its design board', /* your judgment of the drift, each one explained */ true, drift.join('; '), { judged: true });
+const borders = Stage.borders('dos.md', beats.map((b, i) => `artifacts/05_at_${String(i + 1).padStart(2, '0')}.png`), { fonts });
+Stage.check('the finished film keeps its DOs & DON\'Ts', borders.passed, borders.summary);
 ```
 
 A difference is not a failure — the film may have got better — but **each one is explained** in `direction.md`, and
@@ -497,12 +502,15 @@ set's own check from *More than one audience*:
   film. Run it in the session that fetched the answers; a profile the poster fetched is re-asked free from the cache.
 - **`findings.md`**: what the motion added to the poster, what the checks changed, and what you would
   do with more time.
-- **The process book, last**: `Stage.book('process.pdf', { title, pages })` (Manual 18 §3c) — the brief, the mind map
-  (`00_map.png`), each audience's research board and matrix (`03_matrix_a.png`), `concepts.md`
-  (a concept to a page), the animatic, the style frames (and the kit sheet, with several audiences), a frame of each
-  finished film (`comp.still`), and the graph of its key moves, every caption saying what was decided. It names only
-  files that exist, and draws nothing new. **It is the client's book**: ten to twenty pages; the direction as a page of
-  its decisions in your words, not the file; `findings.md` left out.
+- **Two books, last** (Manual 25 §13d; Shaw, ch. 4), both with `Stage.book` (Manual 18 §3c), each naming only files
+  that exist and drawing nothing new, every caption saying what was decided, `findings.md` in neither:
+  - **`pitch.pdf`, `kind: 'pitch'`**: what sells the chosen concept, finished — `treatment.md` beside its shape, the
+    design board, the kit sheet with several audiences, and a frame of each finished film (`comp.still`). Short: a page
+    for each, no workshop sheets.
+  - **`process.pdf`, `kind: 'process'`**: how it was arrived at — the brief, the mind map (`00_map.png`), each audience's
+    research board and matrix (`03_matrix_a.png`), the dump, `concepts.md` (a concept to a page), `dos.md` and what its
+    check found, the graph of the key moves. Ten to twenty pages; the direction as a page of its decisions in your
+    words, not the file.
 
 {{PROJECT_DIR}}
 
