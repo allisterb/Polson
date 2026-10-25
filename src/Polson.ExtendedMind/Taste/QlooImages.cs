@@ -295,6 +295,12 @@ public sealed class TasteImage
     /// <summary>Mean OKLCH lightness of the picture, 0 (black) to 1 (white).</summary>
     public double Lightness { get; init; }
 
+    /// <summary>Mean OKLCH chroma over every pixel: 0 for greyscale, rising as the picture is more vivid.</summary>
+    public double Chroma { get; init; }
+
+    /// <summary>Qloo's popularity percentile for the entity, 0–1, when the answer carried one.</summary>
+    public double? Popularity { get; init; }
+
     /// <summary>
     /// The picture's leading hue, <c>{ hue, chroma, concentration, color }</c>, or null when it is essentially
     /// neutral. <c>concentration</c> is 1 when every coloured pixel shares one hue and near 0 when they disagree;
@@ -329,8 +335,8 @@ public sealed class TasteImage
     #endregion
 }
 
-/// <summary>A picture's colour, measured once on arrival.</summary>
-public sealed record TasteColourReading(object?[] Colours, double Neutral, double Lightness, Dictionary<string, object?>? Lead);
+/// <summary>A picture's colour, measured once on arrival. <c>Chroma</c> is the mean over every pixel: muted to vivid.</summary>
+public sealed record TasteColourReading(object?[] Colours, double Neutral, double Lightness, Dictionary<string, object?>? Lead, double Chroma = 0);
 
 /// <summary>
 /// Colour measurement in OKLCH (Björn Ottosson's Oklab, 2020), where hue angles and chroma are close to how they
@@ -378,7 +384,7 @@ public static class TasteColour
         const int buckets = 16, size = 256 / buckets;
         var tally = new Dictionary<int, (long N, long R, long G, long B)>();
         long total = 0, neutral = 0;
-        double sumL = 0, x = 0, y = 0, chromaSum = 0;
+        double sumL = 0, sumC = 0, x = 0, y = 0, chromaSum = 0;
 
         for (var j = 0; j < source.Height; j++)
         for (var i = 0; i < source.Width; i++)
@@ -388,6 +394,7 @@ public static class TasteColour
             total++;
             var (L, C, H) = Oklch(p.Red, p.Green, p.Blue);
             sumL += L;
+            sumC += C;
             if (C < NeutralChroma) neutral++;
             else
             {
@@ -399,7 +406,7 @@ public static class TasteColour
             var t = tally.GetValueOrDefault(key);
             tally[key] = (t.N + 1, t.R + p.Red, t.G + p.Green, t.B + p.Blue);
         }
-        if (total == 0) return new TasteColourReading([], 1, 0, null);
+        if (total == 0) return new TasteColourReading([], 1, 0, null, 0);
 
         var colours = tally.OrderByDescending(e => e.Value.N).Take(count).Select(e =>
         {
@@ -440,7 +447,8 @@ public static class TasteColour
                 ["color"] = w > 0 ? $"#{(byte)(sr / w):X2}{(byte)(sg / w):X2}{(byte)(sb / w):X2}" : null,
             };
         }
-        return new TasteColourReading(colours, Math.Round((double)neutral / total, 4), Math.Round(sumL / total, 4), lead);
+        return new TasteColourReading(colours, Math.Round((double)neutral / total, 4), Math.Round(sumL / total, 4), lead,
+            Math.Round(sumC / total, 4));
     }
 
     /// <summary>The shorter way round the wheel between two hues, 0–180°.</summary>

@@ -401,6 +401,29 @@ public sealed class TasteToolkit
     }
 
     /// <summary>
+    /// A picture of your own — a concept, a comp, the final — measured exactly as a Qloo picture is on arrival:
+    /// <c>{ lightness, chroma, neutral, colours, lead }</c>, so it can be placed among the field it was made for.
+    /// </summary>
+    /// <param name="image">A bitmap, a canvas or image data, read losslessly; or a <c>data:</c> URI.</param>
+    public Dictionary<string, object?> Measure(object image)
+    {
+        var bytes = image switch
+        {
+            ILosslessImageSource lossless => lossless.ToLosslessBytes(),
+            string uri when uri.StartsWith("data:", StringComparison.Ordinal) && uri.IndexOf(',') is > 0 and var comma
+                => Convert.FromBase64String(uri[(comma + 1)..]),
+            _ => throw new ArgumentException("Taste.measure takes a bitmap, a canvas or image data — e.g. canvas.bitmap — or a data: URI."),
+        };
+        var fetched = QlooImageSource.Decode(bytes, "the script");
+        if (!fetched.Success || fetched.Colour is not { } c)
+            throw new ArgumentException($"Taste.measure: {fetched.Error}");
+        return new()
+        {
+            ["lightness"] = c.Lightness, ["chroma"] = c.Chroma, ["neutral"] = c.Neutral, ["colours"] = c.Colours, ["lead"] = c.Lead,
+        };
+    }
+
+    /// <summary>
     /// A colour in the terms a field is measured in: <c>{ lightness, chroma, hue, neutral, sector }</c>, with
     /// <c>sector</c> spelled as <see cref="ColourField"/> spells it (<c>'blue 240–270°'</c>), or null for a neutral.
     /// For placing a finished piece's colour on the field its research measured. Takes <c>#rgb</c> or <c>#rrggbb</c>.
@@ -436,6 +459,7 @@ public sealed class TasteToolkit
         var year = Get(properties, "release_year") is { } y && int.TryParse(Convert.ToString(y, System.Globalization.CultureInfo.InvariantCulture), out var parsed) ? parsed : (int?)null;
         var rank = f.Entity.GetValueOrDefault("audienceRank") is { } r ? Convert.ToInt32(r, System.Globalization.CultureInfo.InvariantCulture)
             : Array.IndexOf(registry.Get(f.Answer)?.Entities ?? [], f.Entity) + 1;
+        var popularity = f.Entity.GetValueOrDefault("popularity") is { } pop ? Convert.ToDouble(pop, System.Globalization.CultureInfo.InvariantCulture) : (double?)null;
         TasteImage Failed(TasteImageFailure failure, string error) => new()
         {
             Id = id, Name = name, Type = f.Entity.GetValueOrDefault("type") as string, Url = url, Year = year, Rank = rank,
@@ -455,6 +479,7 @@ public sealed class TasteToolkit
             StyleDescription = StyleOf(f.Entity), Answer = f.Answer, Width = fetched.Width, Height = fetched.Height,
             MimeType = fetched.MimeType, FromCache = fetched.FromCache, Colours = fetched.Colour?.Colours ?? [],
             Neutral = fetched.Colour?.Neutral ?? 1, Lightness = fetched.Colour?.Lightness ?? 0, Lead = fetched.Colour?.Lead,
+            Chroma = fetched.Colour?.Chroma ?? 0, Popularity = popularity,
             bytes = fetched.Bytes, taken = Taken,
         };
     }

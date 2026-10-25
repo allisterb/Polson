@@ -290,6 +290,165 @@ public sealed class StageApi
         };
     }
 
+    /// <summary>
+    /// A brand matrix (Manual 29 §2d; Lupton, pp. 42–45): the audience's field and the concepts on two crossed
+    /// polarities, drawn into <paramref name="ctx"/>, with each quadrant counted and the empty ones named. Returns
+    /// <c>{ x, y, field, concepts, quadrants, empty, unplaced, summary }</c>.
+    /// </summary>
+    /// <param name="spec">
+    /// <c>{ x, y, field, concepts, chosen, box, font }</c>. An axis is <c>{ measure, low?, high? }</c> — <c>lightness</c>,
+    /// <c>chroma</c>, <c>colourful</c>, <c>warmth</c>, <c>popularity</c> or <c>year</c> — or <c>{ judged: { name: 0–1 }, low,
+    /// high }</c>. <c>field</c> is <c>Taste.images</c>' pictures; <c>concepts</c> is <c>[{ label, image }]</c>.
+    /// </param>
+    public Dictionary<string, object?> Matrix(object? ctx, object? spec)
+    {
+        var o = JsInterop.AsDict(spec) ?? throw new ArgumentException("Stage.matrix needs { x, y, field, concepts }: two axes, Taste.images' pictures, and [{ label, image }].");
+        var field = (o["field"] as System.Collections.IEnumerable)?.Cast<object?>().OfType<Polson.ExtendedMind.Taste.TasteImage>().Where(t => t.Success).ToArray() ?? [];
+        var concepts = (o["concepts"] as System.Collections.IEnumerable)?.Cast<object?>().Select(JsInterop.AsDict).OfType<System.Collections.IDictionary>().ToArray() ?? [];
+        var chosen = o["chosen"]?.ToString();
+
+        // A concept is measured as a Qloo picture is measured on arrival, so the two sets of points are comparable.
+        var readings = concepts.Select(c =>
+        {
+            var label = c["label"]?.ToString() ?? throw new ArgumentException("Stage.matrix: each concept is { label, image }, e.g. { label: 'A', image: conceptA.bitmap }.");
+            var reading = c["image"] is ILosslessImageSource image && Polson.ExtendedMind.Taste.QlooImageSource.Decode(image.ToLosslessBytes(), "the script") is { Success: true, Colour: { } r } ? r : null;
+            return (Label: label, Reading: reading);
+        }).ToArray();
+
+        var x = Axis(o["x"], "x");
+        var y = Axis(o["y"], "y");
+        var unplaced = new List<string>();
+        double? Value(MatrixAxis a, string name, Polson.ExtendedMind.Taste.TasteImage? t, Polson.ExtendedMind.Taste.TasteColourReading? r)
+        {
+            if (a.Judged is { } judged) return judged.TryGetValue(name, out var v) ? v : null;
+            double? lightness = t?.Lightness ?? r?.Lightness, chroma = t?.Chroma ?? r?.Chroma, neutral = t?.Neutral ?? r?.Neutral;
+            var lead = t?.Lead ?? r?.Lead;
+            return a.Measure switch
+            {
+                "lightness" => lightness,
+                "chroma" => chroma,
+                "colourful" => 1 - neutral,
+                // Warm toward orange (OKLCH 60°), cool toward blue (240°); a picture with no lead hue sits between.
+                "warmth" => lead?.GetValueOrDefault("hue") is double h ? 0.5 + 0.5 * Math.Cos((h - 60) * Math.PI / 180) : lightness is null ? null : 0.5,
+                "popularity" => t?.Popularity,
+                "year" => t?.Year,
+                _ => null,
+            };
+        }
+
+        var points = new List<(string Label, string Name, double X, double Y, string Colour, bool Concept)>();
+        for (var i = 0; i < field.Length; i++)
+        {
+            var t = field[i];
+            if (Value(x, t.Name, t, null) is { } vx && Value(y, t.Name, t, null) is { } vy)
+                points.Add(($"{i + 1}", t.Name, vx, vy, t.Lead?.GetValueOrDefault("color") as string ?? "#bdbab2", false));
+            else unplaced.Add($"{i + 1} {t.Name}");
+        }
+        foreach (var (label, reading) in readings)
+        {
+            if (reading is null && (x.Judged is null || y.Judged is null))
+                throw new ArgumentException($"Stage.matrix: concept {label} has no image to measure. Give it one — {{ label: '{label}', image: canvas.bitmap }} — or place it on judged axes.");
+            if (Value(x, label, null, reading) is { } vx && Value(y, label, null, reading) is { } vy)
+                points.Add((label, label, vx, vy, "#15151a", true));
+            else if (x.Measure is "popularity" or "year" || y.Measure is "popularity" or "year")
+                throw new ArgumentException($"Stage.matrix: a concept has no {(x.Measure is "popularity" or "year" ? x.Measure : y.Measure)}. Place concepts on lightness, chroma, colourful or warmth, or on a judged axis.");
+            else unplaced.Add(label);
+        }
+        if (points.Count == 0) throw new ArgumentException("Stage.matrix: nothing could be placed. Pass field: Taste.images' pictures, and concepts: [{ label, image }].");
+
+        // The range is the points' own, padded, so the crossing is the middle of this field rather than of an ideal
+        // scale: the question a matrix answers is where this field is crowded, not where it sits on the world's.
+        // A judged axis keeps 0–1, since its numbers mean nothing but their order.
+        (double Min, double Max) Range(MatrixAxis a, Func<(string, string, double X, double Y, string, bool), double> pick)
+        {
+            if (a.Judged is not null) return (0, 1);
+            double lo = points.Min(p => pick(p)), hi = points.Max(p => pick(p)), pad = Math.Max((hi - lo) * 0.1, a.Measure == "year" ? 1 : 0.02);
+            return (lo - pad, hi + pad);
+        }
+        var (x0, x1) = Range(x, p => p.X);
+        var (y0, y1) = Range(y, p => p.Y);
+        double xm = (x0 + x1) / 2, ym = (y0 + y1) / 2;
+
+        string Quadrant(double vx, double vy) => $"{(vy >= ym ? y.High : y.Low)} & {(vx >= xm ? x.High : x.Low)}";
+        var quadrants = new[] { (true, false), (true, true), (false, false), (false, true) }
+            .Select(q => Quadrant(q.Item2 ? x1 : x0, q.Item1 ? y1 : y0)).ToArray();
+        var inQuadrant = quadrants.ToDictionary(q => q, q => points.Where(p => !p.Concept && Quadrant(p.X, p.Y) == q).Select(p => p.Name).ToArray());
+        var empty = quadrants.Where(q => inQuadrant[q].Length == 0).ToArray();
+        var conceptResults = points.Where(p => p.Concept).Select(p =>
+        {
+            var q = Quadrant(p.X, p.Y);
+            return (object?)new Dictionary<string, object?>
+            {
+                ["label"] = p.Label, ["x"] = Math.Round(p.X, 4), ["y"] = Math.Round(p.Y, 4), ["quadrant"] = q,
+                ["fieldInQuadrant"] = inQuadrant[q].Length, ["chosen"] = p.Label == chosen,
+            };
+        }).ToArray();
+
+        if (ctx is Polson.Drawing.Skia.CanvasRenderingContext2D context)
+        {
+            var box = JsInterop.AsDict(o["box"]);
+            float B(string key, float fallback) => box is not null && box.Contains(key) && box[key] is not null ? Convert.ToSingle(box[key], System.Globalization.CultureInfo.InvariantCulture) : fallback;
+            Polson.Drawing.Skia.BrandMatrix.Draw(context,
+                new(x.Low, x.High, x.Kind, x0, x1), new(y.Low, y.High, y.Kind, y0, y1),
+                [.. points.Select(p => new Polson.Drawing.Skia.BrandMatrixPoint(p.Label, p.X, p.Y, p.Colour, p.Concept, p.Label == chosen))],
+                B("x", 0), B("y", 0), B("width", context.Canvas.Width), B("height", context.Canvas.Height), o["font"]?.ToString() ?? "Georgia");
+        }
+        else if (ctx is not null)
+            throw new ArgumentException("Stage.matrix's first argument is a canvas context to draw into — canvas.getContext('2d') — or null.");
+
+        var fieldCount = points.Count(p => !p.Concept);
+        var summary = $"{fieldCount} of the field: " + string.Join(", ", quadrants.Select(q => $"{inQuadrant[q].Length} {q}"))
+            + (empty.Length == 0 ? "; no quadrant empty" : $"; empty: {string.Join(", ", empty)}")
+            + string.Concat(conceptResults.Cast<Dictionary<string, object?>>().Select(c =>
+                $". Concept {c["label"]}{((bool)c["chosen"]! ? " (chosen)" : "")} sits {c["quadrant"]}, with {c["fieldInQuadrant"]} of the field"))
+            + (unplaced.Count == 0 ? "." : $". Not placed: {string.Join(", ", unplaced)}.");
+
+        events?.Append("matrix", session?.Stage, executionId, new Dictionary<string, object?>
+        {
+            ["x"] = x.Kind, ["y"] = y.Kind, ["field"] = fieldCount, ["empty"] = empty, ["summary"] = summary,
+        });
+        return new()
+        {
+            ["x"] = new Dictionary<string, object?> { ["low"] = x.Low, ["high"] = x.High, ["kind"] = x.Kind, ["min"] = x0, ["max"] = x1 },
+            ["y"] = new Dictionary<string, object?> { ["low"] = y.Low, ["high"] = y.High, ["kind"] = y.Kind, ["min"] = y0, ["max"] = y1 },
+            ["field"] = points.Where(p => !p.Concept).Select(p => (object?)new Dictionary<string, object?>
+            {
+                ["n"] = p.Label, ["name"] = p.Name, ["x"] = Math.Round(p.X, 4), ["y"] = Math.Round(p.Y, 4), ["quadrant"] = Quadrant(p.X, p.Y),
+            }).ToArray(),
+            ["concepts"] = conceptResults,
+            ["quadrants"] = quadrants.Select(q => (object?)new Dictionary<string, object?> { ["name"] = q, ["count"] = inQuadrant[q].Length, ["names"] = inQuadrant[q] }).ToArray(),
+            ["empty"] = empty,
+            ["unplaced"] = unplaced.ToArray(),
+            ["summary"] = summary,
+        };
+    }
+
+    /// <summary>An axis as a script gives it: a measure with default poles, or judged values the studio placed.</summary>
+    private static MatrixAxis Axis(object? given, string which)
+    {
+        var a = JsInterop.AsDict(given) ?? throw new ArgumentException($"Stage.matrix: {which} is an axis — {{ measure: 'lightness' }} or {{ judged: {{ name: 0.2, … }}, low: 'formal', high: 'informal' }}.");
+        if (JsInterop.AsDict(a["judged"]) is { } judged)
+        {
+            var values = judged.Keys.Cast<object>().ToDictionary(k => k.ToString()!, k => Convert.ToDouble(judged[k], System.Globalization.CultureInfo.InvariantCulture));
+            return new(null, values, a["low"]?.ToString() ?? throw new ArgumentException($"Stage.matrix: a judged {which} axis names its poles, low and high."),
+                a["high"]?.ToString() ?? throw new ArgumentException($"Stage.matrix: a judged {which} axis names its poles, low and high."), "judged by the studio");
+        }
+        var measure = a["measure"]?.ToString()?.Trim().ToLowerInvariant();
+        (string Low, string High, string Kind) poles = measure switch
+        {
+            "lightness" => ("dark", "light", "measured · mean lightness"),
+            "chroma" => ("muted", "vivid", "measured · mean chroma"),
+            "colourful" or "colorful" => ("monochrome", "colourful", "measured · share in colour"),
+            "warmth" => ("cool", "warm", "measured · lead hue"),
+            "popularity" => ("niche", "mainstream", "Qloo · popularity"),
+            "year" => ("older", "newer", "Qloo · release year"),
+            _ => throw new ArgumentException($"Stage.matrix: '{measure}' is not a measure. Use lightness, chroma, colourful, warmth, popularity or year, or a judged axis."),
+        };
+        return new(measure == "colorful" ? "colourful" : measure, null, a["low"]?.ToString() ?? poles.Low, a["high"]?.ToString() ?? poles.High, poles.Kind);
+    }
+
+    private sealed record MatrixAxis(string? Measure, Dictionary<string, double>? Judged, string Low, string High, string Kind);
+
     /// <summary>Ends the current stage. Harmless when none is open.</summary>
     public void End()
     {
