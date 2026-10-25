@@ -198,7 +198,9 @@ DELIVERABLES: tuple[tuple[str, str], ...] = (
     # because it is what a judge of a taste-grounded poster reads straight after the brief.
     ("direction.md", "why it looks like this: every choice and the evidence behind it"),
     ("artwork.js", "the drawing itself, as code"),
-    ("trailer.js", "the trailer itself, as code: every layer and key"),
+    ("motion.js", "the film itself, as code: every layer and key"),
+    # The same file under the motion workflow's name before 2026-10-25, so a run made then still shows its source.
+    ("trailer.js", "the film itself, as code: every layer and key"),
     ("plan.md", "the explainer's scenes, every formula in them and what checked it"),
     ("explainer.js", "the explainer itself, as code: every equation, graph and key"),
     ("accuracy.md", "what was checked against a source, and what could not be"),

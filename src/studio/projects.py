@@ -66,11 +66,21 @@ WORKFLOWS: dict[str, tuple[str, ...]] = {
     # trailer**, which is not the same as "the studio's choice": `product` is a fifteen-second product ad, and
     # `report` an explainer that answers an audience's questions from a document the director attached, and `pitch` a
     # startup's case told to investors from its own deck.
-    "trailer": ("pitch", "product", "report"),
+    "motion": ("pitch", "product", "report"),
     # A theorem or concept explained in an animated film, every formula checked before it is drawn. No types.
     "math_explainer": (),
     "harness": ("image", "infographic", "logo"),
 }
+
+#: Workflows by a former name, as the generator's `RenamedWorkflows` has them: `trailer` became `motion` on 2026-10-25,
+#: and every project.json written before that still says `trailer`.
+RENAMED: dict[str, str] = {"trailer": "motion"}
+
+
+def canonical(workflow: str) -> str:
+    """The workflow's current name: a former one read as what it became, anything else as given."""
+    return RENAMED.get(workflow, workflow)
+
 
 #: Every type any workflow offers, for building the form's one type control. Derived rather than
 #: listed, because the control and the closed set above cannot then disagree about what exists.
@@ -100,6 +110,7 @@ def check(root: Path, project_id: str, workflow: str, kind: str) -> None:
             "A project name may use letters, digits, dot, dash and underscore, up to 64 characters. "
             "It becomes a directory name.")
 
+    workflow = canonical(workflow)
     if workflow not in WORKFLOWS:
         raise StudioError(f"Unknown workflow '{workflow}'. Choose one of: {', '.join(WORKFLOWS)}.")
 

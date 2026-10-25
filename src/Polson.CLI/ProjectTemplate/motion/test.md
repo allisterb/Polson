@@ -1,6 +1,6 @@
 ## What this workflow tests
 
-`trailer` is the motion-graphics route through the animation model: shapes and groups keyed with eases,
+`motion` is the motion-graphics route through the animation model: shapes and groups keyed with eases,
 **text with animators** (`comp.text`), **blur** (`group.blur`), the camera and its planes, write-ons, wipes,
 the grade, cuts, contact sheets as the agent's only view of the film, and delivery as `comp.saveVideo`.
 Reach for `polson://sdk/core/Motion` (*Layers*, *Type*, *Nodes*, *Video with sound*) and `polson://manual/25`.
@@ -43,7 +43,7 @@ Answer these in `findings.md`:
 - **The checks.** Which failed, what did you change, and was the change in the keys, the eases or the
   beats?
 - **Delivery.** Did `comp.saveVideo` finish inside the script's time limit? How long did it take, and
-  were its `warnings` empty? Is `trailer.js` runnable on its own — which mode would an export use, and
+  were its `warnings` empty? Is `motion.js` runnable on its own — which mode would an export use, and
   does anything on that path need the session?
 - **From the poster.** What carried over unchanged, what did the motion force you to change, and why?
 - **Where it ran out.** What did the brief need that the model could not give, and what did you do instead?

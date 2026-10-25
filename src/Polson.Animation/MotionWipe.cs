@@ -15,7 +15,8 @@ using Polson.Drawing.Skia;
 using SkiaSharp;
 
 /// <summary>
-/// A wipe: everything below it in its stack hidden as <c>completion</c> runs from 0 to 1 — linear, radial, iris or blinds.
+/// A wipe: everything below it in its stack hidden as <c>completion</c> runs from 0 to 1 — linear, radial, iris, blinds or
+/// matte.
 /// It is an eraser, Synfig's alpha over, so it stops at its own group and goes to <c>.sif</c> as a Synfig layer that erases.
 /// </summary>
 /// <remarks>
@@ -32,6 +33,10 @@ using SkiaSharp;
 /// or region.</item>
 /// <item><b>blinds</b>: bands across <c>angle</c>, <c>width</c> apart, each closing as completion rises, as Venetian
 /// Blinds.</item>
+/// <item><b>matte</b>: a picture's greys decide the order, the darkest erased first and the lightest last, as After
+/// Effects' Gradient Wipe; <c>invert</c> takes the lightest first. The picture lies between <c>tl</c> and <c>br</c> (the
+/// frame when left out) and erases only there; its feather is a share of the grey range, 0 to 1. Synfig has no such
+/// layer, so the <c>.sif</c> holds each distinct mask baked as a picture.</item>
 /// </list>
 /// Distances are in the stack's units, and the frame is the composition's, carried into those units.
 /// </remarks>
@@ -41,16 +46,17 @@ internal sealed class MotionWipeLayer : MotionLayer
     public MotionWipeLayer(MotionOptions o, MotionLayerList stack) : base(o)
     {
         this.stack = stack;
-        type = o.Raw("type") as string ?? throw new ArgumentException("wipe's type is 'linear', 'radial', 'iris' or 'blinds'.");
+        type = o.Raw("type") as string ?? throw new ArgumentException("wipe's type is 'linear', 'radial', 'iris', 'blinds' or 'matte'.");
         string[] allowed = type switch
         {
             "linear" => ["angle", "over"],
             "radial" => ["startAngle", "center", "sweep"],
             "iris" => ["center", "points", "innerRadius", "rotation", "invert"],
             "blinds" => ["angle", "width"],
-            _ => throw new ArgumentException($"wipe has no type '{type}'. It takes 'linear', 'radial', 'iris' or 'blinds'."),
+            "matte" => ["image", "tl", "br", "invert"],
+            _ => throw new ArgumentException($"wipe has no type '{type}'. It takes 'linear', 'radial', 'iris', 'blinds' or 'matte'."),
         };
-        string[] all = ["angle", "over", "startAngle", "center", "sweep", "points", "innerRadius", "rotation", "invert", "width"];
+        string[] all = ["angle", "over", "startAngle", "center", "sweep", "points", "innerRadius", "rotation", "invert", "width", "image", "tl", "br"];
         foreach (var key in all.Where(k => o.Has(k) && !allowed.Contains(k)))
             throw new ArgumentException($"A {type} wipe has no '{key}'. It takes completion, feather, {string.Join(", ", allowed)}, desc.");
 
@@ -70,6 +76,13 @@ internal sealed class MotionWipeLayer : MotionLayer
         if (inner is <= 0 or > 1) throw new ArgumentException("wipe's innerRadius is a fraction of the outer radius, more than 0 and at most 1: it makes the polygon a star.");
         invert = o.Bool("invert", false);
         over = o.Has("over") ? Box(o.Raw("over")) : null;
+        if (type == "matte")
+        {
+            picture = MotionPicture.From(o.Raw("image"), "a matte wipe");
+            luma = Luma(picture);
+            tl = o.Has("tl") ? o.Node("tl", MotionType.Vector, new[] { 0d, 0d }) : null;
+            br = o.Has("br") ? o.Node("br", MotionType.Vector, new[] { 0d, 0d }) : null;
+        }
     }
     #endregion
 
@@ -83,11 +96,14 @@ internal sealed class MotionWipeLayer : MotionLayer
     private readonly double inner;
     private readonly bool invert;
     private readonly SKRect? over;
+    private readonly MotionPicture? picture;
+    private readonly float[] luma = [];
+    private readonly MotionNode? tl, br;
     #endregion
 
     #region Methods
     public override IEnumerable<MotionNode> Nodes() =>
-        new[] { Amount, completion, feather, angle, startAngle, width, rotation }.Concat(center is null ? [] : [center]);
+        new[] { Amount, completion, feather, angle, startAngle, width, rotation }.Concat(new[] { center, tl, br }.OfType<MotionNode>());
 
     /// <summary>The composition's frame in this stack's units, from the space the stack is drawn in.</summary>
     private SKPoint[] Frame(MotionSpace space)
@@ -251,6 +267,44 @@ internal sealed class MotionWipeLayer : MotionLayer
         return [c, .. Enumerable.Range(0, 5).Select(i => { var d = Dir(from + (to - from) * i / 4); return new SKPoint((float)(c.X + Far * d.X), (float)(c.Y + Far * d.Y)); })];
     }
 
+    /// <summary>Each pixel's grey, Rec. 601, over black: a transparent pixel reads as black and goes first.</summary>
+    private static float[] Luma(MotionPicture picture)
+    {
+        using var bitmap = new SKBitmap(new SKImageInfo(picture.Width, picture.Height, SKColorType.Rgba8888, SKAlphaType.Premul));
+        using (var c = new SKCanvas(bitmap)) { c.Clear(SKColors.Black); c.DrawImage(picture.Image, 0, 0); }
+        var px = bitmap.GetPixelSpan();
+        var luma = new float[picture.Width * picture.Height];
+        for (var i = 0; i < luma.Length; i++)
+            luma[i] = (0.299f * px[i * 4] + 0.587f * px[i * 4 + 1] + 0.114f * px[i * 4 + 2]) / 255f;
+        return luma;
+    }
+
+    /// <summary>Matte: where the picture lies, its top-left and bottom-right corners — the frame's when not given.</summary>
+    private (SKPoint Tl, SKPoint Br) Placed(double time, SKPoint[] frame)
+    {
+        static SKPoint At(MotionNode n, double t) { var v = n.Evaluate(t); return new((float)v[0], (float)v[1]); }
+        return (tl is null ? frame[0] : At(tl, time), br is null ? frame[2] : At(br, time));
+    }
+
+    /// <summary>
+    /// Matte: the erased share of each pixel at <paramref name="done"/>, black with that alpha, at the picture's size. A grey g
+    /// (1 − g with <c>invert</c>) goes once completion passes it; a feather f spreads that over a band of greys,
+    /// erase = clamp((done · (1 + f) − g) / f), so nothing goes at 0 and everything at 1.
+    /// </summary>
+    private SKBitmap Mask(double done, double f)
+    {
+        var bitmap = new SKBitmap(new SKImageInfo(picture!.Width, picture.Height, SKColorType.Rgba8888, SKAlphaType.Unpremul));
+        var px = bitmap.GetPixelSpan();
+        for (var i = 0; i < luma.Length; i++)
+        {
+            var g = invert ? 1 - luma[i] : luma[i];
+            var erase = done >= 1 ? 1 : f <= 0 ? (g < done ? 1 : 0) : Math.Clamp((done * (1 + f) - g) / f, 0, 1);
+            px[i * 4 + 3] = (byte)Math.Round(erase * 255);
+        }
+        bitmap.NotifyPixelsChanged();
+        return bitmap;
+    }
+
     // ------------------------------------------------------------------ the render
 
     /// <summary>
@@ -308,6 +362,16 @@ internal sealed class MotionWipeLayer : MotionLayer
                     [.. stops.Select(s => SKColors.Black.WithAlpha((byte)Math.Round(s.Erase * 255)))], [.. stops.Select(s => s.Pos)], SKShaderTileMode.Repeat);
                 ink.Shader = shader;
                 canvas.DrawPaint(ink);
+                return;
+            }
+            case "matte":
+            {
+                var (a, b) = Placed(time, frame);
+                if (done <= 0 || a.X == b.X || a.Y == b.Y) return;
+                using var mask = Mask(done, Feather(time));
+                using var image = SKImage.FromBitmap(mask);
+                canvas.DrawImage(image, SKRect.Create(0, 0, mask.Width, mask.Height), new SKRect(a.X, a.Y, b.X, b.Y),
+                    new SKSamplingOptions(SKFilterMode.Linear), ink);
                 return;
             }
             case "radial":
@@ -423,24 +487,35 @@ internal sealed class MotionWipeLayer : MotionLayer
                 if (over is not { } box) return Element("linear_gradient", "0.1", sif, gradient);
                 // Confined to the box: a group that erases, holding the gradient (composite, 0) and an inverted box erasing it outside.
                 var outside = RegionParams(sif, [.. Corners(box).Select(p => (MotionNode)new MotionConstant(MotionType.Vector, [p.X, p.Y]))], true, null);
-                return Element("group", "0.3", sif,
-                    SifWriter.Param("origin", SifWriter.Value(MotionType.Vector, [0, 0])),
-                    SifWriter.Param("transformation", new XElement("composite", new XAttribute("type", "transformation"),
-                        new XElement("offset", SifWriter.Value(MotionType.Vector, [0, 0])),
-                        new XElement("angle", SifWriter.Value(MotionType.Angle, [0])),
-                        new XElement("skew_angle", SifWriter.Value(MotionType.Angle, [0])),
-                        new XElement("scale", SifWriter.Value(MotionType.Vector, [1, 1])))),
-                    SifWriter.Param("canvas", new XElement("canvas",
-                        Inner("linear_gradient", 0, gradient),
-                        Inner("region", SifBlendMethod, outside))),
-                    SifWriter.Param("time_dilation", new XElement("real", new XAttribute("value", "1"))),
-                    SifWriter.Param("time_offset", new XElement("time", new XAttribute("value", MotionTypes.Time(0)))),
-                    SifWriter.Param("children_lock", SifWriter.Bool(false)),
-                    SifWriter.Param("outline_grow", new XElement("real", new XAttribute("value", "0"))),
-                    SifWriter.Param("z_range", SifWriter.Bool(false)),
-                    SifWriter.Param("z_range_position", new XElement("real", new XAttribute("value", "0"))),
-                    SifWriter.Param("z_range_depth", new XElement("real", new XAttribute("value", "0"))),
-                    SifWriter.Param("z_range_blur", new XElement("real", new XAttribute("value", "0"))));
+                return ErasingGroup(sif, Inner("linear_gradient", 0, gradient), Inner("region", SifBlendMethod, outside));
+            }
+            case "matte":
+            {
+                // Synfig has no threshold wipe, so each distinct mask is a picture beside the .sif, on an import layer held
+                // for the frames it covers, all in a group that erases.
+                var names = times.Select(t => Done(t) <= 0 ? null : Baked(sif, Done(t), Feather(t))).ToArray();
+                XElement Corner(Func<(SKPoint Tl, SKPoint Br), SKPoint> pick, string name)
+                {
+                    var at = Enumerable.Range(0, count).Select(i => pick(Placed(times[i], frames[i]))).ToArray();
+                    return at.All(p => p == at[0]) ? SifWriter.Param(name, SifWriter.Value(MotionType.Vector, [at[0].X, at[0].Y]))
+                        : sif.Param(name, Point(i => at[i]));
+                }
+                var (cornerTl, cornerBr) = (Corner(p => p.Tl, "tl"), Corner(p => p.Br, "br"));
+                var held = new List<XElement>();
+                for (var i = 0; i < count;)
+                {
+                    var j = i;
+                    while (j + 1 < count && names[j + 1] == names[i]) j++;
+                    if (names[i] is { } file)
+                        held.Add(Inner("import", 0, [new XElement(cornerTl), new XElement(cornerBr),
+                            SifWriter.Param("c", new XElement("integer", new XAttribute("value", "1"))),
+                            SifWriter.Param("gamma_adjust", new XElement("real", new XAttribute("value", "1"))),
+                            SifWriter.Param("filename", new XElement("string", file)),
+                            SifWriter.Param("time_offset", new XElement("time", new XAttribute("value", "0s")))],
+                            Held(times[i], j + 1 < count ? times[j + 1] : null)));
+                    i = j + 1;
+                }
+                return ErasingGroup(sif, [.. held]);
             }
             case "blinds":
                 return Element("linear_gradient", "0.1", sif,
@@ -478,15 +553,51 @@ internal sealed class MotionWipeLayer : MotionLayer
         }
     }
 
+    /// <summary>A group that erases what lies under it with what it holds, the wipe's amount on the group.</summary>
+    private XElement ErasingGroup(SifWriter sif, params XElement[] inner) =>
+        Element("group", "0.3", sif,
+            SifWriter.Param("origin", SifWriter.Value(MotionType.Vector, [0, 0])),
+            SifWriter.Param("transformation", new XElement("composite", new XAttribute("type", "transformation"),
+                new XElement("offset", SifWriter.Value(MotionType.Vector, [0, 0])),
+                new XElement("angle", SifWriter.Value(MotionType.Angle, [0])),
+                new XElement("skew_angle", SifWriter.Value(MotionType.Angle, [0])),
+                new XElement("scale", SifWriter.Value(MotionType.Vector, [1, 1])))),
+            SifWriter.Param("canvas", new XElement("canvas", inner)),
+            SifWriter.Param("time_dilation", new XElement("real", new XAttribute("value", "1"))),
+            SifWriter.Param("time_offset", new XElement("time", new XAttribute("value", MotionTypes.Time(0)))),
+            SifWriter.Param("children_lock", SifWriter.Bool(false)),
+            SifWriter.Param("outline_grow", new XElement("real", new XAttribute("value", "0"))),
+            SifWriter.Param("z_range", SifWriter.Bool(false)),
+            SifWriter.Param("z_range_position", new XElement("real", new XAttribute("value", "0"))),
+            SifWriter.Param("z_range_depth", new XElement("real", new XAttribute("value", "0"))),
+            SifWriter.Param("z_range_blur", new XElement("real", new XAttribute("value", "0"))));
+
+    /// <summary>A matte's mask at one completion, written beside the .sif; the same mask twice is one file.</summary>
+    private string Baked(SifWriter sif, double done, double f)
+    {
+        using var mask = Mask(done, f);
+        return sif.Picture(MotionPicture.From(mask, "a matte wipe"));
+    }
+
+    /// <summary>An amount of 1 from <paramref name="from"/> until <paramref name="until"/> (or the end), 0 otherwise, held.</summary>
+    private static XElement Held(double from, double? until)
+    {
+        if (from <= 0 && until is null) return SifWriter.Param("amount", new XElement("real", new XAttribute("value", "1")));
+        static XElement At(double t, double v) => new("waypoint", new XAttribute("time", MotionTypes.Time(t)),
+            new XAttribute("before", "constant"), new XAttribute("after", "constant"), new XElement("real", new XAttribute("value", MotionTypes.Format(v))));
+        return SifWriter.Param("amount", new XElement("animated", new XAttribute("type", "real"),
+            from > 0 ? At(0, 0) : null, At(from, 1), until is { } u ? At(u, 0) : null));
+    }
+
     /// <summary>A closed region of corner points, black, erasing.</summary>
     private XElement Region(SifWriter sif, MotionNode[] corners, bool inverted, XElement? featherParam) =>
         Element("region", "0.1", sif, RegionParams(sif, corners, inverted, featherParam));
 
-    /// <summary>A layer inside the wipe's own group: at full amount, blended by <paramref name="blend"/>.</summary>
-    private static XElement Inner(string type, int blend, object[] content) =>
+    /// <summary>A layer inside the wipe's own group: at full amount unless given one, blended by <paramref name="blend"/>.</summary>
+    private static XElement Inner(string type, int blend, object[] content, XElement? amount = null) =>
         new("layer", new XAttribute("type", type), new XAttribute("active", "true"), new XAttribute("version", "0.1"),
             SifWriter.Param("z_depth", new XElement("real", new XAttribute("value", "0"))),
-            SifWriter.Param("amount", new XElement("real", new XAttribute("value", "1"))),
+            amount ?? SifWriter.Param("amount", new XElement("real", new XAttribute("value", "1"))),
             SifWriter.Param("blend_method", new XElement("integer", new XAttribute("value", blend))),
             content);
 
@@ -531,6 +642,9 @@ internal sealed class MotionWipeLayer : MotionLayer
 
     public override XElement ToSvg(SvgAnimationWriter svg, MotionTimeMap map)
     {
+        if (type == "matte")
+            throw new InvalidOperationException($"A matte wipe{(Desc is null ? "" : $" '{Desc}'")} cannot be written as animated SVG: its mask is a picture "
+                + "that changes every frame. Write a .sif, or capture the composition as frames.");
         if (times(svg).Any(t => Feather(map.Local(t)) > 0))
             throw new InvalidOperationException($"The {type} wipe{(Desc is null ? "" : $" '{Desc}'")} is feathered, which this SVG export does not draw yet. "
                 + "Give it no feather, write a .sif, or capture the composition as frames.");

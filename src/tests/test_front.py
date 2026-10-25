@@ -115,7 +115,7 @@ class CatalogueTests(unittest.TestCase):
                             {"product": "Nightshift, a canned cold brew", "comparables": "Blue Bottle, La Colombe",
                              "claim": "Steeped for twenty hours.", "cta": "Find it chilled."},
                             "An ad for a cold brew.", ["Berlin", "Lagos"], ["30_to_34", ""])
-        self.assertEqual((c.workflow, c.kind), ("trailer", "product"))
+        self.assertEqual((c.workflow, c.kind), ("motion", "product"))
         text = c.brief_text([])
         for line in ("- One ad per audience", "- Comparable brands: Blue Bottle, La Colombe",
                      "- Claim: Steeped for twenty hours.", "- Call to action: Find it chilled."):
@@ -124,8 +124,20 @@ class CatalogueTests(unittest.TestCase):
     def test_a_film_trailer_never_becomes_a_product_ad(self):
         """One workflow, two cards: the film trailer offers no type, so it cannot be given the ad's."""
         film = catalogue.BY_SLUG["film-trailer"]
-        self.assertEqual(catalogue.types_for(film, "trailer"), [])
-        self.assertIs(catalogue.card_for("trailer"), film, "a trailer made elsewhere is a film trailer")
+        self.assertEqual(catalogue.types_for(film, "motion"), [])
+        self.assertIs(catalogue.card_for("motion"), film, "an untyped motion project made elsewhere is a film trailer")
+
+    def test_a_motion_project_made_elsewhere_is_named_by_its_type(self):
+        """
+        A headless run records no card, so the card comes from the workflow and the type: every one of them used to be
+        "Film trailer". A project.json from before the rename says `trailer`, and reads the same.
+        """
+        for workflow in ("motion", "trailer"):
+            self.assertIs(catalogue.card_for(workflow, "product"), catalogue.BY_SLUG["product-ad"], workflow)
+            self.assertIs(catalogue.card_for(workflow, "report"), catalogue.BY_SLUG["report-explainer"], workflow)
+            self.assertIs(catalogue.card_for(workflow, "pitch"), catalogue.BY_SLUG["startup-pitch"], workflow)
+            self.assertIs(catalogue.card_for(workflow, ""), catalogue.BY_SLUG["film-trailer"], workflow)
+        self.assertIs(catalogue.card_for("poster", "product"), catalogue.BY_SLUG["poster"])
         with self.assertRaises(StudioError):
             catalogue.parse("film-trailer", "Harbour", "0", "product", ["1920x1080"], "", [".mp4"], {}, "A film.",
                             ["Tokyo"], [""])
@@ -138,7 +150,7 @@ class CatalogueTests(unittest.TestCase):
         c = catalogue.parse("report-explainer", "NVIDIA explained", "0", "", ["1920x1080"], "", [".mp4"],
                             {"viewer": "New retail investors", "questions": "How big was revenue?; Where did it come from?"},
                             "Explain the annual report.", [], [])
-        self.assertEqual((c.workflow, c.kind), ("trailer", "report"))
+        self.assertEqual((c.workflow, c.kind), ("motion", "report"))
         text = c.brief_text(["nvda-10k.pdf"])
         for line in ("- Who is watching: New retail investors",
                      "- Their questions:\n  1. How big was revenue?\n  2. Where did it come from?",
@@ -161,7 +173,7 @@ class CatalogueTests(unittest.TestCase):
         c = catalogue.parse("startup-pitch", "UberCab retold", "0", "", ["1920x1080"], "", [".mp4"],
                             {"company": "UberCab", "told_as": "A retelling of a past deck", "raise": "$1.25M seed"},
                             "Tell the 2008 deck.", [], [])
-        self.assertEqual((c.workflow, c.kind), ("trailer", "pitch"))
+        self.assertEqual((c.workflow, c.kind), ("motion", "pitch"))
         text = c.brief_text(["uber-2008.pdf"])
         for line in ("- Company: UberCab", "- Told as: A retelling of a past deck", "- Stage: As the deck says",
                      "- The raise: $1.25M seed", "- Duration: 2 minutes", "- Narration: A voice",
@@ -368,6 +380,15 @@ class FrontRoutingTests(unittest.TestCase):
         self.assertIn("Harbour festival trailer", self.client.get("/requests?view=drafts").text)
         self.assertEqual(page.status_code, 200)
 
+    def test_a_headless_run_is_listed_by_its_type(self):
+        """A product ad made by a headless run, with no request record, is listed as a product ad, not a film trailer."""
+        p = project_dir(self.root, "nightshift9", workflow="trailer")
+        manifest = json.loads((p / "project.json").read_text(encoding="utf-8"))
+        (p / "project.json").write_text(json.dumps({**manifest, "type": "product"}), encoding="utf-8")
+        row = front.describe(p, self.registry)
+        self.assertEqual(row["workflow"], "Product ad")
+        self.assertIs(row["card"], catalogue.BY_SLUG["product-ad"])
+
     def test_the_thumbnail_is_the_newest_recorded_image(self):
         p = project_dir(self.root, "pic", workflow="painting")
         (p / "artifacts" / "one.webp").write_bytes(b"one")
@@ -497,7 +518,7 @@ class FrontRoutingTests(unittest.TestCase):
         self.assertEqual(handed, {})
 
     def test_the_request_page_shows_what_the_studio_learned(self):
-        p = project_dir(self.root, "pair", workflow="trailer")
+        p = project_dir(self.root, "pair", workflow="motion")
         (p / "direction.md").write_text(DIRECTION, encoding="utf-8")
         events(p, {"type": "taste.query", "id": "t1", "op": "profile", "label": "audience A", "distinctive": 82,
                    "request": "/v2/insights?x=1"})
@@ -569,7 +590,7 @@ class FakeCommissioner:
     """Stands in for `adk_agent.intake.Commissioner`: offers drawing (review only) and the infographics."""
 
     TYPES = {"drawing": ("review",), "vector_infographic": ("editorial", "swiss"), "infographic": ("editorial",),
-             "trailer": ("pitch", "product", "report")}
+             "motion": ("pitch", "product", "report")}
 
     def __init__(self, root: Path, refuse: Exception | None = None) -> None:
         self.root, self.refuse, self.made = root, refuse, []
@@ -658,7 +679,7 @@ class CommissionedComposerTests(unittest.TestCase):
                                  follow_redirects=False)
         self.assertEqual(reply.status_code, 303, reply.text[:300])
         made = self.commissioner.made[0]
-        self.assertEqual((made["workflow"], made["kind"]), ("trailer", "product"))
+        self.assertEqual((made["workflow"], made["kind"]), ("motion", "product"))
         self.assertIn("- Claim: Steeped for twenty hours.", made["brief"])
 
     def test_a_report_explainer_is_refused_without_its_pdf_and_commissioned_with_it(self):
@@ -672,7 +693,7 @@ class CommissionedComposerTests(unittest.TestCase):
                                  follow_redirects=False)
         self.assertEqual(reply.status_code, 303, reply.text[:300])
         made = self.commissioner.made[0]
-        self.assertEqual((made["workflow"], made["kind"], made["documents"]), ("trailer", "report", ["nvda-10k.pdf"]))
+        self.assertEqual((made["workflow"], made["kind"], made["documents"]), ("motion", "report", ["nvda-10k.pdf"]))
         self.assertIn("  1. How big was revenue?", made["brief"])
 
     def test_a_startup_pitch_is_commissioned_as_a_pitch_trailer_with_its_deck(self):
@@ -681,7 +702,7 @@ class CommissionedComposerTests(unittest.TestCase):
                                  follow_redirects=False)
         self.assertEqual(reply.status_code, 303, reply.text[:300])
         made = self.commissioner.made[0]
-        self.assertEqual((made["workflow"], made["kind"], made["documents"]), ("trailer", "pitch", ["deck.pdf"]))
+        self.assertEqual((made["workflow"], made["kind"], made["documents"]), ("motion", "pitch", ["deck.pdf"]))
         self.assertIn("- Audience A: Singapore", made["brief"])
         self.assertIn("- One film per audience", made["brief"])
         self.assertFalse(made["auto"], "asking is the default")

@@ -57,6 +57,13 @@ internal static class ProjectGenerator
     //  one and the difference is what keeps a reset from rewriting a project's workflow.
     const string DefaultWorkflow = "logo";
 
+    /// <summary>
+    /// Workflows by a former name, read as their current one wherever a name arrives: a flag, or a project.json written
+    /// before the rename. <c>trailer</c> became <c>motion</c> on 2026-10-25, since its types make product ads, report
+    /// explainers and pitches as well as film trailers.
+    /// </summary>
+    internal static readonly Dictionary<string, string> RenamedWorkflows = new(StringComparer.OrdinalIgnoreCase) { ["trailer"] = "motion" };
+
     static readonly Regex ValidId = new(@"^[A-Za-z0-9._-]{1,64}$", RegexOptions.Compiled);
     #endregion
 
@@ -165,10 +172,12 @@ internal static class ProjectGenerator
         // Stating the flag still changes the workflow, because that is someone asking for it.
         var workflow = opts.Workflow.Trim().ToLowerInvariant();
         var inherited = workflow.Length == 0 ? Recorded(recorded, "workflow") : string.Empty;
+        inherited = RenamedWorkflows.GetValueOrDefault(inherited, inherited);
         if (workflow.Length == 0)
         {
             workflow = inherited.Length > 0 ? inherited : DefaultWorkflow;
         }
+        workflow = RenamedWorkflows.GetValueOrDefault(workflow, workflow);
 
         if (!KnownWorkflows.Contains(workflow))
         {
@@ -658,10 +667,10 @@ internal static class ProjectGenerator
         ["animation"] = 40,
         // Fifteen seconds of motion graphics: beats, a design board, keys, two sheets and a video that takes a quarter of a
         // minute to encode. A poster's allowance, plus the motion; seventy since the brain dump (Manual 29 §2c).
-        ["trailer"] = 70,
+        ["motion"] = 70,
         // A pitch is two minutes of film to the trailer's fifteen: a deck (and perhaps a model) read and checked, about
         // nine scenes each encoded as a part, and every line narrated. No measured run behind it yet; tune after the first.
-        ["trailer.pitch"] = 90,
+        ["motion.pitch"] = 90,
         // A minute of film like the trailer's, with a plan whose every formula and claim is checked before anything is
         // drawn, narration spoken line by line, and a read-back. No measured run behind it yet; tune after the first.
         ["math_explainer"] = 60,
@@ -1149,9 +1158,10 @@ internal static class ProjectGenerator
         "events", "scripts", "artifacts", "audio",
         "findings.md", "critique_log.md", "artwork.js", "output.webp", "output.svg", "output.png", "output.mp4",
         // Workflow deliverables: drawing's turns.md, painting's materials.md, sketch_scene's sketch.md,
-        // animation's animation.md, poster's and trailer's direction.md and scripts, trailer's Synfig file.
+        // animation's animation.md, poster's and motion's direction.md and scripts, motion's Synfig file (under its name
+        // before the rename too, so a project made then still resets clean).
         "turns.md", "materials.md", "sketch.md", "animation.md",
-        "direction.md", "poster.js", "trailer.js", "trailer.sif",
+        "direction.md", "poster.js", "motion.js", "motion.sif", "trailer.js", "trailer.sif",
         // math_explainer's film script and its checked plan.
         "explainer.js", "plan.md",
         // The mind map's outline (Manual 29 §2a), the concept presentation (§8), the motion deliverables of Manual 25 §13 —
@@ -1439,7 +1449,7 @@ internal static class ProjectGenerator
         // poster, a trailer, a mark — and the kit of parts is how a set across audiences holds together.
         // Scoring motion is the method; composition and type are what a trailer moves. 24 and 28 (the figure) are absent:
         // a trailer here is shapes and type, not a character.
-        ["trailer"] = ["25", "09", "11", "29"],
+        ["motion"] = ["25", "09", "11", "29"],
         // Scoring motion carries *Mathematics on screen* (equations, axes, counting numbers, the checks); composition and
         // type lay out a scene of formulas. No figure manuals: an explainer is formulas and graphs, not a character.
         ["math_explainer"] = ["25", "09", "11"],
@@ -1504,8 +1514,8 @@ internal static class ProjectGenerator
     /// </remarks>
     static readonly Dictionary<string, string[]> TypeManuals = new()
     {
-        ["trailer.report"] = ["13"],
-        ["trailer.pitch"] = ["13"],
+        ["motion.report"] = ["13"],
+        ["motion.pitch"] = ["13"],
     };
 
     /// <summary>The judgment manuals' preamble, then one entry per manual, or empty when there are none.</summary>

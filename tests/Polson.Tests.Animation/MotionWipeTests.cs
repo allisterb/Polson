@@ -320,6 +320,100 @@ public class MotionWipeTests(ITestOutputHelper output) : TestsRuntime
         Assert.True(Differing(ours.SkBitmap, theirs, 24) > 0.1, "synfig no longer softens the blinds: update the docs");
     }
 
+    /// <summary>
+    /// A matte wipe takes the darkest greys first: on a left-to-right ramp, half done is the left half gone; <c>invert</c>
+    /// takes the right; nothing goes at 0 and all at 1; placed in a box it erases only there; a feather leaves a soft band.
+    /// </summary>
+    [Fact]
+    public void AMatteWipeErasesTheDarkestGreysFirst()
+    {
+        double Kept(MotionComposition c, double x0, double x1)
+        {
+            using var frame = c.Render(0);
+            var b = frame.SkBitmap;
+            var (from, to) = ((int)x0, (int)x1);
+            return Enumerable.Range(0, b.Height).Sum(y => Enumerable.Range(from, to - from).Count(x => b.GetPixel(x, y) == Content)) / (double)((to - from) * b.Height);
+        }
+        MotionComposition Matte(double done, params (string, object?)[] more) =>
+            Wiped(Opts([("type", "matte"), ("image", Ramp()), ("completion", done), .. more]));
+
+        Assert.True(Kept(Matte(0), 0, W) > 0.999);
+        Assert.True(Kept(Matte(1), 0, W) < 0.001);
+        var half = Matte(0.5);
+        Assert.True(Kept(half, 0, W / 2 - 4) < 0.001 && Kept(half, W / 2 + 4, W) > 0.999, "half done should take the dark left half");
+        var inverted = Matte(0.5, ("invert", true));
+        Assert.True(Kept(inverted, 0, W / 2 - 4) > 0.999 && Kept(inverted, W / 2 + 4, W) < 0.001, "inverted should take the light right half");
+        var boxed = Matte(1, ("tl", new[] { 60d, 0d }), ("br", new[] { 120d, H }));
+        Assert.True(Kept(boxed, 0, 58) > 0.999 && Kept(boxed, 62, 118) < 0.001 && Kept(boxed, 122, W) > 0.999, "a placed matte erases only inside");
+        using (var soft = Matte(0.5, ("feather", 0.4)).Render(0))
+        {
+            var row = Enumerable.Range(0, (int)W).Select(x => soft.SkBitmap.GetPixel(x, (int)H / 2)).ToArray();
+            Assert.True(row.Count(p => p != Content && p != SKColors.White) > 20, "a feathered matte should leave a band between erased and kept");
+        }
+        Assert.Contains("matte wipe", Assert.Throws<InvalidOperationException>(() => Matte(0.5).ToSvg()).Message);
+        Assert.Contains("needs an image", Assert.Throws<ArgumentException>(() => Wiped(Opts(("type", "matte"), ("completion", 0.5)))).Message);
+        Assert.Contains("has no 'angle'", Assert.Throws<ArgumentException>(() => Matte(0.5, ("angle", 30d))).Message);
+    }
+
+    /// <summary>
+    /// Synfig draws a matte wipe's baked masks the same, the completion keyed over three frames, hard and feathered: the same
+    /// share erased, centred within a pixel. Compared by amount and place rather than edge pixels, because Synfig samples an
+    /// imported picture half a pixel over (measured: the box's top row and left column half erased, its threshold edge half a
+    /// pixel behind), as <see cref="MotionBlendTests"/> found for a cutout.
+    /// </summary>
+    [Theory]
+    [InlineData(0d)]
+    [InlineData(0.3)]
+    public void SynfigWipesTheMatteTheSame(double feather)
+    {
+        if (SynfigOracle.Find() is not { } synfig) return;
+
+        var motion = new MotionToolkit();
+        var comp = Wiped(Opts(("type", "matte"), ("image", Ramp()), ("tl", new[] { 20d, 10d }), ("br", new[] { 220d, 150d }),
+            ("completion", motion.Nodes.Linear("real", 0.3, 0.2)), ("feather", feather)), motion, 2);
+
+        var theirs = SynfigOracle.Render(synfig, comp, $"wipe-matte-{feather}", output);
+        Assert.Equal(comp.FrameCount, theirs.Length);
+        for (var i = 0; i < theirs.Length; i++)
+        {
+            using var ours = comp.Render(i);
+            using var bitmap = theirs[i];
+            SynfigOracle.Dump(ours.SkBitmap, bitmap, $"wipe-matte-{feather}-{i}");
+            var (a, b) = (Erasure(ours.SkBitmap), Erasure(bitmap));
+            output.WriteLine($"matte feather {feather} frame {i}: ours erases {a.Share:P2} about x {a.X:0.0}, synfig {b.Share:P2} about x {b.X:0.0}; "
+                + $"{Differing(ours.SkBitmap, bitmap, 24):P2} differ by more than 24");
+            Assert.InRange(Math.Abs(a.Share - b.Share), 0, 0.01);
+            Assert.InRange(Math.Abs(a.X - b.X), 0, 1.0);
+            Assert.InRange(Math.Abs(a.Y - b.Y), 0, 1.0);
+        }
+
+        // How much of the frame is erased, by the white showing through, and the centre of that erasing.
+        static (double Share, double X, double Y) Erasure(SKBitmap bitmap)
+        {
+            double sum = 0, sx = 0, sy = 0;
+            for (var y = 0; y < bitmap.Height; y++)
+                for (var x = 0; x < bitmap.Width; x++)
+                {
+                    var e = (bitmap.GetPixel(x, y).Red - Content.Red) / (255.0 - Content.Red);
+                    (sum, sx, sy) = (sum + e, sx + e * x, sy + e * y);
+                }
+            return (sum / (bitmap.Width * bitmap.Height), sum > 0 ? sx / sum : 0, sum > 0 ? sy / sum : 0);
+        }
+    }
+
+    /// <summary>A left-to-right grey ramp, black to white: the matte whose order is known.</summary>
+    private static SKBitmap Ramp()
+    {
+        var bitmap = new SKBitmap(64, 32);
+        for (var x = 0; x < 64; x++)
+            for (var y = 0; y < 32; y++)
+            {
+                var g = (byte)Math.Round(x * 255 / 63.0);
+                bitmap.SetPixel(x, y, new SKColor(g, g, g));
+            }
+        return bitmap;
+    }
+
     private static MotionComposition Scene(MotionToolkit? motion = null, double duration = 0)
     {
         var comp = (motion ?? new MotionToolkit()).Composition(Opts(("width", W), ("height", H), ("fps", 1d), ("duration", duration)));
