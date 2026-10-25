@@ -152,9 +152,15 @@ public sealed class StageApi
         if (title.Length == 0) throw new ArgumentException("Stage.book needs a title: the project, as every page's header names it.");
         if (o["pages"] is not System.Collections.IEnumerable given || o["pages"] is string)
             throw new ArgumentException("Stage.book's pages is a list: [{ title, image, caption, text, file }].");
+        // Shaw's two books (Manual 25 §13d): a process book shows how the work was arrived at; a pitch book sells the chosen
+        // concept, and carries its treatment, its design board and its frames rather than the workshop's sheets.
+        var kind = o["kind"]?.ToString()?.Trim().ToLowerInvariant() ?? "process";
+        if (kind is not ("process" or "pitch"))
+            throw new ArgumentException($"Stage.book's kind is 'process' or 'pitch', not '{kind}'.");
 
         var pages = new List<Polson.Drawing.Skia.PdfBook.Page>();
         var warnings = new List<string>();
+        var shown = new List<string>();
         foreach (var item in given)
         {
             var p = JsInterop.AsDict(item) ?? throw new ArgumentException("Each of Stage.book's pages is an object: { title, image, caption, text, file }.");
@@ -173,6 +179,7 @@ public sealed class StageApi
                 if (!System.Text.RegularExpressions.Regex.IsMatch(full, @"\.(png|jpe?g|webp)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
                     throw new ArgumentException($"Stage.book's pages show stills (.png, .jpg, .webp), not '{imagePath}'. For a film, render a frame of it.");
                 image = File.ReadAllBytes(full);
+                shown.Add(Path.GetFileNameWithoutExtension(full));
             }
             var text = p["text"]?.ToString();
             if (p["file"]?.ToString() is { Length: > 0 } filePart)
@@ -188,6 +195,17 @@ public sealed class StageApi
             pages.Add(new(p["title"]?.ToString(), image, p["caption"]?.ToString(), text));
         }
         if (pages.Count is 0 or > 60) throw new ArgumentException($"Stage.book takes 1 to 60 pages, not {pages.Count}.");
+        if (kind == "pitch")
+        {
+            // The workshop's sheets belong in the process book; a pitch shows the idea already chosen, finished.
+            var workshop = shown.Where(s => PitchExcluded.IsMatch(s)).ToArray();
+            if (workshop.Length > 0)
+                warnings.Add($"a pitch book sells the chosen concept, so the workshop's sheets go in the process book: {string.Join(", ", workshop)}.");
+            if (!shown.Any(s => s.Contains("board", StringComparison.OrdinalIgnoreCase) || s.Contains("style", StringComparison.OrdinalIgnoreCase)))
+                warnings.Add("a pitch book shows the look: its design board or its style frames, and it has neither.");
+            if (!given.Cast<object?>().Select(JsInterop.AsDict).Any(p => p?["file"]?.ToString()?.Contains("treatment", StringComparison.OrdinalIgnoreCase) == true))
+                warnings.Add("a pitch book opens on the story: pass treatment.md as a page's file.");
+        }
 
         var (pdf, count, overflows) = Polson.Drawing.Skia.PdfBook.Write(title, pages);
         // A page whose text runs on for pages is a file pasted, not a page written: nightshift1 put the whole of
@@ -206,11 +224,12 @@ public sealed class StageApi
             ["format"] = "pdf",
             ["bytes"] = pdf.Length,
             ["pages"] = count,
+            ["book"] = kind,
             ["warnings"] = warnings.Count == 0 ? null : warnings.ToArray(),
         });
         return new()
         {
-            ["path"] = filePath, ["pages"] = count, ["bytes"] = (long)pdf.Length,
+            ["path"] = filePath, ["pages"] = count, ["bytes"] = (long)pdf.Length, ["kind"] = kind,
             ["warnings"] = warnings.Cast<object?>().ToList(),
         };
     }
@@ -421,6 +440,175 @@ public sealed class StageApi
             ["unplaced"] = unplaced.ToArray(),
             ["summary"] = summary,
         };
+    }
+
+    /// <summary>
+    /// The shape of the story (Manual 25 §13b; Shaw, ch. 8): each beat's intensity, judged 0–1, drawn as a curve over the
+    /// film's time, for the written treatment. Returns <c>{ peak, range, flat, warnings }</c>; <c>ctx</c> may be null.
+    /// </summary>
+    /// <param name="spec"><c>{ beats: [{ name, time, intensity }], duration?, box?, font? }</c>.</param>
+    public Dictionary<string, object?> Shape(object? ctx, object? spec)
+    {
+        var o = JsInterop.AsDict(spec) ?? throw new ArgumentException("Stage.shape needs { beats: [{ name, time, intensity }] }.");
+        var beats = (o["beats"] as System.Collections.IEnumerable)?.Cast<object?>().Select((b, i) =>
+        {
+            var d = JsInterop.AsDict(b) ?? throw new ArgumentException($"Stage.shape: beat {i + 1} is {{ name, time, intensity }}.");
+            double Num(string k) => d[k] is { } v ? Convert.ToDouble(v, System.Globalization.CultureInfo.InvariantCulture)
+                : throw new ArgumentException($"Stage.shape: beat {i + 1} has no {k}.");
+            var intensity = Num("intensity");
+            if (intensity is < 0 or > 1) throw new ArgumentException($"Stage.shape: beat {i + 1}'s intensity is 0 to 1, not {intensity}.");
+            return (Name: d["name"]?.ToString() ?? $"beat {i + 1}", Time: Num("time"), Intensity: intensity);
+        }).OrderBy(b => b.Time).ToArray() ?? [];
+        if (beats.Length < 2) throw new ArgumentException("Stage.shape needs at least two beats: a shape is a change.");
+        var duration = o["duration"] is { } dur ? Convert.ToDouble(dur, System.Globalization.CultureInfo.InvariantCulture) : beats[^1].Time;
+
+        var range = beats.Max(b => b.Intensity) - beats.Min(b => b.Intensity);
+        var peak = beats.MaxBy(b => b.Intensity);
+        var warnings = new List<string>();
+        // Shaw's graph-editor lesson: a velocity that does not change is a straight line and dull, and a story is the same.
+        if (range < 0.3)
+            warnings.Add($"The story barely changes: its intensity spans {range:0.00} of 1. A flat line is static; give it a rise, a turn and a resolve (Shaw, ch. 8).");
+
+        if (ctx is Polson.Drawing.Skia.CanvasRenderingContext2D context)
+        {
+            var box = JsInterop.AsDict(o["box"]);
+            float B(string key, float fallback) => box is not null && box.Contains(key) && box[key] is not null ? Convert.ToSingle(box[key], System.Globalization.CultureInfo.InvariantCulture) : fallback;
+            Polson.Drawing.Skia.StoryShape.Draw(context, [.. beats.Select(b => (b.Name, b.Time, b.Intensity))], duration,
+                B("x", 0), B("y", 0), B("width", context.Canvas.Width), B("height", context.Canvas.Height), o["font"]?.ToString() ?? "Georgia");
+        }
+        else if (ctx is not null)
+            throw new ArgumentException("Stage.shape's first argument is a canvas context to draw into — canvas.getContext('2d') — or null.");
+
+        foreach (var w in warnings) result?.Logs.Add("[WARN] Stage.shape: " + w);
+        return new()
+        {
+            ["peak"] = new Dictionary<string, object?> { ["name"] = peak.Name, ["time"] = peak.Time, ["intensity"] = peak.Intensity },
+            ["range"] = Math.Round(range, 3), ["flat"] = range < 0.3, ["warnings"] = warnings.ToArray(),
+        };
+    }
+
+    /// <summary>
+    /// The DOs &amp; DON'Ts list (Manual 25 §13c; Shaw, ch. 7) checked: every <c>- DO</c> or <c>- DON'T</c> line of the file
+    /// that ends with a clause in backticks is measured on <paramref name="images"/>, and the rest are listed as judged.
+    /// Returns <c>{ passed, lines, judged, summary }</c>.
+    /// </summary>
+    /// <param name="images">A project path, a bitmap or canvas, or an array of them: the clause must hold on every one.</param>
+    /// <param name="options"><c>{ fonts?: string[] }</c>: the typefaces used, for a <c>fonts</c> clause.</param>
+    public Dictionary<string, object?> Borders(string filePath, object? images, object? options = null)
+    {
+        var full = ProjectPath.Resolve(projectRoot, filePath, nameof(filePath), "Read");
+        if (!File.Exists(full)) throw new ArgumentException($"Stage.borders: '{filePath}' is not in the project. Write the list first: '- DO …' and '- DON'T …' lines.");
+        var targets = (images is string or ILosslessImageSource || images is null ? [images] : (images as System.Collections.IEnumerable)?.Cast<object?>().ToArray() ?? [images])
+            .Where(t => t is not null).Select(t => (Name: t is string s ? s : "an image", Look: BorderLook.Of(t switch
+            {
+                string path => File.ReadAllBytes(ProjectPath.Resolve(projectRoot, path, "images", "Read")),
+                ILosslessImageSource image => image.ToLosslessBytes(),
+                _ => throw new ArgumentException("Stage.borders measures project paths, bitmaps or canvases."),
+            }))).ToArray();
+        var fonts = (JsInterop.AsDict(options)?["fonts"] as System.Collections.IEnumerable)?.Cast<object?>().Select(f => f?.ToString()).OfType<string>()
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+
+        var lines = new List<object?>();
+        var judged = new List<string>();
+        foreach (var raw in File.ReadAllLines(full))
+        {
+            if (BorderLine.Match(raw) is not { Success: true } m) continue;
+            var kind = m.Groups[1].Value.StartsWith("DO", StringComparison.OrdinalIgnoreCase) && m.Groups[1].Value.Length == 2 ? "do" : "don't";
+            var text = m.Groups[2].Value.Trim();
+            if (BorderClause.Match(text) is not { Success: true } c) { judged.Add($"{kind.ToUpperInvariant()}: {text}"); continue; }
+
+            var (metric, op, limit) = (c.Groups[1].Value.Trim().ToLowerInvariant(), c.Groups[2].Value, double.Parse(c.Groups[3].Value, System.Globalization.CultureInfo.InvariantCulture) / (c.Groups[4].Success ? 100 : 1));
+            bool Holds(double v) => op switch { "<" => v < limit, "<=" => v <= limit, ">" => v > limit, _ => v >= limit };
+            double[] values;
+            if (metric == "fonts")
+                values = [fonts?.Length ?? throw new ArgumentException($"Stage.borders: '{text}' counts typefaces; pass {{ fonts: [...] }}, the families the piece sets.")];
+            else
+            {
+                if (targets.Length == 0) throw new ArgumentException($"Stage.borders: '{text}' is measured on images; pass the frames or the final to measure.");
+                values = [.. targets.Select(t => t.Look.Measure(metric) ?? throw new ArgumentException(
+                    $"Stage.borders: '{metric}' is not a measure. Use lightness, chroma, colourful, warmth, 'hue <sector>' ({string.Join(", ", Polson.ExtendedMind.Taste.TasteVisual.SectorNames)}), 'colour #rrggbb' or fonts."))];
+            }
+            var worst = values.Select((v, i) => (v, i)).OrderBy(p => Holds(p.v) ? 1 : 0).First();
+            lines.Add(new Dictionary<string, object?>
+            {
+                ["kind"] = kind, ["text"] = text[..c.Index].TrimEnd(' ', '—', '-', ':'), ["clause"] = c.Value.Trim('`'),
+                ["passed"] = values.All(Holds), ["value"] = Math.Round(worst.v, 4),
+                ["where"] = metric == "fonts" ? null : targets[worst.i].Name,
+            });
+        }
+
+        var failed = lines.Cast<Dictionary<string, object?>>().Where(l => !(bool)l["passed"]!).ToArray();
+        var summary = $"{lines.Count} measured, {judged.Count} judged"
+            + (failed.Length == 0 ? "; every measured line holds." : $"; {failed.Length} broken: " + string.Join("; ", failed.Select(l => $"{l["text"]} ({l["clause"]}: {l["value"]} on {l["where"] ?? "the piece"})")) + ".");
+        events?.Append("borders", session?.Stage, executionId, new Dictionary<string, object?>
+        {
+            ["path"] = filePath, ["measured"] = lines.Count, ["judged"] = judged.Count, ["broken"] = failed.Length, ["summary"] = summary,
+        });
+        return new() { ["passed"] = failed.Length == 0, ["lines"] = lines.ToArray(), ["judged"] = judged.ToArray(), ["summary"] = summary };
+    }
+
+    /// <summary>What the workflows name a workshop sheet: the map, the research and dump sheets, the concepts and the matrix.</summary>
+    private static readonly System.Text.RegularExpressions.Regex PitchExcluded =
+        new(@"^0[0-3]_(map|field|research|dump|concepts|matrix)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+    /// <summary><c>- DO …</c> or <c>- DON'T …</c>, the apostrophe straight, curly or absent.</summary>
+    private static readonly System.Text.RegularExpressions.Regex BorderLine =
+        new(@"^\s*[-*]\s*\**(DON[’']?T|DO)\b\**[:\s]*(.+)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+    /// <summary>A measurable clause in backticks at the end: <c>`lightness &gt; 0.6`</c>, <c>`hue green &lt; 2%`</c>, <c>`colour #000000 &lt; 1%`</c>.</summary>
+    private static readonly System.Text.RegularExpressions.Regex BorderClause =
+        new(@"`\s*([a-z][a-z\- ]*(?:#[0-9a-f]{6})?)\s*(<=|>=|<|>)\s*([0-9]*\.?[0-9]+)\s*(%)?\s*`\s*\.?$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+    /// <summary>An image measured once for every clause a DOs &amp; DON'Ts list may ask of it, in OKLCH.</summary>
+    private sealed class BorderLook
+    {
+        private readonly List<(double L, double A, double B, double C, double H)> pixels = [];
+        private Polson.ExtendedMind.Taste.TasteColourReading reading = null!;
+
+        public static BorderLook Of(byte[] bytes)
+        {
+            var fetched = Polson.ExtendedMind.Taste.QlooImageSource.Decode(bytes, "the script");
+            if (!fetched.Success) throw new ArgumentException($"Stage.borders: {fetched.Error}");
+            var look = new BorderLook { reading = fetched.Colour! };
+            using var bitmap = SkiaSharp.SKBitmap.Decode(bytes);
+            var step = Math.Max(1, Math.Max(bitmap.Width, bitmap.Height) / 200);
+            for (var y = 0; y < bitmap.Height; y += step)
+                for (var x = 0; x < bitmap.Width; x += step)
+                {
+                    var p = bitmap.GetPixel(x, y);
+                    if (p.Alpha == 0) continue;
+                    var (L, C, H) = Polson.ExtendedMind.Taste.TasteColour.Oklch(p.Red, p.Green, p.Blue);
+                    look.pixels.Add((L, C * Math.Cos(H * Math.PI / 180), C * Math.Sin(H * Math.PI / 180), C, H));
+                }
+            return look;
+        }
+
+        /// <summary>The measure a clause names, or null when it names none.</summary>
+        public double? Measure(string metric)
+        {
+            if (metric.StartsWith("hue ", StringComparison.Ordinal))
+            {
+                var sector = Array.IndexOf(Polson.ExtendedMind.Taste.TasteVisual.SectorNames, metric[4..].Trim());
+                return sector < 0 ? null : pixels.Count(p => p.C >= Polson.ExtendedMind.Taste.TasteColour.NeutralChroma && (int)(p.H / 30) % 12 == sector) / (double)Math.Max(1, pixels.Count);
+            }
+            if (metric.StartsWith("colour ", StringComparison.Ordinal) || metric.StartsWith("color ", StringComparison.Ordinal))
+            {
+                var hex = metric[(metric.IndexOf(' ') + 1)..].Trim().TrimStart('#');
+                if (hex.Length != 6 || !int.TryParse(hex, System.Globalization.NumberStyles.HexNumber, null, out var rgb)) return null;
+                var (L, C, H) = Polson.ExtendedMind.Taste.TasteColour.Oklch((byte)(rgb >> 16), (byte)(rgb >> 8), (byte)rgb);
+                double a = C * Math.Cos(H * Math.PI / 180), b = C * Math.Sin(H * Math.PI / 180);
+                // Within 0.04 in Oklab: about as close as two colours can be and still be told apart side by side.
+                return pixels.Count(p => Math.Sqrt((p.L - L) * (p.L - L) + (p.A - a) * (p.A - a) + (p.B - b) * (p.B - b)) < 0.04) / (double)Math.Max(1, pixels.Count);
+            }
+            return metric switch
+            {
+                "lightness" => reading.Lightness,
+                "chroma" => reading.Chroma,
+                "colourful" or "colorful" => 1 - reading.Neutral,
+                "warmth" => reading.Lead?.GetValueOrDefault("hue") is double h ? 0.5 + 0.5 * Math.Cos((h - 60) * Math.PI / 180) : 0.5,
+                _ => null,
+            };
+        }
     }
 
     /// <summary>An axis as a script gives it: a measure with default poles, or judged values the studio placed.</summary>

@@ -194,10 +194,11 @@ once, before the beats, and record it in `direction.md` with its reasons.
   for text. Do not rebuild the company's brand identity — its signature colour as the whole palette, its typeface,
   its graphic devices — so the film reads as an explanation *of* the filing, not as the company's own
   communication. An accent that nods to the subject is fine; a film mistaken for investor relations is not.
-- **Style frames before motion, the book at the end.** The questions and figures are the document's, so there is no
-  concept to choose; the look is yours. Make style frames as the instructions say — the title and one answered
-  question — and hold the film to them in Stage 5; `process.pdf` carries the questions, the figures with their pages,
-  the style frames and a frame of each finished film.
+- **The design board before motion, the books at the end.** The questions and figures are the document's, so there is
+  no concept to choose; the look is yours. Draw the design board as the instructions say — a frame per answered
+  question, the title among them — with `treatment.md` and `dos.md`, and hold the film to the board in Stage 5.
+  `pitch.pdf` carries the treatment, the board and a frame of each finished film; `process.pdf` the questions and the
+  figures with their pages.
 - **Ambient detail stays in the background.** A few slow, low-contrast lines or dots (outlines at a low `amount`)
   can give the ground life; nothing ambient may move faster than the figures, or be bright enough to compete with
   them, and the flash check still applies.
@@ -265,7 +266,7 @@ computed })`** is the instructions' read-back, and for a report it carries the m
   marked found, computed, or left out — and any question the document does not answer. The director confirms the
   facts before anything moves.
 - **Q2** the tone and pace, with the length per scene.
-- **Q3** and **Q4** as the instructions say: the animatic, then the sheet.
+- **Q3** and **Q4** as the instructions say: the design board, then the sheet.
 
 ### direction.md
 

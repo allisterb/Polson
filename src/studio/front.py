@@ -191,7 +191,7 @@ def still_renders(project: Path, events: list[dict[str, Any]]):
     root = project.resolve()
     executions = research_executions(events)
     for event in reversed(events):
-        if event.get("type") != "render" or (event.get("motion") or "").lower() == "sheet":
+        if event.get("type") != "render" or (event.get("motion") or "").lower() in ("sheet", "board"):
             continue
         if is_research(event, executions):
             continue                                # a sheet of Qloo's pictures is never a request's face (research.py)

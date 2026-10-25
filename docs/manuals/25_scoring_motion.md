@@ -1,6 +1,6 @@
 # Studio Manual 25: Scoring Motion
 
-> **Credits & Theoretical Foundation**: **§5 distils John Lasseter, "Principles of Traditional Animation Applied to 3D Computer Animation" (*Computer Graphics* 21(4), SIGGRAPH '87, pp. 35–44) and John Colette & Austin Shaw, *Motion Design Toolkit* (Routledge, 2023), ch. 1, 2 and 8; §12 distils Colette & Shaw ch. 1, 7 and 11; both ledgered 2026-10-24 and cited by section or chapter where used. §11 distils Walt Stanchfield's *Drawn to Life* (vol. 1 ch. 41 and others), cited by chapter there; §1–§4 and §6–§10 distil no book in `reference/`.** Lasseter's source, Thomas & Johnston's *The Illusion of Life* (1981), is not in `reference/` and is cited only through him. This header used to say the corpus held no animation text. That was wrong: Stanchfield taught at Disney, and his lectures, ledgered on 2026-09-25 and first read only for gesture, include chapters on timing, phrasing and overlap. §5's received practices are corroborated there. The rest comes from three places, each named where it is used: the **position paradigm** is GSAP's, adopted deliberately and credited (it is not from the corpus and no claim is made about the rest of that library); the **cost figures** are our own measurements, recorded in `docs/motion-score-api.md` §3; and the **seek-rather-than-play** model is the studio's own, argued from the medium — an agent renders frames, it does not watch them. Until 2026-10-24 §5 stated its timing craft as received practice without a source; it is now sourced, and anything in it that is the studio's own is marked as ours. The calls are documented at `polson://sdk/core/Motion`.
+> **Credits & Theoretical Foundation**: **§5 distils John Lasseter, "Principles of Traditional Animation Applied to 3D Computer Animation" (*Computer Graphics* 21(4), SIGGRAPH '87, pp. 35–44) and John Colette & Austin Shaw, *Motion Design Toolkit* (Routledge, 2023), ch. 1, 2 and 8; §12 distils Colette & Shaw ch. 1, 7 and 11; both ledgered 2026-10-24 and cited by section or chapter where used. §13 distils Austin Shaw, *Design for Motion: Motion Design Techniques & Fundamentals* (Focal Press, 2016), ch. 2–4, 7 and 8, ledgered 2026-10-24 (the same retrieval clause: methods in our words, never its text). §11 distils Walt Stanchfield's *Drawn to Life* (vol. 1 ch. 41 and others), cited by chapter there; §1–§4 and §6–§10 distil no book in `reference/`.** Lasseter's source, Thomas & Johnston's *The Illusion of Life* (1981), is not in `reference/` and is cited only through him. This header used to say the corpus held no animation text. That was wrong: Stanchfield taught at Disney, and his lectures, ledgered on 2026-09-25 and first read only for gesture, include chapters on timing, phrasing and overlap. §5's received practices are corroborated there. The rest comes from three places, each named where it is used: the **position paradigm** is GSAP's, adopted deliberately and credited (it is not from the corpus and no claim is made about the rest of that library); the **cost figures** are our own measurements, recorded in `docs/motion-score-api.md` §3; and the **seek-rather-than-play** model is the studio's own, argued from the medium — an agent renders frames, it does not watch them. Until 2026-10-24 §5 stated its timing craft as received practice without a source; it is now sourced, and anything in it that is the studio's own is marked as ours. The calls are documented at `polson://sdk/core/Motion`.
 > **Purpose**: How to build a piece of motion that can be inspected, revised and resumed — why a score is a function of time rather than a sequence of events, how to place beats so that editing one does not break the rest, and how to look at a result you cannot watch. **It governs the building of a score, not the decision that the piece should move**; see the scope note below.
 
 ---
@@ -1025,3 +1025,82 @@ music added over it is not.
 film meant for them must make its case with the sound off — every claim on screen, not only in the voice — and should
 still be cut to a track, so that even silent it moves to a rhythm. A silent film with no track behind its timing tends
 to have none.
+
+---
+
+## 13. What a Motion Studio Delivers Before Anything Moves
+
+> **Implemented by**: `comp.board`, `Stage.shape`, `Stage.borders` and `Stage.book`'s `kind`.
+
+Shaw's account of design for motion is a sequence of artifacts, each closing down what the project could be until it is
+one thing (*Design for Motion*, ch. 6: a project starts as "can it be anything?" and tips into "is it becoming
+something?"). Most of the early ones the studio already makes — the brief, the mind map (Manual 29 §2a), the thumbnails
+(the concept sheets). These four are the ones a client is shown, and they come before the motion.
+
+### 13a. The design board
+
+**A design board is the film told in full style frames**: a sequence read left to right and top to bottom, each frame a
+key moment at the finished look, with the camera's changes and the transitions at least suggested (ch. 3). It differs
+from a storyboard in that every frame is finished; it differs from a contact sheet in that every frame is captioned for
+someone who has not seen the film. It is what the client agrees to before anything moves, because changing the look
+after the motion is built costs the work twice.
+
+- **One frame per beat, and enough of them**: Shaw counts nine to twelve for a thirty-second spot (ch. 16), so five or
+  six for fifteen seconds. A board thinner than one frame per 3.5 s comes back with a warning.
+- **Each caption says what happens and why it matters**; the camera line says how it is seen and how it leaves.
+- **The board's frames are the film's style frames.** Keep them full size (`stills`) and hold the finished film to every
+  one at the end, as §12b holds it to its resolve.
+
+```js
+comp.board('artifacts/03_board.png', { title: 'Nightshift — design board', stills: 'artifacts/03_board', frames: [
+    { time: 1,    caption: 'Night. An empty teal line across a dark ground: something is waiting.', camera: 'Locked off.' },
+    { time: 4.6,  caption: 'The name arrives, as if steeped into the dark.', camera: 'Slow push in.' },
+    { time: 7.5,  caption: 'The claim settles under it: twenty hours, said once.', camera: 'Hold.' },
+    { time: 11.5, caption: 'Dawn: the ground warms to cream, and the card resolves.', camera: 'Cross-fade to the end card.' }] });
+```
+
+### 13b. The written treatment, and the shape of the story
+
+**A treatment is the story in words** (ch. 8): a paragraph to a page that tells what happens, in order, and what it
+means — what a board cannot say, and what a client reads first. "If you can write down your idea in a paragraph, and it
+makes sense", the board has a foundation. Write it as `treatment.md`, in the present tense, once the concept is chosen.
+
+**Give it a shape.** Shaw teaches story with the graph editor: a velocity that never changes is a straight line and
+dull, and a curve that rises and turns is alive. `Stage.shape` draws each beat's intensity — your judgement, 0 to 1 —
+over the film's time, and warns when the line is flat. Put the drawing beside the treatment.
+
+```js
+Stage.shape(ctx, { duration: 15, beats: [
+    { name: 'Night', time: 1, intensity: 0.2 }, { name: 'The name', time: 4.6, intensity: 0.7 },
+    { name: 'The claim', time: 7.5, intensity: 0.9 }, { name: 'Dawn', time: 12, intensity: 0.4 }] });
+```
+
+### 13c. The DOs & DON'Ts list, checked
+
+**A DOs & DON'Ts list sets the project's creative borders** (ch. 7): what belongs in it and what does not — the palette,
+the type, the materials, the camera, how the story unfolds. It is loose enough to grow, and firm enough to say no.
+
+The studio's version (ours): **write each line so it can be checked where it can.** A line ending with a clause in
+backticks is measured by `Stage.borders` on the frames you give it; the rest are judged, and listed so you judge them.
+
+```markdown
+- DO keep the ground dark until dawn `lightness < 0.35`
+- DON'T use pure black anywhere `colour #000000 < 1%`
+- DON'T let green into it `hue green < 2%`
+- DON'T set more than two typefaces `fonts <= 2`
+- DON'T cut on the claim; let it settle.
+```
+
+Write it as `dos.md` before the board, check the board's stills against it, and check the finished film's frames again
+at the end. A broken line is a decision recorded in `direction.md` or a fault to fix — never a line quietly deleted.
+
+### 13d. The pitch book and the process book
+
+**Shaw keeps two books** (ch. 4). A **process book** documents how the work was arrived at — the thinking, the
+methods, the discarded paths — and is what shows a reader how the studio thinks. A **pitch book** sells the chosen
+concept: clean, consistent, one typeface, the work given room, and nothing in it that is not the idea being sold.
+
+- `Stage.book('pitch.pdf', { kind: 'pitch', … })`: the treatment and its shape, the design board, the style frames,
+  the finished film's frames. It is warned about if it shows a workshop sheet, or has no board or treatment.
+- `Stage.book('process.pdf', { kind: 'process', … })`: everything else, in the order it was made — the map, the field,
+  the dump, the concepts, the matrix, the boards that changed.

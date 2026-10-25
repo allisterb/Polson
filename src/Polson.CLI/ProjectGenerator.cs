@@ -656,7 +656,7 @@ internal static class ProjectGenerator
         // once per beat, and every pass then captures every frame. Frames are cheap (Manual 25 §6)
         // but a run renders its film three or four times, at draft size and at full size.
         ["animation"] = 40,
-        // Fifteen seconds of motion graphics: beats, an animatic, keys, two sheets and a video that takes a quarter of a
+        // Fifteen seconds of motion graphics: beats, a design board, keys, two sheets and a video that takes a quarter of a
         // minute to encode. A poster's allowance, plus the motion; seventy since the brain dump (Manual 29 §2c).
         ["trailer"] = 70,
         // A pitch is two minutes of film to the trailer's fifteen: a deck (and perhaps a model) read and checked, about
@@ -1154,8 +1154,9 @@ internal static class ProjectGenerator
         "direction.md", "poster.js", "trailer.js", "trailer.sif",
         // math_explainer's film script and its checked plan.
         "explainer.js", "plan.md",
-        // The mind map's outline (Manual 29 §2a), the concept presentation (§8) and the process book Stage.book assembles.
-        "mindmap.md", "concepts.md", "process.pdf"
+        // The mind map's outline (Manual 29 §2a), the concept presentation (§8), the motion deliverables of Manual 25 §13 —
+        // the treatment, the DOs & DON'Ts — and the two books Stage.book assembles.
+        "mindmap.md", "concepts.md", "treatment.md", "dos.md", "process.pdf", "pitch.pdf"
     ];
 
     /// <summary>What a clear actually managed to do.</summary>

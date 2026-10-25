@@ -243,6 +243,45 @@ public class MotionVideoTests : TestsRuntime, IDisposable
     }
 
     /// <summary>
+    /// A design board (Shaw, ch. 3) is the film in captioned frames: each drawn whole in its cell, each frame also kept full
+    /// size when asked, recorded for the studio as a board, and warned about when it is too thin for the film's length.
+    /// </summary>
+    [Fact]
+    public void TestABoardCaptionsEveryFrameKeepsItsStillsAndCountsItsFrames()
+    {
+        var comp = Ramp(new MotionToolkit(root), 960);
+
+        var board = comp.Board("artifacts/board.png", Opts(("title", "Ramp — design board"), ("stills", "artifacts/board"), ("frames", new object[]
+        {
+            Opts(("time", 0d), ("caption", "Red fills the frame: the opening, before anything has happened."), ("camera", "Locked off.")),
+            Opts(("time", 1.96), ("caption", "Blue has taken it over."), ("camera", "Cut to black.")),
+        })));
+
+        Assert.Equal(2, board["cells"]);
+        Assert.Equal(["artifacts/board_01.png", "artifacts/board_02.png"], ((object?[])board["stills"]!).Cast<string>());
+        using (var first = SKBitmap.Decode(File.ReadAllBytes(Path.Combine(root, "artifacts", "board_01.png"))))
+        {
+            Assert.Equal((960, 960), (first.Width, first.Height));
+            Assert.True(first.GetPixel(first.Width / 2, first.Height / 2).Red > 200);
+        }
+        using var image = SKBitmap.Decode(File.ReadAllBytes(Path.Combine(root, "artifacts", "board.png")));
+        Assert.Equal((int)board["width"]!, image.Width);
+        Assert.Empty((object?[])board["warnings"]!);                         // two frames for two seconds is plenty
+
+        // Thirty seconds told in two frames: Shaw's nine to twelve, said back as a warning rather than refused.
+        var motion = new MotionToolkit(root);
+        var spot = motion.Composition(Opts(("width", 64d), ("height", 36d), ("fps", 25d), ("duration", 30d)));
+        spot.Fill(Opts(("color", "#2a7f8f")));
+        var thin = spot.Board("artifacts/thin.png", Opts(("frames", new object[]
+            { Opts(("time", 0d), ("caption", "The open.")), Opts(("time", 29d), ("caption", "The end card.")) })));
+        Assert.Contains("2 frames for 30 s", Assert.Single((object?[])thin["warnings"]!) as string);
+        Assert.Contains("no caption", Assert.Throws<ArgumentException>(() =>
+            comp.Board("artifacts/bad.png", Opts(("frames", new object[] { Opts(("time", 1d)) })))).Message);
+        Assert.Contains("outside the film", Assert.Throws<ArgumentException>(() =>
+            comp.Board("artifacts/bad.png", Opts(("frames", new object[] { Opts(("time", 9d), ("caption", "Late.")) })))).Message);
+    }
+
+    /// <summary>
     /// A move's graph measures what an animator reads off it: a middle key left on <c>halt</c> stops a move that should pass
     /// through; <c>clamped</c> passes; <c>auto</c> on resting keys dips below them — Lasseter's Luxo base through the floor.
     /// </summary>

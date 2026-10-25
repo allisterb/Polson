@@ -1208,6 +1208,152 @@ public sealed class MotionComposition : MotionLayerList
     }
 
     /// <summary>
+    /// The design board (Shaw, <i>Design for Motion</i>, ch. 3): the film told in a sequence of full style frames, read left
+    /// to right and top to bottom, each numbered and timed, with what happens in it and what the camera or the cut does.
+    /// <c>options</c>: <c>{ frames: [{ time, caption, camera? }], cols?, scale?, title?, stills?, background?, fontFamily?,
+    /// format?, quality? }</c>. Returns <c>{ path, cells, times, stills, warnings, width, height, bytes }</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Not a contact sheet.</b> <c>comp.sheet</c> is the agent's view of the film, labelled with times; a design board is
+    /// a deliverable, the look and the story agreed before anything moves, so each frame carries words a client reads. It is
+    /// recorded as <c>motion: 'board'</c>, which the studio shows, where a sheet is the agent's and is not.
+    /// </para>
+    /// <para>
+    /// <b><c>stills</c></b> writes every frame at full size as well, <c>{stills}_01.png</c>, <c>_02</c>…: the board's frames
+    /// are the film's style frames, and the finished film is held to each of them at the end. Shaw counts nine to twelve
+    /// frames for a thirty-second spot; a board with fewer than one frame per 3.5 s of film comes back with a warning.
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, object?> Board(string filePath, object? options = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+        var o = new MotionOptions(options, "composition.board", "frames", "cols", "scale", "title", "stills", "background",
+            "fontFamily", "format", "quality");
+        if (o.Raw("frames") is not IEnumerable given || given is string)
+            throw new ArgumentException("composition.board needs frames: [{ time, caption, camera? }], one per beat, in order.");
+        var frames = given.Cast<object?>().Select((f, i) =>
+        {
+            var d = JsInterop.AsDict(f) ?? throw new ArgumentException($"composition.board: frame {i + 1} is {{ time, caption, camera? }}.");
+            if (d["time"] is null) throw new ArgumentException($"composition.board: frame {i + 1} has no time.");
+            var time = Convert.ToDouble(d["time"], CultureInfo.InvariantCulture);
+            if (time < 0 || time > Duration + 1e-9) throw new ArgumentException($"composition.board: frame {i + 1} at {time:0.###} s is outside the film (0 to {Duration:0.###} s).");
+            var caption = d["caption"]?.ToString();
+            if (string.IsNullOrWhiteSpace(caption))
+                throw new ArgumentException($"composition.board: frame {i + 1} has no caption. Say what happens in it — a board is read by someone who has not seen the film.");
+            return (Time: time, Caption: caption.Trim(), Camera: d["camera"]?.ToString()?.Trim());
+        }).ToArray();
+        if (frames.Length is 0 or > 24)
+            throw new ArgumentException($"composition.board takes 1 to 24 frames, not {frames.Length}.");
+
+        var warnings = new List<string>();
+        if (frames.Length < Math.Ceiling(Duration / 3.5))
+            warnings.Add($"{frames.Length} frames for {Duration:0.#} s of film: Shaw counts nine to twelve for thirty seconds, so about "
+                + $"{Math.Ceiling(Duration / 3)} here. A beat the board skips is one the client has not agreed to.");
+        if (frames.Zip(frames.Skip(1)).Any(p => p.Second.Time <= p.First.Time))
+            warnings.Add("The frames are not in time order; a board reads left to right as the film plays.");
+
+        var scale = Math.Clamp(o.Number("scale", Math.Min(1, 420d / Width)), 0.05, 1);
+        var (cellW, cellH) = (Math.Max(1, (int)Math.Round(Width * scale)), Math.Max(1, (int)Math.Round(Height * scale)));
+        var cols = Math.Max(1, (int)o.Number("cols", frames.Length <= 4 ? frames.Length : 3));
+        var rows = (int)Math.Ceiling(frames.Length / (double)cols);
+        const float Gap = 22, Pad = 28, Lead = 17;
+        var family = o.Has("fontFamily") ? o.Raw("fontFamily")!.ToString()! : "Georgia";
+        using var face = SKTypeface.FromFamilyName(family);
+        using var italicFace = SKTypeface.FromFamilyName(family, SKFontStyle.Italic);
+        using var boldFace = SKTypeface.FromFamilyName(family, SKFontStyle.Bold);
+        using var meta = new SKFont(face, 12);
+        using var body = new SKFont(face, 14);
+        using var camera = new SKFont(italicFace, 13);
+        using var heading = new SKFont(boldFace, 22);
+
+        // The words under each frame: its number and time, what happens (up to three lines), and the camera (one).
+        var texts = frames.Select(f => (Caption: Wrap(f.Caption, body, cellW, 3), Camera: f.Camera is { Length: > 0 } c ? Wrap(c, camera, cellW, 1) : [])).ToArray();
+        var textH = Lead + texts.Max(t => t.Caption.Length + t.Camera.Length) * Lead + 6;
+        var titleH = o.Has("title") ? 44f : 0f;
+        var sheetW = (int)Math.Ceiling(cols * cellW + (cols - 1) * Gap + Pad * 2);
+        var sheetH = (int)Math.Ceiling(titleH + rows * (cellH + textH) + (rows - 1) * Gap + Pad * 2);
+
+        var stills = new List<object?>();
+        using var sheet = new SKBitmap(sheetW, sheetH, SKColorType.Rgba8888, SKAlphaType.Premul);
+        using (var canvas = new SKCanvas(sheet))
+        {
+            canvas.Clear(o.Has("background") ? SkiaColorParser.Parse(o.Raw("background")!.ToString()!) : SkiaColorParser.Parse("#f2efe8"));
+            using var ink = new SKPaint { Color = SkiaColorParser.Parse("#15151a"), IsAntialias = true };
+            using var grey = new SKPaint { Color = SkiaColorParser.Parse("#6b675e"), IsAntialias = true };
+            using var rule = new SKPaint { Color = SkiaColorParser.Parse("#15151a"), IsStroke = true, StrokeWidth = 1, IsAntialias = true };
+            if (o.Has("title")) canvas.DrawText(o.Raw("title")!.ToString()!, Pad, Pad + 22, SKTextAlign.Left, heading, ink);
+
+            for (var i = 0; i < frames.Length; i++)
+            {
+                ScriptDeadline.ThrowIfPassed("comp.board");
+                var x = Pad + (i % cols) * (cellW + Gap);
+                var y = Pad + titleH + (i / cols) * (cellH + textH + Gap);
+                using var frame = Render(frames[i].Time);
+                using (var flat = new SKBitmap(Width, Height, SKColorType.Rgba8888, SKAlphaType.Premul))
+                {
+                    using (var c = new SKCanvas(flat)) { c.Clear(SKColors.White); c.DrawBitmap(frame.SkBitmap, 0, 0); }
+                    using var image = SKImage.FromBitmap(flat);
+                    canvas.DrawImage(image, SKRect.Create(0, 0, Width, Height), SKRect.Create(x, y, cellW, cellH),
+                        new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear));
+                    if (o.Has("stills"))
+                    {
+                        var still = $"{o.Raw("stills")}_{i + 1:00}.png";
+                        var full = ProjectPath.Resolve(projectRoot, still, "stills", "Write to");
+                        Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+                        var png = SkiaImageEncoder.Encode(flat, "png", 100);
+                        File.WriteAllBytes(full, png);
+                        motion?.Record("render", full, new() { ["motion"] = "still", ["format"] = "png", ["bytes"] = (long)png.Length, ["width"] = Width, ["height"] = Height });
+                        stills.Add(still);
+                    }
+                }
+                canvas.DrawRect(SKRect.Create(x, y, cellW, cellH), rule);
+
+                var ty = y + cellH + Lead;
+                var next = i + 1 < frames.Length ? frames[i + 1].Time : Duration;
+                canvas.DrawText($"{i + 1:00}   {frames[i].Time:0.0}–{next:0.0} s", x, ty, SKTextAlign.Left, meta, grey);
+                foreach (var line in texts[i].Caption) canvas.DrawText(line, x, ty += Lead, SKTextAlign.Left, body, ink);
+                foreach (var line in texts[i].Camera) canvas.DrawText(line, x, ty += Lead, SKTextAlign.Left, camera, grey);
+            }
+        }
+
+        var format = o.Has("format") ? o.Raw("format")!.ToString()! : "png";
+        var bytes = SkiaImageEncoder.Encode(sheet, format, (int)o.Number("quality", 92));
+        var path = ProjectPath.Resolve(projectRoot, filePath, nameof(filePath), "Write to");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllBytes(path, bytes);
+        motion?.Record("render", path, new()
+        {
+            ["motion"] = "board", ["format"] = format.ToLowerInvariant() is "jpg" ? "jpeg" : format.ToLowerInvariant(),
+            ["bytes"] = (long)bytes.Length, ["cells"] = frames.Length, ["width"] = sheetW, ["height"] = sheetH,
+            ["warnings"] = warnings.Count == 0 ? null : warnings.ToArray(),
+        });
+        return new()
+        {
+            ["path"] = filePath, ["cells"] = frames.Length, ["times"] = frames.Select(f => (object?)f.Time).ToArray(),
+            ["stills"] = stills.ToArray(), ["warnings"] = warnings.Cast<object?>().ToArray(),
+            ["width"] = sheetW, ["height"] = sheetH, ["bytes"] = (long)bytes.Length,
+        };
+
+        // Words to lines of `width`, at most `max`; the last line cut with an ellipsis when the words run over.
+        static string[] Wrap(string text, SKFont font, float width, int max)
+        {
+            var lines = new List<string>();
+            var line = "";
+            foreach (var word in text.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (line.Length > 0 && font.MeasureText(line + " " + word) > width) { lines.Add(line); line = word; }
+                else line = line.Length == 0 ? word : line + " " + word;
+            }
+            if (line.Length > 0) lines.Add(line);
+            if (lines.Count <= max) return [.. lines];
+            var last = string.Join(' ', lines.Skip(max - 1));
+            while (last.Length > 1 && font.MeasureText(last + "…") > width) last = last[..^1];
+            return [.. lines.Take(max - 1), last.TrimEnd() + "…"];
+        }
+    }
+
+    /// <summary>
     /// The composition as an animated SVG: SMIL animation on ordinary elements, playing in a browser and
     /// in an <c>&lt;img&gt;</c>. <c>options</c>: <c>{ loop?, fps? }</c> — <c>loop</c> repeats instead of
     /// holding the last frame; <c>fps</c> is the rate for values that cannot be written exactly.

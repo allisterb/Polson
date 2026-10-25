@@ -251,10 +251,11 @@ once, before the beats, and record it in `direction.md` with its reasons.
   the market size the business model then divides — keep it in a group outside both scenes and change the scene around
   it: a partial edit (Manual 25 §12c), which says *the same number* without a word.
 - **The ask is the resolve.** Design the end on the ask first, and let the earlier scenes lead to it (§12b).
-- **Style frames before motion, the book at the end.** The case is the deck's, so there is no concept to choose; the
-  look is yours. Make three style frames as the instructions say — a figure scene, the projections scene, the ask — and
-  hold the film to them in Stage 5. `process.pdf` carries the scene list, the label confirmations, the style frames and a
-  frame of each finished film.
+- **The design board before motion, the books at the end.** The case is the deck's, so there is no concept to choose;
+  the look is yours. Draw the design board as the instructions say — a frame per scene, the figure scenes, the
+  projections and the ask among them — with `treatment.md` and `dos.md`, and hold the film to the board in Stage 5.
+  `pitch.pdf` is the case as a client reads it: the treatment, the board, a frame of each finished film. `process.pdf`
+  carries the scene list and the label confirmations.
 - **Your palette, not the company's.** One accent and its tints on a neutral; contrast 4.5 : 1 for text. Do not rebuild
   the company's identity — its colour as the whole palette, its typeface, its devices. For a retelling this is the
   whole difference between a film *about* the deck and one passing as the company's.
@@ -339,7 +340,7 @@ number: look at its frame before deciding. The check records its own verdict; do
   disagreement between a derivation and its printed result, and between the deck and the model; and the sections
   dropped for length. The director confirms the case before anything moves.
 - **Q2** the tone, pace and voice.
-- **Q3** and **Q4** as the instructions say: the animatic, then the sheet.
+- **Q3** and **Q4** as the instructions say: the design board, then the sheet.
 
 ### direction.md
 
