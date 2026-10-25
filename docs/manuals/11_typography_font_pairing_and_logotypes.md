@@ -106,15 +106,19 @@ What the shorthand accepts:
 | Family | `"Source Serif 4", Georgia, serif` | Quoted, multi-word and comma-separated all parse. |
 
 > [!TIP]
-> Confirm the faces you actually care about before building on them, rather than after:
+> **Cast from what is installed, not from what you hope is.** `Skia.Font.families()` is the whole
+> repertory, often hundreds of faces; audition from it, then confirm the one you chose:
 >
 > ```js
-> const wanted = ['Didot', 'Bodoni MT', 'Playfair Display', 'Georgia'];
-> log('usable: ' + wanted.filter(f => Skia.Font.has(f)).join(', '));
+> const all = Skia.Font.families();
+> log(all.length + ' families: ' + all.join(', '));
+> log('Bodoni MT is installed: ' + Skia.Font.has('Bodoni MT'));
 > ```
 >
-> `Skia.Font.resolve(family)` reports what a name would *actually* become — when it comes back as
-> something other than what you asked for, that request fell through.
+> Testing a list of names you hoped for finds only those names: becool1 tried 22, found six, and took the
+> six for everything installed, with 242 on the machine. `Skia.Font.resolve(family)` reports what a name
+> would *actually* become — when it comes back as something other than what you asked for, that request
+> fell through.
 
 ### Setting Other Scripts
 
@@ -135,8 +139,12 @@ the script substitutes something that was never chosen.
 | Bengali, Tamil, Gujarati, Gurmukhi, Telugu, Kannada, Malayalam | `Noto Sans <Script>` | |
 | Thai, Lao, Khmer, Myanmar | `Noto Sans <Script>` | |
 
-These are what the studio's image installs; a developer's machine may have others. Check with
-`Skia.Font.has(...)` first, as above.
+These are what the studio's image installs; a developer's machine may have others instead. **When the
+named face is missing, ask for the script, not the name**: `Skia.Font.families('日本語の題名')` lists every
+face on this machine that sets that line with its own glyphs (a Windows machine sets Japanese in Yu Gothic
+and MS Gothic), and `Skia.Font.covers(family, text)` checks one. Only when that list is empty is the script
+out of reach, and then say so in `direction.md`; never set an audience's language aside for a face you did
+not look for.
 
 **All three text calls shape**: Snap's `paper.text(...)`, Motion's `comp.text(...)` and the canvas
 `ctx.fillText(...)` / `measureText(...)`. Arabic letters join, right-to-left scripts run right to left, and a

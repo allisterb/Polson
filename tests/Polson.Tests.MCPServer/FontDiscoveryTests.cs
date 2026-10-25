@@ -41,6 +41,31 @@ public class FontDiscoveryTests : TestsRuntime
         Assert.Contains("nonsense=false", log, System.StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// families(text) is the faces that set a line with their own glyphs, a subset of all of them, each of which covers it;
+    /// Arial sets Latin and not Japanese, and a missing family covers nothing. becool1 took six hoped-for names for the
+    /// whole repertory and set a Tokyo film in English.
+    /// </summary>
+    [Fact]
+    public void TestFamiliesForAScriptAreTheFacesThatCoverIt()
+    {
+        var result = Run("""
+            const all = Skia.Font.families();
+            const japanese = Skia.Font.families('日本語の題名');
+            log('subset=' + japanese.every(f => all.includes(f)));
+            log('fewer=' + (japanese.length < all.length));
+            log('eachCovers=' + japanese.every(f => Skia.Font.covers(f, '日本語の題名')));
+            log('arialLatin=' + Skia.Font.covers('Arial', 'BE COOL'));
+            log('arialJapanese=' + Skia.Font.covers('Arial', '日本語'));
+            log('missing=' + Skia.Font.covers('NoSuchFontXYZ', 'A'));
+            """);
+
+        Assert.True(result.Success, result.Error);
+        var log = string.Join("\n", result.Logs);
+        foreach (var expected in new[] { "subset=true", "fewer=true", "eachCovers=true", "arialLatin=true", "arialJapanese=false", "missing=false" })
+            Assert.Contains(expected, log, System.StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>A fallback must be visible: resolve reports what would really be used.</summary>
     [Fact]
     public void TestResolveRevealsAFallback()

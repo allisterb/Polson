@@ -623,12 +623,34 @@ public class SkiaTracerApi
 public class SkiaFontApi
 {
     #region Methods
-    /// <summary>Every font family installed on this machine, sorted.</summary>
-    public string[] Families()
+    /// <summary>
+    /// Every font family installed on this machine, sorted; given <paramref name="text"/>, only the families whose own
+    /// glyphs set every character of it — <c>families('日本語')</c> is the faces that can set Japanese.
+    /// </summary>
+    /// <remarks>
+    /// becool1 tested a list of 22 names it hoped for with <c>has()</c>, found six, and reported those as everything
+    /// installed: it addressed Tokyo in English with Yu Gothic and MS Gothic on the machine. The whole repertory is here.
+    /// </remarks>
+    public string[] Families(string? text = null)
     {
         ProbeScope.Record(ProbeScope.Kinds.Capability);
         using var manager = SKFontManager.CreateDefault();
-        return [.. manager.FontFamilies.OrderBy(f => f, StringComparer.OrdinalIgnoreCase)];
+        var all = manager.FontFamilies.OrderBy(f => f, StringComparer.OrdinalIgnoreCase);
+        return string.IsNullOrEmpty(text) ? [.. all] : [.. all.Where(f => Sets(f, text))];
+    }
+
+    /// <summary>Whether <paramref name="family"/> is installed and sets every character of <paramref name="text"/> with its own glyphs.</summary>
+    public bool Covers(string family, string text) => Has(family) && Sets(family.Trim(), text);
+
+    /// <summary>Whether the face itself has a glyph for each character, spaces aside, without falling back to another.</summary>
+    private static bool Sets(string family, string text)
+    {
+        using var typeface = SKTypeface.FromFamilyName(family);
+        if (typeface is null) return false;
+        using var font = new SKFont(typeface);
+        foreach (var rune in text.EnumerateRunes())
+            if (!System.Text.Rune.IsWhiteSpace(rune) && !font.ContainsGlyph(rune.Value)) return false;
+        return true;
     }
 
     /// <summary>Whether <paramref name="family"/> resolves to itself rather than a substitute.</summary>

@@ -1,6 +1,6 @@
 # Studio Manual 25: Scoring Motion
 
-> **Credits & Theoretical Foundation**: **§5 distils John Lasseter, "Principles of Traditional Animation Applied to 3D Computer Animation" (*Computer Graphics* 21(4), SIGGRAPH '87, pp. 35–44) and John Colette & Austin Shaw, *Motion Design Toolkit* (Routledge, 2023), ch. 1, 2 and 8; §12 distils Colette & Shaw ch. 1, 7 and 11; both ledgered 2026-10-24 and cited by section or chapter where used. §13 distils Austin Shaw, *Design for Motion: Motion Design Techniques & Fundamentals* (Focal Press, 2016), ch. 2–4, 7 and 8, ledgered 2026-10-24 (the same retrieval clause: methods in our words, never its text); §14 distils its ch. 9, and restates Manual 21 §1's depth rules (Glebas, after Perkins) because no motion workflow loads Manual 21; §16 distils its ch. 13, and its costs are our measurements; §15 distils its ch. 10 (with two points from ch. 11), and its camera mappings (tilt, roll, the laid-down plane) are ours, measured on the engine. §11 distils Walt Stanchfield's *Drawn to Life* (vol. 1 ch. 41 and others), cited by chapter there; §1–§4 and §6–§10 distil no book in `reference/`.** Lasseter's source, Thomas & Johnston's *The Illusion of Life* (1981), is not in `reference/` and is cited only through him. This header used to say the corpus held no animation text. That was wrong: Stanchfield taught at Disney, and his lectures, ledgered on 2026-09-25 and first read only for gesture, include chapters on timing, phrasing and overlap. §5's received practices are corroborated there. The rest comes from three places, each named where it is used: the **position paradigm** is GSAP's, adopted deliberately and credited (it is not from the corpus and no claim is made about the rest of that library); the **cost figures** are our own measurements, recorded in `docs/motion-score-api.md` §3; and the **seek-rather-than-play** model is the studio's own, argued from the medium — an agent renders frames, it does not watch them. Until 2026-10-24 §5 stated its timing craft as received practice without a source; it is now sourced, and anything in it that is the studio's own is marked as ours. The calls are documented at `polson://sdk/core/Motion`.
+> **Credits & Theoretical Foundation**: **§5 distils John Lasseter, "Principles of Traditional Animation Applied to 3D Computer Animation" (*Computer Graphics* 21(4), SIGGRAPH '87, pp. 35–44) and John Colette & Austin Shaw, *Motion Design Toolkit* (Routledge, 2023), ch. 1, 2 and 8; §12 distils Colette & Shaw ch. 1, 7 and 11; both ledgered 2026-10-24 and cited by section or chapter where used. §13 distils Austin Shaw, *Design for Motion: Motion Design Techniques & Fundamentals* (Focal Press, 2016), ch. 2–4, 7 and 8, ledgered 2026-10-24 (the same retrieval clause: methods in our words, never its text); §14 distils its ch. 9, and restates Manual 21 §1's depth rules (Glebas, after Perkins) because no motion workflow loads Manual 21; §4's symptom table and §5j's motion identity are organised after LottieFiles' *Motion Design Skill* (MIT, 2025, ledgered 2026-10-25), whose own content is unsourced and is not adopted; §16 distils its ch. 13 (§16f its ch. 15), and its costs are our measurements; §17 distils its ch. 17 with Rob Carter, Ben Day & Philip Meggs, *Typographic Design: Form and Communication* (Wiley, 5th ed., 2012), pp. 115, 143–147 and 173–175, ledgered 2026-10-16 (the same retrieval clause: our words, cited by folio); §15 distils its ch. 10 (with two points from ch. 11), and its camera mappings (tilt, roll, the laid-down plane) are ours, measured on the engine. §11 distils Walt Stanchfield's *Drawn to Life* (vol. 1 ch. 41 and others), cited by chapter there; §1–§4 and §6–§10 distil no book in `reference/`.** Lasseter's source, Thomas & Johnston's *The Illusion of Life* (1981), is not in `reference/` and is cited only through him. This header used to say the corpus held no animation text. That was wrong: Stanchfield taught at Disney, and his lectures, ledgered on 2026-09-25 and first read only for gesture, include chapters on timing, phrasing and overlap. §5's received practices are corroborated there. The rest comes from three places, each named where it is used: the **position paradigm** is GSAP's, adopted deliberately and credited (it is not from the corpus and no claim is made about the rest of that library); the **cost figures** are our own measurements, recorded in `docs/motion-score-api.md` §3; and the **seek-rather-than-play** model is the studio's own, argued from the medium — an agent renders frames, it does not watch them. Until 2026-10-24 §5 stated its timing craft as received practice without a source; it is now sourced, and anything in it that is the studio's own is marked as ours. The calls are documented at `polson://sdk/core/Motion`.
 > **Purpose**: How to build a piece of motion that can be inspected, revised and resumed — why a score is a function of time rather than a sequence of events, how to place beats so that editing one does not break the rest, and how to look at a result you cannot watch. **It governs the building of a score, not the decision that the piece should move**; see the scope note below.
 
 ---
@@ -203,6 +203,28 @@ What comes back is three findings:
 
 The watching is a judgment, and the check records it as one itself. Settle a stray in a later script than the check, after you have looked at its frame.
 
+### What the sheet shows, and where to look
+
+A sheet shows symptoms, and the fix for each is usually somewhere specific. Find the row for what you see, check the
+cause, and measure where there is a check rather than trusting the sheet:
+
+| You see | Usually | Fix | Measured by |
+|---|---|---|---|
+| **Mechanical, robotic** motion | one ease everywhere, or none; straight paths; everything starting and stopping together | eases that start, pass and stop (§5b); arcs (§5c); overlap and follow-through (§5g) | `Motion.graph`: evenly spaced dots are a linear move |
+| A move **stutters** partway | a middle key left on `'halt'` | `'clamped'` through a key the move carries on past (§5b) | `Motion.graph`'s `stops` |
+| Something **dips past where it rests**, or bounces unasked | `'auto'` on resting keys | `'halt'` at rest, or `'clamped'` (§5b) | `Motion.graph`'s `overshoots` |
+| **Too much at once**; the eye does not know where to go | two ideas in one beat; competing heroes | one idea at a time (§5f); one focal point (§14a, §17d) | the sheet; the layout and overlap checks |
+| A line is **not read**, or reads late | held too briefly; arriving while something else moves | arrive, then hold; a hold is a beat (§5i) | `text.settledAt`; `Verify.film`'s "set but not read" |
+| **Jarring**, too fast | no anticipation; no settle; cutting and moving at once | anticipation sized to the action (§5e); cut or move, not both (§12) | the sheet |
+| **Slow**, the film drags | holds longer than the audience's pace; a flat story | enough time and no more (§5a); the pace evidence; reshape the beats (§13b) | `pace()`; `Stage.shape`'s `flat` |
+| **Flat**, cheap | one plane; no secondary action; type and pictures pasted on | planes and parallax (§14d); secondary action (§5h); one world (§16, §17c) | the sheet |
+| **No personality**, or each move unlike the last | a different ease and length for every move | a motion identity (§5j) | the kit's `Motion.graph` against each film's |
+| **Flicker** | flashes or a strobe | fewer, softer transitions | `comp.flashes()` |
+| **Peppered** grain | grain too strong for a dark frame | 6%, or weaker light specks (§16d) | the sheet, on a dark frame |
+
+The arrangement by symptom follows LottieFiles' *Motion Design Skill* (MIT, 2025). Every fix in the table is this
+manual's own, from the sources each section names.
+
 ---
 
 ## 5. Timing Craft
@@ -357,6 +379,23 @@ stiff. Vary each side: one arm leads, one shoulder rises, the head turns off the
 
 > [!TIP]
 > **A hold is a beat.** Motion that never rests gives the reader nowhere to look. Leave gaps — a `'+=400'` before a reveal is not wasted time, it is the pause that makes the reveal land.
+
+### 5j. A motion identity: one ease, three durations, one entrance
+
+A film whose every move has its own ease and its own length has no character, and a set of films that each found their
+own has no family. Decide three things before keying, and hold to them:
+
+- **One signature ease** for most moves: the house curve, the one the kit's `Motion.graph` shows (Manual 29 §7). Depart
+  from it on purpose, for a move that means something else (§5a).
+- **A palette of three durations**: quick, standard and slow, in frames, so a move's length is a choice among three
+  rather than whatever a beat happened to leave. The pace evidence decides where the palette sits; §5a decides which of
+  the three a move takes.
+- **One entrance pattern**: how things arrive in this film (rising from below, a wipe from the left, focus pulled in),
+  the same for every element of a kind.
+
+Write the three in `direction.md` with the kit, and in a set they are fixed parts (Manual 29 §7), held by every film.
+This is how brand systems carry motion. The way of organising it into three follows LottieFiles' *Motion Design Skill*
+(MIT, 2025); its millisecond tables are for interface motion and are not adopted here.
 
 ---
 
@@ -1423,15 +1462,19 @@ yellow, black and grey at one saturation throughout. Two ways to do it here:
 
 **Gradients, noise and texture help a composite read as one surface** (ch. 13). The same grain over drawn and
 generated parts is the strongest single cue that they were made together. `comp.noise` is Synfig's noise, matched to it
-pixel for pixel. For grain, a new one-pixel pattern every frame, use the native composite rather than `overlay`: about
-30 ms a frame at 1280 × 720, where `overlay` adds about 135 ms at 1080 (the SDK's *Blend methods*):
+pixel for pixel. For grain, a new one-pixel pattern every frame, use the native composite: about 25 ms a frame at
+1920 × 1080, so a whole film can carry it. **Not `overlay`**: Synfig's overlay is keyed by the layer, not the backdrop as Photoshop's is, so it lifts the
+darks by about the square of the noise and peppers a dark ground, and it adds about 135 ms a frame at 1080 (the SDK's
+*Blend methods*). The recipe, 6% either way:
 
 ```js
-comp.noise({ size: 2, detail: 1, smooth: 'nearest', speed: 24, stops: ['#00000020', '#80808000', '#ffffff20'] });
+comp.noise({ size: 2, detail: 1, smooth: 'nearest', speed: 24, stops: ['#00000010', '#80808000', '#ffffff10'] });
 ```
 
-Put it last, above everything, so the type is grained with the picture. Keep it faint: grain that can be noticed is a
-style, not a unifier. A still texture is an `Assets.material` tiled with `blend: 'overlay'`, at the cost of one
+For a dark film, weaken the light specks, which show most on a dark ground: `['#00000018', '#80808000', '#ffffff0a']`.
+Put it last, above everything, so the type is grained with the picture. **Keep it faint**: 12.5% (`…20`) already read as
+peppered on a dark frame. Grain that can be noticed is a style, not a unifier, and stronger grain is a decision to
+record in `direction.md`, not the default. A still texture is an `Assets.material` tiled with `blend: 'overlay'`, at the cost of one
 full-frame blend.
 
 ### 16e. Duplication and restraint
@@ -1461,6 +1504,152 @@ plate.colorCorrect({ saturation: 0 });
 plate.fill({ color: '#c9802f', blend: 'color', amount: 0.8 });
 
 // Grain over everything, last, on the native composite.
-comp.noise({ size: 2, detail: 1, smooth: 'nearest', speed: 24, stops: ['#00000020', '#80808000', '#ffffff20'] });
+comp.noise({ size: 2, detail: 1, smooth: 'nearest', speed: 24, stops: ['#00000010', '#80808000', '#ffffff10'] });
 comp.render(0.5);
+```
+
+### 16f. A scene you own: the matte painter's order
+
+**A matte painting puts the composition and the light in the designer's hands** (*Design for Motion*, ch. 15). A frame
+built around a found or generated picture has to take that picture's composition. A frame built from a sketch, with
+the material made to fit it, does not. The matte painter's order, in this studio's calls:
+
+1. **Thumbnails, and choose** (§15d): the planes, an unexpected camera, and **where the light comes from**, decided
+   before anything is made.
+2. **The value sketch**: the chosen rough in flat greys, its masses blocked in. The thumbnail already is one.
+3. **A plate built around it.** Draw the foreground masses of the chosen rough as flat `#000000` silhouettes on one
+   `#808080` ground, at the film's shape, and pass that as the backdrop's `conditionOn`. The plate is then generated
+   around your composition instead of bringing its own. A blocking with shading or colour is refused before anything is
+   spent, and `remedy` says what to change. A plate conditioned this way is tied to that blocking (`plate.boundTo`):
+   change the composition and it must be made again.
+4. **Light the foreground from the plate** (Manual 16 §8): `plate.metrics.keyLightX` and `keyLightY` are where its
+   brightest mass is, 0 to 1 across the frame. Shadows fall away from that point and rims face it. A foreground lit from
+   the other side of the plate's sun is the commonest way a composite reads as fake.
+5. **Paint over** (ch. 15): once the pieces are placed, deepen the shadows and lift the highlights across all of them,
+   so they share one light. A translucent dark gradient towards the side away from the light, and a translucent warm glow
+   at the key light, both on the native composite, cost a few milliseconds where `multiply` and `screen` over a full
+   frame cost a shader pass each.
+6. **Grade and texture on top** (§16c–d): the grade, then the grain, last in the stack.
+
+```js
+// 3. The blocking: the chosen thumbnail's foreground masses, black on grey, at 16:9.
+const b = createCanvas(640, 360), bx = b.getContext('2d');
+bx.fillStyle = '#808080'; bx.fillRect(0, 0, 640, 360);
+bx.fillStyle = '#000000'; bx.fillRect(0, 270, 640, 90); bx.fillRect(420, 120, 90, 150);   // the quay; the warehouse
+const plate = await Assets.backdrop('a harbour at dusk, low cloud, water catching the last light',
+    { width: 1920, height: 1080, conditionOn: b.toBitmap().toPngBytes() });
+if (!plate.success) { error(plate.remedy); exit(plate.failureName); }
+Session.plate = plate.toDataUri();
+Session.key = [plate.metrics.keyLightX * 1280, plate.metrics.keyLightY * 720];
+
+// In the next script: the plate, the foreground drawn over it, then 5. the paint-over on the native composite.
+comp.image({ image: Skia.Image.fromDataUrl(Session.plate), tl: [0, 0], br: [1280, 720] });
+// … the foreground, lit from Session.key …
+comp.linearGradient({ point1: Session.key, point2: [1280 - Session.key[0], 720], stops: ['#00000000', '#00000060'] });
+comp.radialGradient({ origin: Session.key, radius: 420, stops: ['#ffe2b040', '#ffe2b000'] });
+```
+
+Shaw's brief for the exercise asks for **a scene that would be difficult or impossible to photograph**. A composited
+landscape alone is called "underwhelming" (ch. 15). The order above is for exactly the frames a brief wants that a
+search could never find.
+
+## 17. Type in Motion
+
+> **Implemented by**: `comp.text` (`family`, `weight`, `style`, `size`, `compress`, `vcompress`, `kerning`, `invert`,
+> `animators`), `text.settledAt`, `text.boundsAt`, `Motion.contrast`, `blend: 'onto'` and `'alphaOver'`, groups at `z`.
+
+Nearly every commercial carries type, whether a whole spot of kinetic type or only the logo's end tag (*Design for
+Motion*, ch. 17). Manual 11 holds the craft of setting it, as for print. This section is what changes when it moves
+and is seen on a screen.
+
+### 17a. Cast the typeface
+
+**Choose a typeface the way a casting director chooses an actor** (ch. 17): first name the role, then audition for it.
+Write down the adjectives the concept and the treatment give (playful or grave, modern or classical, warm or cold)
+before looking at a single face. **Then audition the whole company**: `Skia.Font.families()` lists every installed face,
+often hundreds, and `Skia.Font.families(text)` those that can set a line in the audience's own script. A careless choice says something the film did not mean. Carter, Day and Meggs make
+the same point from the other side: a face's proportions, serifs and peculiar characters give it a personality, and can
+**signal a period, a place or a milieu**, often through a detail too small to name (*Typographic Design*, p. 143).
+
+**Those associations are cultural** (ch. 17): slab-serif wood type reads as the American West, stencil as military,
+collegiate letters as sport. They are not the same everywhere. For a set made for several audiences, say in
+`direction.md` what the chosen face connotes, and whether that holds for each audience. It is a judgement to state, not
+a measurement Qloo can make. Record the adjectives with the choice, and check the finished film against them.
+
+### 17b. Set it for the screen
+
+Manual 11's rules hold. The screen changes a few numbers (*Typographic Design*, pp. 144–147):
+
+| On screen | Why | In `comp.text` |
+|---|---|---|
+| **Capitals tracked open, to at least 110–120%** | screen light spreads each letter into the next; capitals alone need the room most | `compress` about 1.1–1.2 for a line of capitals |
+| **45–65 characters a line** for anything read as a sentence | the eye takes a screen line in at a glance | break the line; a film's lines are usually far shorter |
+| **Leading around 140% of the size** | text on screen needs more space between lines than print | `vcompress` multiplies the font's own line height, which already exceeds the size; set it by eye on a still near 1.2 |
+| **Flush left reads easiest**; centre what is truly symmetric, such as a lock-up or an end card (§14a) | the ragged right edge guides the eye from line to line | `orient: [0, …]` for ranged left, `[0.5, …]` centred |
+| **Moderate stroke contrast, sturdy serifs, simple forms** for anything small | hairline serifs and extreme thick-thin contrast break up as type gets smaller on screen | a display face with hairlines only at display size |
+| **A real italic or bold, never a faked one**, and no stretched glyphs | — | `style` and `weight` select real faces |
+
+Size by what the type measures in the frame, not by the number asked for: `text.boundsAt(t)` gives its box. Hold every
+line still long enough to read (`text.settledAt`), keep it title-safe, and measure its contrast on the graded colours
+(`Motion.contrast`).
+
+### 17c. Integrate it into the picture
+
+**Type pasted on after everything else flattens the frame** (ch. 17). It is an element of the composition like any
+other, so give it the picture's space, value, contrast and colour, until it belongs. In this studio's calls:
+
+- **On a plane**: type in a group at its own `z` moves with the camera and finds its depth among the picture's planes,
+  rather than floating over them.
+- **Graded and grained with everything** (§16c–d): the grade and the grain go over the type as well.
+- **A surface inside the letters**: the text, then a material, a noise or a picture with `blend: 'onto'` in the same
+  group. The letters become the matte (§16b), for Shaw's tactile type.
+- **Letters cut as windows**: `invert: true` fills everything but the letters, so the picture behind shows through them.
+  Carter describes the *Altered States* titles this way: words like windows opened in a black ground, overlapping as
+  they drift (*Typographic Design*, p. 174). With `blend: 'alphaOver'` in a group, the same knockout erases instead.
+
+### 17d. Make the motion mean something
+
+**A typographic sign works on two levels: its form and its meaning** (*Typographic Design*, p. 115). A form can be made
+to act out the word: repeated letters read as speed, a small letter in a large void as isolation (p. 115). Moving type
+has more ways to do this, and a title sequence is, in Richard Greenberg's phrase as Carter quotes him, a "visual
+metaphor" for the film that tells the audience how to react (p. 173). Carter's examples include a title gathered out of
+small rectangles as a dark planet passes (*Alien*), and two opposing words revealed on the faces of turning cubes
+(*True Lies*) (pp. 174–175).
+
+So choose each text animator for what the word means, not only for how it enters (§5a, *timing is meaning*). Shaw's
+treatments (ch. 17), in this studio's calls:
+
+| Treatment | How |
+|---|---|
+| **Graphic construction** | the letters' outlines as shapes (`comp.region`, `comp.outline` from a path) recoloured, cut, assembled |
+| **Tangible / tactile** | a material or noise inside the letters (17c) |
+| **Cut and paste** | letters on separate small planes, slightly misaligned, each entering on its own key |
+| **Ephemeral** | wipes (the matte wipe for ink or smoke), `blur` keyed in and out, opacity animators by range |
+| **Hand-lettered** | marks drawn with `Skia.Brush`, set into the film with `comp.image` |
+
+Baudenbacher, interviewed in the chapter, puts the rule that holds over all of it: even in a complex frame there is
+**one focal point**, and even five or ten seconds have a beginning, a development and a conclusion.
+
+```javascript
+// A title integrated into its picture: a material inside the letters, the letters cut as windows over a plate,
+// both on planes under one camera move, and grained with everything else.
+const comp = Motion.composition({ width: 640, height: 360, duration: 3 });
+const n = Motion.nodes;
+comp.camera({ distance: n.animated('real', [{ time: 0, value: 889, ease: 'halt' }, { time: 3, value: 760, ease: 'halt' }]) });
+
+// The far plane: a dusk ground, with a windowed word over it. The knockout fills all but the letters, so the
+// ground shows through them.
+const far = comp.group({ z: 400, keepSize: true });
+far.linearGradient({ point1: [0, 0], point2: [0, 360], stops: ['#3a7ca5', '#c8553d'] });
+far.text({ text: 'NIGHT', family: 'Arial', weight: 'bold', size: 150, origin: [320, 150], orient: [0.5, 0.5],
+    color: '#14202b', invert: true, compress: 1.12 });                       // capitals tracked open for the screen
+
+// The near plane: the title filled with a tactile surface in the picture's own palette.
+const near = comp.group({ z: 0, keepSize: true });
+near.text({ text: 'shift', family: 'Georgia', style: 'italic', size: 96, origin: [320, 280], orient: [0.5, 0.5], color: '#ffffff' });
+near.noise({ stops: ['#c9802f', '#efe6d6'], size: 40, detail: 3, seed: 5, blend: 'onto' });
+
+// One grain over everything, the type included, so nothing reads as pasted on.
+comp.noise({ size: 2, detail: 1, smooth: 'nearest', speed: 24, stops: ['#00000010', '#80808000', '#ffffff10'] });
+comp.render(1.5);
 ```

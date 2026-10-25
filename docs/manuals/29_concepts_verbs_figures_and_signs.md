@@ -633,7 +633,8 @@ Lupton's steps for a brand language (p. 133), as they apply to a set:
 5. **Document the family.**
 
 **For a set** (ours): decide, before any piece is made, **what is fixed** — the type, the hierarchy, the figures and their
-order, the end card's structure — and **what each audience may change** — palette temperature, pace, the hero image,
+order, the end card's structure, and in motion the motion identity (Manual 25 §5j: one ease, three durations, one
+entrance) — and **what each audience may change** — palette temperature, pace, the hero image,
 the allusion (§4). Each piece is then the kit reconfigured, and the set reads as one family whose members differ for a
 reason. Write the kit as its own section of `direction.md`, before the audiences' sections: the fixed parts, the
 variable parts, and for each variable part the evidence that set it per audience.

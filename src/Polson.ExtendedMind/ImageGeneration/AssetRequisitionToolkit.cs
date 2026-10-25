@@ -225,7 +225,7 @@ public partial class AssetRequisitionToolkit : Runtime
                     Reason: reason, Model: null, FromCache: false, Refused: true));
                 RecordBudgetState();
 
-                return new BackdropPlate { Success = false, Failure = ImageGenerationFailure.InvalidRequest, Error = reason };
+                return new BackdropPlate { Success = false, Failure = ImageGenerationFailure.InvalidRequest, Error = reason, Refusal = reason };
             }
         }
 
@@ -447,6 +447,7 @@ public partial class AssetRequisitionToolkit : Runtime
                 Success = false,
                 Failure = ImageGenerationFailure.InvalidRequest,
                 Error = reason,
+                Refusal = reason,
             };
         }
 
@@ -475,6 +476,7 @@ public partial class AssetRequisitionToolkit : Runtime
                 Success = false,
                 Failure = ImageGenerationFailure.InvalidRequest,
                 Error = reason,
+                Refusal = reason,
             };
         }
 
@@ -509,7 +511,7 @@ public partial class AssetRequisitionToolkit : Runtime
                 Reason: referenceError, Model: null, FromCache: false, Refused: true));
             RecordBudgetState();
 
-            return new CutoutAsset { Success = false, Failure = ImageGenerationFailure.InvalidRequest, Error = referenceError };
+            return new CutoutAsset { Success = false, Failure = ImageGenerationFailure.InvalidRequest, Error = referenceError, Refusal = referenceError };
         }
 
         if (KeyGround(opts) is null)
@@ -520,7 +522,7 @@ public partial class AssetRequisitionToolkit : Runtime
                 Reason: reason, Model: null, FromCache: false, Refused: true));
             RecordBudgetState();
 
-            return new CutoutAsset { Success = false, Failure = ImageGenerationFailure.InvalidRequest, Error = reason };
+            return new CutoutAsset { Success = false, Failure = ImageGenerationFailure.InvalidRequest, Error = reason, Refusal = reason };
         }
 
         var variants = (opts.Variants ?? []).Where(v => !string.IsNullOrWhiteSpace(v)).Take(6).ToList();
@@ -616,7 +618,7 @@ public partial class AssetRequisitionToolkit : Runtime
             RequisitionScope.Record(new RequisitionRecord(
                 "redraw", descriptor, Success: false, Failure: failure.ToString(), Reason: reason, Model: null, FromCache: false, Refused: true));
             RecordBudgetState();
-            return new CutoutAsset { Success = false, Failure = failure, Error = reason };
+            return new CutoutAsset { Success = false, Failure = failure, Error = reason, Refusal = failure == ImageGenerationFailure.InvalidRequest ? reason : null };
         }
 
         var guideBytes = GuideBytes(guide);

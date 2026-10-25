@@ -363,6 +363,9 @@ public class RequisitionSuccessPathTests : TestsRuntime
         Assert.Equal(ImageGenerationFailure.InvalidRequest, refused.Failure);
         Assert.Equal(0, generator.Calls);
         Assert.Equal(0, budget.Spent);
+        // The remedy is the refusal's own: what a blocking is. The generic one said to simplify the descriptor.
+        Assert.Contains("blocking", refused.Remedy);
+        Assert.DoesNotContain("Simplify the descriptor", refused.Remedy);
 
         using var blocking = Blocking();
         var png = Encode(blocking);

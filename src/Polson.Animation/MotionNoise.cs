@@ -31,6 +31,7 @@ internal sealed class MotionNoiseLayer : MotionLayer
     {
         stops = MotionGradientLayer.ReadStops(o.Raw("stops"), o.Who);
         lut = Lookup(stops);
+        packed = [.. lut.Select(c => Pack(c.R, c.G, c.B, c.A))];
         seed = (int)o.Number("seed", 0);
         size = MotionBlurLayer.ReadSize(o, 60);
         var name = o.Has("smooth") ? o.Raw("smooth") as string ?? throw new ArgumentException("noise's smooth is a name: " + string.Join(", ", Smooths) + ".") : "cosine";
@@ -51,6 +52,9 @@ internal sealed class MotionNoiseLayer : MotionLayer
 
     private readonly (double Pos, double[] Color)[] stops;
     private readonly (float R, float G, float B, float A)[] lut;
+
+    /// <summary>The same table packed as pixels, so a pixel without alpha noise is one lookup.</summary>
+    private readonly uint[] packed;
     private readonly int seed, smooth, detail;
     private readonly MotionNode size, speed;
     private readonly bool turbulent, alpha;
@@ -72,24 +76,36 @@ internal sealed class MotionNoiseLayer : MotionLayer
         var (w, h) = (surface.Width, surface.Height);
         var scale = (float)(1 << detail);
 
-        var bytes = new byte[w * h * 4];
+        // The raster corner of each pixel in the layer's units, as Synfig's paint task steps them, by the inverse matrix in
+        // managed arithmetic. Grain — nearest, one octave, no alpha noise — is one lattice cell a pixel, so it skips the
+        // octave loop; the value is the general path's exactly. becool1 measured grain at ~65 ms a frame at 1920 × 1080 and
+        // left it out of its film; most of that was unoptimised first-pass code (see Polson.CLI's TieredCompilation
+        // settings), and the rest was this loop: 10 ms with the cell inline, against 17 through the general path.
+        var grain = mode == 0 && detail == 1 && !alpha;
+        var t0 = (int)MathF.Floor(ftime);
+        var pixels = new uint[w * h];
         System.Threading.Tasks.Parallel.For(0, h, row =>
         {
+            var line = pixels.AsSpan(row * w, w);
             for (var col = 0; col < w; col++)
             {
-                // The raster corner in the layer's units, as Synfig's paint task steps them.
-                var p = back.MapPoint(col, row);
-                var (r, g, b, a) = Pixel(p.X / sx * scale, p.Y / sy * scale, ftime, mode);
-                var i = (row * w + col) * 4;
-                bytes[i] = (byte)MathF.Round(Math.Clamp(r, 0, 1) * 255);
-                bytes[i + 1] = (byte)MathF.Round(Math.Clamp(g, 0, 1) * 255);
-                bytes[i + 2] = (byte)MathF.Round(Math.Clamp(b, 0, 1) * 255);
-                bytes[i + 3] = (byte)MathF.Round(Math.Clamp(a, 0, 1) * 255);
+                float px = back.ScaleX * col + back.SkewX * row + back.TransX, py = back.SkewY * col + back.ScaleY * row + back.TransY;
+                var wgt = back.Persp0 * col + back.Persp1 * row + back.Persp2;
+                if (wgt != 1f) (px, py) = (px / wgt, py / wgt);
+                if (!grain)
+                {
+                    line[col] = Pixel(px / sx * scale, py / sy * scale, ftime, mode);
+                    continue;
+                }
+                // One octave of Pixel: the cell, clamped, folded or mapped to 0…1, then the packed colour.
+                var value = Math.Clamp(Cell(5, (int)MathF.Floor(px / sx * scale), (int)MathF.Floor(py / sy * scale), t0), -1f, 1f);
+                value = turbulent ? MathF.Abs(value) : value / 2 + 0.5f;
+                line[col] = packed[(int)MathF.Round(Math.Clamp(value, 0, 1) * (packed.Length - 1))];
             }
         });
 
         using var bitmap = new SKBitmap(new SKImageInfo(w, h, SKColorType.Rgba8888, SKAlphaType.Premul));
-        bytes.CopyTo(bitmap.GetPixelSpan());
+        System.Runtime.InteropServices.MemoryMarshal.AsBytes(pixels.AsSpan()).CopyTo(bitmap.GetPixelSpan());
         bitmap.NotifyPixelsChanged();
         using var paint = new SKPaint { Color = SKColors.White.WithAlpha((byte)Math.Round(amount * 255)) };
         canvas.Save();
@@ -98,8 +114,11 @@ internal sealed class MotionNoiseLayer : MotionLayer
         canvas.Restore();
     }
 
-    /// <summary>TaskNoiseSW's octave loop for one point, premultiplied: the gradient's colour, its alpha scaled by the alpha noise.</summary>
-    private (float R, float G, float B, float A) Pixel(float x, float y, float t, int mode)
+    /// <summary>
+    /// TaskNoiseSW's octave loop for one point, as a premultiplied RGBA pixel: the gradient's colour from the packed table,
+    /// or, with the alpha noise, that colour scaled by it.
+    /// </summary>
+    private uint Pixel(float x, float y, float t, int mode)
     {
         float value = 0, opacity = 0;
         for (var i = 0; i < detail; i++)
@@ -119,8 +138,17 @@ internal sealed class MotionNoiseLayer : MotionLayer
             value = value / 2 + 0.5f;
             opacity = opacity / 2 + 0.5f;
         }
-        var c = lut[(int)MathF.Round(Math.Clamp(value, 0, 1) * (lut.Length - 1))];
-        return alpha ? (c.R * opacity, c.G * opacity, c.B * opacity, c.A * opacity) : c;
+        var index = (int)MathF.Round(Math.Clamp(value, 0, 1) * (lut.Length - 1));
+        if (!alpha) return packed[index];
+        var c = lut[index];
+        return Pack(c.R * opacity, c.G * opacity, c.B * opacity, c.A * opacity);
+    }
+
+    /// <summary>A premultiplied colour as one Rgba8888 pixel: red in the lowest byte, alpha in the highest.</summary>
+    private static uint Pack(float r, float g, float b, float a)
+    {
+        static uint B(float v) => (uint)MathF.Round(Math.Clamp(v, 0, 1) * 255);
+        return B(r) | B(g) << 8 | B(b) << 16 | B(a) << 24;
     }
 
     /// <summary>Synfig's <c>RandomNoise(salt, x, y, t)</c>: one lattice cell's value, −1 to 1.</summary>
@@ -143,16 +171,12 @@ internal sealed class MotionNoiseLayer : MotionLayer
         {
             case Cubic:
             {
-                // Catmull–Rom on each axis, which does not blur.
-                float[] Weights(float d) =>
-                [
-                    0.5f * d * (d * (d * -1f + 2f) - 1f),
-                    0.5f * (d * (d * (3f * d - 5f)) + 2f),
-                    0.5f * d * (d * (-3f * d + 4f) + 1f),
-                    0.5f * d * d * (d - 1f),
-                ];
-                var (wx, wy, wt) = (Weights(xf - x), Weights(yf - y), Weights(tf - t));
-                int[] ts = [tm1, t0, t1, t2];
+                // Catmull–Rom on each axis, which does not blur. On the stack: this runs per pixel per octave.
+                Span<float> wx = stackalloc float[4], wy = stackalloc float[4], wt = stackalloc float[4];
+                Weights(xf - x, wx);
+                Weights(yf - y, wy);
+                Weights(tf - t, wt);
+                Span<int> ts = [tm1, t0, t1, t2];
                 var sum = 0f;
                 for (var i = 0; i < 4; i++)
                 {
@@ -179,7 +203,7 @@ internal sealed class MotionNoiseLayer : MotionLayer
             case Spline:
             {
                 var (a, b, c) = (xf - x, yf - y, tf - t);
-                int[] ts = [tm1, t0, t1, t2];
+                Span<int> ts = [tm1, t0, t1, t2];
                 var sum = 0f;
                 for (var k = -1; k <= 2; k++)
                     for (var i = -1; i <= 2; i++)
@@ -208,6 +232,14 @@ internal sealed class MotionNoiseLayer : MotionLayer
             }
             default:
                 return Cell(salt, x, y, t0);
+        }
+
+        static void Weights(float d, Span<float> into)
+        {
+            into[0] = 0.5f * d * (d * (d * -1f + 2f) - 1f);
+            into[1] = 0.5f * (d * (d * (3f * d - 5f)) + 2f);
+            into[2] = 0.5f * d * (d * (-3f * d + 4f) + 1f);
+            into[3] = 0.5f * d * d * (d - 1f);
         }
 
         // The cubic B-spline kernel of Synfig's spline modes.
