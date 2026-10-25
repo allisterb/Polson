@@ -52,13 +52,13 @@ internal sealed class MotionBlurLayer : MotionLayer, IMotionStackFilter
     /// A blur's <c>size</c>: a number is both axes, and so is a keyed number — a focus pull is keyed as one value, as an
     /// agent writes it first — linked into both of a composite so it stays one value in .sif too. Anything else is a vector.
     /// </summary>
-    internal static MotionNode ReadSize(MotionOptions o) => o.Raw("size") switch
+    internal static MotionNode ReadSize(MotionOptions o, double fallback = 6) => o.Raw("size") switch
     {
         IConvertible n and not string => MotionNodeFactory.Node(new[] { Convert.ToDouble(n), Convert.ToDouble(n) }, MotionType.Vector, $"{o.Who}'s size"),
         MotionNode { Kind: MotionType.Real } r => new MotionComposite(r, r),
         // Synfig's default is 0.1 of its units, which are 60 px by default: 6 px. Ours are the view's, pixels unless the
         // composition says otherwise, where 0.1 is no blur at all (trailer1 found the docs' example invisible).
-        _ => o.Node("size", MotionType.Vector, new[] { 6d, 6d }),
+        _ => o.Node("size", MotionType.Vector, new[] { fallback, fallback }),
     };
     #endregion
 

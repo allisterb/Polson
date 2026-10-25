@@ -81,6 +81,24 @@ public abstract partial class MotionLayerList
     }
 
     /// <summary>
+    /// A gradient looked up by value noise over the whole plane: <c>{ stops?, seed?, size?, smooth?, detail?, speed?,
+    /// turbulent?, alpha?, amount?, blend?, desc? }</c>. <c>size</c> is the coarsest feature in units (a number or
+    /// <c>[x, y]</c>, 60 by default), <c>detail</c> the octaves below it (4), <c>smooth</c> <c>'nearest'</c>, <c>'linear'</c>,
+    /// <c>'cosine'</c> (the default), <c>'spline'</c> or <c>'cubic'</c>, <c>speed</c> cycles per second (0, still).
+    /// </summary>
+    /// <remarks>
+    /// Synfig's noise layer. Grain: <c>{ size: 2, detail: 1, smooth: 'nearest', speed: fps, stops: ['#00000020', '#80808000', '#ffffff20'] }</c>,
+    /// a new one-pixel pattern every frame on the native composite.
+    /// </remarks>
+    public MotionLayerList Noise(object? options = null)
+    {
+        var o = new MotionOptions(options, "noise", "stops", "seed", "size", "smooth", "detail", "speed", "turbulent", "alpha",
+            "amount", "blend", "desc");
+        layers.Add(new MotionNoiseLayer(o));
+        return this;
+    }
+
+    /// <summary>
     /// A rectangle between two corners, in either order:
     /// <c>{ point1, point2, expand?, radius?, color, invert?, amount?, blend?, desc? }</c>. <c>expand</c> grows it on
     /// every side; <c>radius</c> rounds its corners, Synfig's bevel, at most half the shorter side. The bar of a bar chart:
@@ -452,6 +470,21 @@ public abstract partial class MotionLayerList
     {
         var o = new MotionOptions(options, "colorCorrect", "hue", "brightness", "contrast", "exposure", "saturation", "gamma", "desc");
         layers.Add(new MotionColorCorrectLayer(o));
+        return this;
+    }
+
+    /// <summary>
+    /// A luma key of everything below it in this stack: <c>{ desc? }</c>. Each pixel becomes as transparent as it is dark,
+    /// and is brightened to full luminance keeping its hue, so a grey matte becomes white with its brightness for alpha.
+    /// </summary>
+    /// <remarks>
+    /// Synfig's luma key layer, for a luma matte: in a group, the matte, then <c>lumaKey()</c>, then what shows through it
+    /// with <c>blend: 'onto'</c>. It stops at its own group.
+    /// </remarks>
+    public MotionLayerList LumaKey(object? options = null)
+    {
+        var o = new MotionOptions(options, "lumaKey", "desc");
+        layers.Add(new MotionLumaKeyLayer(o));
         return this;
     }
 

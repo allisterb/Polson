@@ -333,6 +333,10 @@ full are at `polson://sdk/core/Assets`; how to word a request is Manual 16 (`pol
   or a matte claims nothing and fits; a generated object, a person or a photograph does not.
 - **A matte need not be bought.** Its greys are its timing, so a gradient or shapes you draw on a canvas are a matte too,
   passed as the wipe's `image`, and free. Requisition one when the texture is the point.
+- **Make what you bring in and what you draw one world** (Manual 25 §16): read each source's light, values and edges
+  first; hold a picture inside a shape with a matte (a luma matte is the matte, `comp.lumaKey()`, then the picture with
+  `blend: 'onto'`, in one group); tint a brought-in picture to the palette with a flat colour at `blend: 'color'` over it
+  desaturated; and grain everything last with `comp.noise`, §16d's recipe, on the native composite.
 - **Qloo's pictures stay research.** `Taste.images` is never in the film.
 - **Say what you brought in**, in `direction.md`: each asset's `id`, its descriptor, and what it is for.
 

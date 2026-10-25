@@ -19,8 +19,8 @@ using SkiaSharp;
 /// the same name. <c>composite</c> needs no blender: it is Skia's source-over.
 /// <para>
 /// Not ported: <c>straight</c> and <c>alpha</c>, which clear everything outside the layer and so depend on
-/// Synfig's task bounds; the YUV methods (<c>color</c>, <c>hue</c>, <c>saturation</c>, <c>luminance</c>);
-/// and the deprecated ones. Each is refused by name.
+/// Synfig's task bounds, and the deprecated ones. Each is refused by name. The YUV methods (<c>color</c>, <c>hue</c>,
+/// <c>saturation</c>, <c>luminance</c>) were ported on 2026-10-25, for grading a composite to its palette.
 /// </para>
 /// </remarks>
 internal sealed class MotionBlend
@@ -72,16 +72,40 @@ internal sealed class MotionBlend
         new("subtract", 5, "c = b * da - a * (sa * k); oa = da;", null),
         new("difference", 18, "c = abs(b * da - a * (sa * k)); oa = da;", "difference"),
         new("alphaOver", 19, "c = b; oa = da * (1 - sa * k);", null),
+        // The YUV methods (Synfig's Color::get_y/u/v, set_uv, set_hue, set_s, set_y): one component of the layer's colour
+        // replaces the backdrop's, and the change is mixed by amount × the layer's alpha. The backdrop keeps its alpha.
+        new("color", 8, Yuv + """
+            float3 t = Rgb(yb, ua, va);
+            """ + Mix, null),
+        new("hue", 9, Yuv + """
+            // Synfig's hue is atan2(u, v), so a grey layer's is 0 and turns the backdrop's chroma to +v.
+            float2 dir = sa2 > 0 ? float2(ua, va) / sa2 : float2(0, 1);
+            float3 t = Rgb(yb, sb * dir.x, sb * dir.y);
+            """ + Mix, null),
+        // Synfig scales any chroma it finds, and a grey's is float rounding: over #808080 it paints #896ad9, measured on
+        // 1.5.5. A chroma under 1e-4 is taken as none here, so a grey stays grey; a .sif opened in Synfig still shows its noise.
+        new("saturation", 10, Yuv + """
+            float3 t = sb > 0.0001 ? Rgb(yb, ub / sb * sa2, vb / sb * sa2) : b;
+            """ + Mix, null),
+        new("luminance", 11, Yuv + """
+            float3 t = Rgb(ya, ub, vb);
+            """ + Mix, null),
     ];
+
+    // Synfig's EncodeYUV rows for the layer (a) and the backdrop (b), and each chroma's magnitude, its "saturation".
+    private const string Yuv = """
+        float3 Y = float3(0.299, 0.587, 0.114), U = float3(-0.168736, -0.331264, 0.5), V = float3(0.5, -0.418688, -0.081312);
+        float ya = dot(a, Y), ua = dot(a, U), va = dot(a, V);
+        float yb = dot(b, Y), ub = dot(b, U), vb = dot(b, V);
+        float sa2 = length(float2(ua, va)), sb = length(float2(ub, vb));
+        """;
+
+    private const string Mix = "c = (t - b) * k * sa + b; oa = da;";
 
     private static readonly Dictionary<string, string> NotPorted = new(StringComparer.OrdinalIgnoreCase)
     {
         ["straight"] = "it replaces everything outside the layer as well, which depends on Synfig's render bounds",
         ["alpha"] = "it clears everything outside the layer, which depends on Synfig's render bounds",
-        ["color"] = "Synfig's YUV methods are not ported yet",
-        ["hue"] = "Synfig's YUV methods are not ported yet",
-        ["saturation"] = "Synfig's YUV methods are not ported yet",
-        ["luminance"] = "Synfig's YUV methods are not ported yet",
     };
     #endregion
 
@@ -134,6 +158,8 @@ internal sealed class MotionBlend
         {
             var source = $$"""
                 uniform float amount;
+                // Synfig's DecodeYUV, for the YUV methods.
+                float3 Rgb(float y, float u, float v) { return float3(y + 1.402 * v, y - 0.344136 * u - 0.714136 * v, y + 1.772 * u); }
                 half4 main(half4 srcIn, half4 dstIn) {
                     float4 src = float4(srcIn);
                     float4 dst = float4(dstIn);

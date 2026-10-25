@@ -93,12 +93,7 @@ internal sealed class MotionGradientLayer : MotionLayer
 
     public override XElement ToSif(SifWriter sif)
     {
-        var gradient = SifWriter.Param("gradient", new XElement("gradient", stops.Select(s =>
-        {
-            var color = SifWriter.Value(MotionType.Color, s.Color);
-            color.Add(new XAttribute("pos", MotionTypes.Format(s.Pos)));
-            return color;
-        })));
+        var gradient = SifGradient(stops);
         var repeat = new[] { SifWriter.Param("loop", SifWriter.Bool(loop)), SifWriter.Param("zigzag", SifWriter.Bool(zigzag)) };
         return radial
             ? Element("radial_gradient", "0.2", sif, gradient, sif.Param("center", a), sif.Param("radius", b), repeat)
@@ -144,11 +139,20 @@ internal sealed class MotionGradientLayer : MotionLayer
         return rect;
     }
 
+    /// <summary>The stops as Synfig's <c>gradient</c> parameter.</summary>
+    internal static XElement SifGradient((double Pos, double[] Color)[] stops) =>
+        SifWriter.Param("gradient", new XElement("gradient", stops.Select(s =>
+        {
+            var color = SifWriter.Value(MotionType.Color, s.Color);
+            color.Add(new XAttribute("pos", MotionTypes.Format(s.Pos)));
+            return color;
+        })));
+
     /// <summary>
     /// <c>stops</c>: colours spread evenly, <c>['#000', '#fff']</c>; or <c>[[pos, color], ...]</c>; or
     /// <c>[{ pos, color }, ...]</c>; black to white when left out, as Synfig's default.
     /// </summary>
-    private static (double Pos, double[] Color)[] ReadStops(object? value, string who)
+    internal static (double Pos, double[] Color)[] ReadStops(object? value, string who)
     {
         if (value is null) return [(0, [0, 0, 0, 1]), (1, [1, 1, 1, 1])];
         if (value is not IList list || list.Count == 0)
