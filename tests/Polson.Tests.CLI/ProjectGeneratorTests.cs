@@ -543,8 +543,8 @@ public partial class ProjectGeneratorTests : TestsRuntime, IDisposable
     [Fact]
     public void TestAReportExplainerCarriesTheDataManualAndAProductAdDoesNot()
     {
-        Assert.True(ProjectGenerator.Create(Options("report", o => { o.Workflow = "trailer"; o.Type = "report"; })));
-        Assert.True(ProjectGenerator.Create(Options("product", o => { o.Workflow = "trailer"; o.Type = "product"; })));
+        Assert.True(ProjectGenerator.Create(Options("report", o => { o.Workflow = "motion"; o.Type = "report"; })));
+        Assert.True(ProjectGenerator.Create(Options("product", o => { o.Workflow = "motion"; o.Type = "product"; })));
 
         var data = $"### Manual 13 — {PolsonManuals.Find("13")!.Title}";
         var motion = $"### Manual 25 — {PolsonManuals.Find("25")!.Title}";
@@ -566,9 +566,9 @@ public partial class ProjectGeneratorTests : TestsRuntime, IDisposable
     [Fact]
     public void TestAutoModeTellsEveryHostThatNobodyWillAnswer()
     {
-        Assert.True(ProjectGenerator.Create(Options("auto-agy", o => { o.Workflow = "trailer"; o.Auto = true; })));
+        Assert.True(ProjectGenerator.Create(Options("auto-agy", o => { o.Workflow = "motion"; o.Auto = true; })));
         Assert.True(ProjectGenerator.Create(Options("auto-claude", o => { o.Workflow = "poster"; o.Sdk = "claude"; o.Auto = true; })));
-        Assert.True(ProjectGenerator.Create(Options("asks", o => { o.Workflow = "trailer"; })));
+        Assert.True(ProjectGenerator.Create(Options("asks", o => { o.Workflow = "motion"; })));
 
         var agy = Path.Combine(root, "auto-agy");
         Assert.Contains("## Autonomous mode — nobody will answer", File.ReadAllText(Path.Combine(agy, "GEMINI.md")), StringComparison.Ordinal);
@@ -600,15 +600,33 @@ public partial class ProjectGeneratorTests : TestsRuntime, IDisposable
     [Fact]
     public void TestAPitchCarriesTheDataManualAndItsOwnDeadline()
     {
-        Assert.True(ProjectGenerator.Create(Options("pitch", o => { o.Workflow = "trailer"; o.Type = "pitch"; })));
+        Assert.True(ProjectGenerator.Create(Options("pitch", o => { o.Workflow = "motion"; o.Type = "pitch"; })));
 
         var pitch = File.ReadAllText(Path.Combine(root, "pitch", "GEMINI.md"));
         Assert.Contains("## The type: pitch", pitch, StringComparison.Ordinal);
         Assert.Contains("A projection looks like a projection", pitch, StringComparison.Ordinal);
         Assert.Contains($"### Manual 13 — {PolsonManuals.Find("13")!.Title}", pitch, StringComparison.Ordinal);
-        Assert.Equal(90, ProjectGenerator.DeadlineFor("trailer", null, "pitch"));
-        Assert.Equal(70, ProjectGenerator.DeadlineFor("trailer", null, "report"));
-        Assert.Equal(30, ProjectGenerator.DeadlineFor("trailer", 30, "pitch"));
+        Assert.Equal(90, ProjectGenerator.DeadlineFor("motion", null, "pitch"));
+        Assert.Equal(70, ProjectGenerator.DeadlineFor("motion", null, "report"));
+        Assert.Equal(30, ProjectGenerator.DeadlineFor("motion", 30, "pitch"));
+    }
+
+    /// <summary>
+    /// `trailer` was renamed `motion` (2026-10-25). The old name still works when typed, and a project.json written
+    /// before the rename regenerates as `motion` on a reset rather than failing as an unknown workflow.
+    /// </summary>
+    [Fact]
+    public void TestTheFormerTrailerWorkflowIsReadAsMotion()
+    {
+        Assert.True(ProjectGenerator.Create(Options("typed", o => { o.Workflow = "trailer"; o.Type = "product"; })));
+        Assert.Contains("\"workflow\": \"motion\"", File.ReadAllText(Path.Combine(root, "typed", "project.json")), StringComparison.Ordinal);
+        Assert.Contains("# Motion Project: typed", File.ReadAllText(Path.Combine(root, "typed", "GEMINI.md")), StringComparison.Ordinal);
+
+        var old = Path.Combine(root, "typed", "project.json");
+        File.WriteAllText(old, File.ReadAllText(old).Replace("\"workflow\": \"motion\"", "\"workflow\": \"trailer\""));
+        Assert.True(ProjectGenerator.Create(Options("typed", o => { o.Workflow = ""; o.Reset = true; })));
+        Assert.Contains("\"workflow\": \"motion\"", File.ReadAllText(old), StringComparison.Ordinal);
+        Assert.Contains("## The type: product", File.ReadAllText(Path.Combine(root, "typed", "GEMINI.md")), StringComparison.Ordinal);
     }
     #endregion
 

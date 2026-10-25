@@ -150,7 +150,7 @@ SIZES: dict[str, tuple[Size, ...]] = {
 
 #: What each kind can be delivered as. Only formats the engine writes: outFile, outSvg, outPdf, saveVideo, .sif.
 FORMATS: dict[str, tuple[Format, ...]] = {
-    # The trailer workflow writes the film and, when silent, a looping .webp of it. No .sif: the template
+    # The motion workflow writes the film and, when silent, a looping .webp of it. No .sif: the template
     # forbids writing one during a run, and it is exported afterwards with `polson eval --sif`.
     "video": (Format(".mp4", "Video"), Format(".webp", "Looping preview")),
     "motion": (Format(".webp", "Animation"), Format(".mp4", "Video"), Format(".sif", "Synfig file")),
@@ -163,13 +163,13 @@ CARDS: tuple[Card, ...] = (
     # The workflow is built and measured around 15-second films; longer ones are more encode parts and more
     # clock, so 30 is the most the form offers. A director who wants longer says so in the brief.
     Card("film-trailer", "Film trailer", "video", "Video · 15 seconds, one film per audience",
-         (Route("trailer", "Motion graphics trailer"),),
+         (Route("motion", "Motion graphics trailer"),),
          extras=(Extra("duration", "Duration", ("15 seconds", "30 seconds"), "15 seconds"),),
          audiences=True, types=()),
-    # Dynamic creative: one product, an ad per audience, each from that audience's buyers (Qloo). The trailer
+    # Dynamic creative: one product, an ad per audience, each from that audience's buyers (Qloo). The motion
     # workflow's `product` type; its evidence method is `docs/internal/product-ad-probe.md`.
     Card("product-ad", "Product ad", "video", "Video · 15 seconds, one ad per audience",
-         (Route("trailer", "Motion graphics ad"),),
+         (Route("motion", "Motion graphics ad"),),
          extras=(Extra("product", "Product", placeholder="Its name, and what it is"),
                  Extra("comparables", "Comparable brands", placeholder="Two or three real brands like it"),
                  Extra("claim", "Claim", placeholder="The one claim, worded as it may appear"),
@@ -177,20 +177,20 @@ CARDS: tuple[Card, ...] = (
                  Extra("duration", "Duration", ("15 seconds", "30 seconds"), "15 seconds")),
          audiences=True, types=("product",)),
     # An audience's questions answered from a long document the director attaches — an annual report, a 10-K. The
-    # trailer workflow's `report` type: Nemotron reads the PDF as page text through `Documents.ask`, and every figure
+    # motion workflow's `report` type: Nemotron reads the PDF as page text through `Documents.ask`, and every figure
     # on screen is one the engine found on its page. Audiences are optional: with places, a film for each, paced from
     # its Qloo profile and with its figures written as that place writes them (Locale.number); without, one film.
     Card("report-explainer", "Report explainer", "video", "Video · 45 seconds, questions answered from a report",
-         (Route("trailer", "Motion graphics explainer"),),
+         (Route("motion", "Motion graphics explainer"),),
          extras=(Extra("viewer", "Who is watching", placeholder="Who they are, and what they already know", long=True),
                  Extra("questions", "Their questions", placeholder="One question a line, up to five", long=True),
                  Extra("duration", "Duration", ("45 seconds", "60 seconds"), "45 seconds")),
          audiences=True, audiences_optional=True, types=("report",), needs=".pdf"),
     # A startup's case told to investors from its own pitch deck, and a financial model or metrics where it has them. The
-    # trailer workflow's `pitch` type: the documents read and checked as a report's are, every projection drawn and
+    # motion workflow's `pitch` type: the documents read and checked as a report's are, every projection drawn and
     # labelled as one, the ask as stated. With places, a film per investor audience in its conventions; without, one.
     Card("startup-pitch", "Startup pitch", "video", "Video · 2 minutes from the deck, one film per investor audience",
-         (Route("trailer", "Motion graphics pitch"),),
+         (Route("motion", "Motion graphics pitch"),),
          extras=(Extra("company", "Company", placeholder="Its name, as the deck gives it"),
                  Extra("told_as", "Told as", ("The company's own pitch", "A retelling of a past deck"),
                        "The company's own pitch"),
@@ -255,17 +255,19 @@ CARDS: tuple[Card, ...] = (
 
 BY_SLUG: dict[str, Card] = {c.slug: c for c in CARDS}
 
-#: Which card a project belongs to, for projects made on the developer page or by another host.
-#: The first card wins: `trailer` is the film trailer's before it is the product ad's. A project's own record names its
-#: card, so this is only the fallback for one made elsewhere.
-BY_WORKFLOW: dict[str, Card] = {}
-for _card in CARDS:
-    for _route in _card.routes:
-        BY_WORKFLOW.setdefault(_route.workflow, _card)
-
-
-def card_for(workflow: str) -> Card | None:
-    return BY_WORKFLOW.get(workflow)
+def card_for(workflow: str, type_: str = "") -> Card | None:
+    """
+    Which card a project belongs to, for one made on the developer page or by another host: a project made here records
+    its card, so this is only the fallback. **The type decides between cards of one workflow** — a `motion` project
+    typed `product` is a product ad, `report` a report explainer, untyped a film trailer — where taking the workflow's
+    first card named every one of them "Film trailer". A former workflow name is read as its current one.
+    """
+    workflow = projects.canonical(workflow)
+    cards = [c for c in CARDS if any(r.workflow == workflow for r in c.routes)]
+    return (next((c for c in cards if type_ and c.fixed_type == type_), None)
+            or next((c for c in cards if not type_ and c.types == ()), None)
+            or next((c for c in cards if c.types is None or type_ in c.types), None)
+            or next(iter(cards), None))
 
 
 def types_for(card: Card, workflow: str) -> list[tuple[str, str]]:

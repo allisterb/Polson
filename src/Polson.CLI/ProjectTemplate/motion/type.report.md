@@ -33,7 +33,7 @@ finishes, and a 60-minute run. With more, ask the director which five.
 
 `Documents.ask` reads a PDF **as text, page by page**, with Nemotron 3.5 Super VL, and returns **evidence**: the page and
 the exact figures each answer used, **each already looked for on its page by the engine**. Ask every question in
-one call, with a schema, and **keep the call at the top of `trailer.js`**: the same question of the same document is
+one call, with a schema, and **keep the call at the top of `motion.js`**: the same question of the same document is
 served from the cache for nothing, so every later run asks again rather than copying numbers by hand.
 
 ```javascript
@@ -99,7 +99,7 @@ log(`${read.provenance.model} via ${read.provenance.route}, ${read.provenance.pa
 ### The rules of a report
 
 - **Every number on screen is either printed in the document and found on its page, or computed in the script from
-  ones that were.** A growth rate, a share, a difference: compute it in `trailer.js` from the found figures, show
+  ones that were.** A growth rate, a share, a difference: compute it in `motion.js` from the found figures, show
   the working in `direction.md`, and **never take the model's arithmetic** — its `headline` is a draft of the
   sentence, not a source for a number.
 - **A figure carries its period and its unit**, on screen or in the scene's source line: *"Revenue, fiscal 2026

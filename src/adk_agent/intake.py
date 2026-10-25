@@ -98,7 +98,7 @@ WORKFLOWS: dict[str, tuple[str, ...]] = {
     "drawing": ("review",),
     # **The Qloo entry's two.** Both ground the work in an audience's taste through the `Taste` tool, so they need
     # `POLSON_QLOO_KEY` on the host. A poster reads `documents/` from stage 1 (a brand guide, an earlier poster);
-    # a trailer builds on a poster found there. `film` is the CLI's default for a poster; `product` makes either one
+    # a motion film builds on a poster found there. `film` is the CLI's default for a poster; `product` makes either one
     # a product ad, the dynamic-creative case (`docs/internal/product-ad-probe.md`).
     # Their deadlines are the craft defaults (55 and 70, since the brain dump): no entry in `DEADLINES` below, since the keepalive's
     # ceiling (218) holds both, where the old 38 held neither — and a set of six, at +20 or +25 per audience.
@@ -108,7 +108,7 @@ WORKFLOWS: dict[str, tuple[str, ...]] = {
     # `UNTYPED_IS_A_CHOICE` below.
     # `pitch` tells a startup's case from its own deck (and model) to investors, every projection marked as one; with
     # places, a film per investor audience in its conventions.
-    "trailer": ("pitch", "product", "report"),
+    "motion": ("pitch", "product", "report"),
     # **The Nebius entry's.** A theorem or concept explained in the model's own argument, every formula and claim checked
     # before it is drawn (`Equation`, `Verify.derivation`, `Verify.claim`, whose code Nemotron writes) and the film read
     # back after. Untyped. Documents are optional material (lecture notes, a textbook page), never the subject.
@@ -117,8 +117,17 @@ WORKFLOWS: dict[str, tuple[str, ...]] = {
 
 #: Workflows whose lone type is **not** what an empty type means. The form selects a workflow's only type for
 #: the visitor, on the reasoning that one type is not a choice — true when the CLI would default to it anyway
-#: (`poster` to `film`), false for `trailer`, where no type is the film trailer and `product` is something else.
-UNTYPED_IS_A_CHOICE: frozenset[str] = frozenset({"trailer"})
+#: (`poster` to `film`), false for `motion`, where no type is the film trailer and `product` is something else.
+UNTYPED_IS_A_CHOICE: frozenset[str] = frozenset({"motion"})
+
+#: Workflows by a former name, as the CLI's `RenamedWorkflows` has them: `trailer` became `motion` on 2026-10-25, since
+#: its types make product ads, report explainers and pitches as well as film trailers.
+RENAMED: dict[str, str] = {"trailer": "motion"}
+
+
+def canonical(workflow: str) -> str:
+    """The workflow's current name: a former one read as what it became, anything else as given."""
+    return RENAMED.get(workflow, workflow)
 
 #: What a workflow is **called** on the form, where its template name is not the useful name.
 #:
@@ -226,10 +235,10 @@ DEADLINES: dict[str, int] = {
     # The craft defaults. They need the keepalive: without it the ceiling is 38 and `check` clamps them to it. Ten minutes
     # more each since 2026-10-24, for the brain dump before the concepts (Manual 29 §2c); the CLI's agree.
     "poster": 55,
-    "trailer": 70,
+    "motion": 70,
     # A type's own entry, `workflow.type`, wins over its workflow's: a pitch is two minutes of narrated film to a
     # trailer's fifteen seconds. The CLI's craft default agrees (`ProjectGenerator.WorkflowDeadlines`).
-    "trailer.pitch": 90,
+    "motion.pitch": 90,
     "math_explainer": 60,
 }
 
@@ -241,7 +250,7 @@ DEADLINES: dict[str, int] = {
 #: default is scaled: a deadline the director typed is theirs, and the ceiling still clamps either.
 PER_AUDIENCE_MINUTES: dict[str, int] = {
     "poster": 20,
-    "trailer": 25,
+    "motion": 25,
 }
 
 #: How a brief names each audience: `Audience A:` to `Audience F:`. The composer writes one per line; the starters
@@ -270,9 +279,9 @@ def _base_token_cap() -> int | None:
 #: `math_explainer` at twice: every stage checks before it draws, and each check is a turn that resends the whole
 #: context (55k tokens at the start, 172k by the end). ftcexplainer1 (3.7 Flash, 2026-10-23) had spent 1.8M of 2M by
 #: Deliver and had not written its findings; ftcexplainer3 (3.5 Flash) hit 2M in its build stage after 57 turns.
-#: `trailer.pitch` at twice, keyed like `DEADLINES`: about nine scenes and their narration against a trailer's handful, and
+#: `motion.pitch` at twice, keyed like `DEADLINES`: about nine scenes and their narration against a trailer's handful, and
 #: no measured run behind it yet.
-TOKEN_SCALE: dict[str, float] = {"math_explainer": 2.0, "trailer.pitch": 2.0}
+TOKEN_SCALE: dict[str, float] = {"math_explainer": 2.0, "motion.pitch": 2.0}
 
 
 def token_budget(workflow: str, brief: str, kind: str = "") -> int | None:
@@ -422,7 +431,7 @@ STARTERS: tuple[dict[str, str], ...] = (
     {
         "label": "Film trailer, two cities",
         "name": "lanternkeepertrailer",
-        "workflow": "trailer",
+        "workflow": "motion",
         "kind": "",
         "brief": "A fifteen-second trailer for an original film, The Lantern Keeper: a retired lighthouse "
                  "keeper lights the lamp one last night as a storm takes the town's power. Comparable "
@@ -435,7 +444,7 @@ STARTERS: tuple[dict[str, str], ...] = (
         # product-ad probe measured, so a run's evidence can be read against docs/internal/product-ad-probe.md.
         "label": "Product ad, three cities",
         "name": "nightshiftcoldbrew",
-        "workflow": "trailer",
+        "workflow": "motion",
         "kind": "product",
         "brief": "A fifteen-second ad for Nightshift, a fictitious canned cold brew coffee: slow-steeped for twenty "
                  "hours, sold chilled. Comparable brands: Blue Bottle Coffee, La Colombe, Stumptown Coffee "
@@ -693,6 +702,7 @@ def check(name: str, workflow: str, kind: str, brief: str, deadline: str = "",
             f"name would be written over it. Choose another name — or open the archived one "
             f"from the studio, where its renders, scripts and documents are kept."))
 
+    workflow = canonical(workflow)
     if workflow not in WORKFLOWS:
         raise Refused(400, f"{workflow!r} is not offered here. Choose: {', '.join(WORKFLOWS)}.")
 
@@ -746,6 +756,7 @@ async def commission(app: FastAPI, name: str, workflow: str, brief: str, kind: s
     else None. `documents` are files already staged and checked by the caller; `create` copies them
     into the project's `documents/`, and is the only thing that writes into it.
     """
+    workflow = canonical(workflow)
     minutes = check(name, workflow, kind, brief, deadline, start)
     try:
         create(name, workflow=workflow, prompt=brief, type_=kind or None, deadline=minutes,
@@ -816,7 +827,7 @@ class Commissioner:
 
     def types(self, workflow: str) -> tuple[str, ...] | None:
         """The types this host offers for `workflow`, or None when it does not offer the workflow."""
-        return WORKFLOWS.get(workflow)
+        return WORKFLOWS.get(canonical(workflow))
 
     def free_name(self, title: str) -> str:
         return free_name(title)

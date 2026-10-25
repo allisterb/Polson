@@ -219,7 +219,10 @@ def describe(project: Path, registry: Registry) -> dict[str, Any]:
     except (OSError, ValueError):
         manifest = {}
     workflow = record.get("workflow") or manifest.get("workflow") or ""
-    card = catalogue.BY_SLUG.get(record.get("card", "")) or catalogue.card_for(workflow)
+    # A request made here names its card. A run made elsewhere names only its workflow and type, and the type is what
+    # tells a product ad from a film trailer: both are `motion`.
+    card = (catalogue.BY_SLUG.get(record.get("card", ""))
+            or catalogue.card_for(workflow, record.get("type") or manifest.get("type") or ""))
     events = read_events(project / "events" / "server.jsonl")
     run = run_for(registry, project)
 
@@ -243,6 +246,7 @@ def describe(project: Path, registry: Registry) -> dict[str, Any]:
         # Anything else is watched here and worked in its own host, so the page offers no Start or change.
         "runnable": (manifest.get("sdk") or "agy").lower() == "agy" and (project / "agent.config.json").is_file(),
         "record": record,
+        "card": card,
         "run": run,
         "events": events,
     }
@@ -454,8 +458,7 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
         answerable = run is not None and (not run.observed or observe_mod._ask_channel() is not None)
 
         return page(request, "request.html", "requests", row=row, run=run, brief=brief, answerable=answerable,
-                    card=catalogue.BY_SLUG.get(row["record"].get("card", "")) or catalogue.card_for(
-                        row["record"].get("workflow", "")),
+                    card=row["card"],
                     learned=learned_from(project, run, row["events"]),
                     notice=notices.pop(name, ""))
 

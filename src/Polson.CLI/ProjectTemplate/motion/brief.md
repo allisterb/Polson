@@ -13,7 +13,7 @@ BRIEF-END
 
 ---
 
-## The trailer
+## The film
 
 Fill these in with the director. Where the brief above is silent, ask — do not invent a value and
 proceed as though the director had chosen it.
@@ -29,5 +29,5 @@ proceed as though the director had chosen it.
 | Sound (none, or what) | |
 | Anything explicitly ruled out | |
 
-> **Fifteen seconds is a handful of beats.** Every beat is planned, timed and checked; a trailer whose
+> **Fifteen seconds is a handful of beats.** Every beat is planned, timed and checked; a film whose
 > beats you cannot list in a table is too long for one run.

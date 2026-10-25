@@ -346,12 +346,13 @@ class WorkflowTypeTests(unittest.TestCase):
              mock.patch.object(intake, "archived_names", return_value=[]):
             self.assertEqual(intake.check("p", "poster", "film", brief(2)), 55)
             self.assertEqual(intake.check("p", "poster", "film", brief(4)), 55 + 2 * 20)
+            # `trailer`, the motion workflow's name before 2026-10-25, is read as `motion`.
             self.assertEqual(intake.check("p", "trailer", "", brief(6)), 70 + 4 * 25)
-            self.assertEqual(intake.check("p", "trailer", "", brief(6), deadline="30"), 30,
+            self.assertEqual(intake.check("p", "motion", "", brief(6), deadline="30"), 30,
                              "a deadline the director typed is theirs")
         with mock.patch.object(intake, "MAX_DEADLINE_MINUTES", 100), \
              mock.patch.object(intake, "archived_names", return_value=[]):
-            self.assertEqual(intake.check("p", "trailer", "", brief(6)), 100, "still clamped to the ceiling")
+            self.assertEqual(intake.check("p", "motion", "", brief(6)), 100, "still clamped to the ceiling")
 
     def test_six_audiences_fit_under_the_keepalive(self):
         """The composer offers six; the scaled default for six must not be clamped on a host with the keepalive."""
@@ -367,11 +368,11 @@ class WorkflowTypeTests(unittest.TestCase):
 
         with mock.patch.object(intake, "MAX_DEADLINE_MINUTES", 218), \
              mock.patch.object(intake, "archived_names", return_value=[]):
-            self.assertEqual(intake.check("p", "trailer", "pitch", brief(0)), 90)
-            self.assertEqual(intake.check("p", "trailer", "report", brief(0)), 70, "the workflow's for a type without one")
-            self.assertEqual(intake.check("p", "trailer", "pitch", brief(6)), 90 + 4 * 25)
+            self.assertEqual(intake.check("p", "motion", "pitch", brief(0)), 90)
+            self.assertEqual(intake.check("p", "motion", "report", brief(0)), 70, "the workflow's for a type without one")
+            self.assertEqual(intake.check("p", "motion", "pitch", brief(6)), 90 + 4 * 25)
         ceiling = intake._max_deadline(keepalive.MAX_HOLD_MINUTES * 60.0)
-        self.assertLessEqual(intake.DEADLINES["trailer.pitch"] + 4 * intake.PER_AUDIENCE_MINUTES["trailer"], ceiling)
+        self.assertLessEqual(intake.DEADLINES["motion.pitch"] + 4 * intake.PER_AUDIENCE_MINUTES["motion"], ceiling)
 
     def test_audiences_are_counted_by_letter(self):
         self.assertEqual(intake.audiences_in("Audience A: Tokyo\nAudience B: Lagos\n  Audience C : Dubai"), 3)
@@ -403,9 +404,9 @@ class WorkflowTypeTests(unittest.TestCase):
 
     def test_a_pitch_gets_twice_the_cap_and_its_audiences_scale_it_further(self):
         with mock.patch.object(intake, "_base_token_cap", return_value=2_000_000):
-            self.assertEqual(intake.token_budget("trailer", "A pitch.", "pitch"), 4_000_000)
-            self.assertIsNone(intake.token_budget("trailer", "A report.", "report"), "only the pitch is scaled")
-            self.assertEqual(intake.token_budget("trailer", "".join(f"Audience {c}: X\n" for c in "ABCD"), "pitch"), 8_000_000)
+            self.assertEqual(intake.token_budget("motion", "A pitch.", "pitch"), 4_000_000)
+            self.assertIsNone(intake.token_budget("motion", "A report.", "report"), "only the pitch is scaled")
+            self.assertEqual(intake.token_budget("motion", "".join(f"Audience {c}: X\n" for c in "ABCD"), "pitch"), 8_000_000)
 
     def test_every_declined_type_says_why(self):
         """The entry is the record. A blank reason is the same as having forgotten."""
@@ -564,11 +565,11 @@ class StarterTests(unittest.TestCase):
         self.assertIn("if (types.length === 1 && !chosen.dataset.untyped) kind.value = types[0];", body)
 
     def test_a_trailer_is_not_made_a_product_ad_by_having_one_type(self):
-        """`trailer` offers `product` and `report`, and **no type is the film trailer**. It offered `product` alone at
+        """`motion` offers `product` and `report`, and **no type is the film trailer**. It offered `product` alone at
         first, when selecting the lone type would have turned every film trailer into an ad; the mark stays, so a
         trailer stays untyped however many types it gains or loses."""
         body = TestClient(_app()).get("/new").text
-        self.assertIn('value="trailer" data-types="pitch,product,report" data-untyped="1"', body)
+        self.assertIn('value="motion" data-types="pitch,product,report" data-untyped="1"', body)
         self.assertNotIn('value="poster" data-types="film,product" data-untyped', body)
 
     def test_switching_workflow_cannot_leave_an_unoffered_type_selected(self):
@@ -730,7 +731,7 @@ class TypeSelectionTests(unittest.TestCase):
         self.assertIn(str(intake.MAX_DEADLINE_MINUTES), label)
         for workflow, minutes in intake.DEADLINES.items():
             if "." in workflow:
-                continue                                # a type's own allowance, `trailer.pitch`: no option of its own
+                continue                                # a type's own allowance, `motion.pitch`: no option of its own
             with self.subTest(workflow=workflow):
                 tag = re.search(rf'<option value="{workflow}"[^>]*>', body)
                 self.assertIn(f'data-deadline="{minutes}"', tag.group(0),
@@ -794,7 +795,7 @@ class TypeSelectionTests(unittest.TestCase):
 
         self.assertEqual(ceiling, 218)
         self.assertLessEqual(ceiling + intake.AFTER_DEADLINE_SECONDS / 60, keepalive.MAX_HOLD_MINUTES)
-        self.assertGreaterEqual(ceiling, intake.DEADLINES["trailer"], "the trailer's craft default must fit")
+        self.assertGreaterEqual(ceiling, intake.DEADLINES["motion"], "the motion workflow's craft default must fit")
 
     def test_a_type_the_workflow_does_not_offer_is_refused(self):
         answer = self.client.post("/projects", data={

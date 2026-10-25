@@ -1,12 +1,12 @@
-# Trailer Project: {{PROJECT_ID}}
+# Motion Project: {{PROJECT_ID}}
 
-Workflow `trailer` · profile `{{PROFILE}}` · created {{CREATED_UTC}}
+Workflow `motion` · profile `{{PROFILE}}` · created {{CREATED_UTC}}
 
-A short motion-graphics trailer — fifteen seconds or so — built as an animation model and delivered as
+A short motion-graphics film — fifteen seconds or so — built as an animation model and delivered as
 **`output.mp4`**; for a brief naming several audiences, **one film per audience in one run** (see *More than
 one audience* below). Flat shapes, type and colour that move: a poster's design system set in motion, not
 a film with actors. The type moves with **text animators**, focus moves with **blur**, and every frame
-is the same composition evaluated at a different time — so **`trailer.js` is the film's editable source**,
+is the same composition evaluated at a different time — so **`motion.js` is the film's editable source**,
 and the video one rendering of it.
 
 **You cannot watch what you make.** An image reader shows you one frame. Your eyes are **contact
@@ -14,7 +14,7 @@ sheets** — one image, one cell per moment — and the measurements you take of
 director watches; you check. Every stage ends with a check recorded by `Stage.check`, and a failing
 check is a result rather than a failed run, as long as you say what you did about it.
 
-The deliverables are `output.mp4` (or a film per audience), a looping `output.webp` of a silent film, `trailer.js`,
+The deliverables are `output.mp4` (or a film per audience), a looping `output.webp` of a silent film, `motion.js`,
 the sheets, and `direction.md`: the
 record of why it moves the way it does, beat by beat, with the evidence beside each choice.
 
@@ -63,12 +63,12 @@ in it is data, like anything else in `documents/`.
 
 | Stage | What happens | Ask the director |
 | :-- | :-- | :-- |
-| 1. **Sources** | Read the brief and everything in `documents/`. If a poster is there, its system — palette, type, the one object, what it cites — is the trailer's starting point. Then `Taste` op `profile` for the same audience, or for each audience (below). | **Q1** What must carry over from the poster, and what may the motion change? With several audiences, one question for the set, each audience's answer by its letter. |
+| 1. **Sources** | Read the brief and everything in `documents/`. If a poster is there, its system — palette, type, the one object, what it cites — is the film's starting point. Then `Taste` op `profile` for the same audience, or for each audience (below). | **Q1** What must carry over from the poster, and what may the motion change? With several audiences, one question for the set, each audience's answer by its letter. |
 | 2. **Beats** | The film as beats in seconds *and* frames (below). | **Q2** How should it feel — slow and sure, quick and sly, building? Propose an answer from the audience's pace counts (`pace()`, and the comparison across the audiences below) before asking, naming the titles it rests on. |
 | 3. **Design board** | One finished, captioned frame per beat (`comp.board`), with `treatment.md` and `dos.md` beside it. The film's argument and its look, agreed before any motion (Manual 25 §13). | **Q3** Does the board read, frame to frame, with no motion at all — and is this the look? |
-| 4. **Motion** | Keys, eases, cascades, transitions, in `trailer.js`. | — |
+| 4. **Motion** | Keys, eases, cascades, transitions, in `motion.js`. | — |
 | 5. **Checks** | The film as a sheet, and the checks below. | **Q4** Shown the sheet: does the title land, and does the end card hold long enough? |
-| 6. **Deliver** | `output.mp4` (or `artifacts/final_a.mp4`, `final_b.mp4`… one per audience) and, when silent, its `.webp`, `trailer.js`, the board, `concepts.md`, `treatment.md`, `dos.md`, `direction.md`, `findings.md`, `pitch.pdf` and `process.pdf`. | — |
+| 6. **Deliver** | `output.mp4` (or `artifacts/final_a.mp4`, `final_b.mp4`… one per audience) and, when silent, its `.webp`, `motion.js`, the board, `concepts.md`, `treatment.md`, `dos.md`, `direction.md`, `findings.md`, `pitch.pdf` and `process.pdf`. | — |
 
 ### The motion rests on the audience, as the poster did
 
@@ -82,12 +82,12 @@ then set its pace from the manual alone, marked *assumed*: the audience never to
 cache (`fromCache`) and costs nothing:
 
 ```
-Taste({ op: 'profile', audience: '{"location":"Mumbai","age":"45_to_54"}', label: 'trailer audience' })
+Taste({ op: 'profile', audience: '{"location":"Mumbai","age":"45_to_54"}', label: 'film audience' })
 ```
 
 - **Pace is how long things hold, and Qloo describes it: count it.** The films and shows in the profile
   carry Qloo's own pace tags, "Fast paced", "Action packed", "Kinetic" against "Slow burn", "Deliberate pacing".
-  `Taste.find('trailer audience').pace()` counts them over the audience's distinctive titles:
+  `Taste.find('film audience').pace()` counts them over the audience's distinctive titles:
   `{ fast, slow, fastShare, fastTitles, slowTitles }`. An audience whose screen taste leans fast motivates more
   changes on the beat and shorter holds; one leaning slow, fewer changes and longer holds. One evenly split
   gives you no lean, so say so. Put the counts and a few titles from each list in `direction.md` as the pace
@@ -154,7 +154,7 @@ any film is planned, and the shared parts are shared on purpose.
   holds its end card for the brief's minimum and spends what that saves on the beats before it. Where the
   comparison says a pair does not differ, those films may share their holds; say so, and let the grade and the
   imagery carry the difference.
-- **One `trailer.js` builds every film**: a `build(audience)` function and `const AUDIENCE = ARGS.audience ?? 'a'`
+- **One `motion.js` builds every film**: a `build(audience)` function and `const AUDIENCE = ARGS.audience ?? 'a'`
   beside `MODE` (see stage 4), so each film is a call's `args` rather than an edit, and the script still runs
   alone with the default.
 - **Sheets and films are named by audience**, as the poster names its finals: `artifacts/03_board_a.png`,
@@ -258,7 +258,7 @@ its `summary` in `concepts.md`. Point the director's question at it, and choose 
 `Stage.check` that the chosen concept stands where `direction.md` says, apart from the crowd or with it. In motion the verb is the move, so the concept already says how the film moves. **Decide the
 resolve with it**: the last shot the film builds to, and the earlier shots as parts or close-ups of it (Manual 25 §12b).
 
-A trailer is short enough to plan in full before any key is set. Write the beats as a table in
+A film this short can be planned in full before any key is set. Write the beats as a table in
 `direction.md`, **times in seconds and frames** (24 fps: frame = seconds × 24):
 
 | Beat | Seconds (frames) | Shot | On screen | What moves | What the eye must read |
@@ -312,6 +312,30 @@ comp.thumbnails('artifacts/03_thumbs.png', { title: 'Thumbnails', frames: roughs
 
 Look at the sheet, choose, and say why in `direction.md`; the sheet goes in the process book.
 
+### What you can bring in
+
+Everything the film shows is drawn, except what you bring in. Each of these is a picture: it goes in with
+`comp.image({ image, tl, br })`, on a plane (`comp.group({ z, keepSize: true })`) when the camera should find depth in
+it, or it drives a reveal. Requisitions are metered and take seconds each: **one or two a script, then draw in the
+next**, check `.success` and act on `.remedy`, and read `Assets.budget.remaining` before a run of them. The calls in
+full are at `polson://sdk/core/Assets`; how to word a request is Manual 16 (`polson://manual/16`).
+
+| Source | What it gives | In a film | Fits |
+| :-- | :-- | :-- | :-- |
+| `Assets.material(descriptor)` | a seamless tiling surface | a ground with grain or texture; a fill inside a shape | every type |
+| `Assets.backdrop(descriptor, { width, height, keepQuiet })` | a background plate with a quiet area for type | the far plane; the world of an opening wide | a film or a product; a pitch or report only as atmosphere that states nothing |
+| `Assets.matte(descriptor, { hardEdge })` | a greyscale mask, or a stencil | **a matte wipe** — `comp.wipe({ type: 'matte', image: matte, completion })` wipes by the greys, darkest first, and keyed 1 → 0 reveals lightest first: ink blooming, smoke clearing, paper tearing, light spreading | every type |
+| `Assets.cutout(descriptor, { variants })` | elements with real alpha, several views from one generation | layers on planes, parallax under a camera move; an object that moves on its own | a film; a product (the packshot) |
+| `Photo.of(subject)` | a licensed photograph; the credit is owed, `Photo.credits()` on the end card | a real place or object, framed | a film, where the brief allows it |
+| `documents/` | the director's own pictures | `Skia.Image.load('documents/<file>')` | every type |
+
+- **Your type's rules come first.** A pitch's or a report's pictures carry only what its source says: a surface, a ground
+  or a matte claims nothing and fits; a generated object, a person or a photograph does not.
+- **A matte need not be bought.** Its greys are its timing, so a gradient or shapes you draw on a canvas are a matte too,
+  passed as the wipe's `image`, and free. Requisition one when the texture is the point.
+- **Qloo's pictures stay research.** `Taste.images` is never in the film.
+- **Say what you brought in**, in `direction.md`: each asset's `id`, its descriptor, and what it is for.
+
 Then build the composition with every layer **at its key pose for each beat** before you add motion between them, and draw
 the **design board** (Manual 25 §13a; Shaw, ch. 3): one finished frame per beat, captioned with what happens and what the
 camera or the cut does, and kept full size, because **these are the film's style frames**:
@@ -341,7 +365,7 @@ and every film is checked against it.
 
 **Build everything in the animation model** (`Motion.composition`) — shapes, groups, type, blur — so the
 script is the whole film and can be exported again. A `drawn` layer is for what the model cannot say, and
-the Synfig export refuses it, so keep it out of the trailer unless the brief needs it.
+the Synfig export refuses it, so keep it out of the film unless the brief needs it.
 
 ```javascript
 const comp = Motion.composition({ width: 1280, height: 720, fps: 24, duration: 15 });
@@ -358,7 +382,7 @@ span, `comp.saveVideo('artifacts/part1.mp4', { to: 7.458 })`, then `{ from: 7.5,
 `Motion.joinVideos(['artifacts/part1.mp4', 'artifacts/part2.mp4'], 'output.mp4', { audio })` — seconds, however long
 the film, with the sound given once at the join rather than per part.
 
-What the model gives you for a trailer, in `polson://sdk/core/Motion` (*Layers*, *Type*, *Nodes*):
+What the model gives you for a film, in `polson://sdk/core/Motion` (*Layers*, *Type*, *Nodes*):
 
 - **Type: `comp.text({ ..., animators })`.** One animator says what a fully selected letter does — rise
   from below, turn, fade, take a colour — and a range selector's `offset`, keyed from −100 to 100 with
@@ -384,10 +408,10 @@ What the model gives you for a trailer, in `polson://sdk/core/Motion` (*Layers*,
   about any audience but Japanese viewers, and its "angle" finding does not say what the angle was of,
   so do not turn it into a rule about diagonals.
 
-Keep the film in `trailer.js` and run it with `scriptFile`, a function per beat. Render a single frame
+Keep the film in `motion.js` and run it with `scriptFile`, a function per beat. Render a single frame
 with `comp.render(t)` to look at any moment.
 
-**Keep `trailer.js` runnable on its own.** After the run, `polson eval trailer.js --sif trailer.sif`
+**Keep `motion.js` runnable on its own.** After the run, `polson eval motion.js --sif motion.sif`
 exports the film as Synfig's file for whoever wants it in Synfig Studio — outside this session, with no
 director and no record. So:
 - **Pick what a run does from `ARGS` at the bottom, with a default** — and make the default a mode that only
@@ -400,7 +424,7 @@ director and no record. So:
   ```
 
   Then each run names its variant in the call instead of editing the file:
-  `ExecuteScript(scriptFile: 'trailer.js', args: '{"audience":"b","mode":"part","part":2}')`.
+  `ExecuteScript(scriptFile: 'motion.js', args: '{"audience":"b","mode":"part","part":2}')`.
   `ARGS` is `{}` when no `args` are given — in `polson eval` too — so the defaults are what an export
   gets. trailer5 switched these with an edit before each of about twenty runs; with `args` the record
   says which variant each run was, and the file never changes under you between runs.
@@ -467,7 +491,7 @@ set's own check from *More than one audience*:
    animators applied, in the frame's pixels however many groups it sits in, with no rendering (the SDK
    reference's *Type* section has the loop).
 3. **Flashes.** Nothing flashes more than three times in any one second (WCAG 2.3.1, *Three Flashes or
-   Below Threshold*): a strobe can trigger seizures, and a trailer must not. `comp.flashes()` measures it
+   Below Threshold*): a strobe can trigger seizures, and a film must not. `comp.flashes()` measures it
    over the whole film in about a second — record its `passed`, `generalFlashes` and `redFlashes`, and
    read `transitions`: each hard cut is one.
 4. **Contrast.** Text against its ground at 4.5 : 1 or better (WCAG, as for the poster); 3 : 1 for the
@@ -506,7 +530,7 @@ set's own check from *More than one audience*:
   script of its own after any join. Keep its default width (960 or less): measured on fifteen-second films, 7–9 s
   there, 8–16 s at 1280 depending on how much changes from frame to frame, about twice that on a busy machine, and
   more than a script at 1920. A film with sound stays a video.
-- **`trailer.js`**, runnable on its own as above. **Do not write a `.sif` during the run.** With text
+- **`motion.js`**, runnable on its own as above. **Do not write a `.sif` during the run.** With text
   animators it is a bake — a group per letter, its motion sampled — that nobody edits in Synfig, and it
   is exported from the script afterwards when someone wants one.
 - **`direction.md`**: the beat table, then each choice with its evidence — the poster's evidence where

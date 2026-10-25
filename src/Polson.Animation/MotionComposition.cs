@@ -418,14 +418,16 @@ public abstract partial class MotionLayerList
 
     /// <summary>
     /// A wipe of everything below it in this stack, hidden as <c>completion</c> runs 0 → 1:
-    /// <c>{ type, completion, feather?, angle?, over?, startAngle?, center?, sweep?, points?, innerRadius?, rotation?, invert?, width?, amount?, desc? }</c>.
+    /// <c>{ type, completion, feather?, angle?, over?, startAngle?, center?, sweep?, points?, innerRadius?, rotation?, invert?, width?, image?, tl?, br?, amount?, desc? }</c>.
     /// <c>type</c> is <c>'linear'</c> (<c>angle</c>, 90 left to right; <c>over</c>, a box <c>[x0, y0, x1, y1]</c> or
     /// <c>{ x, y, width, height }</c>, to cross that and erase only inside it), <c>'radial'</c> (<c>startAngle</c> clockwise from up,
     /// <c>center</c>, <c>sweep</c> clockwise, counterclockwise or both), <c>'iris'</c> (<c>center</c>, a circle or <c>points</c>
-    /// with <c>innerRadius</c> and <c>rotation</c>, <c>invert</c> to close down instead) or <c>'blinds'</c> (<c>angle</c>,
-    /// <c>width</c>). A reveal keys completion 1 → 0. It stops at its own group.
+    /// with <c>innerRadius</c> and <c>rotation</c>, <c>invert</c> to close down instead), <c>'blinds'</c> (<c>angle</c>,
+    /// <c>width</c>) or <c>'matte'</c> (<c>image</c>, a matte or any picture, whose darkest greys go first; <c>tl</c> and
+    /// <c>br</c> where it lies, the frame by default; <c>invert</c> for lightest first; <c>feather</c> a share of the greys, 0 to 1).
+    /// A reveal keys completion 1 → 0. It stops at its own group.
     /// </summary>
-    /// <remarks>EffectCraft's wipes, written to .sif as Synfig layers that erase (alpha over).</remarks>
+    /// <remarks>EffectCraft's wipes, written to .sif as Synfig layers that erase (alpha over); the matte's masks are baked.</remarks>
     public MotionLayerList Wipe(object? options)
     {
         var given = JsInterop.AsDict(options) ?? throw new ArgumentException("wipe takes an options object: { type, completion, ... }.");
@@ -434,7 +436,7 @@ public abstract partial class MotionLayerList
         foreach (DictionaryEntry e in given) withBlend[e.Key] = e.Value;
         withBlend["blend"] = "alphaOver";
         var o = new MotionOptions(withBlend, "wipe", "type", "completion", "feather", "angle", "over", "startAngle", "center", "sweep",
-            "points", "innerRadius", "rotation", "invert", "width", "amount", "blend", "desc");
+            "points", "innerRadius", "rotation", "invert", "width", "image", "tl", "br", "amount", "blend", "desc");
         layers.Add(new MotionWipeLayer(o, this));
         return this;
     }

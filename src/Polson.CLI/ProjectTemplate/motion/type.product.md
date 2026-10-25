@@ -41,7 +41,7 @@ in place of the film ones, and ask for what is missing:
   product shot is placed with `Skia.Image.load('documents/<file>')` and `comp.image({ image, tl, br })`; one with its
   own background is shown as a framed photograph rather than cut out by hand. With no shot, make a packshot
   (below). A cutout cell goes straight into `comp.image({ image: cell, tl, br })`.
-- **No real person**, as in every trailer: no face, likeness or recognisable silhouette.
+- **No real person**, as in every film: no face, likeness or recognisable silhouette.
 - **A product that advertising law restricts by age or place** — alcohol, gambling, medicines, financial products —
   is a question for the director before any design. Qloo measures taste; it knows nothing about the law.
 
