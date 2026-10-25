@@ -166,9 +166,25 @@ internal static class RunReport
             .Select(e => (JsonNode)new JsonObject { ["claim"] = e["claim"]?.GetValue<string>(), ["reason"] = e["reason"]?.GetValue<string>() })
             .ToArray();
 
+        // The director's techniques, against what the record shows: a requested one not found, or a denied one used, is
+        // reported beside the rest. A technique nothing measures is listed as judged, never as used.
+        JsonNode? manifest = null;
+        try { manifest = File.Exists(Path.Combine(dir, "project.json")) ? JsonNode.Parse(File.ReadAllText(Path.Combine(dir, "project.json"))) : null; }
+        catch (JsonException) { }
+        var techniques = Techniques.Check(dir, Techniques.FromManifest(manifest));
+        var techniqueWarnings = techniques
+            .Where(t => t.Requested ? t.Status == "not used" : t.Status == "used")
+            .Select(t => t.Requested
+                ? $"Requested technique not found: {t.Name} — {t.Detail}. The run should say in direction.md where it went, or why its concept lost."
+                : $"Denied technique used: {t.Name} — {t.Detail}.");
+
         return new JsonObject
         {
             ["hasEventLog"] = hasLog,
+            ["techniques"] = new JsonArray([.. techniques.Select(t => (JsonNode)new JsonObject
+            {
+                ["id"] = t.Id, ["name"] = t.Name, ["requested"] = t.Requested, ["status"] = t.Status, ["detail"] = t.Detail,
+            })]),
             ["events"] = events.Count,
             ["runStarts"] = Count("run.start"),
             ["sessions"] = new JsonArray([.. Sessions(events)]),
@@ -215,6 +231,7 @@ internal static class RunReport
             ["warnings"] = new JsonArray([.. Warnings(hasLog, scriptsRun.Length, Count("render"),
                 scriptFiles.Length, scriptsNeverRun.Length, unexplainedArtifacts.Length,
                 Count("expect"), checks.Length, checksFailed)
+                .Concat(techniqueWarnings)
                 .Select(w => (JsonNode)w!)])
         };
     }
@@ -576,6 +593,15 @@ internal static class RunReport
         foreach (var (label, value) in rows)
         {
             Console.WriteLine($"    {label,-22} {value}");
+        }
+
+        // The director's techniques, one line each: asked for or denied, and what the record shows.
+        if (report["techniques"] is JsonArray { Count: > 0 } techniques)
+        {
+            Console.WriteLine();
+            Console.WriteLine("    Techniques the director chose:");
+            foreach (var t in techniques)
+                Console.WriteLine($"      {(t!["requested"]!.GetValue<bool>() ? "requested" : "denied"),-10} {t["name"],-28} {t["status"],-9} {t["detail"]}");
         }
 
         PrintSessions(sessions);

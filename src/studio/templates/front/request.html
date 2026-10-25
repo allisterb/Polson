@@ -28,6 +28,9 @@
       {% if rec.sizes %}<span class="ps-field fr-static"><span class="ps-field-label">Sizes</span><span class="ps-field-value">{% for s in rec.sizes %}{{ s.width }} × {{ s.height }}{{ ', ' if not loop.last }}{% endfor %}</span></span>{% endif %}
       {% if rec.formats %}<span class="ps-field fr-static"><span class="ps-field-label">Formats</span><span class="ps-field-value">{{ rec.formats|join(', ') }}</span></span>{% endif %}
       {% for x in rec.extras or [] %}<span class="ps-field fr-static"><span class="ps-field-label">{{ x.label }}</span><span class="ps-field-value">{{ x.value }}</span></span>{% endfor %}
+      {%- set techs = rec.techniques or {} -%}
+      {% if techs.request %}<span class="ps-field fr-static" title="Design techniques asked for"><span class="ps-field-label">Use</span><span class="ps-field-value">{{ technique_names(techs.request)|join(', ') }}</span></span>{% endif %}
+      {% if techs.deny %}<span class="ps-field fr-static" title="Design techniques ruled out"><span class="ps-field-label">Don't use</span><span class="ps-field-value">{{ technique_names(techs.deny)|join(', ') }}</span></span>{% endif %}
     </div>
   </header>
 

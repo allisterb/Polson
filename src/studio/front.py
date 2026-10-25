@@ -36,7 +36,7 @@ from starlette.concurrency import run_in_threadpool
 
 from orchestrator.events import read_events
 
-from . import archive, catalogue, projects, uploads
+from . import archive, catalogue, projects, techniques, uploads
 from . import direction as direction_mod
 from . import observe as observe_mod
 from .research import is_research, research_executions
@@ -357,6 +357,8 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
     # directory does not change under a running server.
     gallery = Path(__file__).parent / "static" / "gallery"
     templates.env.globals["gallery"] = frozenset(p.name for p in gallery.glob("*") if p.is_file())
+    # A request's design techniques are recorded by id; the page names them.
+    templates.env.globals["technique_names"] = techniques.names
 
     def page(request: Request, name: str, nav: str, status_code: int = 200, **context: Any) -> HTMLResponse:
         state = request.app.state
@@ -412,9 +414,12 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
         styles = {i: [(v, label) for v, label in catalogue.types_for(card, r.workflow)
                       if i in runs and (runs[i] is None or v in runs[i]) and not card.fixed_type]
                   for i, r in enumerate(card.routes)}
+        # The design techniques each route's workflow offers (techniques.py): the "Graphic design" field, per route as
+        # the styles are, since a technique belongs to a workflow.
+        designs = {i: techniques.for_workflow(r.workflow) for i, r in enumerate(card.routes)}
         return page(request, "compose.html", "new", status_code=status_code, card=card,
                     sizes=catalogue.SIZES[card.kind], formats=catalogue.FORMATS[card.kind],
-                    styles=styles, offered=runs,
+                    styles=styles, offered=runs, designs=designs,
                     can_make=not state.observe_only or state.commissioner is not None,
                     drafts=not state.observe_only,
                     form=form, route=route, refused=refused, ages=catalogue.AGE_BANDS,
@@ -509,7 +514,8 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
         form = {"title": title, "route": route, "kind": kind, "sizes": sizes, "custom_size": custom_size,
                 "formats": formats, "brief": brief, "extras": extras, "auto": "1" if autonomous else "",
                 "audiences": [{"place": p, "age": aud_age[i] if i < len(aud_age) else ""}
-                              for i, p in enumerate(aud_place)]}
+                              for i, p in enumerate(aud_place)],
+                "techniques": techniques.states(form_data)}
 
         chosen = catalogue.BY_SLUG.get(card)
         if chosen is None:
@@ -525,11 +531,13 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
         try:
             commission = catalogue.parse(card, title, route, kind, sizes, custom_size, formats, extras, brief,
                                          aud_place, aud_age)
+            commission.request, commission.deny = techniques.parse(commission.workflow, form["techniques"])
             staged = await uploads.stage(files, scratch)
             commission.card.check_files([p.name for p in staged])
             project_id = unique_id(state.root, commission.title)
             made = await projects.create(state.root, project_id, commission.workflow, commission.kind,
-                                         commission.brief_text([p.name for p in staged]), auto=autonomous)
+                                         commission.brief_text([p.name for p in staged]), auto=autonomous,
+                                         request=commission.request, deny=commission.deny)
         except StudioError as exc:
             shutil.rmtree(scratch, ignore_errors=True)
             note = " Files have to be chosen again." if any((f.filename or "").strip() for f in files) else ""
@@ -573,6 +581,7 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
         try:
             commission = catalogue.parse(chosen.slug, title, route, kind, sizes, custom_size, formats, extras,
                                          brief, aud_place, aud_age)
+            commission.request, commission.deny = techniques.parse(commission.workflow, form.get("techniques", {}))
             types = commissioner.types(commission.workflow)
             if types is None:
                 raise StudioError(f"This studio does not make {chosen.title.lower()} requests yet.")
@@ -588,7 +597,8 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
             commission.card.check_files([p.name for p in staged])
             name = commissioner.free_name(commission.title)
             await commissioner.commission(name, commission.workflow, commission.kind,
-                                          commission.brief_text([p.name for p in staged]), staged, auto=autonomous)
+                                          commission.brief_text([p.name for p in staged]), staged, auto=autonomous,
+                                          request=commission.request, deny=commission.deny)
         except Exception as exc:                                 # noqa: BLE001 - refusals carry a status
             status = 409 if isinstance(exc, StudioError) else getattr(exc, "status", None)
             if status is None:

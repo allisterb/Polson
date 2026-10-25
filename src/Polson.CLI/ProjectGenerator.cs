@@ -231,6 +231,17 @@ internal static class ProjectGenerator
             type = fallback;
         }
 
+        // The director's techniques for this production, refused rather than ignored when an id is unknown or belongs to
+        // another workflow, like --type. A regeneration keeps the recorded ones unless either flag is given again, and only
+        // for the workflow they were recorded against: a technique belongs to a workflow as a type does.
+        var (techniques, techniqueError) = Techniques.Parse(workflow, opts.Request, opts.Deny);
+        if (techniqueError is not null) return Fail(techniqueError);
+        if (techniques!.IsEmpty && inherited.Length > 0 && inherited == workflow)
+        {
+            var kept = Techniques.FromManifest(recorded);
+            techniques = Techniques.Parse(workflow, kept.Request, kept.Deny).Choices ?? Techniques.Choices.None;
+        }
+
         // One channel for what to make, so there is one place the trust boundary sits: --brief reads
         // a file, --prompt takes the text directly, and both are quoted into brief.md as data.
         // Taking both would mean silently dropping one.
@@ -470,6 +481,10 @@ internal static class ProjectGenerator
             // Nobody will answer: the agent decides where the workflow would ask, and records each decision as the
             // question it replaced. After the deadline so it reads as the last word on how to work, and it says it wins.
             ["AUTO"] = opts.Auto ? Render("_shared", "auto.md", []) : string.Empty,
+
+            // The techniques the director requested or denied for this production (`--request`, `--deny`): an option
+            // becomes an instruction for this production only, and a default can be taken away. Empty when none.
+            ["TECHNIQUES"] = Techniques.Section(techniques),
         };
 
         // The instructions are always rewritten: they are the project's system prompt, generated
@@ -486,7 +501,7 @@ internal static class ProjectGenerator
         }
 
         WriteText(dir, ".gitignore", GitIgnore(orchestratable));
-        WriteJson(dir, "project.json", ProjectManifest(id, workflow, type, sdk, profile, createdUtc, orchestratable, deadline, opts.Test, opts.Auto));
+        WriteJson(dir, "project.json", ProjectManifest(id, workflow, type, sdk, profile, createdUtc, orchestratable, deadline, opts.Test, opts.Auto, techniques));
 
         // Roles, checklists, anything else the workflow ships. Rendered like the rest, so they can
         // carry the same tokens.
@@ -833,7 +848,8 @@ internal static class ProjectGenerator
     /// by probing filenames. <c>conversationId</c> is standalone-only state: resume belongs to us,
     /// and a desktop host neither writes nor reads it.
     /// </remarks>
-    static object ProjectManifest(string id, string workflow, string type, string sdk, string profile, string createdUtc, bool orchestratable, int deadlineMinutes, bool test, bool auto = false)
+    static object ProjectManifest(string id, string workflow, string type, string sdk, string profile, string createdUtc, bool orchestratable, int deadlineMinutes, bool test, bool auto = false,
+        Techniques.Choices? techniques = null)
     {
         // An ordered dictionary rather than an anonymous type: the optional fields would otherwise
         // need one shape per combination of them, and the order here is the order on disk.
@@ -856,6 +872,9 @@ internal static class ProjectGenerator
 
         // Only when true, like `test`. Read by the ADK runtime, which then gives the agent no `ask_director`.
         if (auto) manifest["auto"] = true;
+
+        // Only when the director chose any, like `test`: `{ request, deny }`, read back by `polson report` to check the run.
+        if (techniques is not null && Techniques.ToManifest(techniques) is { } chosen) manifest["techniques"] = chosen;
 
         // The slot the orchestrator records a resumable session into, so it exists wherever the
         // orchestrator can run — which is now any Antigravity project, not only a standalone one.

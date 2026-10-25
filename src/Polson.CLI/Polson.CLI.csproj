@@ -32,6 +32,8 @@
     <!-- Workflow templates ship inside the binary, so create-project works from bin/cli with no
          loose files to lose. Resource names become Polson.CLI.ProjectTemplate.<workflow>.<file>. -->
     <EmbeddedResource Include="ProjectTemplate\**\*.md" />
+    <!-- The technique catalogue: data the generator, the report and `polson techniques` read. -->
+    <EmbeddedResource Include="ProjectTemplate\_shared\techniques.json" />
   </ItemGroup>
 
   <!-- `bin/cli` is what agent runs use, so it is a Release build: only a Release build is copied there

@@ -41,6 +41,17 @@
         out.classList.toggle('is-empty', !who.length);
         return;
       }
+      if (pop.hasAttribute('data-techniques')) {
+        // A choice per technique: the summary counts what was asked for and ruled out, the rest is the studio's.
+        var use = pop.querySelectorAll('input[value=request]:checked').length;
+        var deny = pop.querySelectorAll('input[value=deny]:checked').length;
+        var said = [];
+        if (use) said.push(use + ' to use');
+        if (deny) said.push(deny + ' ruled out');
+        out.textContent = said.length ? said.join(' · ') : "Studio's choice";
+        out.classList.toggle('is-empty', !said.length);
+        return;
+      }
       var picked = Array.prototype.map.call(pop.querySelectorAll('input:checked'), function (i) {
         return i.closest('[data-label]').getAttribute('data-label');
       });
@@ -71,7 +82,8 @@
       pop.addEventListener('change', function (e) {
         summarise(pop);
         if (e.target.name === 'route') syncRoute();
-        if (e.target.type === 'radio') pop.open = false;
+        // A single choice closes its panel; the design techniques are many choices, so theirs stays open.
+        if (e.target.type === 'radio' && !pop.hasAttribute('data-techniques')) pop.open = false;
       });
       pop.addEventListener('input', function () { summarise(pop); });
       pop.addEventListener('toggle', function () {

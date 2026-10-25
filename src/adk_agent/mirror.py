@@ -95,7 +95,7 @@ MIRRORED_DIRS = ("artifacts", "scripts", "events", ".polson/research", "audio")
 #: the document that explains it. `request.json` is the composer's record of the request (title, card, audiences),
 #: without which a restored request is listed under its folder name.
 MIRRORED_FILES = (
-    "brief.md", "mindmap.md", "concepts.md", "treatment.md", "dos.md", "direction.md", "artwork.js", "motion.js", "trailer.js", "explainer.js", "plan.md", "accuracy.md", "findings.md",
+    "brief.md", "mindmap.md", "concepts.md", "treatment.md", "dos.md", "direction.md", "artwork.js", "motion.js", "trailer.js", "poster.js", "explainer.js", "plan.md", "accuracy.md", "findings.md",
     "critique_log.md", "materials.md", "turns.md", "sketch.md", "animation.md", "project.json", "request.json",
     "GEMINI.md", "CLAUDE.md",
     "output.webp", "output.svg", "output.png", "output.mp4",

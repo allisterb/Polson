@@ -117,7 +117,7 @@ internal class Program : Runtime
             with.HelpWriter = Console.Error;
         });
 
-        var result = parser.ParseArguments<ServerOptions, EvalOptions, CreateProjectOptions, ResetOptions, ReportOptions, PreserveChatlogOptions>(args);
+        var result = parser.ParseArguments<ServerOptions, EvalOptions, CreateProjectOptions, ResetOptions, ReportOptions, PreserveChatlogOptions, TechniquesOptions>(args);
         try
         {
             await result.MapResult(
@@ -127,6 +127,7 @@ internal class Program : Runtime
                 (ResetOptions opts) => HandleResetArgs(opts),
                 (ReportOptions opts) => HandleReportArgs(opts),
                 (PreserveChatlogOptions opts) => Task.FromResult(ChatlogPreserver.Run(opts)),
+                (TechniquesOptions opts) => HandleTechniquesArgs(opts),
                 errs => ReportParseFailure(errs)
             );
         }
@@ -787,6 +788,36 @@ internal class Program : Runtime
         var asked = errors.All(e => e is HelpRequestedError or HelpVerbRequestedError or VersionRequestedError);
         if (!asked) Environment.ExitCode = 1;
 
+        return Task.CompletedTask;
+    }
+
+    /// <summary>The technique catalogue, whole or one workflow's, as a list or as JSON for the studio's form.</summary>
+    static Task HandleTechniquesArgs(TechniquesOptions opts)
+    {
+        var workflow = opts.Workflow.Trim().ToLowerInvariant();
+        var list = workflow.Length == 0 ? Techniques.All.ToArray() : Techniques.For(workflow);
+        if (workflow.Length > 0 && list.Length == 0)
+        {
+            Console.Error.WriteLine($"No techniques apply to '{workflow}'. They apply to: {string.Join(", ", Techniques.All.SelectMany(t => t.Workflows).Distinct())}.");
+            Environment.ExitCode = 1;
+            return Task.CompletedTask;
+        }
+        if (opts.Json)
+        {
+            Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(list.Select(t => new
+            {
+                id = t.Id, name = t.Name, workflows = t.Workflows, source = t.Source, summary = t.Summary,
+                measured = t.Evidence.Judged is null,
+            // Escaped to ASCII on purpose: redirected, the CLI writes in the console's code page, and a raw "§" reached the
+            // studio as cp437's 0x15, a control character its JSON parser refused. People read the listing without --json.
+            }), new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+            return Task.CompletedTask;
+        }
+        foreach (var t in list)
+        {
+            Console.WriteLine($"  {t.Id,-20} {t.Name} ({t.Source}) — {string.Join(", ", t.Workflows)}{(t.Evidence.Judged is null ? "" : "; judged, not measured")}");
+            Console.WriteLine($"  {"",-20} {t.Summary}");
+        }
         return Task.CompletedTask;
     }
 

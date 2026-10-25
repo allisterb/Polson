@@ -99,6 +99,37 @@
       </details>
       {% endfor %}
 
+      {%- set tech_in = form.techniques if form.techniques is defined else {} -%}
+      {% for i, techs in designs.items() if techs %}
+      <details class="fr-pop" data-route="{{ i }}" data-techniques {{ 'hidden' if i != route }}>
+        <summary class="ps-field"><span class="ps-field-label">Graphic design</span><span class="ps-field-value" data-summary>Studio's choice</span>{{ m.icon('chevron-down', 18) }}</summary>
+        <fieldset class="ps-ogrid fr-panel fr-techs" style="margin:0" {{ 'disabled' if i != route }}>
+          <legend class="ps-ogrid-title" style="float:left; width:100%">Graphic design</legend>
+          <p class="ps-ogrid-hint" style="clear:both">Leave each to the studio, ask for it, or rule it out. One you ask for is used in what is delivered, or tried in a concept and its loss explained; one you rule out is not used at all, even where the studio would have.</p>
+          <div class="fr-tech-list">
+            {% for t in techs %}
+            {%- set now = tech_in.get(t.id, '') if i == route else '' -%}
+            <div class="fr-tech" role="radiogroup" aria-labelledby="tech-{{ i }}-{{ t.id }}">
+              <div class="fr-tech-text">
+                <span class="fr-tech-name" id="tech-{{ i }}-{{ t.id }}">{{ t.name }}</span>
+                <span class="fr-tech-summary">{{ t.summary }}</span>
+                <span class="fr-spec">{{ t.source }}{% if not t.measured %} · judged, not measured{% endif %}</span>
+              </div>
+              <div class="fr-seg">
+                {% for value, label in (('', 'Studio decides'), ('request', 'Use'), ('deny', "Don't use")) %}
+                <label class="fr-seg-opt{{ ' is-use' if value == 'request' }}{{ ' is-deny' if value == 'deny' }}">
+                  <input class="fr-vh" type="radio" name="tech_{{ t.id }}" value="{{ value }}" {{ 'checked' if now == value }}>
+                  <span>{{ label }}</span>
+                </label>
+                {% endfor %}
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        </fieldset>
+      </details>
+      {% endfor %}
+
       <details class="fr-pop">
         <summary class="ps-field"><span class="ps-field-label">Sizes<span class="ps-req" aria-hidden="true"> *</span></span><span class="ps-field-value" data-summary>Choose</span>{{ m.icon('chevron-down', 18) }}</summary>
         <section class="ps-ogrid fr-panel" aria-label="Sizes">
@@ -211,7 +242,7 @@
     <section class="ps-brief">
       <label class="ps-label" for="x_{{ x.key }}">{{ x.label }}</label>
       <div class="ps-brief-box">
-        <textarea id="x_{{ x.key }}" name="x_{{ x.key }}" rows="5" maxlength="2000"
+        <textarea id="x_{{ x.key }}" name="x_{{ x.key }}" rows="{{ x.rows }}" maxlength="2000"
                   placeholder="{{ x.placeholder }}">{{ extras_in.get(x.key, '') }}</textarea>
       </div>
     </section>

@@ -609,6 +609,8 @@ set's own check from *More than one audience*:
 
 {{AUTO}}
 
+{{TECHNIQUES}}
+
 {{DELIVERABLES}}
 
 {{TEST}}

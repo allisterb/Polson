@@ -70,6 +70,23 @@ public class CommandLineTests : TestsRuntime
     }
 
     /// <summary>
+    /// <c>techniques --json</c> is read through a pipe by the studio's form, so it is ASCII: redirected, the CLI writes in
+    /// the console's code page, and a raw "§" reached the studio as a control character its JSON parser refused
+    /// (2026-10-25), which hid the form's whole Graphic design field.
+    /// </summary>
+    [Fact]
+    public async Task TestTheTechniqueCatalogueIsAsciiJsonThroughAPipe()
+    {
+        var (exitCode, output) = await RunAsync(TimeSpan.FromSeconds(30), "techniques", "--json");
+
+        Assert.Equal(0, exitCode);
+        Assert.DoesNotMatch("[^\\x00-\\x7F]", output);
+        var rows = System.Text.Json.JsonDocument.Parse(output).RootElement;
+        Assert.True(rows.GetArrayLength() > 0);
+        Assert.Contains("§", rows[0].GetProperty("source").GetString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// A bare invocation prints the verbs and exits, rather than starting the server.
     /// </summary>
     /// <remarks>

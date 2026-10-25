@@ -90,6 +90,8 @@ class Extra:
     placeholder: str = ""
     #: A paragraph rather than a line: drawn as a text box under the brief, line breaks kept.
     long: bool = False
+    #: A long field's box height in lines: a claim is a sentence or two, a viewer a paragraph.
+    rows: int = 5
 
 
 @dataclass(frozen=True)
@@ -170,10 +172,11 @@ CARDS: tuple[Card, ...] = (
     # workflow's `product` type; its evidence method is `docs/internal/product-ad-probe.md`.
     Card("product-ad", "Product ad", "video", "Video · 15 seconds, one ad per audience",
          (Route("motion", "Motion graphics ad"),),
-         extras=(Extra("product", "Product", placeholder="Its name, and what it is"),
-                 Extra("comparables", "Comparable brands", placeholder="Two or three real brands like it"),
-                 Extra("claim", "Claim", placeholder="The one claim, worded as it may appear"),
-                 Extra("cta", "Call to action", placeholder="What the viewer should do next"),
+         # What the director types goes under the brief, where there is room to write it; the bar keeps the choices.
+         extras=(Extra("product", "Product", placeholder="Its name, and what it is", long=True, rows=2),
+                 Extra("comparables", "Comparable brands", placeholder="Two or three real brands like it", long=True, rows=2),
+                 Extra("claim", "Claim", placeholder="The one claim, worded as it may appear", long=True, rows=2),
+                 Extra("cta", "Call to action", placeholder="What the viewer should do next", long=True, rows=2),
                  Extra("duration", "Duration", ("15 seconds", "30 seconds"), "15 seconds")),
          audiences=True, types=("product",)),
     # An audience's questions answered from a long document the director attaches — an annual report, a 10-K. The
@@ -295,6 +298,10 @@ class Commission:
     extras: list[tuple[str, str]]
     brief: str
     audiences: list[tuple[str, str]] = field(default_factory=list)   # (place, age band code or "")
+    #: Design techniques the visitor asked for and ruled out, by id (`techniques.parse`). Not in the brief: they are the
+    #: director's settings, not the client's words, and reach the CLI as `--request` / `--deny`.
+    request: list[str] = field(default_factory=list)
+    deny: list[str] = field(default_factory=list)
 
     def audience_lines(self) -> list[str]:
         """'Audience A: Tokyo, aged 45 to 54', as the poster and trailer briefs name them."""
@@ -334,7 +341,8 @@ class Commission:
                 "formats": [f.ext for f in self.formats],
                 "extras": [{"label": k, "value": v} for k, v in self.extras],
                 "audiences": [{"letter": chr(65 + i), "place": p, "age": a, "ageLabel": dict(AGE_BANDS).get(a, "")}
-                              for i, (p, a) in enumerate(self.audiences)]}
+                              for i, (p, a) in enumerate(self.audiences)],
+                "techniques": {"request": list(self.request), "deny": list(self.deny)}}
 
 
 def parse_audiences(places: list[str], ages: list[str]) -> list[tuple[str, str]]:

@@ -121,6 +121,7 @@ def _run_create_project(
     projects_dir: Path, project_id: str, workflow: str,
     prompt: str | None, type_: str | None, force: bool, test: bool = False,
     deadline: int | None = None, inline_manuals: bool = True, auto: bool = False,
+    request: list[str] | None = None, deny: list[str] | None = None,
 ) -> Path:
     """Shells out to the one thing that knows how to build a project."""
     if not CLI_DLL.is_file():
@@ -156,6 +157,11 @@ def _run_create_project(
     # Nobody will answer: the project records it, and `studio.build` then gives the agent no `ask_director`.
     if auto:
         args += ["--auto"]
+    # Design techniques the director asked for or ruled out (`polson techniques`); the CLI checks every id.
+    if request:
+        args += ["--request", ",".join(request)]
+    if deny:
+        args += ["--deny", ",".join(deny)]
     # Minutes for the whole commission. Worth setting explicitly on this runtime: a
     # workflow default plus its breaker grace can exceed **Cloud Run's 3600s request
     # timeout**, and then the wall kills the run before the breaker can halt it cleanly —
@@ -266,6 +272,7 @@ def create(
     deadline: int | None = None, documents: list[str] | None = None,
     projects_dir: Path = PROJECTS_DIR, apps_dir: Path = APPS_DIR, budget_tokens: int | None = None,
     inline_manuals: bool = True, auto: bool = False,
+    request: list[str] | None = None, deny: list[str] | None = None,
 ) -> tuple[Path, Path]:
     """Generates the project and its app. Returns `(project_dir, app_package)`."""
     if not VALID_APP_NAME.match(project_id):
@@ -274,7 +281,7 @@ def create(
             "letters, digits, underscores and dashes."
         )
     project = _run_create_project(
-        projects_dir, project_id, workflow, prompt, type_, force, test, deadline, inline_manuals, auto)
+        projects_dir, project_id, workflow, prompt, type_, force, test, deadline, inline_manuals, auto, request, deny)
     stage_documents(project, documents)
     return project, write_app(project, project_id, apps_dir, budget_tokens)
 
@@ -313,15 +320,21 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--auto", action="store_true",
                         help="Autonomous: the agent asks the director nothing and waits for no one, deciding where "
                              "the workflow would ask and recording each decision for review afterwards.")
+    parser.add_argument("--request", help="Design techniques to use, comma-separated ids (`polson techniques`).")
+    parser.add_argument("--deny", help="Design techniques not to use, comma-separated ids.")
     parser.add_argument("--projects-dir", type=Path, default=PROJECTS_DIR)
     args = parser.parse_args(argv)
+
+    def ids(given: str | None) -> list[str]:
+        return [i.strip() for i in (given or "").split(",") if i.strip()]
 
     try:
         project, package = create(
             args.project_id, workflow=args.workflow, prompt=args.prompt,
             type_=args.type_, force=args.force, test=args.test,
             deadline=args.deadline, documents=args.documents,
-            projects_dir=args.projects_dir, inline_manuals=args.inline_manuals, auto=args.auto)
+            projects_dir=args.projects_dir, inline_manuals=args.inline_manuals, auto=args.auto,
+            request=ids(args.request), deny=ids(args.deny))
     except GenerateError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
