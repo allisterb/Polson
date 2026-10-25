@@ -71,7 +71,11 @@ public static class BrandMatrix
         {
             var r = p.Concept ? 17f : 12f;
             float px = Math.Clamp(Px(p.X), left + r, right - r), py = Math.Clamp(Py(p.Y), top + r, bottom - r), ox = px, oy = py;
-            for (var step = 0; step < 60 && placed.Any(q => MathF.Sqrt((q.X - px) * (q.X - px) + (q.Y - py) * (q.Y - py)) < q.R + r + 2); step++)
+            // The axes are obstacles too: a mark sitting on one hides the line, and the layout check reads the line as
+            // running through its number (poster5's Tokyo field, mark 9). Clearing it moves a mark at most its own width.
+            bool Blocked() => placed.Any(q => MathF.Sqrt((q.X - px) * (q.X - px) + (q.Y - py) * (q.Y - py)) < q.R + r + 2)
+                || MathF.Abs(px - cx) < r + 2 || MathF.Abs(py - cy) < r + 2;
+            for (var step = 0; step < 60 && Blocked(); step++)
             {
                 var a = step * 2.4f;                       // the golden angle, so the search spreads rather than circles
                 var d = 6 + step * 2.2f;

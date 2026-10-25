@@ -180,19 +180,33 @@ public static partial class MindMap
         // Inner pills are placed one at a time, centre outward, and each moves out along its own direction until its
         // box clears every box already placed: pills differ in width, so no fixed set of rings keeps a wide branch name
         // off the sub-branch beside it (a small map's "Films" sat on "Audience A — Berlin 30–34").
+        // A pill must also stay inside the leaf ring, where the leaves' marks and labels begin: whole names pushed out
+        // to the ring covered leaf labels (poster5's "Artists it loves that Mumbai does not" over "Zakir Hussain").
+        // So a pill that cannot fit at full width is tried narrower — its name cut — rather than pushed over the leaves.
         var radius = new Dictionary<MindMapNode, float> { [root] = 0 };
+        var pillWidths = new Dictionary<MindMapNode, float>();
         var boxes = new List<(float L, float T, float R, float B)> { (cx - centre.Width / 2, cy - centre.Height / 2, cx + centre.Width / 2, cy + centre.Height / 2) };
+        bool Inside((float L, float T, float R, float B) b) =>
+            new[] { (b.L, b.T), (b.R, b.T), (b.L, b.B), (b.R, b.B) }.All(p => MathF.Sqrt((p.Item1 - cx) * (p.Item1 - cx) + (p.Item2 - cy) * (p.Item2 - cy)) <= ring - 10);
         foreach (var n in root.Descendants.Where(n => n.Children.Count > 0).OrderBy(n => n.Depth))
         {
-            var (w, h) = PillSize(ctx, n.Text, PillWidth(n, slot, Planned(n)), n.Depth == 1 ? size : size - 1, family, n.Depth == 1);
-            var r = MathF.Max(Planned(n), radius[n.Parent!] + 4);
-            (float L, float T, float R, float B) box;
-            while (true)
+            var fontSize = n.Depth == 1 ? size : size - 1;
+            (float L, float T, float R, float B) box = default;
+            float r = 0, max = PillWidth(n, slot, Planned(n));
+            foreach (var cap in new[] { max, max * 0.75f, max * 0.55f, 80f })
             {
-                float px = cx + r * MathF.Cos(n.Angle), py = cy + r * MathF.Sin(n.Angle);
-                box = (px - w / 2 - 4, py - h / 2 - 4, px + w / 2 + 4, py + h / 2 + 4);
-                if (r >= ring - h || !boxes.Any(o => box.L < o.R && o.L < box.R && box.T < o.B && o.T < box.B)) break;
-                r += 4;
+                var (w, h) = PillSize(ctx, n.Text, cap, fontSize, family, n.Depth == 1);
+                var found = false;
+                for (r = MathF.Max(Planned(n), radius[n.Parent!] + 4); r < ring; r += 4)
+                {
+                    float px = cx + r * MathF.Cos(n.Angle), py = cy + r * MathF.Sin(n.Angle);
+                    box = (px - w / 2 - 4, py - h / 2 - 4, px + w / 2 + 4, py + h / 2 + 4);
+                    if (!Inside(box)) break;
+                    if (!boxes.Any(o => box.L < o.R && o.L < box.R && box.T < o.B && o.T < box.B)) { found = true; break; }
+                }
+                pillWidths[n] = cap;
+                if (found) break;
+                r = MathF.Max(Planned(n), radius[n.Parent!] + 4);           // nothing fit: the narrowest, where it was planned
             }
             boxes.Add(box);
             radius[n] = r;
@@ -240,7 +254,7 @@ public static partial class MindMap
         // Inner nodes: a pill in the branch's colour, as wide as its share of the ring allows.
         foreach (var n in root.Descendants.Where(n => n.Children.Count > 0).OrderByDescending(n => n.Depth))
         {
-            Pill(ctx, n.Text, n.X, n.Y, PillWidth(n, slot, Planned(n)), n.Depth == 1 ? size : size - 1, family, Colour(n), n.Depth == 1);
+            Pill(ctx, n.Text, n.X, n.Y, pillWidths[n], n.Depth == 1 ? size : size - 1, family, Colour(n), n.Depth == 1);
         }
 
         // The centre, in ink, on as many lines as it needs (at most three).
@@ -299,9 +313,11 @@ public static partial class MindMap
         }
     }
 
-    /// <summary>A branch keeps its whole name; a sub-branch is as wide as its share of the ring allows.</summary>
-    private static float PillWidth(MindMapNode n, float slot, float radius) =>
-        n.Depth == 1 ? BranchPill : MathF.Max(70, MathF.Min(170, n.Leaves.Count() * slot * radius));
+    /// <summary>
+    /// Every inner node keeps its whole name, up to the cap: placement pushes a wide pill outward until it is clear, so
+    /// a width capped by the node's share of the ring only cut names ("Key wo…", "Artists it lov…" in poster5).
+    /// </summary>
+    private static float PillWidth(MindMapNode n, float slot, float radius) => BranchPill;
 
     private static (float Width, float Height) PillSize(CanvasRenderingContext2D ctx, string text, float maxWidth, float size, string family, bool bold)
     {

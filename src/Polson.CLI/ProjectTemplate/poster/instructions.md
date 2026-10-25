@@ -132,7 +132,7 @@ divided into blocks running to its edges leaks into its neighbours.
 **Map the brief before anything is drawn** (Manual 29 §2a; Lupton's *Mind Mapping*, after Tony Buzan). Write
 `mindmap.md`, quickly. Put the film in a few words under a `#` heading at the centre, then nested `-` bullets:
 - **The trunk is the film's**, one for the whole set: at least four branches of Lupton's kinds (synonyms, antonyms,
-  clichés, stock phrases, related words), two levels deep.
+  clichés, stock phrases, related words), two levels deep. Name every branch in a word or three; the detail goes in the leaves.
 - **Then a branch per audience**:
   - its distinctive titles and tags, each with the handle of the answer that returned it, `*Suspiria* (t2)`;
   - the film's key words in that audience's language, with what they bring to mind there, each marked

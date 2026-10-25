@@ -52,6 +52,9 @@ from the centre to the word is where the idea came from, and that is worth keepi
 
 - **Write it as an outline, quickly**: `mindmap.md`, a `#` heading for the centre — the brief's subject in a few
   words — and nested `-` bullets. Writing words is the fast part; `Stage.mindMap` does the drawing.
+- **Name a branch in a word or three** — *Films*, *Key words in Japanese* — never a sentence: a map's nodes are
+  words, and an inner name too long for its room on the ring is cut (poster5's *Artists it loves that Mumbai does not*
+  became *Artists it…*). The detail belongs in the leaves.
 - **One map per run, not per audience.** The trunk is the brief's subject, the same for everyone: at least four
   branches of Lupton's kinds and two levels deep, so it is a map and not a list.
 - **Then a branch per audience, and this is where it adapts to culture.** Seed it from what was measured — the

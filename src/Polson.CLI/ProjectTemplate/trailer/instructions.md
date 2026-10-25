@@ -216,7 +216,7 @@ when its answer would change the others'.
 **Map the brief first** (Manual 29 §2a; Lupton's *Mind Mapping*, after Tony Buzan). Write `mindmap.md`, quickly. Put
 the film or product in a few words under a `#` heading at the centre, then nested `-` bullets:
 - **The trunk is the subject's**, one for the whole set: at least four branches of Lupton's kinds (synonyms, antonyms,
-  clichés, stock phrases, related words), two levels deep.
+  clichés, stock phrases, related words), two levels deep. Name every branch in a word or three; the detail goes in the leaves.
 - **Then a branch per audience**:
   - its distinctive titles and tags, each with the handle of the answer that returned it, `*Suspiria* (t2)`;
   - the key words in that audience's language, with what they bring to mind there, each marked `(assumed)`.
