@@ -1128,8 +1128,9 @@ never competing with what it holds.
   the neutral ground.
 - **Lead the reader through the idea in order**: the idea in a sentence, its story, its look, its frames, what is
   asked. A page is read at a glance; a long file is written as a page of its substance, never pasted.
-- **Spell-check every word** (ch. 4: a misspelling reads as unprofessional at once). The studio has no checker; read
-  the book's text back before delivering it.
+- **Spell-check every word** (ch. 4: a misspelling reads as unprofessional at once). The studio has no checker: pass
+  `proof: 'artifacts/pitch_proof'` and read every page it writes back with your image tool before delivering, the
+  words and whether each picture reads at the size its page gives it.
 
 ```js
 Stage.book('pitch.pdf', { kind: 'pitch', title: 'Nightshift — a fifteen-second film', font: 'Georgia', accent: '#2a9d8f',
@@ -1163,7 +1164,10 @@ Balance can be measured, and `Stage.borders` does it. **`symmetry` blurs the fra
 mirrors it, and compares the two**: a centred lock-up comes back near 1, and the further the weight sits to one side,
 the lower the number. The method is ours, not Shaw's, and it reads where the weight sits, not whether the frame is
 good. Measured: a centred two-line lock-up **0.97**, one title on a thirds point **0.79**, a title top left against a
-disc bottom right **0.55**. Put the travel in `dos.md`, scoped to the ends of the film:
+disc bottom right **0.55**. **It weighs the whole frame, the ground included**, so a single small mark on an empty
+ground reads as balanced: nightshift2's opening, one stroke left of centre, measured 0.98. An off-centre opening needs
+its weight off-centre, a pool of light or a mass, and that run's fix, the light keyed from off-centre to centre across
+the camera pull, made the travel a move the viewer sees. Put the travel in `dos.md`, scoped to the ends of the film:
 
 ```markdown
 - DO resolve on a balanced end card `symmetry on last > 0.9`

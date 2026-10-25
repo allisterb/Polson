@@ -1261,6 +1261,12 @@ public sealed class MotionComposition : MotionLayerList
         if (frames.Zip(frames.Skip(1)).Any(p => p.Second.Time <= p.First.Time))
             warnings.Add("The frames are not in time order; a board reads left to right as the film plays.");
         warnings.AddRange(ShotWarnings([.. frames.Select(f => f.Shot)], sequence: true));
+        // nightshift2 drew its thumbnails a minute after its first board: real roughs, deciding nothing that was still open.
+        bool thumbnailed;
+        lock (Thumbnailed) thumbnailed = Thumbnailed.Contains(ThumbnailKey);
+        if (!thumbnailed)
+            warnings.Add("No thumbnails came before this board. Rough the frames with comp.thumbnails first, several for the opening "
+                + "and the resolve, and build the board from the ones you chose (Manual 25 §15d): roughs drawn after it decide nothing.");
 
         var stills = new List<object?>();
         var scale = Math.Clamp(o.Number("scale", Math.Min(1, 420d / Width)), 0.05, 1);
@@ -1371,6 +1377,7 @@ public sealed class MotionComposition : MotionLayerList
                 i => frames[i].Note, _ => null, captionLines: 2, cellSize: (w, h));
 
             var path = WriteSheet(filePath, bytes);
+            lock (Thumbnailed) Thumbnailed.Add(ThumbnailKey);
             motion?.Record("render", path, new()
             {
                 ["motion"] = "sheet", ["kind"] = "thumbnails", ["format"] = format.ToLowerInvariant() is "jpg" ? "jpeg" : format.ToLowerInvariant(),
@@ -1388,6 +1395,15 @@ public sealed class MotionComposition : MotionLayerList
             foreach (var cell in cells) cell.Dispose();
         }
     }
+
+    /// <summary>
+    /// The projects that have made thumbnails since this server started, so a board can say it came first. Process-wide
+    /// because each script runs in a fresh engine and a run's server lives as long as the run; a server restarted between
+    /// the thumbnails and the board forgets them, and the board then warns once without cause.
+    /// </summary>
+    private static readonly HashSet<string> Thumbnailed = new(StringComparer.OrdinalIgnoreCase);
+
+    private string ThumbnailKey => projectRoot is null ? "" : Path.GetFullPath(projectRoot);
 
     /// <summary>The shot ladder, closest first (Manual 25 §15a): what a frame's <c>shot</c> names, by code or name.</summary>
     private static readonly (string Code, string Name)[] ShotLadder =
