@@ -1,6 +1,6 @@
 # Studio Manual 25: Scoring Motion
 
-> **Credits & Theoretical Foundation**: **§5 distils John Lasseter, "Principles of Traditional Animation Applied to 3D Computer Animation" (*Computer Graphics* 21(4), SIGGRAPH '87, pp. 35–44) and John Colette & Austin Shaw, *Motion Design Toolkit* (Routledge, 2023), ch. 1, 2 and 8; §12 distils Colette & Shaw ch. 1, 7 and 11; both ledgered 2026-10-24 and cited by section or chapter where used. §13 distils Austin Shaw, *Design for Motion: Motion Design Techniques & Fundamentals* (Focal Press, 2016), ch. 2–4, 7 and 8, ledgered 2026-10-24 (the same retrieval clause: methods in our words, never its text). §11 distils Walt Stanchfield's *Drawn to Life* (vol. 1 ch. 41 and others), cited by chapter there; §1–§4 and §6–§10 distil no book in `reference/`.** Lasseter's source, Thomas & Johnston's *The Illusion of Life* (1981), is not in `reference/` and is cited only through him. This header used to say the corpus held no animation text. That was wrong: Stanchfield taught at Disney, and his lectures, ledgered on 2026-09-25 and first read only for gesture, include chapters on timing, phrasing and overlap. §5's received practices are corroborated there. The rest comes from three places, each named where it is used: the **position paradigm** is GSAP's, adopted deliberately and credited (it is not from the corpus and no claim is made about the rest of that library); the **cost figures** are our own measurements, recorded in `docs/motion-score-api.md` §3; and the **seek-rather-than-play** model is the studio's own, argued from the medium — an agent renders frames, it does not watch them. Until 2026-10-24 §5 stated its timing craft as received practice without a source; it is now sourced, and anything in it that is the studio's own is marked as ours. The calls are documented at `polson://sdk/core/Motion`.
+> **Credits & Theoretical Foundation**: **§5 distils John Lasseter, "Principles of Traditional Animation Applied to 3D Computer Animation" (*Computer Graphics* 21(4), SIGGRAPH '87, pp. 35–44) and John Colette & Austin Shaw, *Motion Design Toolkit* (Routledge, 2023), ch. 1, 2 and 8; §12 distils Colette & Shaw ch. 1, 7 and 11; both ledgered 2026-10-24 and cited by section or chapter where used. §13 distils Austin Shaw, *Design for Motion: Motion Design Techniques & Fundamentals* (Focal Press, 2016), ch. 2–4, 7 and 8, ledgered 2026-10-24 (the same retrieval clause: methods in our words, never its text); §14 distils its ch. 9, and restates Manual 21 §1's depth rules (Glebas, after Perkins) because no motion workflow loads Manual 21. §11 distils Walt Stanchfield's *Drawn to Life* (vol. 1 ch. 41 and others), cited by chapter there; §1–§4 and §6–§10 distil no book in `reference/`.** Lasseter's source, Thomas & Johnston's *The Illusion of Life* (1981), is not in `reference/` and is cited only through him. This header used to say the corpus held no animation text. That was wrong: Stanchfield taught at Disney, and his lectures, ledgered on 2026-09-25 and first read only for gesture, include chapters on timing, phrasing and overlap. §5's received practices are corroborated there. The rest comes from three places, each named where it is used: the **position paradigm** is GSAP's, adopted deliberately and credited (it is not from the corpus and no claim is made about the rest of that library); the **cost figures** are our own measurements, recorded in `docs/motion-score-api.md` §3; and the **seek-rather-than-play** model is the studio's own, argued from the medium — an agent renders frames, it does not watch them. Until 2026-10-24 §5 stated its timing craft as received practice without a source; it is now sourced, and anything in it that is the studio's own is marked as ours. The calls are documented at `polson://sdk/core/Motion`.
 > **Purpose**: How to build a piece of motion that can be inspected, revised and resumed — why a score is a function of time rather than a sequence of events, how to place beats so that editing one does not break the rest, and how to look at a result you cannot watch. **It governs the building of a score, not the decision that the piece should move**; see the scope note below.
 
 ---
@@ -1088,8 +1088,15 @@ backticks is measured by `Stage.borders` on the frames you give it; the rest are
 - DON'T use pure black anywhere `colour #000000 < 1%`
 - DON'T let green into it `hue green < 2%`
 - DON'T set more than two typefaces `fonts <= 2`
+- DON'T stray off the palette `offPalette #0b1d26 #2a9d8f #f2d9b0 < 3%`
+- DO resolve on a balanced end card `symmetry on last > 0.9`
 - DON'T cut on the claim; let it settle.
 ```
+
+`offPalette` lists the palette in the clause, the ground included, and counts what is far from every colour and every
+blend of two, so a gradient between palette colours is on it and a stray accent is not. `on first` and `on last`
+measure only the first or the last image given, which in a board's stills or the film's frames is the opening and
+the resolve (§14a).
 
 Write it as `dos.md` before the board, check the board's stills against it, and check the finished film's frames again
 at the end. A broken line is a decision recorded in `direction.md` or a fault to fix — never a line quietly deleted.
@@ -1127,3 +1134,114 @@ Stage.book('pitch.pdf', { kind: 'pitch', title: 'Nightshift — a fifteen-second
     { title: 'The story', file: 'treatment.md', image: 'artifacts/03_shape.png' },
     { title: 'Design board', image: 'artifacts/03_board.png' }] });            // a cover first, "Thank you." last
 ```
+
+## 14. The Style Frame Is a Composition, and It Changes
+
+> **Implemented by**: `comp.still` for the frame, `Stage.borders`'s `symmetry` and `offPalette` clauses, `bitmap.diff`
+> and `bitmap.palette` (Manual 15) to measure it,
+> `comp.group({ z, keepSize })` and `comp.camera()` for planes, and `group.blur` for depth of field.
+
+Every frame on the design board is a style frame, and a style frame is judged as a picture first: Shaw's chapter on
+image-making (*Design for Motion*, ch. 9) is composition, value, contrast, colour and depth, the still-image craft that
+Manual 09 already carries. This section is what that craft becomes when the composition moves, and the depth rules for
+a film built in planes. **Manual 21 holds those depth rules for a panel, and no motion workflow loads it**, so the parts
+a film needs are restated here.
+
+### 14a. From mystery to certainty
+
+**Symmetry reads as certainty and asymmetry as mystery** (ch. 9). A balanced, centred frame leaves no doubt what it is
+about, which is why posters, print ads and end tags centre their mark. An off-centre frame is open to reading, more
+dramatic, and draws a viewer in. A still has to be one or the other. **A film can be both, in order**: it can open in
+mystery and travel to certainty, and Shaw notes a commercial almost always does, closing on a near-symmetric frame with
+the mark as its focal point for about the last three to five seconds of thirty. Decide on the board which beats are
+which, and make the resolve (§12b) the most balanced frame in the film.
+
+Balance can be measured, and `Stage.borders` does it. **`symmetry` blurs the frame until lettering is only weight,
+mirrors it, and compares the two**: a centred lock-up comes back near 1, and the further the weight sits to one side,
+the lower the number. The method is ours, not Shaw's, and it reads where the weight sits, not whether the frame is
+good. Measured: a centred two-line lock-up **0.97**, one title on a thirds point **0.79**, a title top left against a
+disc bottom right **0.55**. Put the travel in `dos.md`, scoped to the ends of the film:
+
+```markdown
+- DO resolve on a balanced end card `symmetry on last > 0.9`
+- DON'T open on certainty: leave the first frame open `symmetry on first < 0.85`
+```
+
+Read the opening and the resolve together: an end frame no more balanced than the opening has not travelled anywhere.
+
+### 14b. One change moves every element
+
+**Changing any one element changes the whole frame, and the larger the change, the more it does** (ch. 9), because
+everything in a composition is weighed against everything else. After editing a beat, look again at the whole frame
+at that beat, not only at the element you edited: `comp.still` it before and after, and read `diff`'s `bounds`
+(Manual 15 §4) to see how far the change reached.
+
+**Clutter flattens a frame.** When every element calls for attention, none of them leads, and the eye has no path to
+follow. What is left out matters as much as what is put in: the empty space is what frames the focal point. In motion
+that applies at every moment, not only at the end. A beat that arrives while the last is still being read crowds it,
+which is §5f's one idea at a time seen from the frame's side.
+
+### 14c. Contrast as counterpoint: a critique pass
+
+**Contrast is what gives a frame its tension, and its absence is what makes one flat or washed out** (ch. 9). Shaw
+names the beginner's fault as too little difference, and each cure is a counterpoint. Run it over every board frame:
+
+- **A large form?** Set smaller ones against it.
+- **A full frame?** Take something out, for negative space.
+- **An extreme light?** Put an extreme dark near it.
+- **Everything saturated?** Desaturate what is not the point of interest (Manual 09 §2's fifth device).
+
+Then do what Shaw has his students do in critique: **name the strongest and the weakest frame on the board, and say
+why.** Write both in `direction.md`, and remake the weakest before anything moves.
+
+### 14d. Depth in planes
+
+A film here is often built in planes: groups at `z` under one `comp.camera()`, which a pan or a push turns into
+parallax. **Planes give depth only if each one reads at its distance**, and that comes from value and colour, not from
+`z` alone (ch. 9, and Manual 21 §1 after Glebas):
+
+- **At least three planes**: foreground, middle ground, background. Without them the frame is flat. An extreme
+  foreground (very close) or an extreme background (barely visible) deepens it further.
+- **Contrast comes forward; neutral values recede.** The frame's darkest darks and lightest lights belong on the
+  nearest plane, and the farthest plane holds the narrowest range. Glebas passes on Bill Perkins's bands for this:
+
+  | Plane | Value range |
+  | :--- | :--- |
+  | Foreground | 95% grey up to white |
+  | Middle ground | 70% down to 15% grey |
+  | Background | 40% down to 20% grey |
+
+  Check a plane's band with Manual 15 §6's luminance palette on a still of that plane alone.
+- **Atmospheric perspective**: with distance, contrast and definition fall. **Colour perspective**: with distance,
+  saturation falls, and the farthest things take on the colour of the sky.
+- **Warm colours come forward and cool ones recede** as a general rule (ch. 9). Treat it as a cue *between* planes,
+  not as a law about any one colour: Manual 07 §3's account of temperature as caused by the light is the one to paint
+  by.
+- **A pure black or a pure white anywhere breaks the depth** (Manual 21 §1): a fully black shadow punches a hole in the
+  picture, and a fully white highlight sits on top of it.
+
+### 14e. Depth of field, and moving the focus
+
+**A lens is sharp at one distance and blurs with distance from it** (ch. 9): the plane in focus is crisp, and each
+plane is softer the farther it lies in front of or behind it. That is also how eyes work, so it directs attention the
+way hierarchy does. In a film it can move: **a rack focus moves the focal point over time**, handing the eye from one
+plane to another without a cut.
+
+Put a `blur` inside each plane's group, sized by its distance from the plane in focus, and key the sizes to pull focus.
+Key a blur to 0 once it is done, so it costs nothing (`polson://sdk/core/Motion`, *blur*). At 1280 wide, 2 softens an
+edge and 12–20 is a strong pull.
+
+```js
+// Focus starts on the far plane and racks to the near one over two seconds.
+const n = Motion.nodes;
+comp.camera();
+const far = comp.group({ z: 600, keepSize: true });
+far.circle({ origin: [460, 150], radius: 70, color: '#6f8796' });          // neutral and less saturated: it recedes
+far.blur({ size: n.animated('real', [{ time: 0, value: 0, ease: 'halt' }, { time: 2, value: 10, ease: 'halt' }]) });
+const near = comp.group({ z: 0, keepSize: true });
+near.rectangle({ point1: [80, 200], point2: [300, 330], color: '#f2b134' });   // the strongest contrast: it comes forward
+near.blur({ size: n.animated('real', [{ time: 0, value: 10, ease: 'halt' }, { time: 2, value: 0, ease: 'halt' }]) });
+```
+
+**Never blur what is being read.** A plane carrying a figure or a line of text stays in focus while it is on screen,
+as the pitch workflow already asks of the camera ("never while a figure is being read").

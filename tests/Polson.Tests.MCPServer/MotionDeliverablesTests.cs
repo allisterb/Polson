@@ -68,6 +68,39 @@ public class MotionDeliverablesTests : TestsRuntime, IDisposable
         Assert.Contains("3 broken", (string)mixed["summary"]!);
     }
 
+    /// <summary>
+    /// Manual 25 §14a: the resolve is balanced and the opening need not be, so a clause can hold on the last frame only;
+    /// a gradient between palette colours is on the palette, and a patch of another colour is its share off it.
+    /// </summary>
+    [Fact]
+    public void TestSymmetryHoldsOnTheResolveAndOffPaletteCountsOnlyStrayColour()
+    {
+        Draw("open.png", (c, p) => { c.DrawRect(20, 20, 220, 50, p); c.DrawCircle(520, 280, 50, p); });
+        Draw("resolve.png", (c, p) => { c.DrawRect(170, 150, 300, 40, p); c.DrawRect(240, 205, 160, 14, p); });
+        Draw("graded.png", (c, p) =>
+        {
+            p.Shader = SKShader.CreateLinearGradient(new(0, 0), new(640, 0), [new SKColor(0x14, 0x20, 0x2b), new SKColor(0xf2, 0xb1, 0x34)], SKShaderTileMode.Clamp);
+            c.DrawRect(0, 0, 640, 360, p);
+            p.Shader = null; p.Color = new SKColor(0x2a, 0x9d, 0x8f);
+            c.DrawRect(0, 0, 64, 360, p);                                                      // a tenth of the frame in teal
+        });
+        File.WriteAllText(Path.Combine(root, "dos.md"), """
+            - DO resolve on a balanced end card `symmetry on last > 0.9`
+            - DON'T open on a balanced frame `symmetry on first < 0.8`
+            - DON'T stray off the palette `offPalette #14202b #f2b134 < 5%`
+            """);
+
+        var film = Lines(Stage().Borders("dos.md", new object[] { "artifacts/open.png", "artifacts/resolve.png" }));
+        var graded = Lines(Stage().Borders("dos.md", "artifacts/graded.png"));
+
+        Assert.Equal((true, "artifacts/resolve.png"), ((bool)film["symmetry on last > 0.9"]["passed"]!, (string?)film["symmetry on last > 0.9"]["where"]));
+        Assert.Equal((true, "artifacts/open.png"), ((bool)film["symmetry on first < 0.8"]["passed"]!, (string?)film["symmetry on first < 0.8"]["where"]));
+        Assert.Equal(true, film["offPalette #14202b #f2b134 < 5%"]["passed"]);
+        Assert.InRange((double)graded["offPalette #14202b #f2b134 < 5%"]["value"]!, 0.09, 0.11);
+        File.WriteAllText(Path.Combine(root, "dos.md"), "- DON'T stray `offPalette < 3%`\n");
+        Assert.Contains("palette in the clause", Assert.Throws<ArgumentException>(() => Stage().Borders("dos.md", "artifacts/graded.png")).Message);
+    }
+
     [Fact]
     public void TestAnUnknownMeasureAndAMissingFontListAreRefusedInWords()
     {
@@ -115,6 +148,22 @@ public class MotionDeliverablesTests : TestsRuntime, IDisposable
     };
 
     private static Dictionary<string, object?> Fonts(params string[] fonts) => new() { ["fonts"] = fonts };
+
+    private static Dictionary<string, Dictionary<string, object?>> Lines(Dictionary<string, object?> borders) =>
+        ((object?[])borders["lines"]!).Cast<Dictionary<string, object?>>().ToDictionary(l => (string)l["clause"]!);
+
+    /// <summary>A 640 × 360 frame on the dark ground, drawn in amber.</summary>
+    private void Draw(string name, Action<SKCanvas, SKPaint> draw)
+    {
+        using var bitmap = new SKBitmap(640, 360);
+        using (var canvas = new SKCanvas(bitmap))
+        using (var paint = new SKPaint { Color = new SKColor(0xf2, 0xb1, 0x34), IsAntialias = true })
+        {
+            canvas.Clear(new SKColor(0x14, 0x20, 0x2b));
+            draw(canvas, paint);
+        }
+        File.WriteAllBytes(Path.Combine(root, "artifacts", name), bitmap.Encode(SKEncodedImageFormat.Png, 100).ToArray());
+    }
 
     private void Frame(string name, SKColor colour)
     {
