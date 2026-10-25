@@ -531,23 +531,25 @@ public sealed class StageApi
             var text = m.Groups[2].Value.Trim();
             if (BorderClause.Match(text) is not { Success: true } c) { judged.Add($"{kind.ToUpperInvariant()}: {text}"); continue; }
 
-            var (metric, op, limit) = (c.Groups[1].Value.Trim().ToLowerInvariant(), c.Groups[2].Value, double.Parse(c.Groups[3].Value, System.Globalization.CultureInfo.InvariantCulture) / (c.Groups[4].Success ? 100 : 1));
+            var (metric, scope, op, limit) = (c.Groups["metric"].Value.Trim().ToLowerInvariant(), c.Groups["scope"].Value.ToLowerInvariant(), c.Groups["op"].Value,
+                double.Parse(c.Groups["limit"].Value, System.Globalization.CultureInfo.InvariantCulture) / (c.Groups["percent"].Success ? 100 : 1));
             bool Holds(double v) => op switch { "<" => v < limit, "<=" => v <= limit, ">" => v > limit, _ => v >= limit };
             double[] values;
+            var measured = (scope switch { "first" => targets.Take(1), "last" => targets.TakeLast(1), _ => targets }).ToArray();
             if (metric == "fonts")
                 values = [fonts?.Length ?? throw new ArgumentException($"Stage.borders: '{text}' counts typefaces; pass {{ fonts: [...] }}, the families the piece sets.")];
             else
             {
                 if (targets.Length == 0) throw new ArgumentException($"Stage.borders: '{text}' is measured on images; pass the frames or the final to measure.");
-                values = [.. targets.Select(t => t.Look.Measure(metric) ?? throw new ArgumentException(
-                    $"Stage.borders: '{metric}' is not a measure. Use lightness, chroma, colourful, warmth, 'hue <sector>' ({string.Join(", ", Polson.ExtendedMind.Taste.TasteVisual.SectorNames)}), 'colour #rrggbb' or fonts."))];
+                values = [.. measured.Select(t => t.Look.Measure(metric) ?? throw new ArgumentException(
+                    $"Stage.borders: '{metric}' is not a measure. Use lightness, chroma, colourful, warmth, symmetry, 'offPalette #rrggbb #rrggbb …', 'hue <sector>' ({string.Join(", ", Polson.ExtendedMind.Taste.TasteVisual.SectorNames)}), 'colour #rrggbb' or fonts, each optionally 'on first' or 'on last'."))];
             }
             var worst = values.Select((v, i) => (v, i)).OrderBy(p => Holds(p.v) ? 1 : 0).First();
             lines.Add(new Dictionary<string, object?>
             {
                 ["kind"] = kind, ["text"] = text[..c.Index].TrimEnd(' ', '—', '-', ':'), ["clause"] = c.Value.Trim('`'),
                 ["passed"] = values.All(Holds), ["value"] = Math.Round(worst.v, 4),
-                ["where"] = metric == "fonts" ? null : targets[worst.i].Name,
+                ["where"] = metric == "fonts" ? null : measured[worst.i].Name,
             });
         }
 
@@ -569,21 +571,26 @@ public sealed class StageApi
     private static readonly System.Text.RegularExpressions.Regex BorderLine =
         new(@"^\s*[-*]\s*\**(DON[’']?T|DO)\b\**[:\s]*(.+)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
-    /// <summary>A measurable clause in backticks at the end: <c>`lightness &gt; 0.6`</c>, <c>`hue green &lt; 2%`</c>, <c>`colour #000000 &lt; 1%`</c>.</summary>
+    /// <summary>
+    /// A measurable clause in backticks at the end: <c>`lightness &gt; 0.6`</c>, <c>`hue green &lt; 2%`</c>, <c>`colour #000000 &lt; 1%`</c>,
+    /// <c>`offPalette #14202b #f2b134 &lt; 3%`</c>, <c>`symmetry on last &gt; 0.85`</c>.
+    /// </summary>
     private static readonly System.Text.RegularExpressions.Regex BorderClause =
-        new(@"`\s*([a-z][a-z\- ]*(?:#[0-9a-f]{6})?)\s*(<=|>=|<|>)\s*([0-9]*\.?[0-9]+)\s*(%)?\s*`\s*\.?$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        new(@"`\s*(?<metric>[a-z][a-z\- ]*?(?:\s*#[0-9a-f]{6})*)(?:\s+on\s+(?<scope>first|last))?\s*(?<op><=|>=|<|>)\s*(?<limit>[0-9]*\.?[0-9]+)\s*(?<percent>%)?\s*`\s*\.?$",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
     /// <summary>An image measured once for every clause a DOs &amp; DON'Ts list may ask of it, in OKLCH.</summary>
     private sealed class BorderLook
     {
         private readonly List<(double L, double A, double B, double C, double H)> pixels = [];
         private Polson.ExtendedMind.Taste.TasteColourReading reading = null!;
+        private Lazy<double> symmetry = null!;
 
         public static BorderLook Of(byte[] bytes)
         {
             var fetched = Polson.ExtendedMind.Taste.QlooImageSource.Decode(bytes, "the script");
             if (!fetched.Success) throw new ArgumentException($"Stage.borders: {fetched.Error}");
-            var look = new BorderLook { reading = fetched.Colour! };
+            var look = new BorderLook { reading = fetched.Colour!, symmetry = new(() => Symmetry(bytes)) };
             using var bitmap = SkiaSharp.SKBitmap.Decode(bytes);
             var step = Math.Max(1, Math.Max(bitmap.Width, bitmap.Height) / 200);
             for (var y = 0; y < bitmap.Height; y += step)
@@ -614,14 +621,78 @@ public sealed class StageApi
                 // Within 0.04 in Oklab: about as close as two colours can be and still be told apart side by side.
                 return pixels.Count(p => Math.Sqrt((p.L - L) * (p.L - L) + (p.A - a) * (p.A - a) + (p.B - b) * (p.B - b)) < 0.04) / (double)Math.Max(1, pixels.Count);
             }
+            if (OffPaletteName.Match(metric) is { Success: true } off)
+            {
+                var palette = System.Text.RegularExpressions.Regex.Matches(metric[off.Length..], "#([0-9a-f]{6})").Select(m => Oklab(Convert.ToInt32(m.Groups[1].Value, 16))).ToArray();
+                if (palette.Length == 0)
+                    throw new ArgumentException("Stage.borders: offPalette needs the palette in the clause: `offPalette #14202b #f2b134 #e8e2d6 < 3%`, the ground included.");
+                return pixels.Count(p => OffPalette((p.L, p.A, p.B), palette)) / (double)Math.Max(1, pixels.Count);
+            }
             return metric switch
             {
+                "symmetry" => symmetry.Value,
                 "lightness" => reading.Lightness,
                 "chroma" => reading.Chroma,
                 "colourful" or "colorful" => 1 - reading.Neutral,
                 "warmth" => reading.Lead?.GetValueOrDefault("hue") is double h ? 0.5 + 0.5 * Math.Cos((h - 60) * Math.PI / 180) : 0.5,
                 _ => null,
             };
+        }
+
+        private static readonly System.Text.RegularExpressions.Regex OffPaletteName = new(@"^off[\- ]?palette\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        private static (double L, double A, double B) Oklab(int rgb)
+        {
+            var (L, C, H) = Polson.ExtendedMind.Taste.TasteColour.Oklch((byte)(rgb >> 16), (byte)(rgb >> 8), (byte)rgb);
+            return (L, C * Math.Cos(H * Math.PI / 180), C * Math.Sin(H * Math.PI / 180));
+        }
+
+        /// <summary>
+        /// Off the palette: farther than 0.06 in Oklab from every colour and from every blend of two, so a gradient
+        /// between palette colours, or an antialiased edge, stays on it.
+        /// </summary>
+        private static bool OffPalette((double L, double A, double B) p, (double L, double A, double B)[] palette)
+        {
+            double Distance((double L, double A, double B) a, (double L, double A, double B) b)
+            {
+                var (dl, da, db) = (b.L - a.L, b.A - a.A, b.B - a.B);
+                var length = dl * dl + da * da + db * db;
+                var t = length == 0 ? 0 : Math.Clamp(((p.L - a.L) * dl + (p.A - a.A) * da + (p.B - a.B) * db) / length, 0, 1);
+                var (x, y, z) = (p.L - a.L - t * dl, p.A - a.A - t * da, p.B - a.B - t * db);
+                return Math.Sqrt(x * x + y * y + z * z);
+            }
+            for (var i = 0; i < palette.Length; i++)
+                for (var j = i; j < palette.Length; j++)
+                    if (Distance(palette[i], palette[j]) < 0.06) return false;
+            return true;
+        }
+
+        /// <summary>
+        /// Manual 25 §14a's balance: blurred until lettering is only weight, then compared with its own mirror, the
+        /// share of pixels within 8 levels of their reflection. 1 is mirror-even; lower leans.
+        /// </summary>
+        private static double Symmetry(byte[] bytes)
+        {
+            using var source = SkiaSharp.SKBitmap.Decode(bytes);
+            var (w, h) = (320, Math.Max(1, (int)Math.Round(320.0 * source.Height / source.Width)));
+            using var surface = SkiaSharp.SKSurface.Create(new SkiaSharp.SKImageInfo(w, h, SkiaSharp.SKColorType.Rgba8888, SkiaSharp.SKAlphaType.Premul));
+            using (var image = SkiaSharp.SKImage.FromBitmap(source))
+            using (var blur = SkiaSharp.SKImageFilter.CreateBlur(w * 0.0375f, w * 0.0375f, SkiaSharp.SKShaderTileMode.Clamp))
+            using (var paint = new SkiaSharp.SKPaint { ImageFilter = blur })
+            {
+                surface.Canvas.Clear(SkiaSharp.SKColors.White);
+                surface.Canvas.DrawImage(image, new SkiaSharp.SKRect(0, 0, w, h), new SkiaSharp.SKSamplingOptions(SkiaSharp.SKFilterMode.Linear), paint);
+            }
+            using var soft = new SkiaSharp.SKBitmap(w, h);
+            surface.ReadPixels(soft.Info, soft.GetPixels(), soft.RowBytes, 0, 0);
+            var even = 0;
+            for (var y = 0; y < h; y++)
+                for (var x = 0; x < w; x++)
+                {
+                    var (a, b) = (soft.GetPixel(x, y), soft.GetPixel(w - 1 - x, y));
+                    if (Math.Max(Math.Max(Math.Abs(a.Red - b.Red), Math.Abs(a.Green - b.Green)), Math.Max(Math.Abs(a.Blue - b.Blue), Math.Abs(a.Alpha - b.Alpha))) <= 8) even++;
+                }
+            return even / (double)(w * h);
         }
     }
 

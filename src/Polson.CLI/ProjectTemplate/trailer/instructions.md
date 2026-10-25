@@ -287,7 +287,9 @@ A trailer is short enough to plan in full before any key is set. Write the beats
   `flat` shape is a film that never changes: rework the beats, not the drawing.
 - **`dos.md`**: the creative borders, `- DO …` and `- DON'T …` lines for the palette, the type, the camera and the story.
   **End a line with a clause in backticks wherever it can be measured** — `` `lightness < 0.35` ``, `` `hue green < 2%` ``,
-  `` `colour #000000 < 1%` ``, `` `fonts <= 2` `` — so `Stage.borders` can check it. The rest are judged.
+  `` `colour #000000 < 1%` ``, `` `fonts <= 2` `` — so `Stage.borders` can check it. The rest are judged. **Two lines
+  every list carries**: the palette, every colour the film uses with the ground, as `` `offPalette #rrggbb #rrggbb … < 3%` ``;
+  and the resolve, `` `symmetry on last > 0.9` `` — the end card balanced, the opening left free (Manual 25 §14a).
 
 ---
 
