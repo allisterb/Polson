@@ -144,6 +144,38 @@ public class MotionVideoTests : TestsRuntime, IDisposable
         Assert.False(File.Exists(Path.Combine(root, "out", "move.mp4.part")));
     }
 
+    /// <summary>
+    /// Noise redrawn every frame stays under the bitrate ceiling. Unbounded, CRF 18 kept grain like this at 36.6 Mbps
+    /// (becool2); VBV lets a stream exceed its rate by at most one buffer, so that is the bound.
+    /// </summary>
+    [Fact]
+    public void TestPerFrameNoiseIsHeldToTheCeiling()
+    {
+        if (!FFmpeg.Available) return;
+        const int w = 320, h = 180, fps = 24, frames = 48;
+        var random = new Random(7);
+        using var motion = new MotionToolkit(root);
+        for (var f = 0; f < frames; f++)
+        {
+            using var canvas = Board(w, h, "#204050");
+            var ctx = canvas.GetContext("2d");
+            var image = ctx.GetImageData(0, 0, w, h);
+            for (var i = 0; i < image.Data.Length; i += 4)
+            {
+                var n = random.Next(-24, 25);
+                for (var c = 0; c < 3; c++) image.Data[i + c] = (byte)Math.Clamp(image.Data[i + c] + n, 0, 255);
+            }
+            ctx.PutImageData(image, 0, 0);
+            motion.Frame(canvas);
+        }
+
+        var result = motion.SaveVideo("grain.mp4", Opts(("fps", (double)fps)));
+
+        var kbps = w * (double)h * fps * 80 / 500 / 1000;
+        var bound = (kbps * frames / fps + kbps * 2) * 1000 / 8;
+        Assert.True((long)result["bytes"]! <= bound, $"{result["bytes"]} bytes for {frames} frames of noise; the ceiling allows {bound:0}");
+    }
+
     /// <summary>Video has no alpha: a transparent frame shows the background, and an odd size is padded, saying so.</summary>
     [Fact]
     public void TestTransparencyShowsTheBackgroundAndOddSizesArePadded()

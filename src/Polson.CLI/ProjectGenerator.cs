@@ -1606,14 +1606,24 @@ internal static class ProjectGenerator
         + $"{DirectCommand(sdk, projectDir, windows: true)}{Environment.NewLine}";
 
     /// <summary>The command itself, for a host that can take one without mangling its quotes.</summary>
+    /// <remarks>
+    /// The direct command leaves the exe unquoted unless its path has whitespace. Claude Code does
+    /// not always use the same hook shell: desktop-hosted sessions ran it POSIX-style, but headless
+    /// <c>claude -p</c> (2.1.309) runs it in PowerShell, which reads <c>"C:/…/Polson.CLI.exe" args</c>
+    /// as a string followed by a stray token and fails with "Unexpected token 'preserve-chatlog'".
+    /// Every headless run from 10-24 lost its chatlog that way. A bare forward-slash path runs under
+    /// PowerShell, cmd and bash alike; a path with spaces still needs quotes and still fails under
+    /// PowerShell.
+    /// </remarks>
     static string DirectCommand(string sdk, string projectDir, bool windows = false)
     {
         string Path_(string p) => windows ? p.Replace('/', '\\') : Forward(p);
+        string Quote(string p) => windows || p.Any(char.IsWhiteSpace) ? $"\"{p}\"" : p;
 
         var exe = Path.Combine(AppContext.BaseDirectory, "Polson.CLI.exe");
         var launcher = File.Exists(exe)
-            ? $"\"{Path_(Forward(exe))}\""
-            : $"dotnet \"{Path_(Forward(Path.Combine(AppContext.BaseDirectory, "Polson.CLI.dll")))}\"";
+            ? Quote(Path_(Forward(exe)))
+            : $"dotnet {Quote(Path_(Forward(Path.Combine(AppContext.BaseDirectory, "Polson.CLI.dll"))))}";
 
         return $"{launcher} preserve-chatlog --host {sdk} --project-dir \"{Path_(Forward(projectDir))}\"";
     }

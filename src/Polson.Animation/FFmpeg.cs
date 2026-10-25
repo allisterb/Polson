@@ -395,11 +395,16 @@ public static class FFmpeg
         yield return "-map"; yield return "[v]";
         if (tracks.Count > 0) { yield return "-map"; yield return "[a]"; }
 
+        // A ceiling under the CRF: quality/500 bits a pixel a frame, ~8 Mbps at 1080p24 and 80. Grain redrawn every frame
+        // leaves nothing to predict, and unbounded CRF 18 spent 36.6 Mbps keeping it (becool2: 67 MB for 15 s). Capped,
+        // ~85% of the grain's energy survives at under a quarter of the size; a film without it runs far below and is unchanged.
+        var cap = (long)Math.Round(w * (double)h * fps * quality / 500 / 1000);
         string[] codec = format == VideoFormat.Mp4
             // CRF 18 at the default quality of 80: visually lossless, as WebP's 80 is meant to look.
             ? ["-c:v", "libx264", "-preset", "medium", "-tune", "animation", "-crf", N(Math.Round(51 - quality * 33 / 80d)),
-                "-pix_fmt", "yuv420p", "-movflags", "+faststart"]
-            : ["-c:v", "libvpx-vp9", "-crf", N(Math.Round(63 - quality * 0.4)), "-b:v", "0", "-row-mt", "1", "-pix_fmt", "yuv420p"];
+                "-maxrate", $"{cap}k", "-bufsize", $"{cap * 2}k", "-pix_fmt", "yuv420p", "-movflags", "+faststart"]
+            // libvpx reads a non-zero -b:v beside -crf as constrained quality: the same ceiling.
+            : ["-c:v", "libvpx-vp9", "-crf", N(Math.Round(63 - quality * 0.4)), "-b:v", $"{cap}k", "-row-mt", "1", "-pix_fmt", "yuv420p"];
         foreach (var a in codec) yield return a;
         string[] tags = ["-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709"];
         foreach (var a in tags) yield return a;
