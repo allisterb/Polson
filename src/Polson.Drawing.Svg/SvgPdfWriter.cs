@@ -96,8 +96,9 @@ public sealed partial record PrintSize(float WidthPt, float HeightPt, bool Named
 /// <param name="MillimetresPerUnit">How large one unit of the paper prints: a 40-unit cap height prints at 40 × this.</param>
 /// <param name="Bitmaps">Every bitmap the page draws, at the size it prints. Effects Skia rasterised are among them, at <see cref="SvgPdfWriter.RasterDpi"/>.</param>
 /// <param name="UnplacedBitmaps">Bitmaps in the file that were not drawn by a measurable placement — a pattern fill, say — so their resolution is unknown.</param>
+/// <param name="FileBytes">The size of the written file.</param>
 public sealed record PdfPrintReport(string Path, PrintSize Trim, float BleedPt, float MillimetresPerUnit, IReadOnlyList<string> Warnings,
-    IReadOnlyList<PlacedBitmap> Bitmaps, int UnplacedBitmaps);
+    IReadOnlyList<PlacedBitmap> Bitmaps, int UnplacedBitmaps, long FileBytes = 0);
 
 /// <summary>
 /// Writes a vector document as a print PDF: the artwork at a physical trim size, with bleed, and the
@@ -136,6 +137,12 @@ public static partial class SvgPdfWriter
 
     /// <summary>The print resolution below which a bitmap is reported, in pixels per printed inch.</summary>
     public const float MinimumPpi = 150;
+
+    /// <summary>A filter's rasterised bitmaps this heavy, and most of the file, are reported with their cost.</summary>
+    public const long HeavyBitmapBytes = 1_000_000;
+
+    /// <summary>A file this heavy is reported when bitmaps are most of it, and a filter's bitmaps of this size always are.</summary>
+    public const long HeavyFileBytes = 10_000_000;
 
     /// <summary>How far the paper's proportions may differ from the page's before the write is refused.</summary>
     private const float AspectTolerance = 0.01f;
@@ -226,10 +233,18 @@ public static partial class SvgPdfWriter
 
         IReadOnlyList<PlacedBitmap> bitmaps = [];
         var unplaced = 0;
+        var fileBytes = new FileInfo(path).Length;
         try
         {
             (bitmaps, unplaced) = PdfRasterAudit.Measure(path);
             warnings.AddRange(CheckResolution(bitmaps, unplaced, mediaHeight, bleedPt));
+
+            // Where each filtered element prints, in the PDF's own space (points, origin bottom left), so the bitmap
+            // Skia rasterised for it can be found among the placements.
+            SKRect ToPdf(SKRect paper) => new(
+                (paper.Left - box.MinX + bleedX) * scaleX, mediaHeight - (paper.Bottom - box.MinY + bleedY) * scaleY,
+                (paper.Right - box.MinX + bleedX) * scaleX, mediaHeight - (paper.Top - box.MinY + bleedY) * scaleY);
+            warnings.AddRange(CheckWeight(Filtered(SvgDocument.FromSvg<SvgDocument>(StripDeclaration(svgXml)), ToPdf), bitmaps, fileBytes));
         }
         catch (Exception ex) when (ex is InvalidOperationException or InvalidDataException or ArgumentException)
         {
@@ -238,8 +253,109 @@ public static partial class SvgPdfWriter
             warnings.Add($"The bitmaps in the PDF could not be measured ({ex.Message}), so their print resolution is unchecked.");
         }
 
-        return new PdfPrintReport(path, trim, bleedPt, scaleX / PrintSize.PointsPerMm, warnings, bitmaps, unplaced);
+        return new PdfPrintReport(path, trim, bleedPt, scaleX / PrintSize.PointsPerMm, warnings, bitmaps, unplaced, fileBytes);
     }
+
+    /// <summary>Bitmaps that make a print file heavy, and the filter that put each one there.</summary>
+    /// <remarks>
+    /// <para>
+    /// PDF has no filter primitives, so Skia rasterises a filtered element whole, at <see cref="RasterDpi"/>, over the
+    /// filter's region — and nothing said so. poster5's grain filter on the image group of a 27 x 40 in sheet became one
+    /// 8,177 x 5,367 px bitmap, 20.3 MB of the file: <c>final_a.pdf</c> was 20.5 MB against its sibling's 228 KB, the only difference the
+    /// filter, and the report's one line about it read "1 bitmap(s) placed; the lowest prints at 300 ppi".
+    /// </para>
+    /// <para>
+    /// A bitmap is put down to a filter when most of it lies inside that element's filter region. Reported when the
+    /// filter's bitmaps take <see cref="HeavyBitmapBytes"/> or more and are most of the file, or take
+    /// <see cref="HeavyFileBytes"/> whatever else is in it; and, whatever drew them, when the file is
+    /// <see cref="HeavyFileBytes"/> or more and other bitmaps are most of it.
+    /// </para>
+    /// </remarks>
+    private static IEnumerable<string> CheckWeight(IReadOnlyList<FilteredElement> filtered, IReadOnlyList<PlacedBitmap> bitmaps, long fileBytes)
+    {
+        // An image placed twice is stored once.
+        var unique = bitmaps.Where(b => b.StoredBytes > 0).GroupBy(b => b.ObjectNumber == 0 ? b.GetHashCode() : b.ObjectNumber)
+            .Select(g => g.First()).ToList();
+        var claimed = new HashSet<PlacedBitmap>();
+
+        foreach (var element in filtered)
+        {
+            var mine = unique.Where(b => !claimed.Contains(b) && Area(SKRect.Intersect(b.Bounds, element.Region)) > 0.5f * Area(b.Bounds)).ToList();
+            var bytes = mine.Sum(b => b.StoredBytes);
+            if (mine.Count == 0 || !(bytes >= HeavyBitmapBytes && bytes * 2 >= fileBytes || bytes >= HeavyFileBytes)) continue;
+            claimed.UnionWith(mine);
+
+            var largest = mine.MaxBy(b => (long)b.PixelWidth * b.PixelHeight)!;
+            var rest = Math.Max(0, fileBytes - unique.Sum(b => b.StoredBytes));
+            yield return $"The filter on {element.Name} ({element.Filter}) has no PDF equivalent, so everything it covers was "
+              + Invariant($"rasterised at {RasterDpi:0} ppi into {(mine.Count == 1 ? "one" : $"{mine.Count} bitmaps, the largest")} ")
+              + Invariant($"{largest.PixelWidth:N0} x {largest.PixelHeight:N0} px{(mine.Count == 1 ? " bitmap" : "")} over ")
+              + Invariant($"{largest.WidthPt / PrintSize.PointsPerMm:0} x {largest.HeightPt / PrintSize.PointsPerMm:0} mm — ")
+              + $"{Size(bytes)} of this {Size(fileBytes)} file; the rest of the page is {Size(rest)}. Keep it if the effect is worth "
+              + "that — a print shop will take the file — but know it is the price. To cut it: put the filter on only the element "
+              + "that needs it rather than a group spanning the page, keep it on the screen render and leave it out of the print "
+              + "file, or draw the effect as vector.";
+        }
+
+        var others = unique.Where(b => !claimed.Contains(b)).ToList();
+        var otherBytes = others.Sum(b => b.StoredBytes);
+        if (fileBytes >= HeavyFileBytes && otherBytes * 2 >= fileBytes)
+        {
+            var largest = others.MaxBy(b => b.StoredBytes)!;
+            yield return $"The PDF is {Size(fileBytes)}, and {Size(otherBytes)} of it is {others.Count} bitmap(s); the largest is "
+              + Invariant($"{largest.PixelWidth:N0} x {largest.PixelHeight:N0} px ({Size(largest.StoredBytes)}), printing at {largest.EffectivePpi:0} ppi. ")
+              + "Placed images print well at 300 ppi; more is weight, not detail. Resize any placed far above that before placing it.";
+        }
+    }
+
+    /// <summary>Every element drawn through a filter, named for a warning, with its filter region in PDF space.</summary>
+    private static IReadOnlyList<FilteredElement> Filtered(SvgDocument document, Func<SKRect, SKRect> toPdf)
+    {
+        var found = new List<FilteredElement>();
+        foreach (var element in Descendants(document).OfType<SvgVisualElement>())
+        {
+            if (element.Filter is not { } uri || IsDefinition(element)) continue;
+            var id = uri.OriginalString.Trim().TrimStart('#');
+            if (id.StartsWith("url(", StringComparison.OrdinalIgnoreCase)) id = id[4..].TrimEnd(')').Trim().TrimStart('#');
+            if (document.GetElementById(id) is not SvgElement filter) continue;
+
+            SKRect region;
+            try
+            {
+                // The element's own box, before its own transform, which Transform below applies with its ancestors'.
+                var b = SnapElement.Wrap(element).GetBBox(isWithoutTransform: true);
+                if (b.Width <= 0 || b.Height <= 0) continue;
+                // The default filter region: the element's box and a tenth again on every side.
+                var paper = PosterTypeAudit.Transform(element).MapRect(SKRect.Create(b.X - b.Width / 10, b.Y - b.Height / 10, b.Width * 1.2f, b.Height * 1.2f));
+                region = toPdf(paper);
+            }
+            catch (Exception)
+            {
+                // An element whose box Svg cannot compute is not placed; the file-size check still covers its bitmap.
+                continue;
+            }
+
+            var primitives = filter.Children.Select(ElementName).Distinct().ToArray();
+            var elementId = string.IsNullOrEmpty(element.ID) ? "" : $" id=\"{element.ID}\"";
+            found.Add(new FilteredElement($"<{ElementName(element)}{elementId}>",
+                $"#{id}{(primitives.Length == 0 ? "" : ": " + string.Join(", ", primitives))}", region));
+        }
+        return found;
+    }
+
+    /// <summary>The element's SVG name — <c>g</c>, <c>feTurbulence</c> — as the document spells it.</summary>
+    private static string ElementName(SvgElement element) =>
+        (Attribute.GetCustomAttribute(element.GetType(), typeof(SvgElementAttribute)) as SvgElementAttribute)?.ElementName
+        ?? element.GetType().Name.Replace("Svg", "", StringComparison.Ordinal);
+
+    private static string Size(long bytes) => bytes >= 1_000_000
+        ? Invariant($"{bytes / 1_000_000.0:0.0} MB")
+        : Invariant($"{Math.Max(1, (int)Math.Round(bytes / 1_000.0))} KB");
+
+    private static float Area(SKRect r) => r.IsEmpty ? 0 : r.Width * r.Height;
+
+    /// <summary>An element drawn through a filter: how a warning names it and its filter, and where it prints.</summary>
+    private sealed record FilteredElement(string Name, string Filter, SKRect Region);
 
     /// <summary>Bitmaps that print below <see cref="MinimumPpi"/>, each with the pixels it would need.</summary>
     /// <remarks>

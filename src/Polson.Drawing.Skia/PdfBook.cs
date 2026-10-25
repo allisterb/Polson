@@ -2,6 +2,7 @@ namespace Polson.Drawing.Skia;
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -9,12 +10,19 @@ using SkiaSharp;
 
 /// <summary>
 /// A short presentation as a multi-page PDF: a header on every page, then a title, an image, its caption and text, in
-/// that order — the process book a studio hands its client with the finished work (<c>Stage.book</c>).
+/// that order — the process book or the pitch book a studio hands its client with the finished work (<c>Stage.book</c>).
 /// </summary>
 /// <remarks>
 /// <para>
 /// Lupton's concept presentations are sequential, simple and concise, with a header on each page naming the project
 /// (<i>Graphic Design Thinking</i>, pp. 108–109). Pages are 16:9 at 960 × 540 points, the shape of a projected slide.
+/// </para>
+/// <para>
+/// Shaw's conventions for the book itself (<i>Design for Motion</i>, ch. 4): one typeface, varied in weight and size; a
+/// neutral ground with colour kept for accents; room on every edge; a simple cover naming the project, the date, the
+/// studio and, for a pitch, the client; contents when it runs long; numbered pages; and a closing page. The book carries
+/// the piece's own typeface and accent (<see cref="BookStyle"/>) — Hartstone's "the tone of the idea on every page" —
+/// without competing with the work it holds.
 /// </para>
 /// <para>
 /// Text is a light Markdown: <c>#</c> headings, <c>-</c> bullets, paragraphs split on blank lines, and <c>**</c>, <c>`</c>
@@ -27,11 +35,25 @@ public static class PdfBook
     #region Types
     /// <summary>One page: any of a title, an image (encoded bytes), a caption and text.</summary>
     public sealed record Page(string? Title, byte[]? Image, string? Caption, string? Text);
+
+    /// <summary>The cover's lines: who the book is for, its date and the studio, any of them absent.</summary>
+    public sealed record Cover(string? Client, string? Date, string? Studio, string? Subtitle);
+
+    /// <summary>
+    /// How a book looks and what frames it: its typeface (a family name), its accent colour, a cover, contents (true,
+    /// false, or null for "when the book runs past eight pages"), and a closing page's words.
+    /// </summary>
+    public sealed record BookStyle(string? Font = null, string? Accent = null, Cover? Cover = null, bool? Contents = null, string? Close = null);
     #endregion
 
     #region Constants
     public const float Width = 960, Height = 540;
-    private const float Margin = 40, HeaderY = 26, TitleY = 74;
+
+    /// <summary>Room on every edge: Shaw asks for a healthy amount, so the eye has somewhere to rest.</summary>
+    private const float Margin = 56, HeaderY = 34, TitleY = 86;
+
+    /// <summary>Past this many pages a book opens with its contents.</summary>
+    private const int ContentsFrom = 8;
     #endregion
 
     #region Methods
@@ -39,43 +61,92 @@ public static class PdfBook
     /// The book as PDF bytes, how many pages it came to, and for each of <paramref name="pages"/> how many continuation pages
     /// its text overflowed onto. A page a top-level heading opens is not a continuation: a concept to a page is the format.
     /// </summary>
-    public static (byte[] Pdf, int Pages, int[] Overflows) Write(string title, IReadOnlyList<Page> pages)
+    public static (byte[] Pdf, int Pages, int[] Overflows) Write(string title, IReadOnlyList<Page> pages, BookStyle? style = null)
     {
+        style ??= new BookStyle();
+        using var look = new Look(style);
+        var parts = pages.Select(p => Paginate(p, look).ToList()).ToArray();
+        var layouts = parts.SelectMany(p => p).ToList();
+        var cover = style.Cover is not null;
+        var contents = style.Contents ?? layouts.Count > ContentsFrom;
+        var close = !string.IsNullOrWhiteSpace(style.Close);
+        var first = (cover ? 1 : 0) + (contents ? 1 : 0) + 1;
+        var total = layouts.Count + first - 1 + (close ? 1 : 0);
+
         using var stream = new MemoryStream();
-        var count = 0;
-        var parts = pages.Select(p => Paginate(p).ToList()).ToArray();
-        using (var document = SKDocument.CreatePdf(stream, new SKDocumentPdfMetadata { Title = title, Creator = "Polson Studio" }))
+        using (var document = SKDocument.CreatePdf(stream, new SKDocumentPdfMetadata { Title = title, Creator = style.Cover?.Studio ?? "Polson Studio" }))
         {
-            var layouts = parts.SelectMany(p => p).ToList();
+            if (cover) Page(document, c => RenderCover(c, title, style.Cover!, look));
+            if (contents)
+            {
+                // Each page that opens a section, by its title, at the number it will print with.
+                var entries = layouts.Select((l, i) => (l.Page.Title, Number: first + i, l.Continued)).Where(e => !e.Continued && e.Title is not null);
+                Page(document, c => RenderContents(c, title, [.. entries.Select(e => (e.Title!, e.Number))], cover ? 2 : 1, total, look));
+            }
+            var number = first - 1;
             foreach (var (page, lines, continued, overflow) in layouts)
             {
-                count++;
-                using var canvas = document.BeginPage(Width, Height);
-                Render(canvas, title, page, lines, continued, overflow, count, layouts.Count);
-                document.EndPage();
+                var n = ++number;
+                Page(document, c => Render(c, title, page, lines, continued, overflow, n, total, look));
             }
+            if (close) Page(document, c => RenderClose(c, title, style.Close!, style.Cover?.Studio, total, look));
             document.Close();
         }
-        return (stream.ToArray(), count, [.. parts.Select(p => p.Count(part => part.Overflow))]);
+        return (stream.ToArray(), total, [.. parts.Select(p => p.Count(part => part.Overflow))]);
+
+        static void Page(SKDocument document, Action<SKCanvas> draw)
+        {
+            using var canvas = document.BeginPage(Width, Height);
+            draw(canvas);
+            document.EndPage();
+        }
+    }
+
+    /// <summary>Whether a typeface family is installed: a family that is not would be replaced without a word.</summary>
+    public static bool Installed(string family)
+    {
+        using var face = SKTypeface.FromFamilyName(family);
+        return face is not null && string.Equals(face.FamilyName, family, StringComparison.OrdinalIgnoreCase);
     }
     #endregion
 
     #region Methods (private)
-    private static readonly SKTypeface Regular = SKTypeface.FromFamilyName("Arial") ?? SKTypeface.Default;
-    private static readonly SKTypeface Bold = SKTypeface.FromFamilyName("Arial", SKFontStyle.Bold) ?? SKTypeface.Default;
-
     /// <summary>A line of laid-out text: what it says, its size, whether bold, its indent, and the space before it.</summary>
     private sealed record Line(string Text, float Size, bool Strong, float Indent, float Before, bool Opens = false);
+
+    /// <summary>One book's typefaces and colours.</summary>
+    private sealed class Look : IDisposable
+    {
+        public Look(BookStyle style)
+        {
+            var family = string.IsNullOrWhiteSpace(style.Font) ? "Arial" : style.Font;
+            Regular = SKTypeface.FromFamilyName(family) ?? SKTypeface.Default;
+            Bold = SKTypeface.FromFamilyName(family, SKFontStyle.Bold) ?? SKTypeface.Default;
+            Accent = style.Accent is { Length: > 0 } a && SKColor.TryParse(a, out var c) ? c : Ink;
+        }
+
+        public SKTypeface Regular { get; }
+        public SKTypeface Bold { get; }
+        public SKColor Accent { get; }
+
+        public static readonly SKColor Ground = new(0xfa, 0xf8, 0xf4), Ink = new(0x1d, 0x1f, 0x24), Muted = new(0x7a, 0x7f, 0x88), Rule = new(0xd8, 0xd3, 0xc9);
+
+        public void Dispose()
+        {
+            Regular.Dispose();
+            Bold.Dispose();
+        }
+    }
 
     /// <summary>
     /// The page, split where its text overflows and before each top-level heading after the first, so a concepts file
     /// gives each concept its page, as a concept presentation does; the first part keeps the image.
     /// </summary>
-    private static IEnumerable<(Page Page, List<Line> Lines, bool Continued, bool Overflow)> Paginate(Page page)
+    private static IEnumerable<(Page Page, List<Line> Lines, bool Continued, bool Overflow)> Paginate(Page page, Look look)
     {
         var textLeft = page.Image is null ? Margin : Width * 0.58f;
         var width = Width - Margin - textLeft;
-        var lines = Lay(page.Text ?? "", width);
+        var lines = Lay(page.Text ?? "", width, look);
         var top = page.Title is null ? TitleY - 24 : TitleY + 18;
         var room = Height - Margin - top;
         var part = new List<Line>();
@@ -102,12 +173,21 @@ public static class PdfBook
     }
 
     /// <summary>Light Markdown, wrapped to <paramref name="width"/> points.</summary>
-    private static List<Line> Lay(string text, float width)
+    private static List<Line> Lay(string text, float width, Look look)
     {
         var lines = new List<Line>();
         foreach (var block in Regex.Split(text.Replace("\r\n", "\n").Trim(), @"\n\s*\n"))
         {
+            // A line that starts nothing of its own continues the one before, as Markdown reads it: a file wrapped at 120
+            // columns was set with a break at every source line, so a treatment broke mid-sentence ("arrives / as / if").
+            var joined = new List<string>();
             foreach (var raw in block.Split('\n'))
+            {
+                var starts = joined.Count == 0 || Regex.IsMatch(raw, @"^\s*(#{1,6}\s|[-*]\s|\|)") || Regex.IsMatch(joined[^1], @"^\s*(#{1,6}\s|\|)");
+                if (starts) joined.Add(raw);
+                else joined[^1] = joined[^1].TrimEnd() + " " + raw.Trim();
+            }
+            foreach (var raw in joined)
             {
                 var line = Plain(raw.TrimEnd());
                 if (line.Trim().Length == 0 || Regex.IsMatch(line, @"^\s*\|?\s*:?-{3,}")) continue;
@@ -117,12 +197,12 @@ public static class PdfBook
                 {
                     var size = heading.Groups[1].Length <= 2 ? 17f : 14f;
                     var opens = heading.Groups[1].Length == 1;
-                    lines.AddRange(Wrap(heading.Groups[2].Value, size, true, 0, width).Select((l, i) => i == 0 ? l with { Before = 10, Opens = opens } : l));
+                    lines.AddRange(Wrap(heading.Groups[2].Value, size, true, 0, width, look).Select((l, i) => i == 0 ? l with { Before = 10, Opens = opens } : l));
                 }
                 else if (bullet.Success)
-                    lines.AddRange(Wrap("•  " + bullet.Groups[2].Value, 12.5f, false, 14, width).Select((l, i) => i == 0 ? l with { Before = 3 } : l with { Indent = 26 }));
+                    lines.AddRange(Wrap("•  " + bullet.Groups[2].Value, 12.5f, false, 14, width, look).Select((l, i) => i == 0 ? l with { Before = 3 } : l with { Indent = 26 }));
                 else
-                    lines.AddRange(Wrap(line.Replace("|", "  ").Trim(), 12.5f, false, 0, width));
+                    lines.AddRange(Wrap(line.Replace("|", "  ").Trim(), 12.5f, false, 0, width, look));
             }
             lines.Add(new Line("", 6, false, 0, 0));
         }
@@ -132,9 +212,9 @@ public static class PdfBook
     private static string Plain(string s) =>
         Regex.Replace(Regex.Replace(s.Replace("**", "").Replace("`", ""), @"\[([^\]]*)\]\([^)]*\)", "$1"), @"(?<!\w)\*(\S[^*]*)\*(?!\w)", "$1");
 
-    private static IEnumerable<Line> Wrap(string text, float size, bool strong, float indent, float width)
+    private static IEnumerable<Line> Wrap(string text, float size, bool strong, float indent, float width, Look look)
     {
-        using var font = new SKFont(strong ? Bold : Regular, size);
+        using var font = new SKFont(strong ? look.Bold : look.Regular, size);
         var line = "";
         foreach (var word in text.Split(' ', StringSplitOptions.RemoveEmptyEntries))
         {
@@ -149,20 +229,26 @@ public static class PdfBook
         if (line.Length > 0) yield return new Line(line, size, strong, indent, 0);
     }
 
-    private static void Render(SKCanvas canvas, string book, Page page, List<Line> lines, bool continued, bool overflow, int number, int total)
+    /// <summary>The header Lupton asks for on every page: the project, and where this page sits; the rule in the accent.</summary>
+    private static void Header(SKCanvas canvas, string book, int number, int total, Look look)
     {
-        canvas.Clear(new SKColor(0xfa, 0xf8, 0xf4));
-        using var ink = new SKPaint { Color = new SKColor(0x1d, 0x1f, 0x24), IsAntialias = true };
-        using var muted = new SKPaint { Color = new SKColor(0x7a, 0x7f, 0x88), IsAntialias = true };
-        using var rule = new SKPaint { Color = new SKColor(0xd8, 0xd3, 0xc9), StrokeWidth = 1, IsStroke = true };
-        using var small = new SKFont(Regular, 10);
-        using var titleFont = new SKFont(Bold, 24);
-        using var captionFont = new SKFont(Regular, 11);
-
-        // The header Lupton asks for on every page: the project, and where this page sits.
+        using var muted = new SKPaint { Color = Look.Muted, IsAntialias = true };
+        using var rule = new SKPaint { Color = look.Accent, StrokeWidth = 1.5f, IsStroke = true };
+        using var small = new SKFont(look.Regular, 10);
         canvas.DrawText(book, Margin, HeaderY, SKTextAlign.Left, small, muted);
         canvas.DrawText($"{number} of {total}", Width - Margin, HeaderY, SKTextAlign.Right, small, muted);
-        canvas.DrawLine(Margin, HeaderY + 8, Width - Margin, HeaderY + 8, rule);
+        canvas.DrawLine(Margin, HeaderY + 9, Width - Margin, HeaderY + 9, rule);
+    }
+
+    private static void Render(SKCanvas canvas, string book, Page page, List<Line> lines, bool continued, bool overflow, int number, int total, Look look)
+    {
+        canvas.Clear(Look.Ground);
+        using var ink = new SKPaint { Color = Look.Ink, IsAntialias = true };
+        using var muted = new SKPaint { Color = Look.Muted, IsAntialias = true };
+        using var rule = new SKPaint { Color = Look.Rule, StrokeWidth = 1, IsStroke = true };
+        using var titleFont = new SKFont(look.Bold, 24);
+        using var captionFont = new SKFont(look.Regular, 11);
+        Header(canvas, book, number, total, look);
 
         if (page.Title is { } title)
             canvas.DrawText(overflow ? $"{title} (continued)" : title, Margin, TitleY, SKTextAlign.Left, titleFont, ink);
@@ -178,7 +264,7 @@ public static class PdfBook
             canvas.DrawImage(image, rect, new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear));
             canvas.DrawRect(rect, rule);
             if (page.Caption is { } caption)
-                foreach (var (l, i) in Wrap(Plain(caption), 11, false, 0, Math.Max(rect.Width, 260)).Take(2).Select((l, i) => (l, i)))
+                foreach (var (l, i) in Wrap(Plain(caption), 11, false, 0, Math.Max(rect.Width, 260), look).Take(2).Select((l, i) => (l, i)))
                     canvas.DrawText(l.Text, Margin, rect.Bottom + 15 + i * 13, SKTextAlign.Left, captionFont, muted);
         }
 
@@ -188,9 +274,69 @@ public static class PdfBook
         {
             y += line.Before + line.Size * 1.35f;
             if (line.Text.Length == 0) continue;
-            using var font = new SKFont(line.Strong ? Bold : Regular, line.Size);
+            using var font = new SKFont(line.Strong ? look.Bold : look.Regular, line.Size);
             canvas.DrawText(line.Text, x + line.Indent, y - line.Size * 0.3f, SKTextAlign.Left, font, ink);
         }
+    }
+
+    /// <summary>Shaw's cover: simple and clear — the project, who it is for, the date and the studio.</summary>
+    private static void RenderCover(SKCanvas canvas, string book, Cover cover, Look look)
+    {
+        canvas.Clear(Look.Ground);
+        using var ink = new SKPaint { Color = Look.Ink, IsAntialias = true };
+        using var muted = new SKPaint { Color = Look.Muted, IsAntialias = true };
+        using var accent = new SKPaint { Color = look.Accent, IsAntialias = true };
+        using var titleFont = new SKFont(look.Bold, 40);
+        using var lineFont = new SKFont(look.Regular, 16);
+        using var smallFont = new SKFont(look.Regular, 12);
+
+        canvas.DrawRect(SKRect.Create(Margin, Height * 0.36f, 64, 5), accent);
+        var y = Height * 0.36f + 58;
+        foreach (var line in Wrap(book, 40, true, 0, Width - Margin * 2, look).Take(2)) { canvas.DrawText(line.Text, Margin, y, SKTextAlign.Left, titleFont, ink); y += 48; }
+        if (cover.Subtitle is { Length: > 0 } subtitle) { canvas.DrawText(subtitle, Margin, y + 4, SKTextAlign.Left, lineFont, ink); y += 26; }
+        if (cover.Client is { Length: > 0 } client) canvas.DrawText($"Prepared for {client}", Margin, y + 8, SKTextAlign.Left, lineFont, muted);
+        var foot = string.Join("   ·   ", new[] { cover.Studio, cover.Date }.Where(s => !string.IsNullOrWhiteSpace(s)));
+        canvas.DrawText(foot, Margin, Height - Margin, SKTextAlign.Left, smallFont, muted);
+    }
+
+    /// <summary>The contents: each section's title and the page it opens on.</summary>
+    private static void RenderContents(SKCanvas canvas, string book, IReadOnlyList<(string Title, int Page)> entries, int number, int total, Look look)
+    {
+        canvas.Clear(Look.Ground);
+        using var ink = new SKPaint { Color = Look.Ink, IsAntialias = true };
+        using var accent = new SKPaint { Color = look.Accent, IsAntialias = true };
+        using var titleFont = new SKFont(look.Bold, 24);
+        using var entryFont = new SKFont(look.Regular, 13);
+        Header(canvas, book, number, total, look);
+        canvas.DrawText("Contents", Margin, TitleY, SKTextAlign.Left, titleFont, ink);
+
+        // Two columns once one would run off the page, so a long book's contents stay on one page.
+        var perColumn = (int)((Height - Margin - TitleY - 30) / 22);
+        var columnW = (Width - Margin * 2 - 40) / 2;
+        for (var i = 0; i < entries.Count && i < perColumn * 2; i++)
+        {
+            var x = Margin + (i / perColumn) * (columnW + 40);
+            var y = TitleY + 40 + (i % perColumn) * 22;
+            var label = entries[i].Title;
+            while (label.Length > 4 && entryFont.MeasureText(label) > columnW - 50) label = label[..^2] + "…";
+            canvas.DrawText(label, x, y, SKTextAlign.Left, entryFont, ink);
+            canvas.DrawText(entries[i].Page.ToString(CultureInfo.InvariantCulture), x + columnW, y, SKTextAlign.Right, entryFont, accent);
+        }
+    }
+
+    /// <summary>Shaw's closing page: a simple word of thanks, and the studio.</summary>
+    private static void RenderClose(SKCanvas canvas, string book, string words, string? studio, int total, Look look)
+    {
+        canvas.Clear(Look.Ground);
+        using var ink = new SKPaint { Color = Look.Ink, IsAntialias = true };
+        using var muted = new SKPaint { Color = Look.Muted, IsAntialias = true };
+        using var accent = new SKPaint { Color = look.Accent, IsAntialias = true };
+        using var bigFont = new SKFont(look.Bold, 34);
+        using var smallFont = new SKFont(look.Regular, 13);
+        Header(canvas, book, total, total, look);
+        canvas.DrawRect(SKRect.Create(Width / 2 - 32, Height / 2 - 48, 64, 4), accent);
+        canvas.DrawText(words, Width / 2, Height / 2 + 4, SKTextAlign.Center, bigFont, ink);
+        if (studio is { Length: > 0 }) canvas.DrawText(studio, Width / 2, Height / 2 + 36, SKTextAlign.Center, smallFont, muted);
     }
     #endregion
 }

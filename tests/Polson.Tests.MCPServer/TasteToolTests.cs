@@ -324,6 +324,11 @@ public class TasteToolTests : TestsRuntime, IDisposable
         Assert.Equal("Sample Bold Prints", reply["placeAesthetics"]![0]!.GetValue<string>());
         Assert.Equal("Port Sample, Examplia", reply["locality"]!["disambiguation"]!.GetValue<string>());
         Assert.Equal(3, calls);
+
+        // Pace is in the reply, with the call that compares it: poster5 found it only by dumping Object.keys.
+        Assert.Equal(0, reply["pace"]!["fast"]!.GetValue<int>());
+        Assert.Null(reply["pace"]!["fastShare"]);
+        Assert.Contains("Taste.contrast(a, b).pace", reply["pace"]!["note"]!.GetValue<string>());
     }
 
     [Fact]
@@ -381,6 +386,32 @@ public class TasteToolTests : TestsRuntime, IDisposable
         Assert.Equal("55_and_older", read["age"]!.GetValue<string>());
     }
 
+    /// <summary>The worked example in Polson.core.md's Taste.contrast entry, run as written there.</summary>
+    [Fact]
+    public async Task Contrast_AScriptReadsThePaceAndThePerDomainListsAsDocumented()
+    {
+        ServeProfile();
+        var tools = new DrawingMcpTools();
+        await tools.Taste("profile", audience: """{"location":"Port Sample","age":"55_and_older"}""", type: "movie", label: "audience A");
+        await tools.Taste("profile", audience: """{"location":"Port Sample","age":"24_and_younger"}""", type: "movie", label: "audience B");
+
+        var result = await tools.ExecuteScript("""
+            const c = Taste.contrast(Taste.find('audience A'), Taste.find('audience B'));
+            const film = c.domains.find(d => d.type === 'urn:entity:movie');
+            log(JSON.stringify({ lead: c.summary.split(' — ')[0], shared: film.shared.map(t => t.name), onlyA: film.onlyA.length,
+                                 p: c.pace.p, fastA: c.pace.a.fast, topLevel: typeof c.onlyA }));
+            """, render: false);
+
+        Assert.True(result.Success, result.Error);
+        var read = JsonNode.Parse(result.Logs.Single(l => l.StartsWith("[LOG] {"))["[LOG] ".Length..])!;
+        Assert.Equal("Pace", read["lead"]!.GetValue<string>());
+        Assert.Equal(["Audience Only", "Also Theirs"], read["shared"]!.AsArray().Select(n => n!.GetValue<string>()));
+        Assert.Equal(0, read["onlyA"]!.GetValue<int>());
+        Assert.Equal(1, read["p"]!.GetValue<double>());
+        Assert.Equal(0, read["fastA"]!.GetValue<int>());
+        Assert.Equal("undefined", read["topLevel"]!.GetValue<string>());          // why the docs say domains[i]
+    }
+
     private const string PlaceId = "1b96428c-0000-4000-8000-000000000001";
 
     /// <summary>
@@ -427,6 +458,72 @@ public class TasteToolTests : TestsRuntime, IDisposable
 
         Assert.Equal(PlaceId, reply["locality"]!["id"]!.GetValue<string>());
         Assert.Contains("never resolved", reply["locality"]!["note"]!.GetValue<string>());
+    }
+
+    /// <summary>
+    /// A synthetic compare answer at poster5's scale: seven entities a side, 74 shared tags, one row per tag per
+    /// pairing with the signal entities written out in each, as Qloo sends them.
+    /// </summary>
+    private static (string Body, int Rows) CompareAnswer()
+    {
+        string Signal(string id) => $$"""{ "entity_id": "{{id}}", "name": "Sample Artist {{id}}", "subtype": "urn:entity:artist", "disambiguation": "Sample Artist {{id}}" }""";
+        string Tag(string id, string name, string query) =>
+            $$"""{ "tag_id": "{{id}}", "name": "{{name}}", "type": "urn:tag", "subtype": "urn:tag:genre:music", "entity_id": "X", "popularity": 0.9, "query": {{query}} }""";
+        var rows = new List<string>();
+        for (var i = 0; i < 74; i++)
+            for (var x = 0; x < i % 5 + 1; x++)
+                for (var y = 0; y < i % 4 + 1; y++)
+                    rows.Add(Tag($"urn:tag:genre:music:sample_{i}", $"Sample Tag {i}",
+                        $$"""{ "score": 0.73, "a.signal.interests.entities": [ {{string.Join(", ", Enumerable.Range(0, x + 1).Select(k => Signal($"A-{(i + k) % 7}")))}} ], "b.signal.interests.entities": [ {{Signal($"B-{(i + y) % 7}")}} ] }"""));
+        var a = Enumerable.Range(0, 20).Select(i => Tag($"urn:tag:genre:music:only_a_{i}", $"Only A {i}", $$"""{ "count": "{{i % 5 + 1}}" }"""));
+        var b = Enumerable.Range(0, 20).Select(i => Tag($"urn:tag:genre:music:only_b_{i}", $"Only B {i}", $$"""{ "count": "{{i % 6 + 1}}" }"""));
+        return ($$"""{ "success": true, "results": { "tags": [ {{string.Join(",\n", rows)}} ], "a": [ {{string.Join(", ", a)}} ], "b": [ {{string.Join(", ", b)}} ], "matchEntities": [] } }""", rows.Count);
+    }
+
+    /// <summary>
+    /// poster5: 'compare' over seven artists a side returned 358,332 characters and the host refused the reply. The
+    /// reply is one row per tag and capped; the whole answer stays readable from a script.
+    /// </summary>
+    [Fact]
+    public async Task Compare_RepliesWithOneRowPerTagAndKeepsTheWholeAnswerForScripts()
+    {
+        var (body, rows) = CompareAnswer();
+        Serve(body);
+        var tools = new DrawingMcpTools();
+        var left = string.Join(",", Enumerable.Range(0, 7).Select(i => $"A-{i}"));
+        var right = string.Join(",", Enumerable.Range(0, 7).Select(i => $"B-{i}"));
+
+        var reply = await tools.Taste("compare", entities: left, versus: right, label: "two crowds");
+
+        Assert.True(reply["ok"]!.GetValue<bool>(), reply.ToJsonString());
+        var size = reply.ToJsonString().Length;
+        Assert.True(body.Length > 150_000, $"the fixture should be at the scale that failed: {body.Length:N0}");
+        Assert.True(size < 8_000, $"the reply is {size:N0} characters for a {body.Length:N0}-character answer");
+        var comparison = reply["comparison"]!;
+        Assert.Equal(7, comparison["entities"]!["a"]!.GetValue<int>());
+        Assert.Equal(rows, comparison["rows"]!.GetValue<int>());
+        Assert.Equal(10, comparison["shared"]!.AsArray().Count);                            // take's default
+        Assert.Equal(10, comparison["tagsA"]!.AsArray().Count);
+        Assert.Equal(10, comparison["shared"]!.AsArray().Select(t => t!["id"]!.GetValue<string>()).Distinct().Count());
+        Assert.True(comparison["omitted"]!["shared"]!.GetValue<int>() > 0);
+        var id = reply["id"]!.GetValue<string>();
+        Assert.Contains($"Taste.get('{id}').comparison", comparison["note"]!.GetValue<string>());
+
+        var result = await tools.ExecuteScript($$"""log(JSON.stringify({ rows: Taste.get('{{id}}').comparison.tags.length }));""", render: false);
+        Assert.True(result.Success, result.Error);
+        Assert.Equal(rows, JsonNode.Parse(result.Logs.Single(l => l.StartsWith("[LOG] {"))["[LOG] ".Length..])!["rows"]!.GetValue<int>());
+    }
+
+    [Fact]
+    public async Task Compare_TakeCapsEveryList()
+    {
+        Serve(CompareAnswer().Body);
+
+        var reply = await new DrawingMcpTools().Taste("compare", entities: "A-1,A-2", versus: "B-1", take: 3);
+
+        Assert.Equal(3, reply["comparison"]!["shared"]!.AsArray().Count);
+        Assert.Equal(3, reply["comparison"]!["tagsA"]!.AsArray().Count);
+        Assert.Contains("Lists stop at 3", reply["comparison"]!["note"]!.GetValue<string>());
     }
 
     [Theory]

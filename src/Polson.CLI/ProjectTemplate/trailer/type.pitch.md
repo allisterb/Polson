@@ -254,8 +254,12 @@ once, before the beats, and record it in `direction.md` with its reasons.
 - **The design board before motion, the books at the end.** The case is the deck's, so there is no concept to choose;
   the look is yours. Draw the design board as the instructions say — a frame per scene, the figure scenes, the
   projections and the ask among them — with `treatment.md` and `dos.md`, and hold the film to the board in Stage 5.
-  `pitch.pdf` is the case as a client reads it: the treatment, the board, a frame of each finished film. `process.pdf`
-  carries the scene list and the label confirmations.
+  `pitch.pdf` is the case as a client reads it, in the order Shaw's pitch books lead a reader through an idea
+  (*Design for Motion*, ch. 4): a cover naming the company as the client; the case in a sentence and the treatment
+  beside its shape; the design board; a frame of each scene with its figure and the page it came from; the ask, as
+  the resolve frame; what happens next; and *Thank you.* Set it in the film's typeface and accent on a neutral ground.
+  `process.pdf` carries the scene list and the label confirmations — the evidence a client can check, kept out of the
+  pitch's way.
 - **Your palette, not the company's.** One accent and its tints on a neutral; contrast 4.5 : 1 for text. Do not rebuild
   the company's identity — its colour as the whole palette, its typeface, its devices. For a retelling this is the
   whole difference between a film *about* the deck and one passing as the company's.

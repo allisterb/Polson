@@ -73,9 +73,16 @@ public static class TasteContrast
         }).ToArray();
 
         var pace = TastePace.Compare(a.Pace(), b.Pace(), Named(a), Named(b));
+
+        // Each count with the first titles behind it, so the summary alone says which titles are whose. A count on its
+        // own read as nothing to cite, and the titles live a level down, under domains[i] (poster5 looked for c.onlyA).
+        static string Titles(object? list) => ((object?[])list!).Cast<Dictionary<string, object?>>().Take(3)
+            .Select(e => e["name"] as string ?? "?").ToArray() is { Length: > 0 } names
+                ? $" ({string.Join(", ", names)}{(((object?[])list!).Length > 3 ? ", …" : "")})"
+                : "";
         var counts = domains.Cast<Dictionary<string, object?>>().Select(d =>
-            $"{Short((string)d["type"]!)}: {((object?[])d["shared"]!).Length} shared, {((object?[])d["onlyA"]!).Length} only {a.Id}, "
-            + $"{((object?[])d["onlyB"]!).Length} only {b.Id}");
+            $"{Short((string)d["type"]!)}: {((object?[])d["shared"]!).Length} shared{Titles(d["shared"])}, "
+            + $"{((object?[])d["onlyA"]!).Length} only {a.Id}{Titles(d["onlyA"])}, {((object?[])d["onlyB"]!).Length} only {b.Id}{Titles(d["onlyB"])}");
 
         return new Dictionary<string, object?>
         {
@@ -83,7 +90,10 @@ public static class TasteContrast
             ["b"] = new Dictionary<string, object?> { ["id"] = b.Id, ["label"] = b.Label },
             ["domains"] = domains,
             ["pace"] = pace,
-            ["summary"] = $"{string.Join("; ", counts)}. {pace["summary"]}",
+            // Pace first: it is the one measured difference here, with a test behind it, and poster5 found it only by
+            // dumping Object.keys — it was the last clause of a long summary, after the counts.
+            ["summary"] = $"Pace — {pace["summary"]} Titles — {string.Join("; ", counts)}. "
+                        + "The lists are per domain: c.domains[i].shared, .onlyA, .onlyB, .tagsA, .tagsB; the pace counts and titles are c.pace.a and c.pace.b.",
         };
     }
     #endregion

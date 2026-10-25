@@ -110,15 +110,16 @@ public class SkiaCanvas : IDisposable, IDataUriSource, ILosslessImageSource
     /// <summary>A line of text as drawn, in canvas pixels. Called by the context.</summary>
     internal void RecordText(string words, SKRect bounds, float size, bool upright)
     {
-        var line = new TypeLine(words, bounds, size, upright);
+        var line = new TypeLine(words, bounds, size, upright, order: _marks++);
         if (_drawnText.Count < MaxDrawnText) _drawnText.Add(line);
         if (Room()) _layoutLines.Add(line);
     }
 
-    /// <summary>A shape as drawn, in canvas pixels. Called by the context.</summary>
+    /// <summary>A shape as drawn, in canvas pixels, numbered in drawing order so the audit knows what covers what. Called by the context.</summary>
     internal void RecordShape(LayoutShape shape)
     {
-        if (Room()) _layoutShapes.Add(shape);
+        var numbered = shape with { Order = _marks++ };
+        if (Room()) _layoutShapes.Add(numbered);
     }
 
     /// <summary>
@@ -154,5 +155,6 @@ public class SkiaCanvas : IDisposable, IDataUriSource, ILosslessImageSource
     private readonly List<LayoutShape> _layoutShapes = [];
     private readonly List<TypeLine> _drawnText = [];
     private bool _layoutOverflowed;
+    private int _marks;
     #endregion
 }

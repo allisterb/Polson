@@ -882,10 +882,30 @@ public class CanvasRenderingContext2D
     }
 
     /// <summary>A drawn rectangle or oval, for the layout audit, through the current transform.</summary>
-    private void RecordBox(SKRect local, bool round, SKPaint paint)
+    /// <param name="exact">The box is the filled area — not a rounded rectangle, whose corners it overstates.</param>
+    private void RecordBox(SKRect local, bool round, SKPaint paint, bool exact = true)
     {
         if (paint.Color.Alpha == 0 && paint.Shader is null) return;
-        Canvas.RecordShape(new LayoutShape(round ? "ellipse" : "rectangle", Canvas.SkCanvas.TotalMatrix.MapRect(local), round));
+        var box = Canvas.SkCanvas.TotalMatrix.MapRect(local);
+        Canvas.RecordShape(new LayoutShape(round ? "ellipse" : "rectangle", box, round, Opaque: exact && Hides(paint, box)));
+    }
+
+    /// <summary>
+    /// Whether a fill drawn with this paint certainly hides what is under <paramref name="box"/>: solid, fully opaque,
+    /// source-over, no filter, mask or path effect, axis-aligned, and not cut by a clip. Anything uncertain is not.
+    /// </summary>
+    private bool Hides(SKPaint paint, SKRect box)
+    {
+        var m = Canvas.SkCanvas.TotalMatrix;
+        if (!(paint.Style == SKPaintStyle.Fill && paint.Color.Alpha == 255 && paint.Shader is null && paint.BlendMode == SKBlendMode.SrcOver
+              && paint.ImageFilter is null && paint.ColorFilter is null && paint.MaskFilter is null && paint.PathEffect is null
+              && MathF.Abs(m.SkewX) < 1e-4f && MathF.Abs(m.SkewY) < 1e-4f && Canvas.SkCanvas.IsClipRect))
+            return false;
+
+        // Only what lands on the canvas matters: a band drawn past the edge to bleed is cut by the canvas, not by a clip.
+        var clip = Canvas.SkCanvas.DeviceClipBounds;
+        var onCanvas = SKRect.Intersect(box, SKRect.Create(0, 0, Canvas.Width, Canvas.Height));
+        return !onCanvas.IsEmpty && SKRect.Create(clip.Left, clip.Top, clip.Width, clip.Height).Contains(onCanvas);
     }
 
     /// <summary>A drawn path the audit can place exactly — a rectangle, an oval, a straight line — and nothing else.</summary>
@@ -894,7 +914,7 @@ public class CanvasRenderingContext2D
         if (paint.Color.Alpha == 0 && paint.Shader is null) return;
         if (path.IsRect || path.IsRoundRect)
         {
-            RecordBox(path.Bounds, round: false, paint);
+            RecordBox(path.Bounds, round: false, paint, exact: path.IsRect);
         }
         else if (path.IsOval)
         {
@@ -938,7 +958,7 @@ public class CanvasRenderingContext2D
             // Any other filled outline — a pie, a mark — by its own area, in canvas pixels.
             var outline = new SKPath(path);
             outline.Transform(Canvas.SkCanvas.TotalMatrix);
-            if (!outline.Bounds.IsEmpty) Canvas.RecordShape(new LayoutShape("shape", outline.Bounds, false, Outline: outline));
+            if (!outline.Bounds.IsEmpty) Canvas.RecordShape(new LayoutShape("shape", outline.Bounds, false, Outline: outline, Opaque: Hides(paint, outline.Bounds)));
             else outline.Dispose();
         }
     }

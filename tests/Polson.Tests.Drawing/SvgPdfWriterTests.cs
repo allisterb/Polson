@@ -283,6 +283,56 @@ public class SvgPdfWriterTests : TestsRuntime
         Assert.Contains(report.Warnings, w => w.Contains("not measured", StringComparison.Ordinal));
     }
 
+    /// <summary>poster5's grain: fractal noise kept to the source's shape, multiplied over it.</summary>
+    private const string Grain = """
+        <defs><filter id="grain" x="-10%" y="-10%" width="120%" height="120%">
+          <feTurbulence baseFrequency="0.9" numOctaves="3" seed="5" type="fractalNoise" result="noise"/>
+          <feComposite operator="in" in2="SourceGraphic" in="noise" result="grain"/>
+          <feBlend mode="multiply" in2="grain" in="SourceGraphic"/>
+        </filter></defs>
+        """;
+
+    /// <summary>
+    /// poster5: one grain filter on a group spanning the sheet made <c>final_a.pdf</c> 20.5 MB against its sibling's
+    /// 228 KB, and nothing said so. Here on A5, which is heavy enough to show it and quick enough to test.
+    /// </summary>
+    [Fact]
+    public void TestAFilterRasterisedIntoMostOfTheFileIsNamedWithItsCost()
+    {
+        var path = TempPdf();
+        try
+        {
+            var svg = $"""
+                <svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1414.29" viewBox="0 0 1000 1414.29">{Grain}
+                  <rect x="-20" y="-20" width="1040" height="1454.29" fill="#f2e3c4"/>
+                  <g id="image" filter="url(#grain)"><rect x="-20" y="-20" width="1040" height="1454.29" fill="#1f6f78"/></g>
+                  <text x="100" y="300" font-family="DejaVu Sans, Arial, sans-serif" font-size="80" fill="#000000">Grain</text>
+                </svg>
+                """;
+            var report = SvgPdfWriter.Write(svg, path, PrintSize.Parse("A5"), 3 * Mm);
+
+            Assert.Equal(new FileInfo(path).Length, report.FileBytes);
+            Assert.True(report.FileBytes > SvgPdfWriter.HeavyBitmapBytes, $"the fixture should be heavy: {report.FileBytes:N0} bytes");
+            var warning = Assert.Single(report.Warnings, w => w.StartsWith("The filter on", StringComparison.Ordinal));
+            Assert.StartsWith("The filter on <g id=\"image\"> (#grain: feTurbulence, feComposite, feBlend) has no PDF equivalent", warning);
+            Assert.Matches(@"rasterised at 300 ppi into one [\d,]+ x [\d,]+ px bitmap over \d+ x \d+ mm — [\d.]+ MB of this [\d.]+ MB file; the rest of the page is \d+ KB", warning);
+            Assert.Contains("put the filter on only the element that needs it", warning);
+        }
+        finally { File.Delete(path); }
+    }
+
+    /// <summary>A filter on a small mark rasterises a small bitmap: worth nothing to report.</summary>
+    [Fact]
+    public void TestAFilterOnASmallMarkIsNotReported()
+    {
+        var report = WritePoster($"""{Grain}<circle id="dot" cx="500" cy="700" r="40" fill="#1f6f78" filter="url(#grain)"/>""");
+
+        Assert.NotEmpty(report.Bitmaps);                                  // it was rasterised, at 300 ppi …
+        Assert.Equal(300, report.Bitmaps.Min(b => b.EffectivePpi), 3f);
+        Assert.DoesNotContain(report.Warnings, w => w.Contains("filter on", StringComparison.Ordinal));   // … and is light
+        Assert.True(report.FileBytes < SvgPdfWriter.HeavyBitmapBytes);
+    }
+
     private static PdfPrintReport WriteText(string body, float? safeMarginPt = null)
     {
         var path = TempPdf();

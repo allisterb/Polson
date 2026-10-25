@@ -51,7 +51,18 @@ public static class PrintPdfRequest
       + FormattableString.Invariant(
             $"One paper unit prints at {report.MillimetresPerUnit:0.####} mm, so a cap height of h units prints at h x {report.MillimetresPerUnit:0.####} mm.")
       + (report.Bitmaps.Count == 0 ? "" : FormattableString.Invariant(
-            $" {report.Bitmaps.Count} bitmap(s) placed; the lowest prints at {report.Bitmaps.Min(b => b.EffectivePpi):0} ppi (floor {SvgPdfWriter.MinimumPpi:0})."));
+            $" {report.Bitmaps.Count} bitmap(s) placed; the lowest prints at {report.Bitmaps.Min(b => b.EffectivePpi):0} ppi (floor {SvgPdfWriter.MinimumPpi:0}),")
+          + Largest(report.Bitmaps))
+      // The weight belongs on the line too: poster5's 20.5 MB file read "1 bitmap(s) placed; the lowest prints at 300 ppi".
+      + (report.FileBytes <= 0 ? "" : report.FileBytes >= 1_000_000
+            ? FormattableString.Invariant($" File {report.FileBytes / 1_000_000.0:0.0} MB.")
+            : FormattableString.Invariant($" File {Math.Max(1, (int)Math.Round(report.FileBytes / 1_000.0))} KB."));
+
+    private static string Largest(System.Collections.Generic.IReadOnlyList<PlacedBitmap> bitmaps)
+    {
+        var b = bitmaps.MaxBy(x => (long)x.PixelWidth * x.PixelHeight)!;
+        return FormattableString.Invariant($" the largest {b.PixelWidth:N0} x {b.PixelHeight:N0} px.");
+    }
     #endregion
 
     #region Types
