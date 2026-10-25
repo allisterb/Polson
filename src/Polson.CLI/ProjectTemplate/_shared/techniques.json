@@ -1,0 +1,135 @@
+{
+  "about": "The techniques a director can request or deny for one production (create-project --request / --deny). Each names the workflows it applies to, the instruction it adds to CLAUDE.md either way, and what in the run record shows it was used: a pattern in the run's scripts, an artifact's name, a pattern in direction.md, or nothing measurable (judged). Ids are what the flags take.",
+  "techniques": [
+    {
+      "id": "alternative-grid",
+      "name": "Alternative grid",
+      "workflows": ["poster", "motion"],
+      "source": "Manual 30 §2",
+      "summary": "A grid found in an object tied to the subject, or tiled from a tessellation, organising the type and the image instead of columns.",
+      "request": "Make one concept a grid from an object tied to the subject (Layout.linesFrom on a photograph or your own sketch of it, or Layout.tessellation), organise the type and the image by its lines, and Stage.check grid.fit(...) on the delivered piece. In a film the lines are also the paths things travel.",
+      "deny": "No alternative grid: lay the piece out on a column grid or by its own composition, with no Layout.linesFrom, Layout.tessellation or Layout.lines.",
+      "evidence": { "scripts": "Layout\\.(linesFrom|tessellation|lines)\\(" }
+    },
+    {
+      "id": "kit-of-parts",
+      "name": "Kit of parts",
+      "workflows": ["poster", "motion", "logo"],
+      "source": "Manual 30 §3",
+      "summary": "A small vocabulary of parts recombined into the piece, drawn as a kit sheet with at least six reconfigurations.",
+      "request": "Build the piece from a KIT of four to eight parts and draw artifacts/03_kit.png with at least six labelled reconfigurations before the comps or the board. Everything delivered comes from the kit.",
+      "deny": "No kit of parts and no kit sheet: draw the piece directly from the concept.",
+      "evidence": { "artifacts": "kit" }
+    },
+    {
+      "id": "brand-language",
+      "name": "Brand language",
+      "workflows": ["poster", "motion", "logo"],
+      "source": "Manual 30 §4",
+      "summary": "The piece as a system: a vocabulary, an order of prominence, rules in dos.md, applied to several vehicles and pushed once on purpose.",
+      "request": "Write the brand language into direction.md under a heading 'Brand language': its vocabulary, its order of prominence and its rules (dos.md, measured where they can be), then apply it to three or four vehicles with Stage.mockup and push it once on purpose (enlarged past an edge, cropped, wrapped), saying where the rules bent and where they broke.",
+      "deny": "No brand language: deliver the piece itself, not a system around it, and no applications to other vehicles.",
+      "evidence": { "direction": "^#{1,4}\\s.*brand language" }
+    },
+    {
+      "id": "mockups",
+      "name": "Mock-ups",
+      "workflows": ["poster", "motion", "logo"],
+      "source": "Manual 30 §5",
+      "summary": "The finished work shown where it will live, drawn by Stage.mockup and labelled as a mock-up.",
+      "request": "Show the delivered piece where it will live with Stage.mockup: at least one mock-up per final, in the setting the brief implies (a wall at its real size, a shelter, a billboard, a phone or screen, a card or a box), and put it in the pitch or process book after the piece.",
+      "deny": "No mock-ups: deliver the piece and its books without showing it in any setting.",
+      "evidence": { "artifacts": "^mockup_" }
+    },
+    {
+      "id": "generated-setting",
+      "name": "Generated mock-up setting",
+      "workflows": ["poster", "motion"],
+      "source": "Manual 30 §5b",
+      "summary": "A richer mock-up: a backdrop generated around a panel drawn at the design's shape, the design pinned into the panel it drew. One requisition.",
+      "request": "Make one mock-up on a generated setting: draw the panel at the design's shape as a black silhouette on #808080, pass it as conditionOn to Assets.backdrop asking for the panel blank and evenly lit, then Stage.mockup({ onto: plate, corners, find: true }). One requisition; reuse the plate for every version.",
+      "deny": "Drawn mock-up settings only: no generated backdrop for a mock-up.",
+      "evidence": { "scripts": "find:\\s*true" }
+    },
+    {
+      "id": "matte-painting",
+      "name": "Matte painting background",
+      "workflows": ["poster", "motion"],
+      "source": "Manual 25 §16f",
+      "summary": "A background plate generated around the composition's own blocking (conditionOn), lit and graded into one world with what is drawn over it.",
+      "request": "Build the background as a matte painting in the matte painter's order: thumbnail, value sketch, a plate from Assets.backdrop({ conditionOn }) built around the chosen blocking, the foreground lit from plate.metrics, then the paint-over, the grade and the grain.",
+      "deny": "No generated background plate: every part of the picture is drawn or brought in from documents/.",
+      "evidence": { "scripts": "conditionOn\\s*:" }
+    },
+    {
+      "id": "matte-wipe",
+      "name": "Matte wipe",
+      "workflows": ["motion"],
+      "source": "Manual 25 §16b",
+      "summary": "A transition that wipes by a greyscale matte, darkest first: ink blooming, smoke clearing, paper tearing.",
+      "request": "Use a matte wipe for the beat change that means most: comp.wipe({ type: 'matte', image, completion }), the matte drawn or requisitioned, and say in direction.md what it means at that beat.",
+      "deny": "No matte wipes: cuts, dissolves and moves only.",
+      "evidence": { "scripts": "type:\\s*['\"]matte['\"]" }
+    },
+    {
+      "id": "mystery-reveal",
+      "name": "Mystery → reveal",
+      "workflows": ["motion"],
+      "source": "Manual 25 §14a",
+      "summary": "The film opens on something not yet understood and resolves it: the structure the motion manual recommends by default.",
+      "request": "Structure the film from mystery to certainty: open on something the viewer cannot yet read, and let each beat resolve more of it until the resolve makes it plain.",
+      "deny": "Do not open on a mystery that the film then resolves, however well it would suit: the subject is legible from the first frame, and the beats build on it rather than reveal it. Choose a different shape for the story and say which in direction.md.",
+      "evidence": { "judged": "the opening's legibility, read from the beat table" }
+    },
+    {
+      "id": "camera-move",
+      "name": "Camera move with parallax",
+      "workflows": ["motion"],
+      "source": "Manual 25 §14d, §15",
+      "summary": "The poster's planes set at depths and one camera move — a push, a pull, a pan — keyed as a beat of its own.",
+      "request": "Set the layers on planes at depths (groups with z and keepSize: true) under comp.camera(), and key at least one camera move as a beat of its own, eased in and out.",
+      "deny": "No camera: a flat composition, every move made by the layers themselves.",
+      "evidence": { "scripts": "comp\\.camera\\(" }
+    },
+    {
+      "id": "kinetic-type",
+      "name": "Kinetic type",
+      "workflows": ["motion"],
+      "source": "Manual 25 §17d",
+      "summary": "Type animated by what the words mean, with text animators: letters, words or lines arriving in sequence.",
+      "request": "Animate at least the title with comp.text animators chosen for what the words mean (by letter, word or line), not only an entrance.",
+      "deny": "No text animators: type arrives and leaves whole, by cuts, fades or the layer's own move.",
+      "evidence": { "scripts": "animators\\s*:" }
+    },
+    {
+      "id": "stepped-time",
+      "name": "Stepped time",
+      "workflows": ["motion"],
+      "source": "Manual 25 (comp.posterizeTime)",
+      "summary": "Drawn layers moved on twos or threes, comp.posterizeTime, for a hand-made look.",
+      "request": "Step the drawn layers' time with comp.posterizeTime({ fps: 12 }) or slower, for a hand-made look; keep the camera and type smooth.",
+      "deny": "No stepped time: every layer moves at the film's own rate.",
+      "evidence": { "scripts": "posterizeTime\\(" }
+    },
+    {
+      "id": "film-grain",
+      "name": "Film grain",
+      "workflows": ["motion"],
+      "source": "Manual 25 §16d",
+      "summary": "One grain over the native composite, last in the stack, to make many sources one world.",
+      "request": "Grain the whole film last with comp.noise, §16d's recipe (6%; the dark-film stops for a dark film), on the native composite.",
+      "deny": "No grain: a clean image throughout.",
+      "evidence": { "scripts": "\\.noise\\(" }
+    },
+    {
+      "id": "write-on",
+      "name": "Write-on line",
+      "workflows": ["motion"],
+      "source": "Manual 25 (outline trimEnd)",
+      "summary": "A line that draws itself on: an outline's trimEnd keyed 0 → 1.",
+      "request": "Draw at least one line on as it appears: an outline with trimEnd keyed from 0 to 1, at a beat where the drawing of it means something.",
+      "deny": "No write-ons: lines are on screen whole.",
+      "evidence": { "scripts": "trimEnd\\s*:" }
+    }
+  ]
+}

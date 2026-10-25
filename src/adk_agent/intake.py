@@ -749,19 +749,21 @@ def check(name: str, workflow: str, kind: str, brief: str, deadline: str = "",
 
 async def commission(app: FastAPI, name: str, workflow: str, brief: str, kind: str = "",
                      deadline: str = "", documents: list[Path] | tuple[Path, ...] = (),
-                     start: bool = True, auto: bool = False) -> str | None:
+                     start: bool = True, auto: bool = False,
+                     request: list[str] | tuple[str, ...] = (), deny: list[str] | tuple[str, ...] = ()) -> str | None:
     """Makes the project and, with `start`, sets the agent working on it. Raises `Refused`.
 
     Returns the studio's page for the run when one was started and a studio is mounted to watch it,
     else None. `documents` are files already staged and checked by the caller; `create` copies them
-    into the project's `documents/`, and is the only thing that writes into it.
+    into the project's `documents/`, and is the only thing that writes into it. `request` and `deny` are design
+    technique ids; the CLI refuses any it does not know or that is not for this workflow, and its reason is the refusal.
     """
     workflow = canonical(workflow)
     minutes = check(name, workflow, kind, brief, deadline, start)
     try:
         create(name, workflow=workflow, prompt=brief, type_=kind or None, deadline=minutes,
                documents=[str(p) for p in documents] or None, budget_tokens=token_budget(workflow, brief, kind),
-               auto=auto)
+               auto=auto, request=list(request), deny=list(deny))
     except GenerateError as exc:
         raise Refused(400, str(exc)) from exc
 
@@ -837,8 +839,10 @@ class Commissioner:
         return running(name)
 
     async def commission(self, name: str, workflow: str, kind: str, brief: str,
-                         documents: list[Path], auto: bool = False) -> str | None:
-        return await commission(self.app, name, workflow, brief, kind, documents=documents, start=True, auto=auto)
+                         documents: list[Path], auto: bool = False,
+                         request: list[str] | tuple[str, ...] = (), deny: list[str] | tuple[str, ...] = ()) -> str | None:
+        return await commission(self.app, name, workflow, brief, kind, documents=documents, start=True, auto=auto,
+                                request=request, deny=deny)
 
 
 #: `POST /requests` — the studio's composer, which commissions through `Commissioner` and so meets

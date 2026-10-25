@@ -1113,7 +1113,7 @@ class CommissionTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(where, "nothing is watched when nothing was started")
         create.assert_called_once_with("lighthouse", workflow="drawing", prompt="A lighthouse.", type_="review",
                                        deadline=intake.DEADLINES["drawing"], documents=[str(doc)],
-                                   budget_tokens=None, auto=False)
+                                   budget_tokens=None, auto=False, request=[], deny=[])
 
     async def test_an_autonomous_commission_is_created_with_auto(self):
         with mock.patch.object(intake, "archived_names", return_value=[]), \

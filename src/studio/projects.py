@@ -131,8 +131,10 @@ def check(root: Path, project_id: str, workflow: str, kind: str) -> None:
             f"overwrites a directory that already has work in it.")
 
 
-async def create(root: Path, project_id: str, workflow: str, kind: str, brief: str, *, auto: bool = False) -> Path:
+async def create(root: Path, project_id: str, workflow: str, kind: str, brief: str, *, auto: bool = False,
+                 request: list[str] | tuple[str, ...] = (), deny: list[str] | tuple[str, ...] = ()) -> Path:
     """Generates a standalone project and returns its directory. `auto` makes it with `--auto`: nobody is asked anything.
+    `request` and `deny` are design technique ids, already checked against the catalogue (`techniques.parse`).
 
     Standalone always: the orchestrator refuses a managed project, because its host would own tool
     policy and running it here would apply none — including the denial of `generate_image`, which the
@@ -162,6 +164,10 @@ async def create(root: Path, project_id: str, workflow: str, kind: str, brief: s
             argv += ["--type", kind]
         if auto:
             argv += ["--auto"]
+        if request:
+            argv += ["--request", ",".join(request)]
+        if deny:
+            argv += ["--deny", ",".join(deny)]
 
         await _spawn(argv)
     finally:

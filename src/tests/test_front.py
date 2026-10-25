@@ -18,9 +18,24 @@ from unittest import mock
 from fastapi.testclient import TestClient
 
 from studio import app as app_mod
-from studio import catalogue, front, projects, uploads
+from studio import catalogue, front, projects, techniques, uploads
 from studio.runs import Registry, StudioError
 from tests.test_studio import project_dir
+
+
+#: The design technique catalogue the form is tested against, pinned rather than read from a CLI that may not be built.
+TECHNIQUES = (
+    techniques.Technique("alternative-grid", "Alternative grid", ("poster", "motion"), "Manual 30 §2", "A grid from an object."),
+    techniques.Technique("mockups", "Mock-ups", ("poster", "motion", "logo"), "Manual 30 §5", "The work where it lives."),
+    techniques.Technique("mystery-reveal", "Mystery → reveal", ("motion",), "Manual 25 §14a", "Opens on a mystery.", measured=False),
+)
+
+
+def pin_techniques(test: unittest.TestCase) -> None:
+    """Serves `TECHNIQUES` as the catalogue for the length of one test."""
+    patcher = mock.patch.object(techniques, "catalogue", lambda: TECHNIQUES)
+    patcher.start()
+    test.addCleanup(patcher.stop)
 
 
 def events(project: Path, *lines: dict) -> None:
@@ -28,6 +43,26 @@ def events(project: Path, *lines: dict) -> None:
     with (project / "events" / "server.jsonl").open("a", encoding="utf-8") as out:
         for i, line in enumerate(lines, 1):
             out.write(json.dumps({"ts": f"2026-10-18T10:00:{i:02d}.000Z", "seq": i, "src": "server", **line}) + "\n")
+
+
+class TechniqueCatalogueTests(unittest.TestCase):
+    """The form's catalogue is the CLI's; a CLI that cannot answer hides the field rather than failing the form."""
+
+    def tearDown(self) -> None:
+        techniques.reset()
+
+    def test_a_cli_that_cannot_run_offers_no_techniques(self):
+        techniques.reset()
+        with mock.patch.object(projects, "launcher", lambda: [str(Path(tempfile.gettempdir()) / "no-such-polson.exe")]):
+            self.assertEqual(techniques.catalogue(), ())
+            self.assertEqual(techniques.for_workflow("poster"), ())
+
+    def test_choices_are_ordered_as_the_catalogue_is(self):
+        with mock.patch.object(techniques, "catalogue", lambda: TECHNIQUES):
+            self.assertEqual(techniques.parse("motion", {"mystery-reveal": "deny", "mockups": "request",
+                                                         "alternative-grid": "request", "x": ""}),
+                             (["alternative-grid", "mockups"], ["mystery-reveal"]))
+            self.assertEqual(techniques.names(["mockups", "gone"]), ["Mock-ups", "gone"])
 
 
 class CatalogueTests(unittest.TestCase):
@@ -353,6 +388,7 @@ class FrontRoutingTests(unittest.TestCase):
     def setUp(self) -> None:
         self.root = Path(tempfile.mkdtemp(prefix="polson-front-"))
         self.registry = Registry()
+        pin_techniques(self)
         self.client = TestClient(app_mod.create_app(self.root, self.registry))
 
     def tearDown(self) -> None:
@@ -419,8 +455,9 @@ class FrontRoutingTests(unittest.TestCase):
         """Stands in for the CLI: writes a project directory and keeps the brief it was handed."""
         handed = {}
 
-        async def create(root, project_id, workflow, kind, brief, auto=False):
-            handed.update(project_id=project_id, workflow=workflow, kind=kind, brief=brief, auto=auto)
+        async def create(root, project_id, workflow, kind, brief, auto=False, request=(), deny=()):
+            handed.update(project_id=project_id, workflow=workflow, kind=kind, brief=brief, auto=auto,
+                          request=list(request), deny=list(deny))
             return project_dir(root, project_id, workflow=workflow)
         return handed, mock.patch.object(projects, "create", create)
 
@@ -467,6 +504,16 @@ class FrontRoutingTests(unittest.TestCase):
             self.assertGreater(box, brief, f"{key} should come after the brief")
             self.assertNotIn(f'<input class="fr-inline" name="x_{key}"', page)
         self.assertIn('name="x_duration"', page[:brief])      # a choice stays in the header
+
+    def test_the_product_ads_typed_fields_are_text_boxes_after_the_brief(self):
+        """Product, comparables, claim and call to action are written, not chosen: room under the brief, not a bar field."""
+        page = self.client.get("/compose/product-ad").text
+        brief = page.index('id="brief"')
+        for key in ("product", "comparables", "claim", "cta"):
+            box = page.index(f'<textarea id="x_{key}" name="x_{key}" rows="2"')
+            self.assertGreater(box, brief, f"{key} should come after the brief")
+            self.assertNotIn(f'<input class="fr-inline" name="x_{key}"', page)
+        self.assertIn('name="x_duration"', page[:brief])      # a choice stays in the bar
 
     def test_the_startup_pitch_composer_asks_for_its_terms_and_makes_audiences_optional(self):
         page = self.client.get("/compose/startup-pitch").text
@@ -577,6 +624,47 @@ class FrontRoutingTests(unittest.TestCase):
         self.assertNotIn('id="tab-agent"', page)
         self.assertNotIn("data-agent-log", page)
 
+    def test_the_poster_composer_offers_its_graphic_design_techniques(self):
+        page = self.client.get("/compose/poster").text
+        self.assertIn("Graphic design", page)
+        self.assertIn('name="tech_alternative-grid" value="" checked', page, "the studio decides unless asked")
+        self.assertIn('name="tech_mockups" value="request"', page)
+        self.assertNotIn("tech_mystery-reveal", page, "a motion technique is not offered for a poster")
+        self.assertNotIn("Graphic design", self.client.get("/compose/painting").text, "none apply to painting")
+
+    def test_design_choices_reach_the_cli_and_the_record(self):
+        handed, patch = self.fake_create()
+        with patch:
+            reply = self.client.post("/requests", data=self.compose(**{"tech_mockups": "deny", "tech_alternative-grid": "request"}),
+                                     follow_redirects=False)
+        self.assertEqual(reply.status_code, 303, reply.text[:300])
+        self.assertEqual((handed["request"], handed["deny"]), (["alternative-grid"], ["mockups"]))
+        self.assertNotIn("alternative-grid", handed["brief"], "the director's settings are not the client's words")
+        record = json.loads((self.root / "autumn-menu-poster" / front.REQUEST_FILE).read_text())
+        self.assertEqual(record["techniques"], {"request": ["alternative-grid"], "deny": ["mockups"]})
+        page = self.client.get("/requests/autumn-menu-poster").text
+        self.assertIn("Alternative grid", page)
+        self.assertIn("Don't use", page)
+
+    def test_a_technique_the_workflow_does_not_offer_is_refused_before_anything_is_made(self):
+        handed, patch = self.fake_create()
+        for field, value, words in (("tech_mystery-reveal", "request", "not one this workflow offers"),
+                                    ("tech_mockups", "maybe", "left to the studio, used, or not used")):
+            with self.subTest(field=field), patch:
+                reply = self.client.post("/requests", data=self.compose(**{field: value}), follow_redirects=False)
+                self.assertEqual(reply.status_code, 409)
+                self.assertIn(words, reply.text)
+        self.assertEqual(handed, {})
+        self.assertEqual(list(self.root.iterdir()), [])
+
+    def test_a_refused_request_keeps_its_design_choices(self):
+        handed, patch = self.fake_create()
+        with patch:
+            reply = self.client.post("/requests", data=self.compose(formats=[".mp4"], **{"tech_mockups": "deny"}),
+                                     follow_redirects=False)
+        self.assertEqual(reply.status_code, 409)
+        self.assertIn('name="tech_mockups" value="deny" checked', reply.text)
+
     def test_an_observing_studio_offers_the_form_and_refuses_to_make(self):
         client = TestClient(app_mod.create_app(self.root, Registry(), observe_only=True, create_at="/new"))
         page = client.get("/compose/poster")
@@ -601,10 +689,11 @@ class FakeCommissioner:
     def free_name(self, title: str) -> str:
         return catalogue.slugify(title).replace("-", "_")
 
-    async def commission(self, name, workflow, kind, brief, documents, auto=False):
+    async def commission(self, name, workflow, kind, brief, documents, auto=False, request=(), deny=()):
         if self.refuse is not None:
             raise self.refuse
         self.made.append({"name": name, "workflow": workflow, "kind": kind, "brief": brief, "auto": auto,
+                          "request": list(request), "deny": list(deny),
                           "documents": [Path(d).name for d in documents],
                           "contents": [Path(d).read_bytes() for d in documents]})
         project_dir(self.root, name, workflow=workflow, policy=False)
@@ -626,6 +715,7 @@ class CommissionedComposerTests(unittest.TestCase):
 
     def setUp(self) -> None:
         self.root = Path(tempfile.mkdtemp(prefix="polson-front-adk-"))
+        pin_techniques(self)
         self.commissioner = FakeCommissioner(self.root)
         self.client = TestClient(app_mod.create_app(self.root, Registry(), observe_only=True, create_at="/new",
                                                     commissioner=self.commissioner))
@@ -714,6 +804,13 @@ class CommissionedComposerTests(unittest.TestCase):
         page = self.client.get("/compose/film-trailer").text
         self.assertIn('name="auto" value="1"', page)
         self.assertIn('name="auto" value="" checked', page)
+
+    def test_design_choices_are_commissioned_on_this_host_too(self):
+        data = self.trailer("product-ad", **{"tech_alternative-grid": "request", "tech_mystery-reveal": "deny"})
+        reply = self.client.post("/requests", data=data, follow_redirects=False)
+        self.assertEqual(reply.status_code, 303, reply.text[:300])
+        made = self.commissioner.made[0]
+        self.assertEqual((made["request"], made["deny"]), (["alternative-grid"], ["mystery-reveal"]))
 
     def test_a_film_trailer_is_not_given_the_workflows_lone_type(self):
         """The host offers `trailer` one type; the film trailer's card offers none, and the card decides."""

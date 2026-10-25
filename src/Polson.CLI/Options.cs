@@ -56,6 +56,18 @@ public class ReportOptions : Options
     #endregion
 }
 
+[Verb("techniques", HelpText = "List the techniques a production can request or deny (create-project --request / --deny): their ids, what each asks for, and what in a run shows it was used.")]
+public class TechniquesOptions : Options
+{
+    #region Properties
+    [Option("workflow", Required = false, HelpText = "Only the techniques that apply to this workflow.")]
+    public string Workflow { get; set; } = string.Empty;
+
+    [Option("json", Required = false, HelpText = "Emit the catalogue as JSON, for the studio's form.")]
+    public bool Json { get; set; }
+    #endregion
+}
+
 [Verb("reset", HelpText = "Clear a project's previous run so it can be run again, keeping the brief, the instructions and everything else that was generated.")]
 public class ResetOptions : Options
 {
@@ -99,6 +111,12 @@ public class CreateProjectOptions : Options
 
     [Option("document", Required = false, HelpText = "Source material to copy into the project's documents/ folder — a PDF of a report, a CSV, a brand guide, a reference clip. Give one or more paths after the flag. Each must be a type Documents.ask can read; a file already there under the same name is kept if identical and refused if not.")]
     public IEnumerable<string> Documents { get; set; } = [];
+
+    [Option("request", Required = false, Separator = ',', HelpText = "Techniques the agent must use in this production, by id, comma-separated: e.g. alternative-grid,brand-language. `polson techniques --workflow <name>` lists them. Written into the instructions and project.json, and checked by `polson report`. Kept across --reset unless --request or --deny is given again.")]
+    public IEnumerable<string> Request { get; set; } = [];
+
+    [Option("deny", Required = false, Separator = ',', HelpText = "Techniques the agent must not use in this production, by id, comma-separated: e.g. mystery-reveal. They override the workflow's own defaults. See --request.")]
+    public IEnumerable<string> Deny { get; set; } = [];
 
     [Option("deadline", Required = false, HelpText = "Minutes the commission is allowed to take, written into project.json and stated in the instructions so the agent can plan against it. Omit it for the workflow's own default — a logo is quarter of an hour, a study painting is two. Pass 0 for no deadline.")]
     public int? Deadline { get; set; }

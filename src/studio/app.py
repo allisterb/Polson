@@ -199,6 +199,8 @@ DELIVERABLES: tuple[tuple[str, str], ...] = (
     ("direction.md", "why it looks like this: every choice and the evidence behind it"),
     ("artwork.js", "the drawing itself, as code"),
     ("motion.js", "the film itself, as code: every layer and key"),
+    # The poster workflow's script, named in its instructions since its kit of parts went in (Manual 30 §3).
+    ("poster.js", "the poster itself, as code: its kit of parts and every element"),
     # The same file under the motion workflow's name before 2026-10-25, so a run made then still shows its source.
     ("trailer.js", "the film itself, as code: every layer and key"),
     ("plan.md", "the explainer's scenes, every formula in them and what checked it"),

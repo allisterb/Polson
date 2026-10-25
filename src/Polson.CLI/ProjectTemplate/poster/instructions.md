@@ -393,6 +393,8 @@ of a family's name — `'Franklin Gothic Heavy'` is `'Franklin Gothic'` at `font
 
 {{AUTO}}
 
+{{TECHNIQUES}}
+
 {{DELIVERABLES}}
 
 {{TEST}}
