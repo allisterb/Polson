@@ -1210,8 +1210,8 @@ public sealed class MotionComposition : MotionLayerList
     /// <summary>
     /// The design board (Shaw, <i>Design for Motion</i>, ch. 3): the film told in a sequence of full style frames, read left
     /// to right and top to bottom, each numbered and timed, with what happens in it and what the camera or the cut does.
-    /// <c>options</c>: <c>{ frames: [{ time, caption, camera? }], cols?, scale?, title?, stills?, background?, fontFamily?,
-    /// format?, quality? }</c>. Returns <c>{ path, cells, times, stills, warnings, width, height, bytes }</c>.
+    /// <c>options</c>: <c>{ frames: [{ time, caption, shot?, angle?, camera? }], cols?, scale?, title?, stills?, background?,
+    /// fontFamily?, format?, quality? }</c>. Returns <c>{ path, cells, times, shots, stills, warnings, width, height, bytes }</c>.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -1224,6 +1224,11 @@ public sealed class MotionComposition : MotionLayerList
     /// are the film's style frames, and the finished film is held to each of them at the end. Shaw counts nine to twelve
     /// frames for a thirty-second spot; a board with fewer than one frame per 3.5 s of film comes back with a warning.
     /// </para>
+    /// <para>
+    /// <b><c>shot</c></b> is the camera's distance, <c>'ECU'</c> to <c>'EWS'</c>, and <c>angle</c> where it sits (Manual 25
+    /// §15; Shaw, ch. 10). Both are printed under the frame. A board with no shots, one shot throughout, or a first frame
+    /// closer than wide comes back with a warning: a board is the camera's sequence, and it usually opens by establishing.
+    /// </para>
     /// </remarks>
     public Dictionary<string, object?> Board(string filePath, object? options = null)
     {
@@ -1231,17 +1236,18 @@ public sealed class MotionComposition : MotionLayerList
         var o = new MotionOptions(options, "composition.board", "frames", "cols", "scale", "title", "stills", "background",
             "fontFamily", "format", "quality");
         if (o.Raw("frames") is not IEnumerable given || given is string)
-            throw new ArgumentException("composition.board needs frames: [{ time, caption, camera? }], one per beat, in order.");
+            throw new ArgumentException("composition.board needs frames: [{ time, caption, shot?, angle?, camera? }], one per beat, in order.");
         var frames = given.Cast<object?>().Select((f, i) =>
         {
-            var d = JsInterop.AsDict(f) ?? throw new ArgumentException($"composition.board: frame {i + 1} is {{ time, caption, camera? }}.");
+            var d = JsInterop.AsDict(f) ?? throw new ArgumentException($"composition.board: frame {i + 1} is {{ time, caption, shot?, angle?, camera? }}.");
             if (d["time"] is null) throw new ArgumentException($"composition.board: frame {i + 1} has no time.");
             var time = Convert.ToDouble(d["time"], CultureInfo.InvariantCulture);
             if (time < 0 || time > Duration + 1e-9) throw new ArgumentException($"composition.board: frame {i + 1} at {time:0.###} s is outside the film (0 to {Duration:0.###} s).");
             var caption = d["caption"]?.ToString();
             if (string.IsNullOrWhiteSpace(caption))
                 throw new ArgumentException($"composition.board: frame {i + 1} has no caption. Say what happens in it — a board is read by someone who has not seen the film.");
-            return (Time: time, Caption: caption.Trim(), Camera: d["camera"]?.ToString()?.Trim());
+            return (Time: time, Caption: caption.Trim(), Camera: d["camera"]?.ToString()?.Trim(),
+                Shot: ShotOf(d["shot"], $"composition.board: frame {i + 1}"), Angle: AngleOf(d["angle"], $"composition.board: frame {i + 1}"));
         }).ToArray();
         if (frames.Length is 0 or > 24)
             throw new ArgumentException($"composition.board takes 1 to 24 frames, not {frames.Length}.");
@@ -1252,76 +1258,32 @@ public sealed class MotionComposition : MotionLayerList
                 + $"{Math.Ceiling(Duration / 3)} here. A beat the board skips is one the client has not agreed to.");
         if (frames.Zip(frames.Skip(1)).Any(p => p.Second.Time <= p.First.Time))
             warnings.Add("The frames are not in time order; a board reads left to right as the film plays.");
-
-        var scale = Math.Clamp(o.Number("scale", Math.Min(1, 420d / Width)), 0.05, 1);
-        var (cellW, cellH) = (Math.Max(1, (int)Math.Round(Width * scale)), Math.Max(1, (int)Math.Round(Height * scale)));
-        var cols = Math.Max(1, (int)o.Number("cols", frames.Length <= 4 ? frames.Length : 3));
-        var rows = (int)Math.Ceiling(frames.Length / (double)cols);
-        const float Gap = 22, Pad = 28, Lead = 17;
-        var family = o.Has("fontFamily") ? o.Raw("fontFamily")!.ToString()! : "Georgia";
-        using var face = SKTypeface.FromFamilyName(family);
-        using var italicFace = SKTypeface.FromFamilyName(family, SKFontStyle.Italic);
-        using var boldFace = SKTypeface.FromFamilyName(family, SKFontStyle.Bold);
-        using var meta = new SKFont(face, 12);
-        using var body = new SKFont(face, 14);
-        using var camera = new SKFont(italicFace, 13);
-        using var heading = new SKFont(boldFace, 22);
-
-        // The words under each frame: its number and time, what happens (up to three lines), and the camera (one).
-        var texts = frames.Select(f => (Caption: Wrap(f.Caption, body, cellW, 3), Camera: f.Camera is { Length: > 0 } c ? Wrap(c, camera, cellW, 1) : [])).ToArray();
-        var textH = Lead + texts.Max(t => t.Caption.Length + t.Camera.Length) * Lead + 6;
-        var titleH = o.Has("title") ? 44f : 0f;
-        var sheetW = (int)Math.Ceiling(cols * cellW + (cols - 1) * Gap + Pad * 2);
-        var sheetH = (int)Math.Ceiling(titleH + rows * (cellH + textH) + (rows - 1) * Gap + Pad * 2);
+        warnings.AddRange(ShotWarnings([.. frames.Select(f => f.Shot)], sequence: true));
 
         var stills = new List<object?>();
-        using var sheet = new SKBitmap(sheetW, sheetH, SKColorType.Rgba8888, SKAlphaType.Premul);
-        using (var canvas = new SKCanvas(sheet))
-        {
-            canvas.Clear(o.Has("background") ? SkiaColorParser.Parse(o.Raw("background")!.ToString()!) : SkiaColorParser.Parse("#f2efe8"));
-            using var ink = new SKPaint { Color = SkiaColorParser.Parse("#15151a"), IsAntialias = true };
-            using var grey = new SKPaint { Color = SkiaColorParser.Parse("#6b675e"), IsAntialias = true };
-            using var rule = new SKPaint { Color = SkiaColorParser.Parse("#15151a"), IsStroke = true, StrokeWidth = 1, IsAntialias = true };
-            if (o.Has("title")) canvas.DrawText(o.Raw("title")!.ToString()!, Pad, Pad + 22, SKTextAlign.Left, heading, ink);
-
-            for (var i = 0; i < frames.Length; i++)
+        var scale = Math.Clamp(o.Number("scale", Math.Min(1, 420d / Width)), 0.05, 1);
+        var (bytes, sheetW, sheetH, format) = DrawBoard(frames.Length, scale, o, "comp.board",
+            i =>
             {
-                ScriptDeadline.ThrowIfPassed("comp.board");
-                var x = Pad + (i % cols) * (cellW + Gap);
-                var y = Pad + titleH + (i / cols) * (cellH + textH + Gap);
                 using var frame = Render(frames[i].Time);
-                using (var flat = new SKBitmap(Width, Height, SKColorType.Rgba8888, SKAlphaType.Premul))
+                var flat = new SKBitmap(Width, Height, SKColorType.Rgba8888, SKAlphaType.Premul);
+                using (var c = new SKCanvas(flat)) { c.Clear(SKColors.White); c.DrawBitmap(frame.SkBitmap, 0, 0); }
+                if (o.Has("stills"))
                 {
-                    using (var c = new SKCanvas(flat)) { c.Clear(SKColors.White); c.DrawBitmap(frame.SkBitmap, 0, 0); }
-                    using var image = SKImage.FromBitmap(flat);
-                    canvas.DrawImage(image, SKRect.Create(0, 0, Width, Height), SKRect.Create(x, y, cellW, cellH),
-                        new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear));
-                    if (o.Has("stills"))
-                    {
-                        var still = $"{o.Raw("stills")}_{i + 1:00}.png";
-                        var full = ProjectPath.Resolve(projectRoot, still, "stills", "Write to");
-                        Directory.CreateDirectory(Path.GetDirectoryName(full)!);
-                        var png = SkiaImageEncoder.Encode(flat, "png", 100);
-                        File.WriteAllBytes(full, png);
-                        motion?.Record("render", full, new() { ["motion"] = "still", ["format"] = "png", ["bytes"] = (long)png.Length, ["width"] = Width, ["height"] = Height });
-                        stills.Add(still);
-                    }
+                    var still = $"{o.Raw("stills")}_{i + 1:00}.png";
+                    var full = ProjectPath.Resolve(projectRoot, still, "stills", "Write to");
+                    Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+                    var png = SkiaImageEncoder.Encode(flat, "png", 100);
+                    File.WriteAllBytes(full, png);
+                    motion?.Record("render", full, new() { ["motion"] = "still", ["format"] = "png", ["bytes"] = (long)png.Length, ["width"] = Width, ["height"] = Height });
+                    stills.Add(still);
                 }
-                canvas.DrawRect(SKRect.Create(x, y, cellW, cellH), rule);
+                return flat;
+            },
+            i => $"{i + 1:00}   {frames[i].Time:0.0}–{(i + 1 < frames.Length ? frames[i + 1].Time : Duration):0.0} s{ShotLabel(frames[i].Shot, frames[i].Angle)}",
+            i => frames[i].Caption, i => frames[i].Camera, captionLines: 3);
 
-                var ty = y + cellH + Lead;
-                var next = i + 1 < frames.Length ? frames[i + 1].Time : Duration;
-                canvas.DrawText($"{i + 1:00}   {frames[i].Time:0.0}–{next:0.0} s", x, ty, SKTextAlign.Left, meta, grey);
-                foreach (var line in texts[i].Caption) canvas.DrawText(line, x, ty += Lead, SKTextAlign.Left, body, ink);
-                foreach (var line in texts[i].Camera) canvas.DrawText(line, x, ty += Lead, SKTextAlign.Left, camera, grey);
-            }
-        }
-
-        var format = o.Has("format") ? o.Raw("format")!.ToString()! : "png";
-        var bytes = SkiaImageEncoder.Encode(sheet, format, (int)o.Number("quality", 92));
-        var path = ProjectPath.Resolve(projectRoot, filePath, nameof(filePath), "Write to");
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllBytes(path, bytes);
+        var path = WriteSheet(filePath, bytes);
         motion?.Record("render", path, new()
         {
             ["motion"] = "board", ["format"] = format.ToLowerInvariant() is "jpg" ? "jpeg" : format.ToLowerInvariant(),
@@ -1331,9 +1293,210 @@ public sealed class MotionComposition : MotionLayerList
         return new()
         {
             ["path"] = filePath, ["cells"] = frames.Length, ["times"] = frames.Select(f => (object?)f.Time).ToArray(),
-            ["stills"] = stills.ToArray(), ["warnings"] = warnings.Cast<object?>().ToArray(),
-            ["width"] = sheetW, ["height"] = sheetH, ["bytes"] = (long)bytes.Length,
+            ["shots"] = frames.Select(f => (object?)f.Shot).ToArray(), ["stills"] = stills.ToArray(),
+            ["warnings"] = warnings.Cast<object?>().ToArray(), ["width"] = sheetW, ["height"] = sheetH, ["bytes"] = (long)bytes.Length,
         };
+    }
+
+    /// <summary>
+    /// Thumbnail sketches (Shaw, <i>Design for Motion</i>, ch. 10; Manual 25 §15d): small, fast, disposable roughs of the
+    /// board's frames, drawn before any style frame, each deciding the space, the balance, the focal point, the planes, the
+    /// light, the shot and the angle. <c>options</c>: <c>{ frames: [{ image, beat?, shot?, angle?, note? }], cols?, scale?,
+    /// title?, background?, fontFamily?, format?, quality? }</c>; <c>image</c> is a canvas, a bitmap or a project path.
+    /// Returns <c>{ path, cells, warnings, width, height, bytes }</c>.
+    /// </summary>
+    /// <remarks>
+    /// Recorded as a sheet, <c>kind: 'thumbnails'</c>: process, never the piece. A thumbnail at another aspect than the
+    /// film's, one with no shot, and a set with one rough per beat come back with warnings — a rough at the wrong shape
+    /// decides nothing about the frame, and a thumbnail is worth having because there are several to choose between.
+    /// </remarks>
+    public Dictionary<string, object?> Thumbnails(string filePath, object? options = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+        var o = new MotionOptions(options, "composition.thumbnails", "frames", "cols", "scale", "title", "background",
+            "fontFamily", "format", "quality");
+        if (o.Raw("frames") is not IEnumerable given || given is string)
+            throw new ArgumentException("composition.thumbnails needs frames: [{ image, beat?, shot?, angle?, note? }], a small canvas per rough.");
+        var frames = given.Cast<object?>().Select((f, i) =>
+        {
+            var where = $"composition.thumbnails: frame {i + 1}";
+            var d = JsInterop.AsDict(f) ?? throw new ArgumentException($"{where} is {{ image, beat?, shot?, angle?, note? }}.");
+            var bytes = d["image"] switch
+            {
+                string p => File.ReadAllBytes(ProjectPath.Resolve(projectRoot, p, "image", "Read")),
+                ILosslessImageSource image => image.ToLosslessBytes(),
+                null => throw new ArgumentException($"{where} has no image: draw the rough on a small canvas and pass it."),
+                _ => throw new ArgumentException($"{where}: image is a canvas, a bitmap or a project path."),
+            };
+            var beat = d["beat"] is null ? (int?)null : Convert.ToInt32(d["beat"], CultureInfo.InvariantCulture);
+            return (Bytes: bytes, Beat: beat, Shot: ShotOf(d["shot"], where), Angle: AngleOf(d["angle"], where), Note: d["note"]?.ToString()?.Trim());
+        }).ToArray();
+        if (frames.Length is 0 or > 36)
+            throw new ArgumentException($"composition.thumbnails takes 1 to 36 roughs, not {frames.Length}.");
+
+        var warnings = new List<string>(ShotWarnings([.. frames.Select(f => f.Shot)], sequence: false));
+        var aspect = Width / (double)Height;
+        var cells = frames.Select(f => SKBitmap.Decode(f.Bytes) ?? throw new ArgumentException("composition.thumbnails: an image could not be read.")).ToArray();
+        try
+        {
+            var off = cells.Select((c, i) => (Aspect: c.Width / (double)c.Height, i)).Where(c => Math.Abs(c.Aspect / aspect - 1) > 0.02).ToArray();
+            if (off.Length > 0)
+                warnings.Add($"Thumbnail{(off.Length == 1 ? "" : "s")} {string.Join(", ", off.Select(c => c.i + 1))} "
+                    + $"{(off.Length == 1 ? "is" : "are")} not at the film's aspect ({Width}:{Height}). Block a rough out at the shape it will be "
+                    + "seen in (Shaw, ch. 10): a composition at another shape decides nothing about this one.");
+            var beats = frames.Where(f => f.Beat is not null).GroupBy(f => f.Beat).ToArray();
+            if (beats.Length >= 2 && beats.All(b => b.Count() == 1))
+                warnings.Add("One rough per beat: a thumbnail is worth having because there are several to choose between. "
+                    + "Try two or three for the opening and the resolve, and keep the strongest.");
+
+            // Every cell at the film's shape: a rough drawn at another is fitted inside it, so the mismatch shows.
+            var cellW = (int)Math.Round(Math.Clamp(o.Number("scale", 1), 0.05, 4) * 240);
+            var (w, h) = (cellW, Math.Max(1, (int)Math.Round(cellW / aspect)));
+            var (bytes, sheetW, sheetH, format) = DrawBoard(frames.Length, 1, o, "comp.thumbnails",
+                i =>
+                {
+                    var fitted = new SKBitmap(w, h, SKColorType.Rgba8888, SKAlphaType.Premul);
+                    using var c = new SKCanvas(fitted);
+                    using var image = SKImage.FromBitmap(cells[i]);
+                    c.Clear(SKColors.White);
+                    var s = Math.Min(w / (float)cells[i].Width, h / (float)cells[i].Height);
+                    var (dw, dh) = (cells[i].Width * s, cells[i].Height * s);
+                    c.DrawImage(image, SKRect.Create(0, 0, cells[i].Width, cells[i].Height), SKRect.Create((w - dw) / 2, (h - dh) / 2, dw, dh),
+                        new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear));
+                    return fitted;
+                },
+                i => $"{i + 1:00}{(frames[i].Beat is { } b ? $"   beat {b}" : "")}{ShotLabel(frames[i].Shot, frames[i].Angle)}",
+                i => frames[i].Note, _ => null, captionLines: 2, cellSize: (w, h));
+
+            var path = WriteSheet(filePath, bytes);
+            motion?.Record("render", path, new()
+            {
+                ["motion"] = "sheet", ["kind"] = "thumbnails", ["format"] = format.ToLowerInvariant() is "jpg" ? "jpeg" : format.ToLowerInvariant(),
+                ["bytes"] = (long)bytes.Length, ["cells"] = frames.Length, ["width"] = sheetW, ["height"] = sheetH,
+                ["warnings"] = warnings.Count == 0 ? null : warnings.ToArray(),
+            });
+            return new()
+            {
+                ["path"] = filePath, ["cells"] = frames.Length, ["warnings"] = warnings.Cast<object?>().ToArray(),
+                ["width"] = sheetW, ["height"] = sheetH, ["bytes"] = (long)bytes.Length,
+            };
+        }
+        finally
+        {
+            foreach (var cell in cells) cell.Dispose();
+        }
+    }
+
+    /// <summary>The shot ladder, closest first (Manual 25 §15a): what a frame's <c>shot</c> names, by code or name.</summary>
+    private static readonly (string Code, string Name)[] ShotLadder =
+        [("ECU", "extreme close-up"), ("CU", "close-up"), ("MS", "medium shot"), ("WS", "wide shot"), ("EWS", "extreme wide shot")];
+
+    /// <summary>Where the camera sits (Manual 25 §15b): what a frame's <c>angle</c> names.</summary>
+    private static readonly string[] CameraAngles = ["eye", "low", "high", "dutch", "bird"];
+
+    private static string? ShotOf(object? given, string where)
+    {
+        if (given?.ToString()?.Trim() is not { Length: > 0 } s) return null;
+        var key = s.Replace('-', ' ').ToLowerInvariant();
+        return ShotLadder.FirstOrDefault(r => r.Code.Equals(s, StringComparison.OrdinalIgnoreCase)
+                || r.Name.Replace('-', ' ') == key || r.Name.Replace('-', ' ').Replace(" shot", "") == key).Code
+            ?? throw new ArgumentException($"{where}: '{s}' is not a shot. Use {string.Join(", ", ShotLadder.Select(r => $"'{r.Code}' ({r.Name})"))}.");
+    }
+
+    private static string? AngleOf(object? given, string where)
+    {
+        if (given?.ToString()?.Trim() is not { Length: > 0 } s) return null;
+        var key = s.ToLowerInvariant().Split(' ', '-', '\'', '’')[0];
+        return CameraAngles.Contains(key) ? key
+            : throw new ArgumentException($"{where}: '{s}' is not an angle. Use {string.Join(", ", CameraAngles.Select(a => $"'{a}'"))}.");
+    }
+
+    private static string ShotLabel(string? shot, string? angle) =>
+        shot is null && angle is null ? "" : "   ·   " + string.Join(", ", new[] { shot, angle is null ? null : angle + " angle" }.OfType<string>());
+
+    /// <summary>
+    /// What a board's shots say about it. Every frame names one; and, for a <paramref name="sequence"/> read in order, it
+    /// opens wide and does not hold one distance throughout.
+    /// </summary>
+    private static IEnumerable<string> ShotWarnings(string?[] shots, bool sequence)
+    {
+        string Name(string code) => ShotLadder.First(r => r.Code == code).Name is var n && n.StartsWith('e') ? "an " + n : "a " + n;
+        var missing = shots.Select((s, i) => (s, i)).Where(p => p.s is null).Select(p => p.i + 1).ToArray();
+        if (missing.Length == shots.Length)
+        {
+            yield return "No frame names its shot. Give each a shot, 'ECU' to 'EWS' (Manual 25 §15a): how near the camera is decides "
+                + "how intense the moment is, and naming it is how the board's distances get chosen rather than left.";
+            yield break;
+        }
+        if (missing.Length > 0) yield return $"Frame{(missing.Length == 1 ? "" : "s")} {string.Join(", ", missing)} name{(missing.Length == 1 ? "s" : "")} no shot.";
+        if (!sequence) yield break;
+        if (shots[0] is { } first && first is not ("WS" or "EWS"))
+            yield return $"Frame 1 is {Name(first)}. A board opens on an establishing shot, wide (Shaw, ch. 10); if this film opens close "
+                + "on purpose, a mystery the film resolves, say so in direction.md.";
+        if (shots.Length >= 3 && shots.OfType<string>().Distinct().Count() == 1)
+            yield return $"Every frame is {Name(shots.OfType<string>().First())}: the camera never comes nearer or goes farther, so the "
+                + "film holds one intensity. Vary the shot (Manual 25 §15a).";
+    }
+
+    /// <summary>
+    /// A board's sheet: each cell drawn from <paramref name="cell"/> (and disposed), under it a numbered line, a caption of
+    /// up to <paramref name="captionLines"/> lines, and a camera line. Returns the encoded sheet.
+    /// </summary>
+    private (byte[] Bytes, int Width, int Height, string Format) DrawBoard(int count, double scale, MotionOptions o, string who,
+        Func<int, SKBitmap> cell, Func<int, string> meta, Func<int, string?> caption, Func<int, string?> cameraLine, int captionLines,
+        (int W, int H)? cellSize = null)
+    {
+        var (cellW, cellH) = cellSize ?? (Math.Max(1, (int)Math.Round(Width * scale)), Math.Max(1, (int)Math.Round(Height * scale)));
+        var cols = Math.Max(1, (int)o.Number("cols", count <= 4 ? count : 3));
+        var rows = (int)Math.Ceiling(count / (double)cols);
+        const float Gap = 22, Pad = 28, Lead = 17;
+        var family = o.Has("fontFamily") ? o.Raw("fontFamily")!.ToString()! : "Georgia";
+        using var face = SKTypeface.FromFamilyName(family);
+        using var italicFace = SKTypeface.FromFamilyName(family, SKFontStyle.Italic);
+        using var boldFace = SKTypeface.FromFamilyName(family, SKFontStyle.Bold);
+        using var metaFont = new SKFont(face, 12);
+        using var body = new SKFont(face, 14);
+        using var cameraFont = new SKFont(italicFace, 13);
+        using var heading = new SKFont(boldFace, 22);
+
+        // The words under each cell: its number line, what happens (up to captionLines), and the camera (one).
+        var texts = Enumerable.Range(0, count).Select(i => (
+            Caption: caption(i) is { Length: > 0 } c ? Wrap(c, body, cellW, captionLines) : [],
+            Camera: cameraLine(i) is { Length: > 0 } k ? Wrap(k, cameraFont, cellW, 1) : [])).ToArray();
+        var textH = Lead + texts.Max(t => t.Caption.Length + t.Camera.Length) * Lead + 6;
+        var titleH = o.Has("title") ? 44f : 0f;
+        var sheetW = (int)Math.Ceiling(cols * cellW + (cols - 1) * Gap + Pad * 2);
+        var sheetH = (int)Math.Ceiling(titleH + rows * (cellH + textH) + (rows - 1) * Gap + Pad * 2);
+
+        using var sheet = new SKBitmap(sheetW, sheetH, SKColorType.Rgba8888, SKAlphaType.Premul);
+        using (var canvas = new SKCanvas(sheet))
+        {
+            canvas.Clear(o.Has("background") ? SkiaColorParser.Parse(o.Raw("background")!.ToString()!) : SkiaColorParser.Parse("#f2efe8"));
+            using var ink = new SKPaint { Color = SkiaColorParser.Parse("#15151a"), IsAntialias = true };
+            using var grey = new SKPaint { Color = SkiaColorParser.Parse("#6b675e"), IsAntialias = true };
+            using var rule = new SKPaint { Color = SkiaColorParser.Parse("#15151a"), IsStroke = true, StrokeWidth = 1, IsAntialias = true };
+            if (o.Has("title")) canvas.DrawText(o.Raw("title")!.ToString()!, Pad, Pad + 22, SKTextAlign.Left, heading, ink);
+
+            for (var i = 0; i < count; i++)
+            {
+                ScriptDeadline.ThrowIfPassed(who);
+                var x = Pad + (i % cols) * (cellW + Gap);
+                var y = Pad + titleH + (i / cols) * (cellH + textH + Gap);
+                using (var flat = cell(i))
+                using (var image = SKImage.FromBitmap(flat))
+                    canvas.DrawImage(image, SKRect.Create(0, 0, flat.Width, flat.Height), SKRect.Create(x, y, cellW, cellH),
+                        new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear));
+                canvas.DrawRect(SKRect.Create(x, y, cellW, cellH), rule);
+
+                var ty = y + cellH + Lead;
+                canvas.DrawText(meta(i), x, ty, SKTextAlign.Left, metaFont, grey);
+                foreach (var line in texts[i].Caption) canvas.DrawText(line, x, ty += Lead, SKTextAlign.Left, body, ink);
+                foreach (var line in texts[i].Camera) canvas.DrawText(line, x, ty += Lead, SKTextAlign.Left, cameraFont, grey);
+            }
+        }
+
+        var format = o.Has("format") ? o.Raw("format")!.ToString()! : "png";
+        return (SkiaImageEncoder.Encode(sheet, format, (int)o.Number("quality", 92)), sheetW, sheetH, format);
 
         // Words to lines of `width`, at most `max`; the last line cut with an ellipsis when the words run over.
         static string[] Wrap(string text, SKFont font, float width, int max)
@@ -1351,6 +1514,15 @@ public sealed class MotionComposition : MotionLayerList
             while (last.Length > 1 && font.MeasureText(last + "…") > width) last = last[..^1];
             return [.. lines.Take(max - 1), last.TrimEnd() + "…"];
         }
+    }
+
+    /// <summary>Writes a sheet into the project and returns the full path.</summary>
+    private string WriteSheet(string filePath, byte[] bytes)
+    {
+        var path = ProjectPath.Resolve(projectRoot, filePath, nameof(filePath), "Write to");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllBytes(path, bytes);
+        return path;
     }
 
     /// <summary>

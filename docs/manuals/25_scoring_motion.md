@@ -1,6 +1,6 @@
 # Studio Manual 25: Scoring Motion
 
-> **Credits & Theoretical Foundation**: **§5 distils John Lasseter, "Principles of Traditional Animation Applied to 3D Computer Animation" (*Computer Graphics* 21(4), SIGGRAPH '87, pp. 35–44) and John Colette & Austin Shaw, *Motion Design Toolkit* (Routledge, 2023), ch. 1, 2 and 8; §12 distils Colette & Shaw ch. 1, 7 and 11; both ledgered 2026-10-24 and cited by section or chapter where used. §13 distils Austin Shaw, *Design for Motion: Motion Design Techniques & Fundamentals* (Focal Press, 2016), ch. 2–4, 7 and 8, ledgered 2026-10-24 (the same retrieval clause: methods in our words, never its text); §14 distils its ch. 9, and restates Manual 21 §1's depth rules (Glebas, after Perkins) because no motion workflow loads Manual 21. §11 distils Walt Stanchfield's *Drawn to Life* (vol. 1 ch. 41 and others), cited by chapter there; §1–§4 and §6–§10 distil no book in `reference/`.** Lasseter's source, Thomas & Johnston's *The Illusion of Life* (1981), is not in `reference/` and is cited only through him. This header used to say the corpus held no animation text. That was wrong: Stanchfield taught at Disney, and his lectures, ledgered on 2026-09-25 and first read only for gesture, include chapters on timing, phrasing and overlap. §5's received practices are corroborated there. The rest comes from three places, each named where it is used: the **position paradigm** is GSAP's, adopted deliberately and credited (it is not from the corpus and no claim is made about the rest of that library); the **cost figures** are our own measurements, recorded in `docs/motion-score-api.md` §3; and the **seek-rather-than-play** model is the studio's own, argued from the medium — an agent renders frames, it does not watch them. Until 2026-10-24 §5 stated its timing craft as received practice without a source; it is now sourced, and anything in it that is the studio's own is marked as ours. The calls are documented at `polson://sdk/core/Motion`.
+> **Credits & Theoretical Foundation**: **§5 distils John Lasseter, "Principles of Traditional Animation Applied to 3D Computer Animation" (*Computer Graphics* 21(4), SIGGRAPH '87, pp. 35–44) and John Colette & Austin Shaw, *Motion Design Toolkit* (Routledge, 2023), ch. 1, 2 and 8; §12 distils Colette & Shaw ch. 1, 7 and 11; both ledgered 2026-10-24 and cited by section or chapter where used. §13 distils Austin Shaw, *Design for Motion: Motion Design Techniques & Fundamentals* (Focal Press, 2016), ch. 2–4, 7 and 8, ledgered 2026-10-24 (the same retrieval clause: methods in our words, never its text); §14 distils its ch. 9, and restates Manual 21 §1's depth rules (Glebas, after Perkins) because no motion workflow loads Manual 21; §15 distils its ch. 10 (with two points from ch. 11), and its camera mappings (tilt, roll, the laid-down plane) are ours, measured on the engine. §11 distils Walt Stanchfield's *Drawn to Life* (vol. 1 ch. 41 and others), cited by chapter there; §1–§4 and §6–§10 distil no book in `reference/`.** Lasseter's source, Thomas & Johnston's *The Illusion of Life* (1981), is not in `reference/` and is cited only through him. This header used to say the corpus held no animation text. That was wrong: Stanchfield taught at Disney, and his lectures, ledgered on 2026-09-25 and first read only for gesture, include chapters on timing, phrasing and overlap. §5's received practices are corroborated there. The rest comes from three places, each named where it is used: the **position paradigm** is GSAP's, adopted deliberately and credited (it is not from the corpus and no claim is made about the rest of that library); the **cost figures** are our own measurements, recorded in `docs/motion-score-api.md` §3; and the **seek-rather-than-play** model is the studio's own, argued from the medium — an agent renders frames, it does not watch them. Until 2026-10-24 §5 stated its timing craft as received practice without a source; it is now sourced, and anything in it that is the studio's own is marked as ours. The calls are documented at `polson://sdk/core/Motion`.
 > **Purpose**: How to build a piece of motion that can be inspected, revised and resumed — why a score is a function of time rather than a sequence of events, how to place beats so that editing one does not break the rest, and how to look at a result you cannot watch. **It governs the building of a score, not the decision that the piece should move**; see the scope note below.
 
 ---
@@ -1048,15 +1048,16 @@ after the motion is built costs the work twice.
 - **One frame per beat, and enough of them**: Shaw counts nine to twelve for a thirty-second spot (ch. 16), so five or
   six for fifteen seconds. A board thinner than one frame per 3.5 s comes back with a warning.
 - **Each caption says what happens and why it matters**; the camera line says how it is seen and how it leaves.
+- **Each frame names its shot** (`shot: 'EWS'` to `'ECU'`) and, where it departs from eye level, its `angle` (§15).
 - **The board's frames are the film's style frames.** Keep them full size (`stills`) and hold the finished film to every
   one at the end, as §12b holds it to its resolve.
 
 ```js
 comp.board('artifacts/03_board.png', { title: 'Nightshift — design board', stills: 'artifacts/03_board', frames: [
-    { time: 1,    caption: 'Night. An empty teal line across a dark ground: something is waiting.', camera: 'Locked off.' },
-    { time: 4.6,  caption: 'The name arrives, as if steeped into the dark.', camera: 'Slow push in.' },
-    { time: 7.5,  caption: 'The claim settles under it: twenty hours, said once.', camera: 'Hold.' },
-    { time: 11.5, caption: 'Dawn: the ground warms to cream, and the card resolves.', camera: 'Cross-fade to the end card.' }] });
+    { time: 1,    caption: 'Night. An empty teal line across a dark ground: something is waiting.', shot: 'EWS', camera: 'Locked off.' },
+    { time: 4.6,  caption: 'The name arrives, as if steeped into the dark.', shot: 'WS', camera: 'Slow push in.' },
+    { time: 7.5,  caption: 'The claim settles under it: twenty hours, said once.', shot: 'CU', camera: 'The push ends, and holds.' },
+    { time: 11.5, caption: 'Dawn: the ground warms to cream, and the card resolves.', shot: 'MS', camera: 'Cross-fade to the end card.' }] });
 ```
 
 ### 13b. The written treatment, and the shape of the story
@@ -1064,6 +1065,8 @@ comp.board('artifacts/03_board.png', { title: 'Nightshift — design board', sti
 **A treatment is the story in words** (ch. 8): a paragraph to a page that tells what happens, in order, and what it
 means — what a board cannot say, and what a client reads first. "If you can write down your idea in a paragraph, and it
 makes sense", the board has a foundation. Write it as `treatment.md`, in the present tense, once the concept is chosen.
+**An interesting story has tension, conflict and resolution** (ch. 11), even at thirty seconds: say what is at stake,
+what pushes against it, and how the end settles it.
 
 **Give it a shape.** Shaw teaches story with the graph editor: a velocity that never changes is a straight line and
 dull, and a curve that rises and turns is alive. `Stage.shape` draws each beat's intensity — your judgement, 0 to 1 —
@@ -1245,3 +1248,125 @@ near.blur({ size: n.animated('real', [{ time: 0, value: 10, ease: 'halt' }, { ti
 
 **Never blur what is being read.** A plane carrying a figure or a line of text stays in focus while it is on screen,
 as the pitch workflow already asks of the camera ("never while a figure is being read").
+
+## 15. Think Like a Director: Shots, Angles, and Roughing Them Out
+
+> **Implemented by**: `comp.board`'s `shot` and `angle`, `comp.thumbnails`, and `comp.camera()`'s `distance`, `zoom`,
+> `tilt`, `roll` and `target`.
+
+**A style frame is the camera's eye, and the design board is the camera's vision over the story** (*Design for Motion*,
+ch. 10). Deciding what the viewer sees, from how near and from where, is how a director decides what the viewer thinks
+and feels, and a designer of motion has to make the same decisions. Manual 20 §2–3 hold the ladder and the angles for a
+drawn figure. Motion design's subject is as often type, a mark, a chart or a product, and Shaw reads the same vocabulary
+for those.
+
+### 15a. The shots
+
+| Code | Shot | In motion design |
+| :--- | :--- | :--- |
+| `EWS` | Extreme wide | Establishes the setting; scale, perspective, distance. Also a reveal: a pull out to a surprise. |
+| `WS` | Wide | The subject within its setting, so the action can be taken in; often a transition that moves the story on. |
+| `MS` | Medium | A middle distance from the type or the graphic; the bridge between wide and close. |
+| `CU` | Close-up | Tight on the subject: detail revealed, and the intensity rises. |
+| `ECU` | Extreme close-up | The finest detail; the most intimate and intense. Often a transition: a change of scale, of setting, or of the subject itself (Shaw's example is an eye that becomes a galaxy). |
+
+- **Intensity rises as the camera comes nearer the action**, and the viewer stops observing and starts taking part.
+- **Vary the shots**: a sequence of distances is the film's rhythm, like the slow and fast moves of §5a. A board at one
+  distance throughout holds one intensity.
+- **Give every board frame its `shot`.** `comp.board` warns when none are named, when every frame is the same, and when
+  the first frame is closer than wide (§15c).
+
+In the SDK the camera's distance is `comp.camera()`'s `distance` (a push or a pull, keyed) or its lens, `zoom` or
+`focalLength`. A shot is also simply how much of the frame the subject fills; for a figure use Manual 20 §3's table, and
+for type or a mark, how much of the frame's width it spans is the same measure (ours, not Shaw's).
+
+### 15b. The angles
+
+| `angle` | Where the camera is | What it says in motion design |
+| :--- | :--- | :--- |
+| `eye` | Level with the subject | Neutral; the default every other angle departs from. |
+| `low` | Below, looking up | The subject is larger and monumental. The angle of logo animations and sports graphics. |
+| `high` | Above, looking down | The subject is smaller; in film, powerless. In motion design it shows perspective and reveals detail. |
+| `dutch` | Rolled, the horizon on a slant | Tension, and diagonals: more dynamic than a frame of only horizontals and verticals. |
+| `bird` | High overhead | An unexpected view, and room for sweeping moves: a flight over extruded type or a product. |
+
+Two framings are about relations rather than position: a **two shot** frames two elements to show how they interact,
+and an **over-the-shoulder** shot frames what one subject is looking at, which draws the viewer in. In the SDK, `tilt`
+raises the camera (positive is above, a high angle; negative is below, a low one), and `roll` gives the Dutch angle. A
+plane facing the camera goes edge-on as the camera climbs over it, so **for a bird's eye, lay the plane down** with
+`rotateX: -90` (that sign keeps type the right way up seen from above) and raise the camera with a steep `tilt`:
+
+```js
+comp.camera({ tilt: n.animated('real', [{ time: 0, value: 25, ease: 'halt' }, { time: 3, value: 60, ease: 'halt' }]) });
+const ground = comp.group({ origin: [640, 360], offset: [640, 360], rotateX: -90 });   // the type lies on the ground
+```
+
+### 15c. The board's grammar
+
+Shaw names three kinds of board frame (ch. 10), and a board reads better when each frame knows which it is:
+
+- **The establishing frame** comes first. It sets the stage and says where the action will happen, and the same kind
+  of frame opens each new scene. A film may open close on purpose, as a mystery it resolves (§14a). Then say so in
+  `direction.md`, because `comp.board` will ask.
+- **Hero frames** are the moments the viewer must take in: strong compositions, a clear focal point, **type set legibly
+  and in balance**, and the film slows down for them.
+- **Transitions** connect the heroes, and are much faster. They may be a camera move or a transformation: a pull back
+  that reveals what the last frame was part of, or an extreme close-up that becomes the next subject. **The camera is a
+  transition device** as well as a point of view.
+
+**A camera move that starts in one frame continues into the next** (ch. 10). Write each frame's `camera` line so it
+takes up where the last left off: "the push continues", not a fresh move that ignores the one before. A board whose
+camera lines contradict each other describes a film that jumps.
+
+### 15d. Thumbnails before style frames
+
+**Rough the composition before polishing it** (ch. 10). Young designers rush to make finished assets, and however good
+those look, the image fails without a strong composition. A thumbnail is the composition worked out small, fast and
+cheap: it is meant to be thrown away.
+
+- **At the film's aspect.** A rough at another shape decides nothing about the frame it is for.
+- **Decide, in each one**: positive and negative space; symmetric or asymmetric (§14a); the focal point; foreground,
+  middle ground and background (§14d); where the light comes from, and the range of values; the shot and the angle.
+- **Flat values, no detail.** Three or four greys are enough, and colour waits for the style frame.
+- **Several for a frame that matters**: Shaw has designers make a dozen before a strong composition arrives, and roughs
+  every hero moment (ch. 11). Two or three for the opening and the resolve at the least.
+- **Leave detail out.** A rough that shows the most with the least is one the viewer's imagination can still finish, and
+  one you are not yet committed to (ch. 11: Chace Hartman's interview, and Karin Fong quoted at the start of its Part 2). `comp.thumbnails` warns about a set with one rough per beat, and about a
+  rough at the wrong shape.
+- **A thumbnail differs from a style frame only in polish**: both set the composition and the camera. Build the chosen
+  ones into the key poses, and the board follows.
+
+```javascript
+// Thumbnails for a fifteen-second 16:9 film: roughs in four flat greys, two for the opening and two for the resolve.
+const comp = Motion.composition({ width: 1280, height: 720, duration: 15 });
+const rough = draw => {
+    const c = createCanvas(320, 180), x = c.getContext('2d');
+    x.fillStyle = '#d9d9d9'; x.fillRect(0, 0, 320, 180);              // the ground, the lightest value
+    draw(x);
+    return c;
+};
+const opening = [
+    rough(x => {
+        x.fillStyle = '#262626'; x.fillRect(0, 128, 320, 52);          // foreground: the darkest dark, nearest
+        x.fillStyle = '#8c8c8c'; x.fillRect(206, 40, 64, 80);          // the object, off centre: a question
+    }),
+    rough(x => {
+        x.fillStyle = '#8c8c8c'; x.fillRect(0, 104, 320, 76);          // middle ground only: flatter
+        x.fillStyle = '#262626'; x.beginPath(); x.arc(72, 60, 30, 0, Math.PI * 2); x.fill();
+    }),
+];
+const resolve = [
+    rough(x => { x.fillStyle = '#262626'; x.fillRect(100, 70, 120, 24); x.fillRect(130, 104, 60, 8); }),  // centred lock-up
+    rough(x => { x.fillStyle = '#262626'; x.fillRect(0, 0, 320, 180); x.fillStyle = '#d9d9d9'; x.fillRect(110, 80, 100, 20); }),
+];
+const sheet = comp.thumbnails('artifacts/manual25-thumbs.png', { title: 'Thumbnails', frames: [
+    { image: opening[0], beat: 1, shot: 'EWS', angle: 'low', note: 'Asymmetric; the object high right; light from the left.' },
+    { image: opening[1], beat: 1, shot: 'WS', note: 'Asymmetric; the dark disc as the focal point; no foreground.' },
+    { image: resolve[0], beat: 5, shot: 'MS', angle: 'eye', note: 'Symmetric lock-up on the light ground.' },
+    { image: resolve[1], beat: 5, shot: 'MS', angle: 'eye', note: 'Reversed out: the name light on the dark.' }] });
+log(sheet.warnings.length ? sheet.warnings.join(' | ') : `${sheet.cells} roughs, no warnings`);
+opening[0];
+```
+
+Pick from the sheet with your image tool, record why in `direction.md`, and keep the sheet: it belongs in the process
+book (§13d).

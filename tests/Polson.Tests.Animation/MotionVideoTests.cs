@@ -253,11 +253,12 @@ public class MotionVideoTests : TestsRuntime, IDisposable
 
         var board = comp.Board("artifacts/board.png", Opts(("title", "Ramp — design board"), ("stills", "artifacts/board"), ("frames", new object[]
         {
-            Opts(("time", 0d), ("caption", "Red fills the frame: the opening, before anything has happened."), ("camera", "Locked off.")),
-            Opts(("time", 1.96), ("caption", "Blue has taken it over."), ("camera", "Cut to black.")),
+            Opts(("time", 0d), ("caption", "Red fills the frame: the opening, before anything has happened."), ("shot", "WS"), ("camera", "Locked off.")),
+            Opts(("time", 1.96), ("caption", "Blue has taken it over."), ("shot", "close-up"), ("angle", "low"), ("camera", "Cut to black.")),
         })));
 
         Assert.Equal(2, board["cells"]);
+        Assert.Equal(["WS", "CU"], ((object?[])board["shots"]!).Cast<string>());
         Assert.Equal(["artifacts/board_01.png", "artifacts/board_02.png"], ((object?[])board["stills"]!).Cast<string>());
         using (var first = SKBitmap.Decode(File.ReadAllBytes(Path.Combine(root, "artifacts", "board_01.png"))))
         {
@@ -273,12 +274,74 @@ public class MotionVideoTests : TestsRuntime, IDisposable
         var spot = motion.Composition(Opts(("width", 64d), ("height", 36d), ("fps", 25d), ("duration", 30d)));
         spot.Fill(Opts(("color", "#2a7f8f")));
         var thin = spot.Board("artifacts/thin.png", Opts(("frames", new object[]
-            { Opts(("time", 0d), ("caption", "The open.")), Opts(("time", 29d), ("caption", "The end card.")) })));
+            { Opts(("time", 0d), ("caption", "The open."), ("shot", "EWS")), Opts(("time", 29d), ("caption", "The end card."), ("shot", "MS")) })));
         Assert.Contains("2 frames for 30 s", Assert.Single((object?[])thin["warnings"]!) as string);
         Assert.Contains("no caption", Assert.Throws<ArgumentException>(() =>
             comp.Board("artifacts/bad.png", Opts(("frames", new object[] { Opts(("time", 1d)) })))).Message);
         Assert.Contains("outside the film", Assert.Throws<ArgumentException>(() =>
             comp.Board("artifacts/bad.png", Opts(("frames", new object[] { Opts(("time", 9d), ("caption", "Late.")) })))).Message);
+    }
+
+    /// <summary>
+    /// The board's shots (Manual 25 §15a; Shaw, ch. 10): none named, one distance throughout, and an opening closer than
+    /// wide are each said; a shot or an angle that is not one is refused with the list.
+    /// </summary>
+    [Fact]
+    public void TestABoardsShotsAreNamedVariedAndOpenWide()
+    {
+        var comp = Ramp(new MotionToolkit(root), 96);
+        IEnumerable<string> Warnings(params (double Time, string? Shot)[] frames) => ((object?[])comp.Board("artifacts/shots.png", Opts(("frames",
+            frames.Select(f => (object)(f.Shot is null ? Opts(("time", f.Time), ("caption", "A beat."))
+                : Opts(("time", f.Time), ("caption", "A beat."), ("shot", f.Shot)))).ToArray())))["warnings"]!).Cast<string>();
+
+        Assert.Contains("No frame names its shot", Assert.Single(Warnings((0, null), (1, null))));
+        Assert.Contains("Frame 2 names no shot", Assert.Single(Warnings((0, "WS"), (1, null))));
+        var flat = string.Join(" | ", Warnings((0, "MS"), (0.5, "medium"), (1, "MS")));
+        Assert.Contains("Frame 1 is a medium shot", flat);
+        Assert.Contains("Every frame is a medium shot", flat);
+        Assert.Contains("Frame 1 is an extreme close-up", Assert.Single(Warnings((0, "ECU"), (1, "WS"))));
+        Assert.Empty(Warnings((0, "extreme wide"), (0.5, "MS"), (1, "CU")));
+        Assert.Contains("'EWS' (extreme wide shot)", Assert.Throws<ArgumentException>(() => Warnings((0, "full"))).Message);
+        Assert.Contains("'dutch'", Assert.Throws<ArgumentException>(() => comp.Board("artifacts/bad.png", Opts(("frames", new object[]
+            { Opts(("time", 0d), ("caption", "A beat."), ("angle", "sideways")) })))).Message);
+    }
+
+    /// <summary>
+    /// Thumbnails (Shaw, ch. 10) are small roughs at the film's shape, several to choose between: one at another aspect, and a
+    /// set with a single rough per beat, are said; the sheet is recorded as a sheet, not as the piece.
+    /// </summary>
+    [Fact]
+    public void TestThumbnailsAreRoughsAtTheFilmsShapeWithSeveralPerBeat()
+    {
+        var motion = new MotionToolkit(root);
+        var comp = motion.Composition(Opts(("width", 1280d), ("height", 720d), ("duration", 15d)));
+        SkiaCanvas Rough(int w, int h, string ground)
+        {
+            var c = new SkiaCanvas(w, h);
+            c.SkCanvas.Clear(SKColor.Parse(ground));
+            return c;
+        }
+
+        var good = comp.Thumbnails("artifacts/03_thumbs.png", Opts(("title", "Thumbnails"), ("frames", new object[]
+        {
+            Opts(("image", Rough(320, 180, "#222")), ("beat", 1d), ("shot", "EWS"), ("note", "Asymmetric; the focal point low left; light from the right.")),
+            Opts(("image", Rough(160, 90, "#555")), ("beat", 1d), ("shot", "WS"), ("angle", "low")),
+            Opts(("image", Rough(320, 180, "#aaa")), ("beat", 4d), ("shot", "MS"), ("angle", "eye")),
+        })));
+        var poor = comp.Thumbnails("artifacts/03_poor.png", Opts(("frames", new object[]
+        {
+            Opts(("image", Rough(200, 200, "#222")), ("beat", 1d), ("shot", "WS")),
+            Opts(("image", Rough(320, 180, "#555")), ("beat", 2d)),
+        })));
+
+        Assert.Empty((object?[])good["warnings"]!);
+        Assert.True(File.Exists(Path.Combine(root, "artifacts", "03_thumbs.png")));
+        var said = string.Join(" | ", ((object?[])poor["warnings"]!).Cast<string>());
+        Assert.Contains("Frame 2 names no shot", said);
+        Assert.Contains("Thumbnail 1 is not at the film's aspect (1280:720)", said);
+        Assert.Contains("One rough per beat", said);
+        Assert.Contains("has no image", Assert.Throws<ArgumentException>(() =>
+            comp.Thumbnails("artifacts/bad.png", Opts(("frames", new object[] { Opts(("shot", "WS")) })))).Message);
     }
 
     /// <summary>

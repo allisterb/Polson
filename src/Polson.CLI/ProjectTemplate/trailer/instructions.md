@@ -261,11 +261,16 @@ resolve with it**: the last shot the film builds to, and the earlier shots as pa
 A trailer is short enough to plan in full before any key is set. Write the beats as a table in
 `direction.md`, **times in seconds and frames** (24 fps: frame = seconds × 24):
 
-| Beat | Seconds (frames) | On screen | What moves | What the eye must read |
-| :-- | :-- | :-- | :-- | :-- |
-| Open | 0–2.5 (0–60) | … | … | … |
+| Beat | Seconds (frames) | Shot | On screen | What moves | What the eye must read |
+| :-- | :-- | :-- | :-- | :-- | :-- |
+| Open | 0–2.5 (0–60) | EWS, low | … | … | … |
 
 - **One idea a beat.** The eye reads one thing at a time; a beat that asks for two gets neither.
+- **Each beat names its shot and angle** (Manual 25 §15a–b): `EWS` to `ECU`, and `low`, `high`, `dutch` or `bird`
+  where it is not eye level. Open wide unless the film opens close on purpose, a mystery it resolves; vary the
+  distance, because nearer is more intense; and know which beats are **heroes** (slow, the type legible and balanced)
+  and which are **transitions** (fast, and often made by the camera: a pull back, an extreme close-up that becomes the
+  next thing). A camera move that starts in one beat carries on into the next.
 - **The usual shape** is a cold open that poses a question (the object, the place, the trouble), a build
   that adds to it, the **title**, and an **end card** — but the brief decides.
 - **The end card carries only the film's own credits.** For a film that does not exist: no real festival
@@ -295,13 +300,25 @@ A trailer is short enough to plan in full before any key is set. Write the beats
 
 ## Stage 3 — the design board
 
-Build the composition with every layer **at its key pose for each beat** before you add motion between them, and draw
+**Thumbnails first** (Manual 25 §15d; Shaw, ch. 10). Before any style frame, rough each beat on a small canvas at the
+film's shape — `createCanvas(320, 180)` for 16:9 — in three or four flat greys, no detail and no colour, each deciding
+the space, symmetric or not, the focal point, the planes, the light and the shot. **Two or three for the opening and
+the resolve at the least**, then tile them:
+
+```javascript
+comp.thumbnails('artifacts/03_thumbs.png', { title: 'Thumbnails', frames: roughs.map(r =>
+    ({ image: r.canvas, beat: r.beat, shot: r.shot, angle: r.angle, note: r.decides })) });
+```
+
+Look at the sheet, choose, and say why in `direction.md`; the sheet goes in the process book.
+
+Then build the composition with every layer **at its key pose for each beat** before you add motion between them, and draw
 the **design board** (Manual 25 §13a; Shaw, ch. 3): one finished frame per beat, captioned with what happens and what the
 camera or the cut does, and kept full size, because **these are the film's style frames**:
 
 ```javascript
 comp.board('artifacts/03_board.png', { title: 'Nightshift — design board', stills: 'artifacts/03_board',
-    frames: beats.map(b => ({ time: b.key, caption: b.onScreen, camera: b.moves })) });
+    frames: beats.map(b => ({ time: b.key, caption: b.onScreen, shot: b.shot, angle: b.angle, camera: b.moves })) });
 ```
 
 Shaw counts nine to twelve frames for thirty seconds, so five or six for fifteen; a thinner board comes back with a
@@ -512,8 +529,8 @@ set's own check from *More than one audience*:
     and a cover naming the client (`cover: { client, subtitle }`); it closes on *Thank you.* by itself. Read every word
     of it back before you deliver: nothing here checks spelling.
   - **`process.pdf`, `kind: 'process'`**: how it was arrived at — the brief, the mind map (`00_map.png`), each audience's
-    research board and matrix (`03_matrix_a.png`), the dump, `concepts.md` (a concept to a page), `dos.md` and what its
-    check found, the graph of the key moves. Ten to twenty pages; the direction as a page of its decisions in your
+    research board and matrix (`03_matrix_a.png`), the dump, `concepts.md` (a concept to a page), the thumbnails (`03_thumbs.png`),
+    `dos.md` and what its check found, the graph of the key moves. Ten to twenty pages; the direction as a page of its decisions in your
     words, not the file.
 
 {{PROJECT_DIR}}
