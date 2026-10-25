@@ -52,10 +52,10 @@ concepts when a comp fails is normal, and is recorded rather than hidden.
 | 3. **Message** | Draft the words: short, plain, the main point, true, memorable. Keep two or three candidates, separate, never blended. | **Q4** If they take away one thing, which is it? **Q5** How should it sound — warm, funny, sober, unsettling? |
 | 4. **Concepts** | Word lists, timed; **strike the obvious answers** and go again. **Three genuinely different concepts per audience**, rendered as thumbnails, each naming the operation it uses (below). | **Q6** Which direction will this audience decode first time? |
 | 5. **Direction** | `direction.md`: every choice with its evidence (below). | — decide and cite |
-| 6. **Comps** | Two or three comps on the paper, then the checks. | **Q7** In a two-second glance, what must a passer-by take in — and does the focal point deliver it? |
+| 6. **Comps** | **The kit first** (below): its parts and six reconfigurations on a sheet. Then two or three comps on the paper, built from it, then the checks. | **Q7** In a two-second glance, what must a passer-by take in — and does the focal point deliver it? |
 | 7. **Feedback** | The director looks fresh; revise. | **Q8** Does it hold from across the room? — answered with the distance renders beside the comp |
-| 8. **Variant / series** | Across the audiences: hold the system (grid, type, title) if it serves all of them — never the image, its composition or the palette, which are what each audience's evidence decides. The set is a kit, fixed and variable parts written down (Manual 29 §7); words every audience reads carry no slang, rhyme or puns, and a translated line is marked not checked by a native speaker (§6). | — |
-| 9. **Deliver** | Picture, print file, `direction.md`, `findings.md`. | — |
+| 8. **Variant / series** | Across the audiences: hold the system (grid, type, title) if it serves all of them — never the image, its composition or the palette, which are what each audience's evidence decides. The set is a kit, fixed and variable parts written down (Manual 30 §3c); words every audience reads carry no slang, rhyme or puns, and a translated line is marked not checked by a native speaker (§6). | — |
+| 9. **Deliver** | Picture, print file, its mock-ups, `direction.md`, `findings.md`. | — |
 
 **Ask all of a stage's questions at once, each with your proposed answer**, so the director can accept
 rather than compose. If the director says to proceed, or has already answered in the brief, proceed on
@@ -121,6 +121,11 @@ it uses so `direction.md` can say why:
   magnify, multiply, invert, dissect, combine, melt — or choose the sign's kind on purpose: an icon that resembles, an
   index that traces, a symbol that stands by convention. For a set across audiences, a symbol is the riskiest kind:
   check it against each audience.
+- **Form first** (Lupton, *Graphic Design Thinking*; Manual 30 §2): **a grid from an object** tied to the subject —
+  observe it (a licensed photograph, or your own sketch of it; never a fetched poster), replicate its lines with
+  `Layout.linesFrom(picture, { into: page, count: 8 })`, and organise the type and the image by them, cutting and
+  overlapping with them too. Or a tessellation's grid, `Layout.tessellation(page, { type })`. The concept names the
+  object and why it belongs to the subject.
 
 What carries: **one dominant element**, never everything at equal weight; **three objects or
 groupings at most**; unequal areas rather than equal ones; white space over filling the frame. A
@@ -199,6 +204,17 @@ audience, views (the thumbnail's path, its operation, the profile item it starts
 evidence with their sources, **drawbacks**, and expansion — and a recommendation with next steps. Point Q6 at it, choose, and carry the choice and why the other two
 lost into `direction.md` (below). The chosen concept's drawbacks are checked again before you finish.
 
+### The kit, once a concept is chosen
+
+**Every poster is built from a kit of parts** (Manual 30 §3; Lupton's *Kit of Parts*, after Blauvelt): a small
+vocabulary that makes the forms, so the comps are combinations rather than one drawing repainted. At the top of
+`poster.js`, a `KIT` of four to eight parts — shapes from the concept, two or three line weights, a texture, the palette
+in order of prominence, the faces and their sizes. Then draw `artifacts/03_kit.png`: the parts in a row, then **at
+least six reconfigurations** — repeat, rotate, scale, overlap, crop, combine — each labelled with its rule. The comps
+are chosen from these. Everything on the poster comes from the kit: an element drawn outside it joins the kit, named,
+or goes, and `Stage.check('every element is drawn from the kit', …)` says which. With several audiences the kit is the
+set's, with its fixed and variable parts (Manual 30 §3c).
+
 ---
 
 ## Stage 5 — `direction.md`
@@ -246,6 +262,12 @@ needs a vector paper — a canvas cannot carry a bleed — and the paper *is* th
   its printed size. Requisitioned materials (`polson://manual/16`) are materials, not finished pictures.
 - Lines of type are `<text>`, or one `<tspan>` per line with its own `x` and `y` — the print checks read
   them that way.
+
+**When the concept is a grid from an object** (Manual 30 §2), make the grid over the paper's own units —
+`Layout.linesFrom(picture, { into: Layout.rect(0, 0, 1000, 1414.29) })` — and set by it: a display line on a line of the
+grid with `grid.along(i, t)` (translate, rotate by its `angle`) or a `<textPath>` on `grid.pathData(i)`; a picture
+clipped to its cells or cut at a line. Small text stays level. Then `Stage.check` that it organised the poster:
+`grid.fit([...baselines, ...boxes]).share >= 0.6`, with its `summary` as the detail.
 
 **Every comp writes all three:**
 
@@ -320,6 +342,11 @@ of a family's name — `'Franklin Gothic Heavy'` is `'Franklin Gothic'` at `font
 6. **The field** (Manual 29 §2b). Measure the final with `bitmap.palette`, read its leading colour's hue with
    `Taste.oklch(color).sector`, and `Stage.check` that it stands where `direction.md` said it would — in an open sector or apart in lightness if
    it was to stand apart, in the crowd if it was to belong.
+7. **In its setting** (Manual 30 §5; Lupton's *Mock-Ups*). `Stage.mockup('artifacts/mockup_wall_a.png', { design: paper,
+   setting: 'wall', size: '<the brief's size>' })` hangs the final at its real size beside a figure 1.7 m tall;
+   `'shelter'` or `'billboard'` sets it in the street, `'frame'` framed. Look at it: does the headline hold at that size,
+   and the image? It is the two reading distances shown as the client will see them. Record what you saw with
+   `Stage.note`.
 
 ---
 
@@ -340,9 +367,13 @@ of a family's name — `'Franklin Gothic Heavy'` is `'Franklin Gothic'` at `font
   assumed, and what you would do with more clock.
 - **The print file is RGB and screen-grade** — sized, bled and checked, but not CMYK or PDF/X. Say so
   rather than calling it press-ready.
+- **One or two mock-ups per final**, `artifacts/mockup_<setting>_a.png` (check 7), labelled as mock-ups, as
+  `Stage.mockup` draws them. For a richer street, a plate built around the panel (Manual 30 §5b) — one requisition,
+  `find: true`. A mock-up is never evidence that the poster was placed anywhere; `direction.md` does not say it was.
 - **The process book, last**: `Stage.book('process.pdf', { title, pages })` (Manual 18 §3c) — the brief in a page, each
   mind map (`00_map.png`), each audience's research board (`01_field_a.png`, never the sheet of posters) and matrix
-  (`03_matrix_a.png`), each audience's concept sheet with `concepts.md` beside it, the comps that changed the direction, and each final poster,
+  (`03_matrix_a.png`), each audience's concept sheet with `concepts.md` beside it, the kit sheet (`03_kit.png`), the comps that changed the direction, each final poster
+  and its mock-ups after it,
   every caption saying what was decided. It names only files that exist, and draws nothing new. **It is the client's
   book**: ten to twenty pages; the direction as a page of its decisions in your words, not the file; `findings.md` left out.
 

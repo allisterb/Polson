@@ -74,14 +74,22 @@ internal static class TextShaper
 
     /// <summary>Draws a shaped line with its left edge at <paramref name="x"/> and its baseline at
     /// <paramref name="baselineY"/>.</summary>
-    public static void Draw(SKCanvas canvas, Line line, SKFont font, float x, float baselineY, SKPaint paint)
+    /// <param name="outlineFallback">
+    /// Draws the runs set in a face other than <paramref name="font"/>'s as glyph outlines rather than text. For a PDF:
+    /// Skia embeds every face it draws text with whole, never subset, and a Japanese face is a 9–14 MB collection, so a
+    /// book with one Japanese line came to 5–16 MB more (becool2's, set wholly in Yu Gothic, were 22 MB). Outlined, that
+    /// text cannot be selected, and the file stays the size of its own face.
+    /// </param>
+    public static void Draw(SKCanvas canvas, Line line, SKFont font, float x, float baselineY, SKPaint paint, bool outlineFallback = false)
     {
         if (line.Runs.Length == 0) return;
 
+        var primary = font.Typeface ?? SKTypeface.Default;
         var fonts = new List<SKFont>();
         try
         {
             using var builder = new SKTextBlobBuilder();
+            using var outlines = new SKPath();
             var cursor = x;
             foreach (var run in line.Runs)
             {
@@ -97,18 +105,45 @@ internal static class TextShaper
                 {
                     points[i] = new SKPoint(cursor + run.Positions[i].X, run.Positions[i].Y);
                 }
-                builder.AddPositionedRun(run.Glyphs, runFont, points);
+                if (outlineFallback && !ReferenceEquals(run.Typeface, primary))
+                {
+                    for (var i = 0; i < run.Glyphs.Length; i++)
+                    {
+                        using var glyph = runFont.GetGlyphPath(run.Glyphs[i]);
+                        if (glyph is null) continue;
+                        glyph.Transform(SKMatrix.CreateTranslation(points[i].X, baselineY + points[i].Y));
+                        outlines.AddPath(glyph);
+                    }
+                }
+                else builder.AddPositionedRun(run.Glyphs, runFont, points);
                 cursor += run.Width + line.Spacing;
             }
 
             using var blob = builder.Build();
             if (blob is not null) canvas.DrawText(blob, 0f, baselineY, paint);
+            if (!outlines.IsEmpty) canvas.DrawPath(outlines, paint);
         }
         finally
         {
             foreach (var f in fonts) f.Dispose();
         }
     }
+
+    /// <summary>
+    /// <c>canvas.DrawText(text, x, y, align, font, paint)</c>, shaped and with a face for every character. For the text a
+    /// sheet or a book sets itself: drawn plainly, becool2's Japanese captions came out as boxes on the board and in the
+    /// pitch book (2026-10-25), while <c>comp.text</c> set the same lines in the same sheet.
+    /// </summary>
+    public static void DrawText(SKCanvas canvas, string text, float x, float y, SKTextAlign align, SKFont font, SKPaint paint,
+        bool outlineFallback = false)
+    {
+        var line = Shape(text, font, 0f);
+        Draw(canvas, line, font, align switch { SKTextAlign.Center => x - line.Width / 2, SKTextAlign.Right => x - line.Width, _ => x }, y, paint,
+            outlineFallback);
+    }
+
+    /// <summary><c>font.MeasureText(text)</c> as <see cref="DrawText"/> draws it.</summary>
+    public static float Measure(string text, SKFont font) => Shape(text, font, 0f).Width;
 
     /// <summary>Splits a line into runs of one face and one direction, by grapheme cluster.</summary>
     private static List<(int Start, int Length, SKTypeface Typeface, Dir Dir)> Segment(string text, SKTypeface primary,

@@ -242,6 +242,40 @@ public class VerifyTests : TestsRuntime, IDisposable
         Assert.Throws<ArgumentException>(() => later.Stray(9, "misread"));
         Assert.Throws<ArgumentException>(() => later.Stray(1, "maybe"));
     }
+
+    /// <summary>
+    /// A film over the watcher's limit is watched as a smaller copy, and the summary says so. becool2's 65 MB master was
+    /// refused outright, and the agent made a copy by hand after two refusals.
+    /// </summary>
+    [Fact]
+    public async Task TestAFilmOverTheLimitIsWatchedAsACopy()
+    {
+        if (!FFmpeg.Available || !SkiaSharp.SKFontManager.Default.GetFontFamilies().Contains("Arial"))
+        {
+            Info("Skipped: needs ffmpeg and Arial.");
+            return;
+        }
+        var motion = new MotionToolkit(root);
+        var comp = motion.Composition(new Hashtable { ["width"] = 320d, ["height"] = 180d, ["fps"] = 12d, ["duration"] = 3d });
+        comp.Fill(new Hashtable { ["color"] = "#ffffff" });
+        comp.Text(new Hashtable { ["text"] = "BE COOL", ["family"] = "Arial", ["size"] = 40d, ["origin"] = new[] { 160d, 90d } });
+        comp.SaveVideo("big.mp4");
+        var limit = (int)(new FileInfo(Path.Combine(root, "big.mp4")).Length * 9 / 10);
+
+        var answer = new Answer(new JsonObject { ["items"] = new JsonArray(new JsonObject { ["text"] = "BE COOL", ["from"] = 0, ["to"] = 3 }) }.ToJsonString());
+        using var video = new VideoReader([new NemotronEndpoint(NemotronEndpoint.Nebius, "https://tf.example/v1", "k", NemotronEndpoint.NebiusModel)],
+            new DocumentBudget(5), root, http: new HttpClient(answer)) { MaxClipBytes = limit };
+        var result = await new VerifyToolkit(video, root, null).Film(comp, "big.mp4");
+
+        Assert.True((bool)result["ok"]!, result.GetValueOrDefault("error") as string);
+        var copy = Path.Combine(root, "artifacts", "verify", "big-watch.mp4");
+        Assert.InRange(new FileInfo(copy).Length, 1, limit);
+        var sent = answer.LastRequest.Replace("\\u002B", "+").Replace("\\/", "/");
+        Assert.Contains(Convert.ToBase64String(File.ReadAllBytes(copy))[..400], sent);                   // the copy was sent
+        Assert.Equal("big.mp4", result["video"]);
+        Assert.Contains("Read from artifacts/verify/big-watch.mp4", (string)result["summary"]!);
+        Assert.True((bool)result["passed"]!);
+    }
     /// <summary>
     /// A counting number is checked by the values it holds. A reading in its format and range while it counts is no stray,
     /// even a value no frame drew exactly; one outside its range, or after it stopped, is.

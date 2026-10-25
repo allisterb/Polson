@@ -65,8 +65,15 @@ public class VideoReader : DocumentProcessor
     /// </summary>
     public const string TextType = "text/plain";
 
-    /// <summary>Largest clip sent, in bytes. A data URI grows by a third on the way, and minutes of video are not the use.</summary>
-    public const int MaxVideoBytes = 16 * 1024 * 1024;
+    /// <summary>
+    /// Largest clip sent, in bytes: 7.5 MiB. A data URI grows by a third on the way, and the services refuse well under the
+    /// 16 MiB this once was. Measured on becool2 (2026-10-25): 7.6 MiB was read, while 11.1 MB came back from Nebius as a
+    /// 400 validation error and from NIM as a 500. <c>Verify.film</c> sends a smaller copy of a film over this.
+    /// </summary>
+    public const int MaxVideoBytes = 15 * 512 * 1024;
+
+    /// <summary>This reader's limit: <see cref="MaxVideoBytes"/> unless set, which tests do to exercise a copy cheaply.</summary>
+    internal int MaxClipBytes { get; init; } = MaxVideoBytes;
 
     public override bool IsAvailable => chat.IsAvailable;
 
@@ -74,7 +81,7 @@ public class VideoReader : DocumentProcessor
 
     protected override IReadOnlyDictionary<string, string> Types => VideoTypes;
 
-    protected override int MaxBytes => MaxVideoBytes;
+    protected override int MaxBytes => MaxClipBytes;
     #endregion
 
     #region Methods

@@ -117,6 +117,53 @@ public static class FFmpeg
     }
 
     /// <summary>
+    /// A silent copy of <paramref name="video"/>, <paramref name="seconds"/> long, at most <paramref name="maxHeight"/> tall and
+    /// encoded to fit <paramref name="maxBytes"/>, written as <paramref name="output"/>; null when written, else why not. What
+    /// <c>Verify.film</c> sends when the film itself is over the watcher's limit: a grainy 1080 master ran 65 MB (becool2).
+    /// </summary>
+    /// <remarks>
+    /// The bitrate is a share of what fits, capped by VBV; an encode that still comes out too big is tried again at a smaller
+    /// share. Read with the <c>file</c> protocol only, and moved into place only when it fits.
+    /// </remarks>
+    public static string? WatchCopy(string video, double seconds, string output, int maxHeight, long maxBytes)
+    {
+        if (Executable is not { } exe) return $"no 'ffmpeg' was found: {Install}.";
+        var partial = output + ".part";
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(output))!);
+            for (var share = 0.85; share > 0.3; share *= 0.7)
+            {
+                var kbps = Math.Max(1, (long)(maxBytes * 8 * share / Math.Max(1, seconds) / 1000)).ToString(CultureInfo.InvariantCulture);
+                var info = Info(exe, "-hide_banner", "-nostdin", "-loglevel", "error", "-y", "-protocol_whitelist", "file",
+                    "-i", "file:" + video, "-an", "-vf", $"scale=-2:'min(ih,{maxHeight})':flags=lanczos",
+                    "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-maxrate", kbps + "k", "-bufsize", kbps + "k",
+                    "-pix_fmt", "yuv420p", "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
+                    "-movflags", "+faststart", "-f", "mp4", "file:" + partial);
+                using var process = Process.Start(info);
+                if (process is null) return "ffmpeg did not start.";
+                process.StandardInput.Close();
+                var error = process.StandardError.ReadToEndAsync();
+                process.StandardOutput.ReadToEnd();
+                if (!process.WaitForExit(FinishMs)) { Kill(process); return $"ffmpeg took more than {FinishMs / 1000} s for the copy."; }
+                if (process.ExitCode != 0) return $"ffmpeg failed: {Trim(error.Result)}";
+                if (new FileInfo(partial).Length > maxBytes) continue;
+                File.Move(partial, output, overwrite: true);
+                return null;
+            }
+            return $"no copy {maxHeight} px tall came in under {maxBytes / (1024 * 1024.0):0.#} MB; the film is too long to watch in one read.";
+        }
+        catch (Exception ex) when (ex is IOException or System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            return ex.Message;
+        }
+        finally
+        {
+            File.Delete(partial);
+        }
+    }
+
+    /// <summary>
     /// Encodes <paramref name="frames"/>, each <paramref name="width"/>×<paramref name="height"/>, at
     /// <paramref name="fps"/>, mixing <paramref name="tracks"/> in at their offsets, into <paramref name="output"/>.
     /// </summary>

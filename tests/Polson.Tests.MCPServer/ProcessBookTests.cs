@@ -142,6 +142,23 @@ public class ProcessBookTests : TestsRuntime, IDisposable
         ]);
     }
 
+    /// <summary>
+    /// becool2 passed a page's text as an array and the PDF printed "System.Object[]". A list of paragraphs is joined;
+    /// anything else that is not a string is refused, as an unknown key is.
+    /// </summary>
+    [Fact]
+    public void TestAPagesTextMayBeParagraphsButNotAnythingElse()
+    {
+        var joined = Run("log('pages ' + Stage.book('a.pdf', { title: 'H', cover: false, pages: [{ title: 'One', text: ['First.', 'Second.'] }] }).pages);");
+        var mixed = Run("Stage.book('b.pdf', { title: 'H', pages: [{ title: 'One', text: ['First.', 2] }] });");
+        var listTitle = Run("Stage.book('c.pdf', { title: 'H', pages: [{ title: ['One'] }] });");
+
+        Assert.True(joined.Success, joined.Error);
+        Assert.Contains(joined.Logs, l => l.Contains("pages 1"));
+        Assert.Contains("a page's text is a string, or a list of paragraphs", mixed.Error);
+        Assert.Contains("a page's title is a string, not", listTitle.Error);
+    }
+
     [Theory]
     [InlineData("{ title: 'X', pages: [{ image: 'artifacts/missing.png' }] }", "is not in the project")]
     [InlineData("{ title: 'X', pages: [{ title: 'Y', picture: 'artifacts/frame.png' }] }", "not 'picture'")]

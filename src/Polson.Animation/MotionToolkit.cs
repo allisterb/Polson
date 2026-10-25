@@ -576,7 +576,7 @@ public class MotionToolkit : IDisposable
             canvas.DrawRect(SKRect.Create(x, y, cellW, cellH), border);
 
             if (!labels) continue;
-            canvas.DrawText(labelText[i], x, y + cellH + labelH * 0.72f, SKTextAlign.Left, font, ink);
+            TextShaper.DrawText(canvas, labelText[i], x, y + cellH + labelH * 0.72f, SKTextAlign.Left, font, ink);
         }
 
         var format = opt?["format"]?.ToString() ?? "png";

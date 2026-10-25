@@ -79,7 +79,21 @@ public sealed partial class VerifyToolkit
         var full = ProjectPath.Resolve(projectRoot, videoPath, "video", "Read");
         if (!File.Exists(full)) throw new FileNotFoundException($"Verify.film: '{videoPath}' is not in the project. Encode it first.", full);
 
-        var answer = await video.Ask(videoPath, Question(comp.Duration), new DocumentOptions { Schema = Schema(comp.Duration) });
+        // A film over the watcher's limit is watched as a smaller copy. becool2's grainy 1080 master was 65 MB, and the agent
+        // made a 634 × 356 copy by hand after two refusals (2026-10-25). Strays' frames are still cut from the film itself.
+        var watched = videoPath;
+        long? over = null;
+        var limit = video.MaxClipBytes;
+        if (new FileInfo(full).Length is var size && size > limit)
+        {
+            watched = $"artifacts/verify/{Path.GetFileNameWithoutExtension(full)}-watch.mp4";
+            if (FFmpeg.WatchCopy(full, comp.Duration, ProjectPath.Resolve(projectRoot, watched, "video", "Write"), WatchHeight, limit) is { } why)
+                return Failed("TooLarge", $"{videoPath} is {Megabytes(size)} MB, over the watcher's {Megabytes(limit)} MB, "
+                    + $"and no smaller copy could be made: {why}", "Encode a shorter film, or check it in parts encoded as separate files.");
+            over = size;
+        }
+
+        var answer = await video.Ask(watched, Question(comp.Duration), new DocumentOptions { Schema = Schema(comp.Duration) });
         if (!answer.Success)
             return Failed(answer.FailureName, answer.Error, answer.FailureName == "Pending"
                 ? "The watcher is still reading; it finishes into the cache. Run the same call again, unchanged."
@@ -142,7 +156,7 @@ public sealed partial class VerifyToolkit
         }).ToList();
 
         return Hold(new FilmCheck(videoPath, comp.Duration, items, strays, answer.Provenance?.Model, answer.Provenance?.Endpoint)
-            { Hash = Hash(full), Ignored = ignored, TimeScale = timeScale });
+            { Hash = Hash(full), Ignored = ignored, TimeScale = timeScale, Watched = over is null ? null : watched, FilmBytes = over, Limit = limit });
     }
 
     /// <summary>
@@ -500,6 +514,8 @@ public sealed partial class VerifyToolkit
         return (computed, name, ignored, scale);
     }
 
+    internal static string Megabytes(long bytes) => (bytes / (1024 * 1024.0)).ToString("0.#", CultureInfo.InvariantCulture);
+
     private static Dictionary<string, object?> Failed(string? name, string? error, string? remedy) =>
         new() { ["ok"] = false, ["failureName"] = name, ["error"] = error, ["remedy"] = remedy };
 
@@ -568,6 +584,12 @@ public sealed partial class VerifyToolkit
     internal const string ImageSchema =
         "{\"type\":\"object\",\"required\":[\"items\"],\"properties\":{\"items\":{\"type\":\"array\",\"items\":{\"type\":\"object\","
         + "\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\"}}}}}}";
+
+    /// <summary>
+    /// The watch copy's greatest height. becool2's copies read 8 of 8 texts at 356 px tall and 3 of 8 at 270, where its
+    /// small type fell to 7 px; 720 keeps 1080's type at two thirds and fits 15 s in the limit at about 3.5 Mbps.
+    /// </summary>
+    internal const int WatchHeight = 720;
 
     /// <summary>Boxes given per text: an axis label repeated across small multiples needs a few to find, not all of them.</summary>
     private const int MaxBoxes = 12;
@@ -785,14 +807,28 @@ public sealed class FilmCheck(string video, double duration, Dictionary<string, 
     /// <summary>What the watcher's times were multiplied by to be seconds: 1 unless it answered in another unit.</summary>
     public double TimeScale { get; init; } = 1;
 
-    internal override string Note => TimeScale == 1 ? ""
-        : $" The watcher's times came back in the wrong unit and were read ×{TimeScale:0.##} to match the film; its seconds are approximate.";
+    /// <summary>The smaller copy the watcher read, when the film was over its limit; null when it read the film.</summary>
+    public string? Watched { get; init; }
+
+    /// <summary>The film's size when a copy was read in its place.</summary>
+    public long? FilmBytes { get; init; }
+
+    /// <summary>The watcher's limit, in bytes.</summary>
+    public long Limit { get; init; }
+
+    internal override string Note => (TimeScale == 1 ? ""
+        : $" The watcher's times came back in the wrong unit and were read ×{TimeScale:0.##} to match the film; its seconds are approximate.")
+        + (Watched is null ? ""
+        : $" Read from {Watched}, a copy at most {VerifyToolkit.WatchHeight} px tall: {Video} is {VerifyToolkit.Megabytes(FilmBytes ?? 0)} MB, "
+            + $"over the watcher's {VerifyToolkit.Megabytes(Limit)} MB. "
+            + "Small type reads less reliably there; look at the film's frame before calling a missed line a fault.");
 
     internal override Dictionary<string, object?> Event()
     {
         var e = base.Event();
         e["duration"] = duration;
         if (TimeScale != 1) e["timeScale"] = TimeScale;
+        if (Watched is not null) (e["watched"], e["filmBytes"]) = (Watched, FilmBytes);
         return e;
     }
 

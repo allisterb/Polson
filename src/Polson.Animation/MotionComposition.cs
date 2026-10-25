@@ -1526,7 +1526,7 @@ public sealed class MotionComposition : MotionLayerList
             using var ink = new SKPaint { Color = SkiaColorParser.Parse("#15151a"), IsAntialias = true };
             using var grey = new SKPaint { Color = SkiaColorParser.Parse("#6b675e"), IsAntialias = true };
             using var rule = new SKPaint { Color = SkiaColorParser.Parse("#15151a"), IsStroke = true, StrokeWidth = 1, IsAntialias = true };
-            if (o.Has("title")) canvas.DrawText(o.Raw("title")!.ToString()!, Pad, Pad + 22, SKTextAlign.Left, heading, ink);
+            if (o.Has("title")) TextShaper.DrawText(canvas, o.Raw("title")!.ToString()!, Pad, Pad + 22, SKTextAlign.Left, heading, ink);
 
             for (var i = 0; i < count; i++)
             {
@@ -1540,9 +1540,9 @@ public sealed class MotionComposition : MotionLayerList
                 canvas.DrawRect(SKRect.Create(x, y, cellW, cellH), rule);
 
                 var ty = y + cellH + Lead;
-                canvas.DrawText(meta(i), x, ty, SKTextAlign.Left, metaFont, grey);
-                foreach (var line in texts[i].Caption) canvas.DrawText(line, x, ty += Lead, SKTextAlign.Left, body, ink);
-                foreach (var line in texts[i].Camera) canvas.DrawText(line, x, ty += Lead, SKTextAlign.Left, cameraFont, grey);
+                TextShaper.DrawText(canvas, meta(i), x, ty, SKTextAlign.Left, metaFont, grey);
+                foreach (var line in texts[i].Caption) TextShaper.DrawText(canvas, line, x, ty += Lead, SKTextAlign.Left, body, ink);
+                foreach (var line in texts[i].Camera) TextShaper.DrawText(canvas, line, x, ty += Lead, SKTextAlign.Left, cameraFont, grey);
             }
         }
 
@@ -1556,13 +1556,13 @@ public sealed class MotionComposition : MotionLayerList
             var line = "";
             foreach (var word in text.Split(' ', StringSplitOptions.RemoveEmptyEntries))
             {
-                if (line.Length > 0 && font.MeasureText(line + " " + word) > width) { lines.Add(line); line = word; }
+                if (line.Length > 0 && TextShaper.Measure(line + " " + word, font) > width) { lines.Add(line); line = word; }
                 else line = line.Length == 0 ? word : line + " " + word;
             }
             if (line.Length > 0) lines.Add(line);
             if (lines.Count <= max) return [.. lines];
             var last = string.Join(' ', lines.Skip(max - 1));
-            while (last.Length > 1 && font.MeasureText(last + "…") > width) last = last[..^1];
+            while (last.Length > 1 && TextShaper.Measure(last + "…", font) > width) last = last[..^1];
             return [.. lines.Take(max - 1), last.TrimEnd() + "…"];
         }
     }

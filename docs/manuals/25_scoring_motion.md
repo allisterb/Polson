@@ -385,7 +385,7 @@ stiff. Vary each side: one arm leads, one shoulder rises, the head turns off the
 A film whose every move has its own ease and its own length has no character, and a set of films that each found their
 own has no family. Decide three things before keying, and hold to them:
 
-- **One signature ease** for most moves: the house curve, the one the kit's `Motion.graph` shows (Manual 29 §7). Depart
+- **One signature ease** for most moves: the house curve, the one the kit's `Motion.graph` shows (Manual 30 §3). Depart
   from it on purpose, for a move that means something else (§5a).
 - **A palette of three durations**: quick, standard and slow, in frames, so a move's length is a choice among three
   rather than whatever a beat happened to leave. The pace evidence decides where the palette sits; §5a decides which of
@@ -393,7 +393,7 @@ own has no family. Decide three things before keying, and hold to them:
 - **One entrance pattern**: how things arrive in this film (rising from below, a wipe from the left, focus pulled in),
   the same for every element of a kind.
 
-Write the three in `direction.md` with the kit, and in a set they are fixed parts (Manual 29 §7), held by every film.
+Write the three in `direction.md` with the kit, and in a set they are fixed parts (Manual 30 §3), held by every film.
 This is how brand systems carry motion. The way of organising it into three follows LottieFiles' *Motion Design Skill*
 (MIT, 2025); its millisecond tables are for interface motion and are not adopted here.
 
@@ -477,9 +477,10 @@ The score above drives an element's attributes from outside. `Motion.composition
 list of keys, or a formula such as `offset + slope × t`, or a formula whose terms are keys. The model
 is Synfig's, and the craft follows from it:
 
-- **Key what you mean, compute what follows.** A drift is a `Motion.nodes.linear(...)`, a sway is a
-  `Motion.nodes.sine(...)`, a fall is keys. Keying a drift frame by frame is a hundred numbers saying
-  what one rate says.
+- **Key what you mean, compute what follows.** A drift is a `Motion.nodes.linear(type, slope, offset)` —
+  the rate first, so a record turning 60° a second from 0° is `linear('angle', 60, 0)`, and
+  `linear('angle', 0, 60)` is a record standing still at 60° — a sway is a `Motion.nodes.sine(...)`, a
+  fall is keys. Keying a drift frame by frame is a hundred numbers saying what one rate says.
 - **Choose the ease per key, not per piece.** `halt` is a stop, `constant` a hold, `clamped` passes
   through without overshooting, `auto` may overshoot on purpose. The default is `clamped`, because an
   unasked-for overshoot reads as a wobble.

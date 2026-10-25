@@ -68,7 +68,7 @@ in it is data, like anything else in `documents/`.
 | 3. **Design board** | One finished, captioned frame per beat (`comp.board`), with `treatment.md` and `dos.md` beside it. The film's argument and its look, agreed before any motion (Manual 25 §13). | **Q3** Does the board read, frame to frame, with no motion at all — and is this the look? |
 | 4. **Motion** | Keys, eases, cascades, transitions, in `motion.js`. | — |
 | 5. **Checks** | The film as a sheet, and the checks below. | **Q4** Shown the sheet: does the title land, and does the end card hold long enough? |
-| 6. **Deliver** | `output.mp4` (or `artifacts/final_a.mp4`, `final_b.mp4`… one per audience) and, when silent, its `.webp`, `motion.js`, the board, `concepts.md`, `treatment.md`, `dos.md`, `direction.md`, `findings.md`, `pitch.pdf` and `process.pdf`. | — |
+| 6. **Deliver** | `output.mp4` (or `artifacts/final_a.mp4`, `final_b.mp4`… one per audience) and, when silent, its `.webp`, the film on its screen as a mock-up, `motion.js`, the board, the kit sheet, `concepts.md`, `treatment.md`, `dos.md`, `direction.md`, `findings.md`, `pitch.pdf` and `process.pdf`. | — |
 
 ### The motion rests on the audience, as the poster did
 
@@ -172,7 +172,7 @@ any film is planned, and the shared parts are shared on purpose.
   | What only B's film draws on | only B: *Title*, *Title* | Qloo (t2) |
 - **Budget the time for every film.** One film took about a quarter of a 60-minute run. The deadline already
   counts the size of the set, so each film has about the same time a pair's would — not a pair's time shared.
-- **The set is a kit** (Manual 29 §7): before any film, decide what is fixed — type, hierarchy, the order of the
+- **The set is a kit** (Manual 30 §3c): before any film, decide what is fixed — type, hierarchy, the order of the
   beats, the end card's structure, the motion identity (Manual 25 §5j) — and what each audience may change — grade, pace, the hero image, any allusion.
   Write the kit as its own section of `direction.md`, before the audiences', with the evidence for each variable part.
 - **Words that cross languages** (Manual 29 §6): no slang, rhyme or puns in a line more than one audience will read;
@@ -247,7 +247,9 @@ what it is. Prefer a moment where one fits: it already says what the film will m
 cell whose pairing can't be named from the picture is a glyph, and so is one without the subject. Compare the
 silhouettes with `bitmap.diff`, the staged things black and the setting white, so that no idea appears twice. Mark the three or four worth pursuing and park the rest. From those, make
 **three concepts by three methods** — a verb applied to the core image, a
-figure, a sign chosen for its kind (Manual 29 §2–§5) — and write them as `concepts.md`, the concept presentation of
+figure, a sign chosen for its kind (Manual 29 §2–§5), or in place of one of them **a grid from an object** tied to the
+subject (Manual 30 §2): its lines found with `Layout.linesFrom(picture, { into: frame })`, the type set along them, and in
+the film the lines become the paths — written on, travelled along, followed by the camera — and write them as `concepts.md`, the concept presentation of
 Manual 29 §8: a page per concept with its overview, audience, views (the sketch, the storyboard as beats, and the map's
 trail to its cell; a concept grown from an `(assumed)` node says so among its drawbacks),
 solution, justification, evidence, drawbacks and expansion, then a recommendation with next steps. Before choosing,
@@ -374,10 +376,16 @@ between the films are decided side by side before any of them moves. **The still
 renders the finished film at the same times and compares (below); a frame that has drifted from its board is either a
 decision, recorded, or a fault.
 
-**With several audiences, draw the kit as a sheet too** (`artifacts/03_kit.png`; Manual 29 §7): the type and its sizes
-set as specimens, each film's palette as swatches with what is fixed and what varies marked, the house ease as a
-`Motion.graph` of one move with the three durations beside it, and the order of the beats and the end card's structure. It is the set's system on one page,
-and every film is checked against it.
+**Every film is made from a kit of parts** (Manual 30 §3; Lupton's *Kit of Parts* and the HUSH studio's animation
+kits): a `KIT` at the top of `motion.js` — four to eight parts (shapes from the concept, line weights, a texture, the
+palette in order of prominence, the faces and their sizes) and the motion identity (§5j: one ease, three durations,
+one entrance) — and **every beat is a reconfiguration of it**: the parts recur, change scale, combine, become each
+other, and a transition can be one part turning into the next beat's. Draw it as a sheet, `artifacts/03_kit.png`, before
+the board: the parts in a row, **at least six reconfigurations** each labelled with its rule, the type as specimens, the
+house ease as a `Motion.graph` of one move with the three durations beside it. An element of the film drawn outside the
+kit joins it, named, or goes; `Stage.check('every element is drawn from the kit', …)` says which. With several audiences
+the sheet also shows each film's palette as swatches, what is fixed and what varies marked, and the order of the beats
+and the end card's structure: it is the set's system on one page, and every film is checked against it.
 
 ---
 
@@ -467,8 +475,8 @@ its first four frames, because each crack began under the bullet hole. `comp.she
 once, unread, flat, no personality), it names the usual cause, the fix and the check that measures it.
 
 **Read the curves of the moves that carry the film.** A sheet shows where things are; how they move between is a curve.
-`Motion.graph('artifacts/05_moves.png', { title: titleScale, push: cameraPush })` draws the value and speed of the keyed
-nodes you name and reports, for each, `stops` — middle keys where the move halts though it carries on (a `'halt'` that
+`Motion.graph('artifacts/05_moves.png', { titleScale, cameraPush })` draws the value and speed of the keyed nodes you
+pass, each key naming its curve (read back as `c.label`; a curve has no `name`), and reports, for each, `stops` — middle keys where the move halts though it carries on (a `'halt'` that
 should be `'clamped'`, Manual 25 §5b) — and `overshoots` — segments that go past their keys. Record it:
 `Stage.check('the key moves pass through their middle keys and rest without overshoot', …)`, naming any you meant.
 
@@ -552,6 +560,12 @@ set's own check from *More than one audience*:
   script of its own after any join. Keep its default width (960 or less): measured on fifteen-second films, 7–9 s
   there, 8–16 s at 1280 depending on how much changes from frame to frame, about twice that on a busy machine, and
   more than a script at 1920. A film with sound stays a video.
+- **The film where it will play** (Manual 30 §5; Lupton's *Mock-Ups*): a still of it on the brief's screen —
+  `Stage.mockup('artifacts/mockup_phone_a.png', { design: comp.render(t), setting: 'phone' })`, or `'screen'` for a public
+  one, or `'billboard'` for a digital board — at the moment that sells it, labelled as a mock-up as `Stage.mockup` draws
+  it. It goes in the pitch book after the film's own frames. For a short loop of the opening on a phone, put each frame
+  through `Stage.mockup(null, { … })` and encode the `image`s (about 0.1 s a frame). A mock-up is never evidence that
+  the film played anywhere.
 - **`motion.js`**, runnable on its own as above. **Do not write a `.sif` during the run.** With text
   animators it is a bake — a group per letter, its motion sampled — that nobody edits in Synfig, and it
   is exported from the script afterwards when someone wants one.
@@ -570,7 +584,7 @@ set's own check from *More than one audience*:
 - **Two books, last** (Manual 25 §13d; Shaw, ch. 4), both with `Stage.book` (Manual 18 §3c), each naming only files
   that exist and drawing nothing new, every caption saying what was decided, `findings.md` in neither:
   - **`pitch.pdf`, `kind: 'pitch'`**: what sells the chosen concept, finished — `treatment.md` beside its shape, the
-    design board, the kit sheet with several audiences, and a frame of each finished film (`comp.still`). Short: a page
+    design board, the kit sheet, a frame of each finished film (`comp.still`), and the film on its screen (the mock-up). Short: a page
     for each, no workshop sheets. Give it the film's own typeface and accent (`font`, `accent`) on the neutral ground,
     and a cover naming the client (`cover: { client, subtitle }`); it closes on *Thank you.* by itself.
   - **`process.pdf`, `kind: 'process'`**: how it was arrived at — the brief, the mind map (`00_map.png`), each audience's

@@ -25,8 +25,10 @@ using SkiaSharp;
 /// without competing with the work it holds.
 /// </para>
 /// <para>
-/// Text is a light Markdown: <c>#</c> headings, <c>-</c> bullets, paragraphs split on blank lines, and <c>**</c>, <c>`</c>
-/// and link syntax dropped. A page whose text runs past its bottom continues on the next under the same title. Images
+/// Text is a light Markdown: <c>#</c> headings, <c>-</c> bullets, <c>&gt;</c> quotes indented, table rows as their cells
+/// with the header bold, paragraphs split on blank lines, and <c>**</c>, <c>`</c> and link syntax dropped. Every line is
+/// shaped with a face per character (<see cref="TextShaper"/>), so Japanese in a Latin face's book is not set as boxes; the
+/// characters taken from another face are drawn as outlines, as Skia embeds a face whole. A page whose text runs past its bottom continues on the next under the same title. Images
 /// arrive as bytes, decoded here, never from a path: a Skia-opened path is a handle a child process inherits.
 /// </para>
 /// </remarks>
@@ -54,6 +56,9 @@ public static class PdfBook
 
     /// <summary>Past this many pages a book opens with its contents.</summary>
     private const int ContentsFrom = 8;
+
+    /// <summary>The rule under a Markdown table's header: <c>| :--- | ---: |</c>.</summary>
+    private const string TableRule = @"^\s*\|?\s*:?-{3,}";
     #endregion
 
     #region Methods
@@ -132,10 +137,10 @@ public static class PdfBook
 
     #region Methods (private)
     /// <summary>A line of laid-out text: what it says, its size, whether bold, its indent, and the space before it.</summary>
-    private sealed record Line(string Text, float Size, bool Strong, float Indent, float Before, bool Opens = false);
+    internal sealed record Line(string Text, float Size, bool Strong, float Indent, float Before, bool Opens = false);
 
     /// <summary>One book's typefaces and colours.</summary>
-    private sealed class Look : IDisposable
+    internal sealed class Look : IDisposable
     {
         public Look(BookStyle style)
         {
@@ -193,26 +198,33 @@ public static class PdfBook
     }
 
     /// <summary>Light Markdown, wrapped to <paramref name="width"/> points.</summary>
-    private static List<Line> Lay(string text, float width, Look look)
+    internal static List<Line> Lay(string text, float width, Look look)
     {
         var lines = new List<Line>();
         foreach (var block in Regex.Split(text.Replace("\r\n", "\n").Trim(), @"\n\s*\n"))
         {
             // A line that starts nothing of its own continues the one before, as Markdown reads it: a file wrapped at 120
             // columns was set with a break at every source line, so a treatment broke mid-sentence ("arrives / as / if").
-            var joined = new List<string>();
+            // A blockquote's `>` marks every line it spans and is not text: joined with the rest, becool2's markers were set
+            // mid-sentence (2026-10-25). A quote is indented instead, and a quoted line joins only another quoted line.
+            var joined = new List<(string Text, bool Quote)>();
             foreach (var raw in block.Split('\n'))
             {
-                var starts = joined.Count == 0 || Regex.IsMatch(raw, @"^\s*(#{1,6}\s|[-*]\s|\|)") || Regex.IsMatch(joined[^1], @"^\s*(#{1,6}\s|\|)");
-                if (starts) joined.Add(raw);
-                else joined[^1] = joined[^1].TrimEnd() + " " + raw.Trim();
+                var quote = Regex.Match(raw, @"^\s*>\s?(.*)$");
+                var (content, quoted) = quote.Success ? (quote.Groups[1].Value, true) : (raw, false);
+                var starts = joined.Count == 0 || joined[^1].Quote != quoted || Regex.IsMatch(content, @"^\s*(#{1,6}\s|[-*]\s|\|)")
+                    || Regex.IsMatch(joined[^1].Text, @"^\s*(#{1,6}\s|\|)");
+                if (starts) joined.Add((content, quoted));
+                else joined[^1] = (joined[^1].Text.TrimEnd() + " " + content.Trim(), quoted);
             }
-            foreach (var raw in joined)
+            for (var j = 0; j < joined.Count; j++)
             {
+                var (raw, quoted) = joined[j];
                 var line = Plain(raw.TrimEnd());
-                if (line.Trim().Length == 0 || Regex.IsMatch(line, @"^\s*\|?\s*:?-{3,}")) continue;
+                if (line.Trim().Length == 0 || Regex.IsMatch(line, TableRule)) continue;
                 var heading = Regex.Match(line, @"^(#{1,6})\s+(.*)$");
                 var bullet = Regex.Match(line, @"^(\s*)[-*]\s+(.*)$");
+                var indent = quoted ? 18f : 0f;
                 if (heading.Success)
                 {
                     var size = heading.Groups[1].Length <= 2 ? 17f : 14f;
@@ -220,9 +232,16 @@ public static class PdfBook
                     lines.AddRange(Wrap(heading.Groups[2].Value, size, true, 0, width, look).Select((l, i) => i == 0 ? l with { Before = 10, Opens = opens } : l));
                 }
                 else if (bullet.Success)
-                    lines.AddRange(Wrap("•  " + bullet.Groups[2].Value, 12.5f, false, 14, width, look).Select((l, i) => i == 0 ? l with { Before = 3 } : l with { Indent = 26 }));
+                    lines.AddRange(Wrap("•  " + bullet.Groups[2].Value, 12.5f, false, indent + 14, width, look).Select((l, i) => i == 0 ? l with { Before = 3 } : l with { Indent = indent + 26 }));
+                else if (line.TrimStart().StartsWith('|'))
+                {
+                    // A table row as its cells in order, an empty cell left out; the row above the rule is the header, in bold.
+                    var cells = line.Trim().Trim('|').Split('|').Select(c => c.Trim()).Where(c => c.Length > 0);
+                    var header = j + 1 < joined.Count && Regex.IsMatch(joined[j + 1].Text, TableRule);
+                    lines.AddRange(Wrap(string.Join(" · ", cells), 12.5f, header, indent, width, look).Select((l, i) => i == 0 ? l with { Before = 3 } : l));
+                }
                 else
-                    lines.AddRange(Wrap(line.Replace("|", "  ").Trim(), 12.5f, false, 0, width, look));
+                    lines.AddRange(Wrap(line.Trim(), 12.5f, false, indent, width, look));
             }
             lines.Add(new Line("", 6, false, 0, 0));
         }
@@ -239,7 +258,7 @@ public static class PdfBook
         foreach (var word in text.Split(' ', StringSplitOptions.RemoveEmptyEntries))
         {
             var trial = line.Length == 0 ? word : line + " " + word;
-            if (line.Length > 0 && font.MeasureText(trial) > width - indent)
+            if (line.Length > 0 && TextShaper.Measure(trial, font) > width - indent)
             {
                 yield return new Line(line, size, strong, indent, 0);
                 line = word;
@@ -249,14 +268,21 @@ public static class PdfBook
         if (line.Length > 0) yield return new Line(line, size, strong, indent, 0);
     }
 
+    /// <summary>
+    /// A line of the book's words: shaped, and any run in a face other than the book's drawn as outlines, so the PDF
+    /// embeds the book's own face and not a whole CJK collection besides (<see cref="TextShaper.Draw"/>).
+    /// </summary>
+    private static void Text(SKCanvas canvas, string text, float x, float y, SKTextAlign align, SKFont font, SKPaint paint) =>
+        TextShaper.DrawText(canvas, text, x, y, align, font, paint, outlineFallback: true);
+
     /// <summary>The header Lupton asks for on every page: the project, and where this page sits; the rule in the accent.</summary>
     private static void Header(SKCanvas canvas, string book, int number, int total, Look look)
     {
         using var muted = new SKPaint { Color = Look.Muted, IsAntialias = true };
         using var rule = new SKPaint { Color = look.Accent, StrokeWidth = 1.5f, IsStroke = true };
         using var small = new SKFont(look.Regular, 10);
-        canvas.DrawText(book, Margin, HeaderY, SKTextAlign.Left, small, muted);
-        canvas.DrawText($"{number} of {total}", Width - Margin, HeaderY, SKTextAlign.Right, small, muted);
+        Text(canvas, book, Margin, HeaderY, SKTextAlign.Left, small, muted);
+        Text(canvas, $"{number} of {total}", Width - Margin, HeaderY, SKTextAlign.Right, small, muted);
         canvas.DrawLine(Margin, HeaderY + 9, Width - Margin, HeaderY + 9, rule);
     }
 
@@ -271,7 +297,7 @@ public static class PdfBook
         Header(canvas, book, number, total, look);
 
         if (page.Title is { } title)
-            canvas.DrawText(overflow ? $"{title} (continued)" : title, Margin, TitleY, SKTextAlign.Left, titleFont, ink);
+            Text(canvas, overflow ? $"{title} (continued)" : title, Margin, TitleY, SKTextAlign.Left, titleFont, ink);
 
         var top = page.Title is null ? TitleY - 24 : TitleY + 18;
         if (!continued && page.Image is { } bytes)
@@ -285,7 +311,7 @@ public static class PdfBook
             canvas.DrawRect(rect, rule);
             if (page.Caption is { } caption)
                 foreach (var (l, i) in Wrap(Plain(caption), 11, false, 0, Math.Max(rect.Width, 260), look).Take(2).Select((l, i) => (l, i)))
-                    canvas.DrawText(l.Text, Margin, rect.Bottom + 15 + i * 13, SKTextAlign.Left, captionFont, muted);
+                    Text(canvas, l.Text, Margin, rect.Bottom + 15 + i * 13, SKTextAlign.Left, captionFont, muted);
         }
 
         var x = page.Image is null || continued ? Margin : Width * 0.58f;
@@ -295,7 +321,7 @@ public static class PdfBook
             y += line.Before + line.Size * 1.35f;
             if (line.Text.Length == 0) continue;
             using var font = new SKFont(line.Strong ? look.Bold : look.Regular, line.Size);
-            canvas.DrawText(line.Text, x + line.Indent, y - line.Size * 0.3f, SKTextAlign.Left, font, ink);
+            Text(canvas, line.Text, x + line.Indent, y - line.Size * 0.3f, SKTextAlign.Left, font, ink);
         }
     }
 
@@ -312,11 +338,11 @@ public static class PdfBook
 
         canvas.DrawRect(SKRect.Create(Margin, Height * 0.36f, 64, 5), accent);
         var y = Height * 0.36f + 58;
-        foreach (var line in Wrap(book, 40, true, 0, Width - Margin * 2, look).Take(2)) { canvas.DrawText(line.Text, Margin, y, SKTextAlign.Left, titleFont, ink); y += 48; }
-        if (cover.Subtitle is { Length: > 0 } subtitle) { canvas.DrawText(subtitle, Margin, y + 4, SKTextAlign.Left, lineFont, ink); y += 26; }
-        if (cover.Client is { Length: > 0 } client) canvas.DrawText($"Prepared for {client}", Margin, y + 8, SKTextAlign.Left, lineFont, muted);
+        foreach (var line in Wrap(book, 40, true, 0, Width - Margin * 2, look).Take(2)) { Text(canvas, line.Text, Margin, y, SKTextAlign.Left, titleFont, ink); y += 48; }
+        if (cover.Subtitle is { Length: > 0 } subtitle) { Text(canvas, subtitle, Margin, y + 4, SKTextAlign.Left, lineFont, ink); y += 26; }
+        if (cover.Client is { Length: > 0 } client) Text(canvas, $"Prepared for {client}", Margin, y + 8, SKTextAlign.Left, lineFont, muted);
         var foot = string.Join("   ·   ", new[] { cover.Studio, cover.Date }.Where(s => !string.IsNullOrWhiteSpace(s)));
-        canvas.DrawText(foot, Margin, Height - Margin, SKTextAlign.Left, smallFont, muted);
+        Text(canvas, foot, Margin, Height - Margin, SKTextAlign.Left, smallFont, muted);
     }
 
     /// <summary>The contents: each section's title and the page it opens on.</summary>
@@ -328,7 +354,7 @@ public static class PdfBook
         using var titleFont = new SKFont(look.Bold, 24);
         using var entryFont = new SKFont(look.Regular, 13);
         Header(canvas, book, number, total, look);
-        canvas.DrawText("Contents", Margin, TitleY, SKTextAlign.Left, titleFont, ink);
+        Text(canvas, "Contents", Margin, TitleY, SKTextAlign.Left, titleFont, ink);
 
         // Two columns once one would run off the page, so a long book's contents stay on one page.
         var perColumn = (int)((Height - Margin - TitleY - 30) / 22);
@@ -338,9 +364,9 @@ public static class PdfBook
             var x = Margin + (i / perColumn) * (columnW + 40);
             var y = TitleY + 40 + (i % perColumn) * 22;
             var label = entries[i].Title;
-            while (label.Length > 4 && entryFont.MeasureText(label) > columnW - 50) label = label[..^2] + "…";
-            canvas.DrawText(label, x, y, SKTextAlign.Left, entryFont, ink);
-            canvas.DrawText(entries[i].Page.ToString(CultureInfo.InvariantCulture), x + columnW, y, SKTextAlign.Right, entryFont, accent);
+            while (label.Length > 4 && TextShaper.Measure(label, entryFont) > columnW - 50) label = label[..^2] + "…";
+            Text(canvas, label, x, y, SKTextAlign.Left, entryFont, ink);
+            Text(canvas, entries[i].Page.ToString(CultureInfo.InvariantCulture), x + columnW, y, SKTextAlign.Right, entryFont, accent);
         }
     }
 
@@ -355,8 +381,8 @@ public static class PdfBook
         using var smallFont = new SKFont(look.Regular, 13);
         Header(canvas, book, total, total, look);
         canvas.DrawRect(SKRect.Create(Width / 2 - 32, Height / 2 - 48, 64, 4), accent);
-        canvas.DrawText(words, Width / 2, Height / 2 + 4, SKTextAlign.Center, bigFont, ink);
-        if (studio is { Length: > 0 }) canvas.DrawText(studio, Width / 2, Height / 2 + 36, SKTextAlign.Center, smallFont, muted);
+        Text(canvas, words, Width / 2, Height / 2 + 4, SKTextAlign.Center, bigFont, ink);
+        if (studio is { Length: > 0 }) Text(canvas, studio, Width / 2, Height / 2 + 36, SKTextAlign.Center, smallFont, muted);
     }
     #endregion
 }
