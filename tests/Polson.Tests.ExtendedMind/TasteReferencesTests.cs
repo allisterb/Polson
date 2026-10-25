@@ -133,6 +133,46 @@ public class TasteReferencesTests : TestsRuntime, IDisposable
         Assert.Equal(1, check["checked"]);
     }
 
+    /// <summary>
+    /// poster6 (2026-10-25) wrote its tags as code, <c>`"Boom Bap"` (item 8)</c>: matched by neither the reader nor the unread
+    /// net, every one vanished and the check passed with 0 tags read. Backticks are formatting: the tag is read and checked.
+    /// </summary>
+    [Fact]
+    public void TestATagWrittenAsCodeIsReadAndChecked()
+    {
+        var check = TasteReferences.Check(Table("| Grade | t2 — `\"Flowing\"` (item 2), `\"Nowhere\"` (item 3) | Qloo (t2) |"), Session());
+
+        Assert.Equal(2, check["checked"]);
+        Assert.Equal(["\"Nowhere\""], (string[])check["unverified"]!);
+        Assert.False((bool)check["passed"]!);
+    }
+
+    /// <summary>
+    /// poster6 (2026-10-25) cited five tags its <c>compare</c> answer returned, and all five came back "not returned by t7":
+    /// a comparison's tags live in its pairing rows and side lists, which were never read. The mind map's check is the same.
+    /// </summary>
+    [Fact]
+    public void TestAComparisonsTagsAreFound()
+    {
+        var compare = new TasteResult
+        {
+            Id = "t7", Op = "compare", Label = "with against without", Ok = true,
+            Comparison = new Dictionary<string, object?>
+            {
+                ["tags"] = new object?[] { Tag("Funk") },
+                ["a"] = new object?[] { Tag("Los Angeles") },
+                ["b"] = new object?[] { Tag("J-Pop") },
+            },
+        };
+        var session = Session().Append(compare).ToArray();
+
+        var check = TasteReferences.Check(Table("| Contrast | t7 — \"Funk\" (item 1), \"Los Angeles\" (item 2), \"Disco\" (item 3) | Qloo (t7) |"), session);
+
+        Assert.Equal(["\"Disco\""], (string[])check["unverified"]!);
+        Assert.True(TasteReferences.Carries(compare, "J-Pop", tag: true));
+        Assert.False(TasteReferences.Carries(compare, "Funk", tag: false));      // a tag, not a title
+    }
+
     /// <summary>A citation the parser cannot read used to be skipped, so the row passed with nothing checked.</summary>
     [Fact]
     public void TestATagCitationInAnUnknownFormIsUnreadAndFails()

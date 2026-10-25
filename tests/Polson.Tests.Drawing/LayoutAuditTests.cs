@@ -183,6 +183,46 @@ public class LayoutAuditTests : TestsRuntime
         Assert.Contains(canvas.AuditLayout(), w => w.Contains("vertical line running through it"));
     }
 
+    /// <summary>
+    /// poster6's kit sheet (2026-10-25): each reconfiguration drawn in a clipped tile, a disc magnified past its tile, and
+    /// 26 collisions reported with captions outside the tiles, where nothing was drawn. Only what lands in the clip counts —
+    /// and a caption inside the tile still collides.
+    /// </summary>
+    [Fact]
+    public void TestOnlyWhatLandsInsideAClipIsAudited()
+    {
+        using var canvas = new SkiaCanvas(900, 600);
+        var ctx = canvas.GetContext("2d");
+        ctx.Save();
+        ctx.BeginPath();
+        ctx.Rect(30, 30, 400, 170);
+        ctx.Clip();
+        ctx.FillStyle = "#111111";
+        ctx.BeginPath();
+        ctx.Arc(230, 200, 260, 0, MathF.PI * 2);
+        ctx.Fill();
+        ctx.FillRect(-100, 150, 800, 200);                // a band, cut to the tile
+        ctx.Restore();
+        ctx.FillStyle = "#333333";
+        ctx.Font = "16px Arial";
+        ctx.FillText("scale — the part magnified past the frame", 30, 222);
+
+        Assert.DoesNotContain(canvas.AuditLayout(), w => w.Contains("scale — the part"));
+
+        // Inside a clip, a collision is still one: "Aa" straddling a swatch, both within the tile.
+        ctx.Save();
+        ctx.BeginPath();
+        ctx.Rect(450, 30, 400, 170);
+        ctx.Clip();
+        ctx.FillStyle = "#0f3d5e";
+        ctx.FillRect(480, 80, 44, 44);
+        ctx.FillStyle = "#333333";
+        ctx.Font = "bold 36px Arial";
+        ctx.FillText("Aa", 480, 150);
+        ctx.Restore();
+        Assert.Contains(canvas.AuditLayout(), w => w.Contains("\"Aa\" runs across the edge of a rectangle"));
+    }
+
     [Fact]
     public void TestACanvasDrawnACellAtATimeIsNotAudited()
     {
