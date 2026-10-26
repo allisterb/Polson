@@ -595,6 +595,8 @@ public partial class ProjectGeneratorTests : TestsRuntime, IDisposable
 
         var agy = Path.Combine(root, "auto-agy");
         Assert.Contains("## Autonomous mode — nobody will answer", File.ReadAllText(Path.Combine(agy, "GEMINI.md")), StringComparison.Ordinal);
+        // The interview it skipped is delivered instead, as a document addressed to the client.
+        Assert.Contains("### `questions.md` — what the client would have been asked", File.ReadAllText(Path.Combine(agy, "GEMINI.md")), StringComparison.Ordinal);
         Assert.Contains("\"auto\": true", File.ReadAllText(Path.Combine(agy, "project.json")), StringComparison.Ordinal);
         Assert.Contains("\"agentBehavior\": \"autonomous\"", File.ReadAllText(Path.Combine(agy, "agent.config.json")), StringComparison.Ordinal);
 

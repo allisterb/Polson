@@ -27,5 +27,7 @@ Answer these in `findings.md`:
 - **A product ad** (type `product`). What did each comparable resolve to, and did the buyers' local-only lists
   give you anything to design from? The packshot: one generation, the same can in every view, no stray
   lettering, and did your label read on it? Quote the claim as printed. Qloo requests spent, from `status`.
+  Quote the descriptor as printed, and the cold viewing's answer for each ad word for word. Did any ad fail it at
+  first, and what did you change?
 - **The set.** Could a stranger tell the posters were for different people — and match each to its
   audience? With more than two, which two came closest, and were their audiences close too?

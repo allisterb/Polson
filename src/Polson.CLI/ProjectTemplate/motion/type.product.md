@@ -45,6 +45,55 @@ in place of the film ones, and ask for what is missing:
 - **A product that advertising law restricts by age or place** — alcohol, gambling, medicines, financial products —
   is a question for the director before any design. Qloo measures taste; it knows nothing about the law.
 
+### The key messages — before anything is designed
+
+An ad's first job is that a viewer knows **what is being sold**. Two films of a canned cold brew set its name, its
+claim and its call to action, and never the word *coffee*. A dark can on a chilled shelf read as beer to the first
+person who described it (nightshift3 and nightshift4, 2026-10-25). The picture does not say what the product is; words
+do.
+
+So, after Lupton's *How to Refine a Creative Brief* (*Graphic Design Thinking*, pp. 56–57), narrow the brief to one
+sentence and **list the key messages** before the evidence or the packshot. `direction.md` opens with them, as a table:
+
+| Key message | Words as they appear | Where (beat, seconds) | Checked by |
+| :--- | :--- | :--- | :--- |
+| **What it is** | the descriptor | the product beat and the end card | read-back, source `brief`; the cold viewing |
+| The product's name | as the brief gives it | packshot and end card | read-back |
+| The claim | the brief's words exactly | claim beat | read-back, source `brief` |
+| The call to action | the brief's words | end card | read-back |
+
+- **The descriptor** is what the product is in two to four words, **taken from the brief's own sentence**: from "a
+  fictitious canned cold brew coffee", *cold brew coffee*. In the brief's words, so the read-back finds it with source
+  `brief`; a paraphrase comes back as `own words`, and is restored. It is part of the shared system: the same words in
+  every ad of the set.
+- **It is set in words** beside the product's first clear sighting and on the end card, with the name. It holds for
+  its reading time, like the name.
+- **The strong colour goes on the main items** — the name, what it is, and the call to action — and the rest is set
+  quieter (Vernon Mills, *Making Posters*, 1967: the *what*, *where* and *when* take the colour).
+- **Where the product's category may be unfamiliar** to an audience (cold brew where tea is the everyday drink), the
+  descriptor matters more, not less. If the brief's words would not be understood there, that is a question for the
+  director, not a reason to drop them.
+
+**The cold viewing**, once the film is final: a separate model watches it without the brief and is asked only
+what it is for:
+
+```javascript
+const seen = await Video.ask('output.mp4',
+  'What is this advertisement for? Name the kind of product in a few words.');
+log(seen.success ? seen.text : seen.error);
+```
+
+- **The question names nothing**: not the product, its category or the brief. A question that says "coffee" has
+  answered itself.
+- **A film over the watcher's limit** is asked about through the copy `Verify.film` made,
+  `artifacts/verify/<film>-watch.mp4` (its summary names it).
+- **Record the answer word for word** in the key messages table. Then
+  `Stage.check('a viewer who has not read the brief can say what is advertised', <your reading of it>, seen.text)`.
+- **If it names another kind of product**, the film has failed its first job. Make the descriptor larger, hold it
+  longer, or bring it earlier; then ask again. Never ask a leading question to make it pass.
+- **With several audiences, ask about every film.**
+- It is a machine standing in for a stranger, and `direction.md` says so; it is not a test with viewers.
+
 ### The evidence, measured
 
 Probed on a fictitious cold brew in Berlin, Lagos and Seoul (2026-10-19). What separates audiences for a product is
@@ -144,10 +193,11 @@ and place it as given. **With none**, make one: the model generates the vessel, 
 Fifteen seconds unless the brief says otherwise. A product ad reads in this order, and the beat table names each:
 
 1. **Hook** (0–3 s): the one image from this audience's evidence — the setting, the hour, the object.
-2. **The product**: the packshot, named, legible. Its name holds long enough to read (the reading-time check).
+2. **The product**: the packshot, named, legible, **with the descriptor** — what it is, in words (the key messages
+   above). The name and descriptor hold long enough to read (the reading-time check).
 3. **The claim**, worded as the brief gives it, on screen alone.
-4. **End card**: product name or logo, and the call to action, held for at least the brief's minimum. **Identical
-   in layout across the set** — it is the template's anchor.
+4. **End card**: product name or logo, **the descriptor**, and the call to action, held for at least the brief's
+   minimum. **Identical in layout across the set** — it is the template's anchor.
 
 ### Questions, for a product
 
@@ -157,7 +207,8 @@ Fifteen seconds unless the brief says otherwise. A product ad reads in this orde
 
 ### direction.md
 
-The shared system first — product, claim, call to action, end card, type — each cited to the brief or a document.
+**The key messages first** (the table above, with the cold viewing's answer for each film). Then the shared system —
+product, descriptor, claim, call to action, end card, type — each cited to the brief or a document.
 Then **one section per audience**: its buyers (local-only brands and artists, with counts), its setting (places and
 mood tags), its pace line, and every choice with its evidence. Then **"Between the audiences"**: what the set shares
 and why, what differs and the evidence for each difference, and which two ads came closest — with whether their
