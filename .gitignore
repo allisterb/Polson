@@ -449,10 +449,9 @@ src/adk_agent/apps/
 src/adk_agent/artifact_versions/
 
 # Working notes that are not part of the published project: session handoffs, deployment
-# assessments, anything naming a live project id, region, bucket or service. Kept on disk and
-# backed up separately, deliberately outside the repository - see docs/ for what IS published.
+# assessments,
 docs/internal/
-
+docs/devpost/Polson Graphics Studio.md
 # Downloaded assets, fetched by tools/bootstrap.py at pinned URLs and verified by SHA-256 rather than
 # committed: MediaPipe's landmarker weights into models/ (Apache 2.0, per each model's card), the vision venv,
 # and Mesh2Motion's CC0 stock bodies and pose clips into the Mesh project's Library/ (its README.md, which is
