@@ -77,7 +77,7 @@ label.ps-otile { box-sizing: border-box; }
 .fr-seg-opt { display: inline-flex; align-items: center; height: var(--control-sm); padding: 0 var(--space-3); border-radius: var(--radius-pill); font: 600 13px/1 var(--font-sans); color: var(--ink-muted); white-space: nowrap; cursor: pointer; }
 .fr-seg-opt:hover { color: var(--ink); }
 .fr-seg-opt:has(input:checked) { background: var(--surface-raised); color: var(--ink); box-shadow: 0 0 0 1px var(--line-control); }
-.fr-seg-opt.is-use:has(input:checked) { background: var(--accent-soft); color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.fr-seg-opt.is-use:has(input:checked) { background: var(--done-soft); color: var(--done); box-shadow: 0 0 0 1px var(--done); }
 .fr-seg-opt.is-deny:has(input:checked) { background: var(--failed-soft); color: var(--failed); box-shadow: 0 0 0 1px var(--failed); }
 .fr-seg-opt:has(input:focus-visible) { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 @media (max-width: 640px) { .fr-tech { grid-template-columns: 1fr; gap: var(--space-2); } }

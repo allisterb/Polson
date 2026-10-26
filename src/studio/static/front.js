@@ -42,13 +42,13 @@
         return;
       }
       if (pop.hasAttribute('data-techniques')) {
-        // A choice per technique: the summary counts what was asked for and ruled out, the rest is the studio's.
+        // A choice per technique: the title counts what was asked for and ruled out, the rest is the studio's.
         var use = pop.querySelectorAll('input[value=request]:checked').length;
         var deny = pop.querySelectorAll('input[value=deny]:checked').length;
         var said = [];
-        if (use) said.push(use + ' to use');
-        if (deny) said.push(deny + ' ruled out');
-        out.textContent = said.length ? said.join(' · ') : "Studio's choice";
+        if (use) said.push(use + ' used');
+        if (deny) said.push(deny + ' not used');
+        pop.querySelectorAll('[data-count]').forEach(function (c) { c.textContent = said.length ? ' (' + said.join(' / ') + ')' : ''; });
         out.classList.toggle('is-empty', !said.length);
         return;
       }

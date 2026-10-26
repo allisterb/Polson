@@ -1020,6 +1020,44 @@ class ArtifactRouteTests(unittest.TestCase):
         self.assertEqual(page.content, b"the film")
         self.assertTrue(page.headers["content-type"].startswith("video/mp4"), page.headers["content-type"])
 
+    def test_a_film_is_served_by_the_range_a_player_asks_for(self):
+        page = self.client.get("/runs/acme-1/artifact/output.mp4", headers={"Range": "bytes=4-"})
+
+        self.assertEqual(page.status_code, 206)
+        self.assertEqual(page.content, b"film")
+        self.assertEqual(page.headers["content-range"], "bytes 4-7/8")
+
+    def test_a_film_being_sent_can_be_replaced_and_is_not_spliced(self):
+        """The regression: a `<video>` that stops reading must not stop the agent writing the film again.
+
+        Starlette's `FileResponse` held the file open across every send, and a paused player holds the
+        send; on Windows the engine's replace of `output.mp4` then failed "Access to the path is denied"
+        for as long as the page sat there (nightshift4). Here the send pauses after the first chunk, the
+        file is replaced as `File.Move(overwrite)` replaces it, and what follows must be nothing from the
+        new file.
+        """
+        film = self.root / "acme" / "output.mp4"
+        film.write_bytes(b"o" * (3 * app_mod.ReleasingFileResponse.chunk_size))
+        replacement = self.root / "acme" / "output.mp4.part"
+        replacement.write_bytes(b"n" * 100)
+        bodies: list[bytes] = []
+
+        async def receive() -> dict:
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        async def send(message: dict) -> None:
+            if message["type"] == "http.response.body":
+                bodies.append(message["body"])
+                if len(bodies) == 1:
+                    os.replace(replacement, film)
+
+        scope = {"type": "http", "method": "GET", "headers": [(b"range", b"bytes=0-")]}
+        asyncio.run(app_mod.ReleasingFileResponse(film)(scope, receive, send))
+
+        self.assertEqual(film.read_bytes(), b"n" * 100)
+        self.assertEqual(len(bodies), 1, "the response carried on after its file was replaced")
+        self.assertNotIn(b"n", b"".join(bodies))
+
     def test_a_spoken_line_is_not_an_artifact(self):
         """The film carries the voice; the WAVs `Assets.speak` wrote stay unreachable, like every other non-render."""
         page = self.client.get("/runs/acme-1/artifact/audio/line1.wav")

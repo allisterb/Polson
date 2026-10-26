@@ -148,7 +148,7 @@ public static class FFmpeg
                 if (!process.WaitForExit(FinishMs)) { Kill(process); return $"ffmpeg took more than {FinishMs / 1000} s for the copy."; }
                 if (process.ExitCode != 0) return $"ffmpeg failed: {Trim(error.Result)}";
                 if (new FileInfo(partial).Length > maxBytes) continue;
-                File.Move(partial, output, overwrite: true);
+                MoveIntoPlace(partial, output, "Verify.film");
                 return null;
             }
             return $"no copy {maxHeight} px tall came in under {maxBytes / (1024 * 1024.0):0.#} MB; the film is too long to watch in one read.";
@@ -240,7 +240,7 @@ public static class FFmpeg
                 : $"{who}: {count} frames arrived where {frameCount} were expected.");
         }
 
-        File.Move(partial, output, overwrite: true);
+        MoveIntoPlace(partial, output, who);
         return new(count, w, h, new FileInfo(output).Length);
     }
 
@@ -347,7 +347,7 @@ public static class FFmpeg
             }
             if (process.ExitCode != 0)
                 throw new InvalidOperationException($"{who}: ffmpeg failed to join the parts (exit {process.ExitCode}). {Trim(stderr.Result)}");
-            File.Move(partial, output, overwrite: true);
+            MoveIntoPlace(partial, output, who);
             return new FileInfo(output).Length;
         }
         finally
@@ -392,7 +392,7 @@ public static class FFmpeg
             }
             if (process.ExitCode != 0)
                 throw new InvalidOperationException($"{who}: ffmpeg failed to write the WebP (exit {process.ExitCode}). {Trim(stderr.Result)}");
-            File.Move(partial, output, overwrite: true);
+            MoveIntoPlace(partial, output, who);
             return new FileInfo(output).Length;
         }
         finally
@@ -614,6 +614,32 @@ public static class FFmpeg
     {
         try { process.Kill(entireProcessTree: true); process.WaitForExit(10_000); }
         catch (InvalidOperationException) { /* already gone */ }
+    }
+
+    /// <summary>
+    /// Moves a finished <paramref name="partial"/> over <paramref name="output"/>, waiting a second for a reader that has it
+    /// open for a moment. Windows will not replace a file another program holds open: a run page left on a film held
+    /// <c>output.mp4</c> for minutes, and nightshift4 (2026-10-25) was refused "Access to the path is denied" five times
+    /// with nothing saying why.
+    /// </summary>
+    internal static void MoveIntoPlace(string partial, string output, string who)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                File.Move(partial, output, overwrite: true);
+                return;
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or IOException && File.Exists(output) && File.Exists(partial))
+            {
+                if (attempt < 10) { System.Threading.Thread.Sleep(100); continue; }
+                File.Delete(partial);
+                throw new IOException($"{who}: '{Path.GetFileName(output)}' is open in another program — a page or player " +
+                    "showing it — and Windows will not replace a file while it is open, so the new one was not kept. Close " +
+                    "what is showing it and run this again, or write to another name.", ex);
+            }
+        }
     }
 
     static string Trim(string s) => s.Length <= 600 ? s.Trim() : string.Concat("…", s.AsSpan(s.Length - 600).Trim());

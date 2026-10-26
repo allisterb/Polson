@@ -508,6 +508,57 @@ public class MotionVideoTests : TestsRuntime, IDisposable
     }
 
     /// <summary>
+    /// A film the engine has read — made into a WebP, a frame cut from it, a watch copy made of it, its bytes read as the
+    /// watcher reads them — can be written again under the same name. nightshift4 (2026-10-25) found every later join to
+    /// <c>output.mp4</c> refused "Access to the path is denied" after <c>Verify.film</c> and <c>videoToWebp</c> had read it.
+    /// </summary>
+    [Fact]
+    public void TestAFilmThatWasReadCanBeWrittenAgain()
+    {
+        if (!FFmpeg.Available) return;
+        var motion = new MotionToolkit(root);
+        var comp = Ramp(motion);
+        comp.SaveVideo("part1.mp4", Opts(("to", 0.96)));
+        comp.SaveVideo("part2.mp4", Opts(("from", 1d), ("to", 1.96)));
+        var output = Path.Combine(root, "output.mp4");
+        motion.JoinVideos(new List<object?> { "part1.mp4", "part2.mp4" }, "output.mp4");
+
+        motion.VideoToWebp("output.mp4", "output.webp");
+        Assert.Null(FFmpeg.Frame(output, 0.5, Path.Combine(root, "artifacts", "verify", "stray-1.png")));
+        Assert.Null(FFmpeg.WatchCopy(output, 2, Path.Combine(root, "artifacts", "verify", "output-watch.mp4"), 16, 1 << 20));
+        _ = File.ReadAllBytes(output);
+
+        var again = motion.JoinVideos(new List<object?> { "part1.mp4", "part2.mp4" }, "output.mp4");
+        Assert.Equal(50, again["frames"]);
+        comp.SaveVideo("output.mp4", Opts(("to", 1.96)));
+    }
+
+    /// <summary>
+    /// A film another program holds open — a run page's player — cannot be replaced on Windows. That is what nightshift4
+    /// met, and it is said as that, naming the remedy, with nothing left half-written.
+    /// </summary>
+    [Fact]
+    public void TestAFilmHeldOpenElsewhereSaysSoAndKeepsNothing()
+    {
+        if (!FFmpeg.Available || !OperatingSystem.IsWindows()) return;
+        var motion = new MotionToolkit(root);
+        var comp = Ramp(motion);
+        comp.SaveVideo("part1.mp4", Opts(("to", 0.96)));
+        comp.SaveVideo("part2.mp4", Opts(("from", 1d), ("to", 1.96)));
+        motion.JoinVideos(new List<object?> { "part1.mp4", "part2.mp4" }, "output.mp4");
+
+        // Shared as Python's open() shares it: read and write, never delete.
+        using (new FileStream(Path.Combine(root, "output.mp4"), FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+        {
+            var held = Assert.Throws<IOException>(() => motion.JoinVideos(new List<object?> { "part1.mp4", "part2.mp4" }, "output.mp4"));
+            Assert.Contains("'output.mp4' is open in another program", held.Message);
+            Assert.Contains("write to another name", held.Message);
+        }
+        Assert.Empty(Directory.GetFiles(root, "*.part"));
+        Assert.Equal(50, motion.JoinVideos(new List<object?> { "part1.mp4", "part2.mp4" }, "output.mp4")["frames"]);
+    }
+
+    /// <summary>
     /// Sound given at the join lands on the whole film from its <c>start</c>, across the seam; parts with sound of their own
     /// have it replaced, and the result says so.
     /// </summary>

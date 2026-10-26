@@ -102,10 +102,10 @@
       {%- set tech_in = form.techniques if form.techniques is defined else {} -%}
       {% for i, techs in designs.items() if techs %}
       <details class="fr-pop" data-route="{{ i }}" data-techniques {{ 'hidden' if i != route }}>
-        <summary class="ps-field"><span class="ps-field-label">Graphic design</span><span class="ps-field-value" data-summary>Studio's choice</span>{{ m.icon('chevron-down', 18) }}</summary>
+        <summary class="ps-field"><span class="ps-field-label">Graphic design<span data-count></span></span><span class="ps-field-value" data-summary>What design options to use</span>{{ m.icon('chevron-down', 18) }}</summary>
         <fieldset class="ps-ogrid fr-panel fr-techs" style="margin:0" {{ 'disabled' if i != route }}>
-          <legend class="ps-ogrid-title" style="float:left; width:100%">Graphic design</legend>
-          <p class="ps-ogrid-hint" style="clear:both">Leave each to the studio, ask for it, or rule it out. One you ask for is used in what is delivered, or tried in a concept and its loss explained; one you rule out is not used at all, even where the studio would have.</p>
+          <legend class="ps-ogrid-title" style="float:left; width:100%">Graphic design<span data-count></span></legend>
+          <p class="ps-ogrid-hint" style="clear:both">Specify which graphic design processes, techniques and effects should be used or not used.</p>
           <div class="fr-tech-list">
             {% for t in techs %}
             {%- set now = tech_in.get(t.id, '') if i == route else '' -%}

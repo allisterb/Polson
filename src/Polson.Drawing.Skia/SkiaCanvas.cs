@@ -92,6 +92,17 @@ public class SkiaCanvas : IDisposable, IDataUriSource, ILosslessImageSource
     public string ToDataURL(string format = "webp", int quality = 85) =>
         ToDataUri(format, quality);
 
+    /// <summary>
+    /// What <c>JSON.stringify</c> writes for a canvas: its size. Without it the stringify walked the CLR object into
+    /// SkiaSharp's own and stopped at "Cyclic reference detected", so no result carrying a canvas could be logged whole
+    /// (<c>Stage.mockup</c>'s <c>image</c>, nightshift4).
+    /// </summary>
+    public Dictionary<string, object?> ToJSON(string? key = null) => new()
+    {
+        ["width"] = Width,
+        ["height"] = Height,
+    };
+
     /// <summary>The layout audit on what this canvas drew: type on type, off the canvas, or across a shape's edge.</summary>
     /// <remarks>
     /// <b>Internal, not on the script surface.</b> The engine reports it with every render that returns this canvas, as it
