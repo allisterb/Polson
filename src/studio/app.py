@@ -258,6 +258,9 @@ if MARKDOWN is not None:
 #: worth. That is the order a judge wants them in, and the page shows them in the order given.
 DELIVERABLES: tuple[tuple[str, str], ...] = (
     ("brief.md", "the commission, as the agent received it"),
+    # An autonomous run's interview, deferred (`_shared/auto.md`): the questions it would have asked the client, what it
+    # decided in their place, and what would change. Beside the brief, because it is the brief's other half.
+    ("questions.md", "the questions the studio would have asked you, what it decided instead, and what would change"),
     # The mind map's outline (Manual 29 §2a): the brief's associations, and each audience's, measured or assumed. Before
     # the concepts, because it is where their trails start.
     ("mindmap.md", "the brief mapped: its associations, and each audience's, with which were measured and which assumed"),

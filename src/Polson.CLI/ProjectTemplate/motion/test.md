@@ -23,6 +23,8 @@ Answer these in `findings.md`:
   difference? Did the places come back in the right city, and which mood tags did you use? Quote the claim as it
   appears on screen, and name anything you wanted to say about the product that the brief did not give you. Qloo
   requests spent, from `status`.
+- **The key messages** (product ad). Quote the descriptor as it appears, and when it first appears. Quote the cold
+  viewing's answer for each film word for word. Did any film fail it at first, and what did you change?
 - **The packshot** (product ad without a supplied shot). Was it one generation, and was it the same can in every
   view? Did lettering appear on it anyway? Did your label read on the band, and on the three-quarter view? If a
   product shot was supplied, what did `Documents.ask` tell you about it, and what did you take from it?

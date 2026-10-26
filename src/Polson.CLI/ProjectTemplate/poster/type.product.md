@@ -40,6 +40,50 @@ in place of the film ones, and ask for what is missing:
 - **A product that advertising law restricts by age or place** — alcohol, gambling, medicines, financial products —
   is a question for the director before any design. Qloo measures taste; it knows nothing about the law.
 
+### The key messages — before anything is designed
+
+An ad's first job is that a reader knows **what is being sold**. Two ads for a canned cold brew set its name, its claim
+and its call to action, and never the word *coffee*. A dark can on a chilled shelf read as beer to the first person who
+described it (nightshift3 and nightshift4, 2026-10-25). The picture does not say what the product is; words do.
+
+So, after Lupton's *How to Refine a Creative Brief* (*Graphic Design Thinking*, pp. 56–57), narrow the brief to one
+sentence and **list the key messages** before the evidence or the packshot. `direction.md` opens with them, as a table:
+
+| Key message | Words as they appear | Where on the ad | Checked by |
+| :--- | :--- | :--- | :--- |
+| **What it is** | the descriptor | beside the name | read-back, source `brief`; the cold viewing |
+| The product's name | as the brief gives it | packshot and logo position | read-back |
+| The claim | the brief's words exactly | | read-back, source `brief` |
+| The call to action | the brief's words | the anchor position | read-back |
+
+- **The descriptor** is what the product is in two to four words, **taken from the brief's own sentence**: from "a
+  fictitious canned cold brew coffee", *cold brew coffee*. In the brief's words, so `Verify.image` finds it with
+  source `brief`; a paraphrase comes back as `own words`, and is restored. The same words on every ad of the set.
+- **It is set in words beside the name**, and it reads from the near render. Q4's one thing a passer-by takes away
+  may be the claim, but the descriptor is never dropped for it.
+- **The strong colour goes on the main items** — the name, what it is, and the call to action — and the rest is set
+  quieter (Vernon Mills, *Making Posters*, 1967: the *what*, *where* and *when* take the colour).
+- **Where the product's category may be unfamiliar** to an audience (cold brew where tea is the everyday drink), the
+  descriptor matters more, not less. If the brief's words would not be understood there, ask the director rather than
+  dropping them.
+
+**The cold viewing**, once each ad is final: a separate model reads it without the brief and is asked only what it is
+for:
+
+```javascript
+const seen = await Video.ask('artifacts/final_a.png',
+  'What is this advertisement for? Name the kind of product in a few words.', { mimeType: 'image/png' });
+log(seen.success ? seen.text : seen.error);
+```
+
+- **The question names nothing**: not the product, its category or the brief.
+- **Record the answer word for word** in the key messages table. Then
+  `Stage.check('a reader who has not read the brief can say what is advertised', <your reading of it>, seen.text)`.
+- **If it names another kind of product**, the ad has failed its first job. Make the descriptor larger, or move it
+  nearer the name; then ask again. Never ask a leading question to make it pass.
+- **Ask about every ad in the set.**
+- It is a machine standing in for a stranger, and `direction.md` says so; it is not a test with readers.
+
 ### The evidence, measured
 
 Probed on a fictitious cold brew in Berlin, Lagos and Seoul (2026-10-19). Stage 2 for a product is this, in place of
@@ -132,8 +176,8 @@ and place it as given. **With none**, make one: the model generates the vessel, 
 
 ### The ad
 
-- **Message** (stage 3) is the product name, the claim as the brief words it, and the call to action. **Q4** for a
-  product is which of those a passer-by must take away if they read one thing.
+- **Message** (stage 3) is the key messages above: the product name and what it is, the claim as the brief words
+  it, and the call to action. **Q4** for a product is which of those a passer-by must take away if they read one thing.
 - **Concepts** (stage 4): three per audience, as above, each starting from a different item in *that audience's*
   buyers or places. **Q6 adds: one ad for all, or a series?** A series holds the product, its name, the claim, the
   call to action, the type and the grid, and varies the image, setting, composition and palette.
@@ -142,7 +186,8 @@ and place it as given. **With none**, make one: the model generates the vessel, 
 
 ### direction.md
 
-The shared system first — product, claim, call to action, type, grid — each cited to the brief or a document. Then
+**The key messages first** (the table above, with the cold viewing's answer for each ad). Then the shared system —
+product, descriptor, claim, call to action, type, grid — each cited to the brief or a document. Then
 **one section per audience**: its three concepts, its buyers (local-only brands and artists, with counts), its
 setting (places and mood tags), and every choice with its evidence. Each section after the first opens with what its
 ad does differently from those before it, and which of its own items caused each difference.
