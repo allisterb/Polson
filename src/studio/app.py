@@ -33,7 +33,10 @@ from fastapi.responses import (FileResponse, HTMLResponse, JSONResponse, PlainTe
                                RedirectResponse)
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+import anyio
 from starlette.concurrency import run_in_threadpool
+from starlette.datastructures import MutableHeaders
+from starlette.types import Send
 from pygments import highlight
 from pygments.formatters import HtmlFormatter
 from pygments.lexers import JavascriptLexer, MarkdownLexer
@@ -74,6 +77,76 @@ SOURCE_URL = os.environ.get("POLSON_SOURCE_URL") or "https://github.com/allister
 
 # A global rather than a context entry, so a page added later cannot quietly ship without the offer.
 TEMPLATES.env.globals["source_url"] = SOURCE_URL
+
+
+class _Replaced(Exception):
+    """The file being sent was replaced partway through."""
+
+
+def _read_at(path: str | os.PathLike[str], offset: int, size: int) -> tuple[bytes, tuple[int, int, int]]:
+    """`size` bytes from `offset`, and which file they came from, with the file open for this read only."""
+    with open(path, "rb") as file:
+        stat = os.fstat(file.fileno())
+        file.seek(offset)
+        return file.read(size), (stat.st_ino, stat.st_size, stat.st_mtime_ns)
+
+
+class ReleasingFileResponse(FileResponse):
+    """A `FileResponse` that has the file open only while it reads a chunk, never while it waits on the client.
+
+    **Starlette's holds it open for the whole response**, and a browser that has buffered enough of a
+    `<video>` stops reading and holds the response open indefinitely (`adk_agent/serve.py` measured 86 s).
+    Windows will not replace a file that is open, so while the run page sat on a film every later
+    `Motion.joinVideos(..., 'output.mp4')` failed "Access to the path is denied" — five times over several
+    minutes in nightshift4 (2026-10-25), and the agent delivered `output_final.mp4` instead. Sharing delete
+    is not enough: `File.Move` still gets error 5 on Windows 10.
+
+    A file replaced mid-response ends it short, so the browser asks again and gets the new film rather
+    than a splice of two. One range per response: a multi-range request is answered with the whole file,
+    which HTTP allows and no `<video>` sends.
+    """
+
+    max_ranges = 1
+
+    async def _send_body(self, send: Send, start: int, end: int | None) -> None:
+        sent_from = None
+        while end is None or start < end:
+            size = self.chunk_size if end is None else min(self.chunk_size, end - start)
+            chunk, source = await anyio.to_thread.run_sync(_read_at, self.path, start, size)
+            if sent_from is not None and source != sent_from:
+                raise _Replaced()
+            sent_from = source
+            start += len(chunk)
+            if len(chunk) < size:
+                break
+            await send({"type": "http.response.body", "body": chunk, "more_body": True})
+        else:
+            chunk = b""
+        await send({"type": "http.response.body", "body": chunk, "more_body": False})
+
+    async def _handle_simple(self, send: Send, send_header_only: bool, send_pathsend: bool) -> None:
+        await send({"type": "http.response.start", "status": self.status_code, "headers": self.raw_headers})
+        if send_header_only:
+            await send({"type": "http.response.body", "body": b"", "more_body": False})
+            return
+        try:
+            await self._send_body(send, 0, None)
+        except _Replaced:
+            return
+
+    async def _handle_single_range(self, send: Send, start: int, end: int, file_size: int,
+                                   send_header_only: bool) -> None:
+        headers = MutableHeaders(raw=list(self.raw_headers))
+        headers["content-range"] = f"bytes {start}-{end - 1}/{file_size}"
+        headers["content-length"] = str(end - start)
+        await send({"type": "http.response.start", "status": 206, "headers": headers.raw})
+        if send_header_only:
+            await send({"type": "http.response.body", "body": b"", "more_body": False})
+            return
+        try:
+            await self._send_body(send, start, end)
+        except _Replaced:
+            return
 
 
 def asset_version(*names: str) -> str:
@@ -536,7 +609,7 @@ def create_app(root: Path | None = None, registry: Registry | None = None,
                         headers={"Cache-Control": "max-age=3600"})
 
     @app.get("/runs/{run_id}/artifact/{name:path}")
-    async def serve_artifact(run_id: str, name: str) -> FileResponse:
+    async def serve_artifact(run_id: str, name: str) -> ReleasingFileResponse:
         """A render, by the project-relative path the record names it by.
 
         **Project-relative, not `artifacts/`-relative**, and the difference is a real bug rather than
@@ -578,10 +651,11 @@ def create_app(root: Path | None = None, registry: Registry | None = None,
 
         if suffix == ".pdf":
             # Inline, so a click opens it in the browser's viewer; named, so saving it keeps the name.
-            return FileResponse(path, media_type="application/pdf",
-                                headers={"Content-Disposition": f'inline; filename="{path.name}"',
-                                         "X-Content-Type-Options": "nosniff"})
-        return FileResponse(path)
+            return ReleasingFileResponse(path, media_type="application/pdf",
+                                         headers={"Content-Disposition": f'inline; filename="{path.name}"',
+                                                  "X-Content-Type-Options": "nosniff"})
+        # Released between chunks: the agent may be about to write this very file again.
+        return ReleasingFileResponse(path)
 
     @app.get("/runs/{run_id}/deliverables")
     async def deliverables(run_id: str) -> JSONResponse:

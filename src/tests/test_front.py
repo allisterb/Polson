@@ -518,10 +518,17 @@ class FrontRoutingTests(unittest.TestCase):
     def test_the_startup_pitch_composer_asks_for_its_terms_and_makes_audiences_optional(self):
         page = self.client.get("/compose/startup-pitch").text
         brief = page.index('id="brief"')
-        for key in ("company", "told_as", "stage", "raise", "duration", "narration"):
+        for key in ("company", "told_as", "stage", "duration", "narration"):
             self.assertIn(f'name="x_{key}"', page[:brief], f"{key} should be in the header")
+        self.assertGreater(page.index('<textarea id="x_raise" name="x_raise" rows="2"'), brief)
         self.assertGreater(page.index('<textarea id="x_use_of_funds" name="x_use_of_funds"'), brief)
         self.assertIn("data-audiences data-optional", page)
+
+    def test_the_posters_headline_is_a_text_box_after_the_brief(self):
+        """A headline is words to be set, often two lines: written under the brief, not squeezed into the bar."""
+        page = self.client.get("/compose/poster").text
+        self.assertGreater(page.index('<textarea id="x_headline" name="x_headline" rows="2"'), page.index('id="brief"'))
+        self.assertNotIn('<input class="fr-inline" name="x_headline"', page)
 
     def test_the_composer_offers_mp4_among_the_files_it_takes(self):
         page = self.client.get("/compose/poster")

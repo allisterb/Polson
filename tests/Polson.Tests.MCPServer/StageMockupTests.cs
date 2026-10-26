@@ -44,6 +44,19 @@ public class StageMockupTests : TestsRuntime, IDisposable
         Assert.Contains("\"motion\":\"sheet\"", record);
     }
 
+    /// <summary>The result logs whole: its canvas stringifies as its size, where it used to stop at "Cyclic reference detected".</summary>
+    [Fact]
+    public void TestAMockupResultCanBeStringified()
+    {
+        var result = Run("""
+            const m = Stage.mockup(null, { design: 'artifacts/final_a.png', setting: 'wall', width: 800, height: 500 });
+            log('json ' + JSON.stringify(m));
+            """);
+
+        Assert.True(result.Success, result.Error);
+        Assert.Contains(result.Logs, l => l.Contains("json {") &&l.Contains("\"image\":{\"width\":800,\"height\":500}") && l.Contains("\"setting\":\"wall\""));
+    }
+
     /// <summary>Drawn without a file, its image is a canvas, so a film's frames can go onto a phone one at a time.</summary>
     [Fact]
     public void TestAMockupWithoutAFileReturnsItsCanvas()

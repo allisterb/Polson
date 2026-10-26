@@ -250,6 +250,7 @@ public static class JsSurface
             ["cell.toJSON"] = "JSON.stringify protocol hook; see the execution model",
             ["spoken.toJSON"] = "JSON.stringify protocol hook; see the execution model",
             ["imageData.toJSON"] = "JSON.stringify protocol hook; see the execution model",
+            ["canvas.toJSON"] = "JSON.stringify protocol hook; see the execution model",
             ["element.toJSON"] = "JSON.stringify protocol hook; see the execution model",
 
             // Aliases of a documented member; documenting both spellings invites drift.
