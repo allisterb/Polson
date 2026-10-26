@@ -143,6 +143,7 @@ public partial class DrawingMcpTools
             ["failure"] = response.Success ? null : response.Failure.ToString(),
             ["fromCache"] = response.FromCache,
             ["results"] = result.Entities.Length + result.Tags.Length + result.Audiences.Length + result.Demographics.Length,
+            ["entities"] = response.Success && op == "insights" && result.Entities.Length > 0 ? TasteListed(result) : null,
             ["warnings"] = response.Warnings.Count,
             ["spent"] = registry.Budget.Spent,
             ["remaining"] = registry.Budget.Remaining,
@@ -157,6 +158,20 @@ public partial class DrawingMcpTools
 
     #region Internal methods
     internal const string TasteTypeList = "artist, movie, tv_show, brand, book, podcast, video_game, place, destination, person";
+
+    /// <summary>
+    /// An insights answer's entities as the studio's Audiences view lists them: the item number a direction cites, the name
+    /// and the tag names, so a cited tag can be shown on the entity that carries it. Kept in the project's run record only;
+    /// no id, score or request.
+    /// </summary>
+    internal static object?[] TasteListed(TasteResult result) =>
+        [.. result.Entities.OfType<Dictionary<string, object?>>().Select((e, i) => (object?)new Dictionary<string, object?>
+        {
+            ["rank"] = i + 1,
+            ["name"] = e.GetValueOrDefault("name") as string ?? "?",
+            ["tags"] = (e.GetValueOrDefault("tags") as object?[] ?? []).OfType<Dictionary<string, object?>>()
+                .Select(t => t.GetValueOrDefault("name") as string).OfType<string>().ToArray(),
+        })];
 
     /// <summary>Domains a profile reads when none are named: what an audience watches and listens to.</summary>
     internal const string TasteProfileDomains = "movie,tv_show,artist";
@@ -293,7 +308,9 @@ public partial class DrawingMcpTools
 
         var result = registry.Add(id => TasteObjects.ProfileResult(id, label, profile, responses, [.. distinctiveAll], placeTags, locality, notes));
 
-        // What the studio's Audiences view draws: who, where, the top of each distinctive list and its pace. Titles
+        // What the studio's Audiences view draws: who, where, each distinctive list and its pace — all of it, not its
+        // top, because the pace counts are over the whole list and a reader must be able to find every title they
+        // count (nightshift5 showed 9 of 21, leaning slow under a bar reading 71% fast). Titles
         // and ranks the run used as evidence — the run record lives in the project, never the repository (Qloo's
         // terms forbid storing responses in a public one) — and no request line, key or raw payload.
         var pace = result.Pace();
@@ -314,7 +331,7 @@ public partial class DrawingMcpTools
                 ["type"] = d["type"],
                 ["n"] = ((object?[])d["distinctive"]!).Length,
                 ["shared"] = ((object?[])d["shared"]!).Length,
-                ["top"] = ((object?[])d["distinctive"]!).Take(12).Cast<Dictionary<string, object?>>().Select(e =>
+                ["top"] = ((object?[])d["distinctive"]!).Cast<Dictionary<string, object?>>().Select(e =>
                 {
                     var name = e["name"] as string ?? "?";
                     return (object?)new Dictionary<string, object?>

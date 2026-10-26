@@ -272,6 +272,10 @@ details.fr-more > summary { cursor: pointer; font: 600 13px/18px var(--font-sans
 .fr-ranked { list-style: none; margin: var(--space-1) 0 0; padding: 0; display: grid; gap: 2px; }
 .fr-ranked li { display: flex; gap: var(--space-2); align-items: baseline; font: 400 14px/20px var(--font-sans); color: var(--ink); }
 .fr-ranked em { font-style: italic; min-width: 0; overflow-wrap: anywhere; }
+.fr-ranked .fr-ranked-gap { margin-top: var(--space-2); color: var(--ink-muted); }
+.fr-chips { margin-left: auto; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
+.fr-tag-chip { padding: 0 var(--space-2); border-radius: var(--radius-pill); font: 500 11px/18px var(--font-sans);
+  background: var(--running-soft); color: var(--running); }
 .fr-rank { flex: none; min-width: 2.2em; text-align: right; font: 500 12px/20px var(--font-mono); color: var(--ink-muted); }
 .fr-pace-tag { flex: none; margin-left: auto; padding: 0 var(--space-2); border-radius: var(--radius-pill); font: 500 11px/18px var(--font-sans); }
 .fr-pace-fast { background: var(--running-soft); color: var(--running); }

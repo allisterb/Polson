@@ -254,7 +254,9 @@ public static class TasteReferences
             .Where(t => t.Length > 0 && !"\"“'‘".Contains(t[0]) && t.Any(char.IsLetter));
 
     private static IEnumerable<string> QuotedTags(string text) =>
-        TagRef.Matches(text).Select(m => (m.Groups[1].Success ? m.Groups[1].Value : m.Groups[2].Value).Trim()).Where(t => t.Length > 0);
+        TagRef.Matches(text)
+            .SelectMany(m => m.Groups[1].Success ? [m.Groups[1].Value] : Quoted.Matches(m.Groups[2].Value).Select(q => q.Groups[1].Value))
+            .Select(t => t.Trim()).Where(t => t.Length > 0);
 
     /// <summary>
     /// Quoted words with a parenthesis after them that <see cref="TagRef"/> did not read: shaped like a tag citation, but
@@ -305,12 +307,26 @@ public static class TasteReferences
     private static readonly Regex HandleRef = new(@"(?<![\w-])t(\d{1,3})(?![\w-])", RegexOptions.Compiled);
     private static readonly Regex Italic = new(@"(?<!\*)\*([^*\n]{1,80})\*(?!\*)", RegexOptions.Compiled);
 
-    /// <summary><c>**"Glitzy"**</c>, or <c>"Glitzy" (item 10)</c> / <c>(10)</c> / <c>(t6 item 10)</c> / <c>(`t6` item 10)</c>, bold or not.</summary>
+    /// <summary>
+    /// <c>**"Glitzy"**</c>, or <c>"Glitzy" (item 10)</c> / <c>(10)</c> / <c>(t6 item 10)</c> / <c>(`t6` item 10)</c>, bold or not —
+    /// and a list sharing one item, <c>"Raw", "Matte" and "Glitzy" (item 10)</c>, whose quoted words are group 2 together.
+    /// Until 2026-10-26 only the last of a list was read: nightshift5's <c>"Industrial-Chic", "Raw Textures", "Neutral
+    /// Color Palette" (t6, item 32)</c> checked one tag of three and passed. The entity may stand between, as an italic
+    /// title: <c>"Cold drip espresso" at *DoubleEye* (t8, item 8)</c>, which nightshift5 wrote and nothing read.
+    /// </summary>
     private static readonly Regex TagRef = new(
-        @"\*\*[""“]([^""”\n]{1,40})[""”]\*\*|[""“]([^""”\n]{1,40})[""”]\**\s*\((?:`?t\d{1,3}`?,?\s*)?(?:item\s*)?\d+\)", RegexOptions.Compiled);
+        @"\*\*[""“]([^""”\n]{1,40})[""”]\*\*|((?:[""“][^""”\n]{1,40}[""”]\**\s*(?:,\s*(?:and\s+|&\s*)?|and\s+|&\s*)){0,8}[""“][^""”\n]{1,40}[""”])\**\s*(?:(?:at|on|from|in|of)\s+\*[^*\n]{1,80}\*\s*)?\((?:`?t\d{1,3}`?,?\s*)?(?:item\s*)?\d+\)",
+        RegexOptions.Compiled);
 
-    /// <summary>Anything shaped like a tag citation: quoted words, then a short parenthesis.</summary>
-    private static readonly Regex NearTag = new(@"[""“][^""”\n]{1,40}[""”]\**\s*\([^)\n]{1,30}\)", RegexOptions.Compiled);
+    /// <summary>One quoted tag of a <see cref="TagRef"/> list.</summary>
+    private static readonly Regex Quoted = new(@"[""“]([^""”\n]{1,40})[""”]", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Anything shaped like a tag citation: quoted words, then a short parenthesis — or a few words later, a parenthesis
+    /// naming an item or a handle, so a form <see cref="TagRef"/> does not know fails the check instead of passing unread.
+    /// </summary>
+    private static readonly Regex NearTag = new(
+        @"[""“][^""”\n]{1,40}[""”]\**\s*(?:\([^)\n]{1,30}\)|[^""“”()|\n]{1,40}?\([^)\n]{0,30}\b(?:item|t\d{1,3})\b[^)\n]{0,30}\))", RegexOptions.Compiled);
 
     private static readonly Regex TrailingYear = new(@"\s*\((?:19|20)\d{2}\)\s*$", RegexOptions.Compiled);
     private static readonly Regex LeadingArticle = new(@"^(?:the|a|an)\s+", RegexOptions.Compiled);
