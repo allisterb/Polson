@@ -148,6 +148,56 @@ public class TasteReferencesTests : TestsRuntime, IDisposable
     }
 
     /// <summary>
+    /// nightshift5 (2026-10-26) cited three tags against one item, <c>"Industrial-Chic", "Raw Textures", "Neutral Color
+    /// Palette" (t6, item 32)</c>, and only the last was read: two claims passed unchecked. Every tag of a list is checked.
+    /// </summary>
+    [Fact]
+    public void TestEveryTagOfAListSharingOneItemIsChecked()
+    {
+        var check = TasteReferences.Check(Table(
+            "| Grade | `\"Nowhere\"`, `\"Dreamlike Visuals\"` and `\"Flowing\"` (t2, item 2); \"Minimal\" on 41 of 50 | Qloo (t2) |"), Session());
+
+        Assert.Equal(3, check["checked"]);
+        Assert.Equal(["\"Nowhere\""], (string[])check["unverified"]!);
+        Assert.Empty((string[])check["unread"]!);
+    }
+
+    /// <summary>
+    /// nightshift5 wrote <c>`"Cold drip espresso"` at *DoubleEye* (t8, item 8)</c>: the entity between the tag and its item.
+    /// Neither the reader nor the unread net saw it, so a claim that drove a choice was never checked. Now it is read.
+    /// </summary>
+    [Fact]
+    public void TestATagAtAnEntityNamedBetweenItAndItsItemIsChecked()
+    {
+        var check = TasteReferences.Check(Table("| Kept | `\"Flowing\"` at *Long Quiet* (t2, item 2), \"Nowhere\" on *Long Quiet* (item 2) | Qloo (t2) |"), Session());
+
+        Assert.Equal(3, check["checked"]);                                  // one title, two tags
+        Assert.Equal(["\"Nowhere\""], (string[])check["unverified"]!);
+        Assert.Empty((string[])check["unread"]!);
+    }
+
+    /// <summary>Quoted words a few words before an item's parenthesis, in a form not read: unread, so the check fails.</summary>
+    [Fact]
+    public void TestATagSomeWordsBeforeItsItemInAnUnknownFormIsUnread()
+    {
+        var check = TasteReferences.Check(Table("| Kept | \"Flowing\" seen at the bar (t2, item 2) | Qloo (t2) |"), Session());
+
+        Assert.False((bool)check["passed"]!);
+        Assert.Single((string[])check["unread"]!);
+    }
+
+    /// <summary>nightshift5's own rows: a count of a tag and tags with items, read with nothing unread.</summary>
+    [Fact]
+    public void TestATagCountedAcrossAnAnswerIsNotUnread()
+    {
+        var check = TasteReferences.Check(Table(
+            "| Faces | `\"Dreamlike Visuals\"` on 41 of 50 brands; `\"Flowing\"` (item 1), `\"Flowing\"` (item 7) | Qloo (t2) |"), Session());
+
+        Assert.Empty((string[])check["unread"]!);
+        Assert.True((bool)check["passed"]!, (string)check["summary"]!);
+    }
+
+    /// <summary>
     /// poster6 (2026-10-25) cited five tags its <c>compare</c> answer returned, and all five came back "not returned by t7":
     /// a comparison's tags live in its pairing rows and side lists, which were never read. The mind map's check is the same.
     /// </summary>

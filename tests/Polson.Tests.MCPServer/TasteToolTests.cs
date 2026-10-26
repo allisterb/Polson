@@ -258,6 +258,30 @@ public class TasteToolTests : TestsRuntime, IDisposable
             DrawingMcpTools.TasteTagTypes("aesthetic, motif, urn:tag:genre:media, urn:entity:movie"));
 
     /// <summary>
+    /// The Audiences view shows an insights answer's entities by the item number a direction cites, with their tag names;
+    /// the run record keeps no id, score or request for them.
+    /// </summary>
+    [Fact]
+    public void InsightsEntities_AreListedByItemNumberWithTagNames()
+    {
+        var result = new TasteResult
+        {
+            Id = "t6", Op = "insights", Ok = true,
+            Entities = [TasteObjects.Entity(new QlooEntity { EntityId = "e-1", Name = "Kiosk" }), TasteObjects.Entity(new QlooEntity
+            {
+                EntityId = "e-2", Name = "Cafe Onion", Tags = [new QlooTag("urn:tag:x", "Raw Textures", null, null, null)],
+            })],
+        };
+
+        var listed = DrawingMcpTools.TasteListed(result).Cast<System.Collections.Generic.Dictionary<string, object?>>().ToArray();
+
+        Assert.Equal([1, 2], listed.Select(e => (int)e["rank"]!));
+        Assert.Equal("Cafe Onion", listed[1]["name"]);
+        Assert.Equal(["Raw Textures"], (string[])listed[1]["tags"]!);
+        Assert.Equal(["rank", "name", "tags"], listed[0].Keys);
+    }
+
+    /// <summary>
     /// Unfiltered, Qloo's top tags over films were a credit card and a hotel rating (trailer5), so films this session
     /// resolved get the film kinds and a note; 'all' and ids never seen get the overview.
     /// </summary>

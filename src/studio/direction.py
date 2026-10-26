@@ -16,6 +16,7 @@ import re
 import unicodedata
 from collections.abc import Iterable
 from typing import Any
+from urllib.parse import parse_qs, urlsplit
 
 #: A direction file is a page of tables, not a book. Anything longer is truncated, said so, and still served.
 MAX_DIRECTION = 200_000
@@ -263,9 +264,16 @@ def explain(text: str, events: Iterable[dict[str, Any]], since: str | None = Non
     }
 
 
-#: A tag as the workflows write it: `**"Glitzy"**`, or `"Glitzy" (item 10)` / `(10)` / `(t6 item 10)`, bold or not.
+#: A tag as the workflows write it: `**"Glitzy"**`, or `"Glitzy" (item 10)` / `(10)` / `(t6 item 10)`, bold or not, and a
+#: list sharing one item, `"Raw", "Matte" and "Glitzy" (item 10)`, whose quoted words are group 2 together, with the
+#: entity between as an italic title if it is there: `"Cold drip espresso" at *DoubleEye* (t8, item 8)`.
 #: The same pattern as the engine's `TasteReferences.TagRef`, so the map and the check see the same tags.
-_TAG_REF = re.compile(r'\*\*["“]([^"”\n]{1,40})["”]\*\*|["“]([^"”\n]{1,40})["”]\**\s*\((?:t\d{1,3},?\s*)?(?:item\s*)?\d+\)')
+_TAG_REF = re.compile(r'\*\*["“]([^"”\n]{1,40})["”]\*\*|((?:["“][^"”\n]{1,40}["”]\**\s*(?:,\s*(?:and\s+|&\s*)?|and\s+|&\s*)){0,8}'
+                      r'["“][^"”\n]{1,40}["”])\**\s*(?:(?:at|on|from|in|of)\s+\*[^*\n]{1,80}\*\s*)?'
+                      r'\((?:`?t\d{1,3}`?,?\s*)?(?:item\s*)?\d+\)')
+
+#: One quoted tag of a `_TAG_REF` list.
+_QUOTED = re.compile(r'["“]([^"”\n]{1,40})["”]')
 
 _TRAILING_YEAR = re.compile(r"\s*\((?:19|20)\d{2}\)\s*$")
 
@@ -291,12 +299,15 @@ def row_references(row: dict[str, Any]) -> list[dict[str, str]]:
             if key not in seen:
                 seen.add(key)
                 found.append({"kind": "title", "text": title, "key": key})
-    for match in _TAG_REF.finditer(row["evidence"]):
-        tag = (match.group(1) or match.group(2) or "").strip()
-        key = f"tag:{ref_key(tag)}"
-        if tag and key not in seen:
-            seen.add(key)
-            found.append({"kind": "tag", "text": tag, "key": key})
+    # Backticks are formatting, never part of a tag, and the engine drops them before reading (poster6): read with
+    # them, `"Raw Textures"` (t6, item 32) was a verified reference the map drew as no reference at all (nightshift5).
+    for match in _TAG_REF.finditer(row["evidence"].replace("`", "")):
+        for tag in [match.group(1)] if match.group(1) else _QUOTED.findall(match.group(2)):
+            tag = tag.strip()
+            key = f"tag:{ref_key(tag)}"
+            if tag and key not in seen:
+                seen.add(key)
+                found.append({"kind": "tag", "text": tag, "key": key})
     return found
 
 
@@ -376,6 +387,7 @@ def taste_views(text: str, events: Iterable[dict[str, Any]], since: str | None =
     **audiences**: each profile the run fetched, as its `taste.query` event records it: label, who and where, the top
     of each domain's distinctive list with ranks and pace, and the pace counts. A run from before profiles recorded
     these has only the label and counts, and the view says so.
+    **lists**: each `insights` query asked about an audience, with the tags the direction cites on its entities.
     **contrasts**: each `Taste.contrast` the run made, the latest per pair.
     **map** and **referenceCheck**: the evidence map and the reference check, as the run page has them.
 
@@ -400,9 +412,58 @@ def taste_views(text: str, events: Iterable[dict[str, Any]], since: str | None =
             contrasts[(str(e["a"].get("id")), str(e["b"].get("id")))] = {
                 k: e.get(k) for k in ("a", "b", "domains", "pace", "summary")}
     explained = explain(text, events, since) if text else {"map": None, "referenceCheck": None}
-    return {"audiences": audiences, "contrasts": list(contrasts.values()),
+    return {"audiences": audiences, "lists": audience_lists(scoped, explained["map"]), "contrasts": list(contrasts.values()),
             "map": explained["map"], "referenceCheck": explained["referenceCheck"],
             "verification": verification(scoped, explained["referenceCheck"])}
+
+
+def audience_lists(events: list[dict[str, Any]], evidence: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """The run's `insights` queries asked about an audience — a place or an age in the request — the latest per label.
+
+    Each with who and what was asked, and its entities by the item number a direction cites, each carrying only the tags
+    the direction cites from that query (so `"Raw Textures"` (t6, item 32) shows on item 32, and on any other item of
+    t6 that carries it). An entity's other tags are not sent: the page shows what the run used, not Qloo's answer. A
+    run from before 2026-10-26 recorded no entities, and the list has `entities: None`.
+    """
+    cited: dict[str, set[str]] = {}
+    if evidence:
+        tags = {r["id"]: ref_key(r["text"]) for r in evidence.get("refs") or [] if r.get("kind") == "tag"}
+        for edge in evidence.get("edges") or []:
+            if edge["to"] in tags:
+                cited.setdefault(edge["from"], set()).add(tags[edge["to"]])
+
+    latest: dict[str, dict[str, Any]] = {}
+    for e in events:
+        if e.get("type") != "taste.query" or e.get("op") != "insights":
+            continue
+        q = {k: v[0] for k, v in parse_qs(urlsplit(str(e.get("request") or "")).query).items()}
+        place = q.get("signal.location.query") or q.get("filter.location.query")
+        who = {"place": place, "age": q.get("signal.demographics.age"), "gender": q.get("signal.demographics.gender")}
+        if not any(who.values()):
+            continue
+        keys = cited.get(str(e.get("id")), set())
+        entities = e.get("entities")
+        label = str(e.get("label") or e.get("id"))
+        latest.pop(label, None)
+        latest[label] = {
+            "id": e.get("id"), "label": e.get("label"), "audience": who, "n": e.get("results"),
+            "type": (q.get("filter.type") or "").strip(),
+            "entities": None if not isinstance(entities, list) else [
+                {"rank": x.get("rank"), "name": x.get("name"), "cited": _cited_once(x.get("tags") or [], keys)}
+                for x in entities if isinstance(x, dict)],
+        }
+    return list(latest.values())
+
+
+def _cited_once(tags: list[Any], keys: set[str]) -> list[str]:
+    """The cited tags among an entity's, in its order, once each: Qloo can give one tag under two types ("Nightlife")."""
+    out, seen = [], set()
+    for tag in tags:
+        key = ref_key(tag)
+        if key in keys and key not in seen:
+            seen.add(key)
+            out.append(str(tag))
+    return out
 
 
 def verification(events: list[dict[str, Any]], reference_check: dict[str, Any] | None) -> dict[str, Any]:

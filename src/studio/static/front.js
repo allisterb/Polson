@@ -821,16 +821,24 @@
   }
   function pct(x) { return Math.round(x * 100) + '%'; }
 
-  // A ranked list of titles: Qloo's rank, the title, and its pace where Qloo's tags give one.
-  function ranked(items, limit) {
+  // A ranked list of titles: Qloo's rank, the title, and its pace where Qloo's tags give one. With `paced`, the titles
+  // past the limit that carry a pace tag follow, so every title the pace bar counts can be found.
+  function ranked(items, limit, paced) {
     var ol = el('ol', 'fr-ranked');
-    (items || []).slice(0, limit || 10).forEach(function (t) {
+    function add(t) {
       var li = el('li');
       li.appendChild(el('span', 'fr-rank', t.rank != null ? String(t.rank) : (t.rankA != null ? t.rankA + '·' + t.rankB : '')));
       li.appendChild(el('em', '', t.name));
       if (t.pace) li.appendChild(el('span', 'fr-pace-tag fr-pace-' + t.pace, t.pace === 'fast' ? 'fast-paced' : 'slow-paced'));
       ol.appendChild(li);
-    });
+    }
+    items = items || []; limit = limit || 10;
+    items.slice(0, limit).forEach(add);
+    var further = paced ? items.slice(limit).filter(function (t) { return t.pace; }) : [];
+    if (further.length) {
+      ol.appendChild(el('li', 'fr-small fr-ranked-gap', 'Further down, with a pace tag'));
+      further.forEach(add);
+    }
     if (!ol.children.length) ol.appendChild(el('li', 'fr-small', 'None.'));
     return ol;
   }
@@ -851,13 +859,58 @@
     return box;
   }
 
-  function renderAudiences(box, audiences) {
+  // An insights query asked about an audience: its entities by the item number a direction cites, each with the tags the
+  // direction cites from this query. The top 12, then every further entity carrying a cited tag.
+  function listCard(l) {
+    var card = el('section', 'fr-card fr-aud');
+    card.appendChild(el('h3', 'fr-heading', audienceName({ id: l.id, label: l.label, audience: l.audience })));
+    card.appendChild(el('p', 'fr-small', 'Query ' + l.id + ' · ' + domainName(l.type) + (l.n != null ? ' · ' + l.n + ' results' : '') + ' · source: Qloo'));
+    if (!l.entities) {
+      card.appendChild(el('p', 'fr-small', 'This run recorded the count only; runs from now on record the results too.'));
+      return card;
+    }
+    var marked = l.entities.filter(function (x) { return (x.cited || []).length; });
+    var tags = {};
+    marked.forEach(function (x) { x.cited.forEach(function (t) { tags[t] = true; }); });
+    card.appendChild(el('p', 'fr-small', Object.keys(tags).length
+      ? Object.keys(tags).length + ' tags the direction cites from this query, on ' + marked.length + ' of these ' + l.entities.length + ':'
+      : 'The direction cites no tag from this query.'));
+    var ol = el('ol', 'fr-ranked');
+    function add(x) {
+      var li = el('li');
+      li.appendChild(el('span', 'fr-rank', String(x.rank)));
+      li.appendChild(el('em', '', x.name));
+      if ((x.cited || []).length) {
+        var chips = el('span', 'fr-chips');
+        x.cited.forEach(function (t) { chips.appendChild(el('span', 'fr-tag-chip', t)); });
+        li.appendChild(chips);
+      }
+      ol.appendChild(li);
+    }
+    l.entities.slice(0, 12).forEach(add);
+    var further = l.entities.slice(12).filter(function (x) { return (x.cited || []).length; });
+    if (further.length) {
+      ol.appendChild(el('li', 'fr-small fr-ranked-gap', 'Further down, with a cited tag'));
+      further.forEach(add);
+    }
+    card.appendChild(ol);
+    return card;
+  }
+
+  function renderAudiences(box, audiences, lists) {
     box.textContent = '';
     audiences.forEach(function (a) {
       var card = el('section', 'fr-card fr-aud');
       card.appendChild(el('h3', 'fr-heading', audienceName(a)));
       card.appendChild(el('p', 'fr-small', 'Profile ' + a.id + (a.distinctive != null ? ' · ' + a.distinctive + ' distinctive titles' : '') + ' · source: Qloo'));
-      if (a.pace && a.pace.n) card.appendChild(paceBar(a.pace));
+      if (a.pace && a.pace.n) {
+        card.appendChild(paceBar(a.pace));
+        // Runs before 2026-10-26 recorded only the top 12 titles of each list, so some counted titles cannot be shown.
+        var counted = (a.pace.fast || 0) + (a.pace.slow || 0), shown = 0;
+        (a.domains || []).forEach(function (d) { shown += (d.top || []).filter(function (t) { return t.pace; }).length; });
+        if (a.domains && a.domains.length && shown < counted)
+          card.appendChild(el('p', 'fr-small', shown + ' of the ' + counted + ' paced titles are listed below: this run recorded only the top of each list.'));
+      }
       if (!a.domains || !a.domains.length) {
         card.appendChild(el('p', 'fr-small', 'This run recorded the counts only; runs from now on record the titles too.'));
       } else {
@@ -865,13 +918,14 @@
         a.domains.forEach(function (d) {
           var col = el('div');
           col.appendChild(el('p', 'ps-label', domainName(d.type) + ' (' + d.n + ' distinctive)'));
-          col.appendChild(ranked(d.top, 12));
+          col.appendChild(ranked(d.top, 12, true));
           grid.appendChild(col);
         });
         card.appendChild(grid);
       }
       box.appendChild(card);
     });
+    lists.forEach(function (l) { box.appendChild(listCard(l)); });
   }
 
   // Tags that lean one way, as a back-to-back bar per tag: the share of each side's own titles that carry it.
@@ -1262,7 +1316,7 @@
       .then(function (data) {
         if (!data || !views) return;
         var shown = {
-          audiences: (data.audiences || []).length > 0,
+          audiences: (data.audiences || []).length + (data.lists || []).length > 0,
           contrast: (data.contrasts || []).length > 0,
           choices: !!(data.map && (data.map.choices || []).length),
           verification: !!(data.verification && ((data.verification.films || []).length || (data.verification.images || []).length
@@ -1272,7 +1326,7 @@
         Object.keys(shown).forEach(function (v) {
           var tab = views.querySelector('.ps-tab[data-view="' + v + '"]'); if (tab) tab.hidden = !shown[v];
         });
-        if (shown.audiences) renderAudiences(page.querySelector('[data-audiences]'), data.audiences);
+        if (shown.audiences) renderAudiences(page.querySelector('[data-audiences]'), data.audiences || [], data.lists || []);
         if (shown.contrast) renderContrast(page.querySelector('[data-contrast]'), data.contrasts, data.audiences || []);
         if (shown.verification) renderVerification(page.querySelector('[data-verification]'), data.verification);
         if (shown.choices) {

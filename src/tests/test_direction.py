@@ -122,6 +122,41 @@ class ParseTests(unittest.TestCase):
         self.assertEqual(direction.refs("t2026 is a year, at5 is not a handle, (t7) is"), ["t7"])
 
 
+class AudienceListTests(unittest.TestCase):
+    """An `insights` query asked about an audience, shown with the tags the direction cites from it on its entities."""
+
+    TEXT = """# Direction
+
+## Choices
+
+| Choice | Evidence | Kind |
+| :-- | :-- | :-- |
+| Matte can | `"Raw Textures"`, `"Matte"` (t6, item 2) | Qloo (t6) |
+"""
+
+    def lists(self, *events):
+        return direction.taste_views(self.TEXT, list(events))["lists"]
+
+    def test_entities_carry_only_the_tags_the_direction_cites_from_that_query(self):
+        ent = [{"rank": 1, "name": "Kiosk", "tags": ["Matte", "Loud"]},
+               {"rank": 2, "name": "Cafe Onion", "tags": ["Raw Textures", "Matte", "Cosy", "Raw textures"]}]
+        [l] = self.lists({"type": "taste.query", "id": "t6", "op": "insights", "label": "audience A buyers: brand",
+                          "results": 2, "entities": ent,
+                          "request": "/v2/insights?filter.type=urn%3Aentity%3Abrand&signal.demographics.age=30_to_34"
+                                     "&signal.location.query=Berlin&take=50"})
+        self.assertEqual(l["audience"], {"place": "Berlin", "age": "30_to_34", "gender": None})
+        self.assertEqual(l["type"], "urn:entity:brand")
+        self.assertEqual([(x["name"], x["cited"]) for x in l["entities"]],
+                         [("Kiosk", ["Matte"]), ("Cafe Onion", ["Raw Textures", "Matte"])])
+
+    def test_a_query_with_no_audience_is_not_a_list_and_an_old_run_has_no_entities(self):
+        lists = self.lists(
+            {"type": "taste.query", "id": "t7", "op": "insights", "label": "anywhere", "request": "/v2/insights?filter.type=urn%3Aentity%3Abrand"},
+            {"type": "taste.query", "id": "t8", "op": "insights", "label": "places",
+             "request": "/v2/insights?filter.location.query=Berlin&filter.type=urn%3Aentity%3Aplace", "results": 20})
+        self.assertEqual([(l["id"], l["entities"]) for l in lists], [("t8", None)])
+
+
 class EvidenceMapTests(unittest.TestCase):
     """Query → reference → choice → what it is for, each edge in the state the reference check left it."""
 
@@ -192,6 +227,22 @@ class EvidenceMapTests(unittest.TestCase):
         harder = self.ids["Arrivals land harder"]
         self.assertEqual(self.edges[("t2", harder)], "unchecked")
         self.assertEqual(self.edges[(harder, "s1")], "unchecked")
+
+    def test_a_tag_in_backticks_is_read_as_the_engine_reads_it(self):
+        row = {"choice": "Matte can", "evidence": '`"Raw Textures"` (t6, item 32); `"Matte Finishes"` (item 46)'}
+        self.assertEqual([(r["kind"], r["text"]) for r in direction.row_references(row)],
+                         [("tag", "Raw Textures"), ("tag", "Matte Finishes")])
+
+    def test_every_tag_of_a_list_sharing_one_item_is_read(self):
+        row = {"choice": "Matte can", "evidence": '`"Industrial-Chic"`, `"Raw Textures"` and `"Neutral Color Palette"` '
+                                                  '(t6, item 32); "Minimalist" on 41 of 50'}
+        self.assertEqual([r["text"] for r in direction.row_references(row)],
+                         ["Industrial-Chic", "Raw Textures", "Neutral Color Palette"])
+
+    def test_a_tag_at_an_entity_named_before_its_item_is_read(self):
+        row = {"choice": "Kept", "evidence": '`"Cold drip espresso"` at *DoubleEye* (t8, item 8): present in this city'}
+        self.assertEqual([(r["kind"], r["text"]) for r in direction.row_references(row)],
+                         [("title", "DoubleEye"), ("tag", "Cold drip espresso")])
 
     def test_names_compare_as_the_engine_compares_them(self):
         self.assertEqual(direction.ref_key("Amélie’s Garden (2019)"), "amelie s garden")

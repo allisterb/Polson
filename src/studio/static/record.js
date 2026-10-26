@@ -263,6 +263,14 @@
   function plain(s) { return String(s || '').replace(/[`*_]/g, '').replace(/\s+/g, ' ').trim(); }
   function clip(s, n) { return s.length > n ? s.slice(0, n - 1).replace(/\s+$/, '') + '…' : s; }
 
+  // A label clipped to its box by measurement: the query column is monospaced and wider per character than any
+  // estimate that suits the others. A map drawn while its tab is hidden measures 0, so the estimate stays.
+  function fit(text, s, width) {
+    var n = Math.floor(width / 6.4);
+    text.textContent = clip(s, n);
+    while (n > 4 && text.getComputedTextLength() > width) text.textContent = clip(s, --n);
+  }
+
   function evidenceMap(svg, map) {
     var cols = [
       { key: 'queries', head: 'Qloo query', w: 220 },
@@ -302,7 +310,8 @@
         var g = svgEl('g', { 'class': 'evnode ev-' + c.key + (item.kind === 'tag' ? ' ev-tag' : ''), tabindex: 0, 'data-id': item.id }, gNodes);
         svgEl('title', {}, g).textContent = parts[0] + parts[1] + (item.state ? ' — ' + item.state : '');
         svgEl('rect', { x: c.x, y: y, width: c.w, height: boxH, rx: 3 }, g);
-        svgEl('text', { x: c.x + 7, y: y + 14 }, g).textContent = clip(parts[0], Math.floor(c.w / 6.4));
+        var text = svgEl('text', { x: c.x + 7, y: y + 14 }, g);
+        fit(text, parts[0], c.w - 14);
       });
     });
 
