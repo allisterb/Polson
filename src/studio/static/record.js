@@ -272,21 +272,15 @@
   }
 
   function evidenceMap(svg, map) {
+    // "For" names the piece each choice serves, which only says something when there are several (Film A, Film B); with
+    // one, its width goes to the labels instead.
+    var several = (map.pieces || []).length > 1;
     var cols = [
-      { key: 'queries', head: 'Qloo query', w: 220 },
-      { key: 'refs', head: 'Reference', w: 230 },
-      { key: 'choices', head: 'Choice', w: 240 },
-      { key: 'pieces', head: 'For', w: 200 }
-    ];
+      { key: 'queries', head: 'Qloo query', charW: 6.6 },        // monospaced; both measured at 11px
+      { key: 'refs', head: 'Reference', charW: 5.2 },
+      { key: 'choices', head: 'Choice', charW: 5.2 }
+    ].concat(several ? [{ key: 'pieces', head: 'For', charW: 5.2 }] : []);
     var gap = 70, boxH = 20, step = 26, top = 30;
-    var n = Math.max.apply(null, cols.map(function (c) { return (map[c.key] || []).length; }).concat([1]));
-    var height = top + n * step + 8, x = 0;
-    cols.forEach(function (c) { c.x = x; x += c.w + gap; });
-    var width = x - gap;
-    svg.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
-    svg.style.minWidth = Math.round(width * 0.75) + 'px';
-    Array.prototype.slice.call(svg.querySelectorAll(':scope > g')).forEach(function (g) { g.remove(); });
-
     var label = {
       queries: function (q) { return [q.id + ' · ' + (q.op || 'taste') + (q.label ? ' — ' + q.label : ''), q.known ? '' : ' (not in this run’s record)']; },
       refs: function (r) { return r.kind === 'tag' ? ['“' + r.text + '”', ' (a Qloo tag)'] : [r.text, ' (a title Qloo returned)']; },
@@ -294,6 +288,22 @@
       // `### Choices` under `## Film A: Tokyo` reads as Film A's: the parent heading first when there is one.
       pieces: function (p) { return [p.parent ? plain(p.parent) + ' · ' + plain(p.title) : plain(p.title), '']; }
     };
+    var n = Math.max.apply(null, cols.map(function (c) { return (map[c.key] || []).length; }).concat([1]));
+    var height = top + n * step + 8, x = 0;
+
+    // Each column as wide as its longest label needs (within reason), then the width to spare shared equally, so every
+    // column has the same room past its longest label and a column of short titles does not sit half empty.
+    var avail = 1100 - gap * (cols.length - 1);
+    cols.forEach(function (c) {
+      var longest = Math.max.apply(null, (map[c.key] || []).map(function (item) { return label[c.key](item)[0].length; }).concat([8]));
+      c.need = Math.min(Math.max(longest * c.charW + 14, 140), 460);
+    });
+    var spare = (avail - cols.reduce(function (s, c) { return s + c.need; }, 0)) / cols.length;
+    cols.forEach(function (c) { c.w = Math.max(Math.round(c.need + spare), 120); c.x = x; x += c.w + gap; });
+    var width = x - gap;
+    svg.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
+    svg.style.minWidth = Math.round(width * 0.75) + 'px';
+    Array.prototype.slice.call(svg.querySelectorAll(':scope > g')).forEach(function (g) { g.remove(); });
 
     // Each column spread over the full height, so a short column sits beside the middle of a long one.
     var pos = {};
