@@ -23,6 +23,7 @@
     wrap.innerHTML = '<svg class="ps-icon" width="' + s + '" height="' + s + '" viewBox="0 0 24 24" aria-hidden="true">' + ICON[name] + '</svg>';
     return wrap.firstChild;
   }
+  function megabytes(bytes) { return bytes < 1048576 ? Math.ceil(bytes / 1024) + ' KB' : (bytes / 1048576).toFixed(1) + ' MB'; }
 
   // region Composer
   var form = document.querySelector('[data-compose]');
@@ -449,18 +450,30 @@
 
       loadLearned();
 
+      // One row each: the file, and what it holds. A document is read here; a book is a PDF the studio set, so it
+      // downloads.
       data.deliverables.forEach(function (d) {
-        if (d.kind === 'document') {
-          var li = el('li'); var a = el('a', null, d.name);
-          a.href = deliverableUrl(d.name) + '?raw=1';
-          a.target = '_blank'; li.appendChild(a); li.appendChild(el('span', 'fr-small', ' · ' + d.what));
+        if (d.kind !== 'document' && d.kind !== 'book') return;
+        // Each link says what a click does by its icon: a document is read on this page, a book saved, with its size.
+        var tr = el('tr'), a = el('a'), what = d.what || '', book = d.kind === 'book';
+        a.appendChild(icon(book ? 'download' : 'document', 14));
+        a.appendChild(el('span', 'fr-spec', d.name));
+        if (book && d.bytes) a.appendChild(el('span', 'fr-doc-action', megabytes(d.bytes)));
+        a.title = book ? 'Download ' + d.name : 'Read ' + d.name + ' on this page';
+        if (book) {
+          a.href = artifactUrl(d.path); a.setAttribute('download', d.name);
+        } else {
+          a.href = deliverableUrl(d.name) + '?raw=1'; a.target = '_blank';
           // A plain click reads it here; the link stays the raw file, for a new tab, a copy or a save.
           a.addEventListener('click', function (ev) {
             if (ev.button || ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.altKey || !doc) return;
             ev.preventDefault(); read(d, a);
           });
-          docs.appendChild(li);
         }
+        var link = el('td'); link.appendChild(a);
+        tr.appendChild(link);
+        tr.appendChild(el('td', 'fr-small', what.charAt(0).toUpperCase() + what.slice(1)));
+        docs.appendChild(tr);
       });
       page.querySelector('[data-documents]').hidden = !docs.children.length;
       deliverablesTab();

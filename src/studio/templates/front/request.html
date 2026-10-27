@@ -39,14 +39,15 @@
       transcript in this design, from the same event stream; the sense-making curve stays on that page. -#}
   <nav class="ps-tabs fr-views" role="tablist" aria-label="Request views">
     <button class="ps-tab" type="button" role="tab" id="tab-progress" aria-controls="panel-progress" aria-selected="true" data-view="progress">Progress</button>
-    {#- The finished work, what the studio wrote and what it learned, up front. Appears once there is any (front.js). -#}
-    <button class="ps-tab" type="button" role="tab" id="tab-deliverables" aria-controls="panel-deliverables" aria-selected="false" tabindex="-1" data-view="deliverables" {% if not learned %}hidden{% endif %}>Deliverables</button>
     <button class="ps-tab" type="button" role="tab" id="tab-agent" aria-controls="panel-agent" aria-selected="false" tabindex="-1" data-view="agent">Agent<span class="ps-tab-count" data-agent-count></span></button>
     {#- How the run used Qloo. Each tab appears once the run has something to show in it (front.js, from /taste). -#}
     <button class="ps-tab" type="button" role="tab" id="tab-audiences" aria-controls="panel-audiences" aria-selected="false" tabindex="-1" data-view="audiences" hidden>Audiences</button>
     <button class="ps-tab" type="button" role="tab" id="tab-contrast" aria-controls="panel-contrast" aria-selected="false" tabindex="-1" data-view="contrast" hidden>Contrast</button>
     <button class="ps-tab" type="button" role="tab" id="tab-choices" aria-controls="panel-choices" aria-selected="false" tabindex="-1" data-view="choices" hidden>Choices</button>
     <button class="ps-tab" type="button" role="tab" id="tab-verification" aria-controls="panel-verification" aria-selected="false" tabindex="-1" data-view="verification" hidden>Verification</button>
+    {#- The finished work, what the studio wrote and what it learned. Last, as the run finishes it last; it appears once
+        there is any of it (front.js). -#}
+    <button class="ps-tab" type="button" role="tab" id="tab-deliverables" aria-controls="panel-deliverables" aria-selected="false" tabindex="-1" data-view="deliverables" {% if not learned %}hidden{% endif %}>Deliverables</button>
   </nav>
   {% endif %}
 
@@ -121,7 +122,11 @@
       </section>
       <section class="fr-card" data-documents hidden aria-labelledby="documents-title">
         <h2 class="fr-heading" id="documents-title">What the studio wrote</h2>
-        <ul class="fr-docs" data-doc-list></ul>
+        {#- A document opens in the reader below; a book (a PDF) downloads. -#}
+        <table class="fr-doc-table">
+          <thead><tr><th scope="col">Name</th><th scope="col">Description</th></tr></thead>
+          <tbody data-doc-list></tbody>
+        </table>
       </section>
     </div>
     {% include "front/learned.html" %}

@@ -315,42 +315,42 @@ if MARKDOWN is not None:
 #:
 #: Ordered for reading rather than alphabetically: what was asked, what was made, then what it is
 #: worth. That is the order a judge wants them in, and the page shows them in the order given.
-DELIVERABLES: tuple[tuple[str, str], ...] = (
-    ("brief.md", "the commission, as the agent received it"),
+DELIVERABLES: tuple[tuple[str, str, str], ...] = (
+    ("brief.md", "Brief", "the commission, as the agent received it"),
     # An autonomous run's interview, deferred (`_shared/auto.md`): the questions it would have asked the client, what it
     # decided in their place, and what would change. Beside the brief, because it is the brief's other half.
-    ("questions.md", "the questions the studio would have asked you, what it decided instead, and what would change"),
+    ("questions.md", "Questions", "the questions the studio would have asked you, what it decided instead, and what would change"),
     # The mind map's outline (Manual 29 §2a): the brief's associations, and each audience's, measured or assumed. Before
     # the concepts, because it is where their trails start.
-    ("mindmap.md", "the brief mapped: its associations, and each audience's, with which were measured and which assumed"),
+    ("mindmap.md", "Mind map", "the brief mapped: its associations, and each audience's, with which were measured and which assumed"),
     # The concept presentation (Manual 29 §8): the ideas weighed before any was made, each with its evidence and its
     # drawbacks, and the recommendation. After the brief, because it is the step between what was asked and what was made.
-    ("concepts.md", "the concepts weighed, each with its evidence and drawbacks, and why one was chosen"),
+    ("concepts.md", "Concepts", "the concepts weighed, each with its evidence and drawbacks, and why one was chosen"),
     # A motion run's story in words and its creative borders (Manual 25 §13b–c), read before the film.
-    ("treatment.md", "the film's story in words, as the client reads it before seeing anything"),
-    ("dos.md", "the creative borders: what belongs in the film and what does not, and which were measured"),
+    ("treatment.md", "Treatment", "the film's story in words, as the client reads it before seeing anything"),
+    ("dos.md", "Dos and don'ts", "the creative borders: what belongs in the film and what does not, and which were measured"),
     # The poster workflow's: every visual choice and the evidence it rests on, Qloo or research. Second,
     # because it is what a judge of a taste-grounded poster reads straight after the brief.
-    ("direction.md", "why it looks like this: every choice and the evidence behind it"),
-    ("artwork.js", "the drawing itself, as code"),
-    ("motion.js", "the film itself, as code: every layer and key"),
+    ("direction.md", "Direction", "why it looks like this: every choice and the evidence behind it"),
+    ("artwork.js", "Drawing script", "the drawing itself, as code"),
+    ("motion.js", "Film script", "the film itself, as code: every layer and key"),
     # The poster workflow's script, named in its instructions since its kit of parts went in (Manual 30 §3).
-    ("poster.js", "the poster itself, as code: its kit of parts and every element"),
+    ("poster.js", "Poster script", "the poster itself, as code: its kit of parts and every element"),
     # The same file under the motion workflow's name before 2026-10-25, so a run made then still shows its source.
-    ("trailer.js", "the film itself, as code: every layer and key"),
-    ("plan.md", "the explainer's scenes, every formula in them and what checked it"),
-    ("explainer.js", "the explainer itself, as code: every equation, graph and key"),
-    ("accuracy.md", "what was checked against a source, and what could not be"),
-    ("findings.md", "the agent's own account of friction, gaps and surprise"),
-    ("critique_log.md", "the studio's critique of its own passes"),
-    ("materials.md", "the materials requisitioned, and what each was for"),
-    ("turns.md", "the turn-by-turn record the drawing workflow keeps"),
-    ("sketch.md", "the scene in verbs, and every check the sketch was held to"),
-    ("animation.md", "the dialogue and its timing, the beats in frames, the keys, and every check the motion was held to"),
+    ("trailer.js", "Film script", "the film itself, as code: every layer and key"),
+    ("plan.md", "Plan", "the explainer's scenes, every formula in them and what checked it"),
+    ("explainer.js", "Explainer script", "the explainer itself, as code: every equation, graph and key"),
+    ("accuracy.md", "Accuracy", "what was checked against a source, and what could not be"),
+    ("findings.md", "Findings", "the agent's own account of friction, gaps and surprise"),
+    ("critique_log.md", "Critique log", "the studio's critique of its own passes"),
+    ("materials.md", "Materials", "the materials requisitioned, and what each was for"),
+    ("turns.md", "Turns", "the turn-by-turn record the drawing workflow keeps"),
+    ("sketch.md", "Sketch", "the scene in verbs, and every check the sketch was held to"),
+    ("animation.md", "Animation", "the dialogue and its timing, the beats in frames, the keys, and every check the motion was held to"),
 )
 
 #: The same list as a set, for the membership test the route makes.
-DELIVERABLE_NAMES = frozenset(name for name, _ in DELIVERABLES)
+DELIVERABLE_NAMES = frozenset(name for name, _, _ in DELIVERABLES)
 
 
 def base(request: Request) -> str:
@@ -725,9 +725,10 @@ def create_app(root: Path | None = None, registry: Registry | None = None,
 
         # The picture first, because it is the work. Everything under it is what the studio *says*
         # about the work, which is worth less to a reader who has not yet seen it.
-        written.extend(final_renders(run))
+        pieces = final_renders(run)
+        written.extend(pieces)
 
-        for name, what in DELIVERABLES:
+        for name, title, what in DELIVERABLES:
             try:
                 path = contain(run.project.root, name)
             except StudioError:
@@ -736,13 +737,17 @@ def create_app(root: Path | None = None, registry: Registry | None = None,
                 continue
             if not path.is_file():
                 continue
-            entry: dict[str, Any] = {"kind": "document", "name": name, "what": what,
+            entry: dict[str, Any] = {"kind": "document", "name": name, "title": title, "what": what,
                                      "bytes": path.stat().st_size}
             # The direction also feeds a panel of its own (`/why`). Said here, so the page asks the listing which
             # document that is rather than naming one in its code.
             if name == "direction.md":
                 entry["panel"] = "why"
             written.append(entry)
+
+        # The books the run set (`Stage.book`), which are not the piece: a motion run's pitch and process book. Last,
+        # as they are written last, from the documents above.
+        written.extend(books(run, {f["path"] for p in pieces for f in p["formats"]}))
 
         return JSONResponse({"deliverables": written})
 
@@ -928,6 +933,36 @@ def artifact_ref(run: Run, ref: str) -> str | None:
 #: The print PDF comes last: it is the file sent to a print shop, and no browser shows it as a picture.
 FORMAT_ORDER = ("mp4", "webm", "webp", "png", "jpeg", "jpg", "svg", "pdf")
 
+#: The names the workflows give the finished piece (`output.mp4`, `output.svg`; `artifacts/final.svg` where a workflow
+#: names none and the agent chose). A per-audience `final_a` is found by `final_renders` before this is asked.
+PIECE_STEMS = ("output", "final")
+
+#: The books the workflows name (`Stage.book`), as a reader would call them and with what each holds. Any other PDF a
+#: run sets beside the piece is listed under its file name.
+BOOKS: dict[str, tuple[str, str]] = {
+    "pitch": ("Pitch", "the chosen concept as the client reads it, finished: the treatment, the board and the work"),
+    "process": ("Process book", "how the work was arrived at: the brief, the research, the concepts and the checks"),
+}
+
+
+def books(run: Run, piece: set[str]) -> list[dict[str, Any]]:
+    """The PDFs this run set that are not part of the piece, in the order first written, each once."""
+    events = read_events(run.project.server_events)
+    executions = research_executions(events)
+    found: dict[str, dict[str, Any]] = {}
+    for event in events:
+        artifact = event.get("artifact") or ""
+        if (event.get("type") != "render" or (event.get("format") or "").lower() != "pdf" or not artifact
+                or artifact in piece or artifact in found or is_research(event, executions)
+                or (run.since and (event.get("ts") or "") < run.since)):
+            continue
+        if (path := artifact_file(run, artifact)) is None:
+            continue
+        title, what = BOOKS.get(path.stem.lower(), (path.stem.replace("_", " ").capitalize(), "a book the studio set"))
+        found[artifact] = {"kind": "book", "name": path.name, "path": artifact, "title": title, "what": what,
+                           "bytes": path.stat().st_size}
+    return list(found.values())
+
 
 #: A finished piece per audience, as the poster and trailer workflows name them when a brief names several:
 #: `final_a`, `final_b`… The letter is the audience's, as in the brief.
@@ -962,8 +997,8 @@ def final_renders(run: Run) -> list[dict[str, Any]]:
 
 
 def final_render(run: Run, only=None) -> dict[str, Any] | None:
-    """The finished piece: the last render of each format this run produced, as **one** entry. `only`, when
-    given, keeps the renders whose artifact it accepts — one audience's final.
+    """The finished piece: the last render of each format under the piece's one name, as **one** entry. `only`,
+    when given, keeps the renders whose artifact it accepts — one audience's final.
 
     **Read from the run record rather than from a filename, because the filename is not knowable.**
     Three of the eight workflows prescribe no name for the final image at all — `vector_infographic`
@@ -984,9 +1019,9 @@ def final_render(run: Run, only=None) -> dict[str, Any] | None:
     webp" from the same execution: a moving render therefore beats a still of its format whenever
     it came, and only a later moving render replaces it.
     """
-    latest: dict[str, tuple[bool, dict[str, Any]]] = {}
     events = read_events(run.project.server_events)
     executions = research_executions(events)
+    candidates = []
     for event in events:
         if event.get("type") != "render" or is_research(event, executions):
             continue
@@ -994,16 +1029,33 @@ def final_render(run: Run, only=None) -> dict[str, Any] | None:
         # outlive any one run, so without this an observation shows the previous run's picture.
         if run.since and (event.get("ts") or "") < run.since:
             continue
-        motion = (event.get("motion") or "").lower()
         # A board (comp.board) is a deliverable but not the piece: the film it storyboards is.
-        if motion in ("sheet", "board"):
+        if (event.get("motion") or "").lower() in ("sheet", "board"):
             continue
         fmt, artifact = (event.get("format") or "").lower(), event.get("artifact")
         if fmt and artifact and (only is None or only(artifact)):
-            moving = motion in ("animation", "svg", "video")
-            held = latest.get(fmt)
-            if held is None or moving or not held[0]:
-                latest[fmt] = (moving, event)       # later events win within the same kind
+            candidates.append(event)
+
+    # **The piece is one name in several formats, never the last render of each.** nightshift5's last PNG was a probe
+    # and its last PDF the pitch book, and the film was offered as `.mp4 .webp .png .pdf`. The name the workflows give
+    # it wins where the run wrote one; otherwise the name of its latest moving render, else of its best format.
+    stems = {Path(e["artifact"]).stem for e in candidates}
+    stem = next((s for s in PIECE_STEMS if s in stems), None)
+    if stem is None and candidates:
+        moving = [e for e in candidates if (e.get("motion") or "").lower() in ("animation", "svg", "video")]
+        best = moving[-1] if moving else min(reversed(candidates), key=lambda e: (
+            FORMAT_ORDER.index(e["format"].lower()) if e["format"].lower() in FORMAT_ORDER else 99))
+        stem = Path(best["artifact"]).stem
+
+    latest: dict[str, tuple[bool, dict[str, Any]]] = {}
+    for event in candidates:
+        if Path(event["artifact"]).stem != stem:
+            continue
+        fmt = event["format"].lower()
+        moving = (event.get("motion") or "").lower() in ("animation", "svg", "video")
+        held = latest.get(fmt)
+        if held is None or moving or not held[0]:
+            latest[fmt] = (moving, event)       # later events win within the same kind
 
     formats = []
     for fmt in sorted(latest, key=lambda f: (FORMAT_ORDER.index(f) if f in FORMAT_ORDER else 99, f)):

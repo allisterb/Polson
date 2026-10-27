@@ -166,12 +166,14 @@ CARDS: tuple[Card, ...] = (
     # clock, so 30 is the most the form offers. A director who wants longer says so in the brief.
     Card("film-trailer", "Film trailer", "video", "Video · 15 seconds, one film per audience",
          (Route("motion", "Motion graphics trailer"),),
+         image="film-trailer.webp", alt="A trailer's end card: a cracked vinyl record beside the title",
          extras=(Extra("duration", "Duration", ("15 seconds", "30 seconds"), "15 seconds"),),
          audiences=True, types=()),
     # Dynamic creative: one product, an ad per audience, each from that audience's buyers (Qloo). The motion
     # workflow's `product` type; its evidence method is `docs/internal/product-ad-probe.md`.
     Card("product-ad", "Product ad", "video", "Video · 15 seconds, one ad per audience",
          (Route("motion", "Motion graphics ad"),),
+         image="product-ad.webp", alt="The end card of an ad for a canned cold brew coffee",
          # What the director types goes under the brief, where there is room to write it; the bar keeps the choices.
          extras=(Extra("product", "Product", placeholder="Its name, and what it is", long=True, rows=2),
                  Extra("comparables", "Comparable brands", placeholder="Two or three real brands like it", long=True, rows=2),
@@ -185,6 +187,7 @@ CARDS: tuple[Card, ...] = (
     # its Qloo profile and with its figures written as that place writes them (Locale.number); without, one film.
     Card("report-explainer", "Report explainer", "video", "Video · 45 seconds, questions answered from a report",
          (Route("motion", "Motion graphics explainer"),),
+         image="report-explainer.webp", alt="A shareholder letter's question answered on screen: where the capacity is built",
          extras=(Extra("viewer", "Who is watching", placeholder="Who they are, and what they already know", long=True),
                  Extra("questions", "Their questions", placeholder="One question a line, up to five", long=True),
                  Extra("duration", "Duration", ("45 seconds", "60 seconds"), "45 seconds")),
@@ -194,6 +197,7 @@ CARDS: tuple[Card, ...] = (
     # labelled as one, the ask as stated. With places, a film per investor audience in its conventions; without, one.
     Card("startup-pitch", "Startup pitch", "video", "Video · 2 minutes from the deck, one film per investor audience",
          (Route("motion", "Motion graphics pitch"),),
+         image="startup-pitch.webp", alt="The ask from a retold startup pitch deck",
          extras=(Extra("company", "Company", placeholder="Its name, as the deck gives it"),
                  Extra("told_as", "Told as", ("The company's own pitch", "A retelling of a past deck"),
                        "The company's own pitch"),
@@ -209,12 +213,14 @@ CARDS: tuple[Card, ...] = (
     # it is drawn and the film read back after. The Nebius entry's; the `math_explainer` workflow.
     Card("maths-explainer", "Maths explainer", "video", "Video · a theorem or concept, every step checked",
          (Route("math_explainer", "Maths explainer"),),
+         image="maths-explainer.webp", alt="The area under y = x² from 0 to 2 worked out as 8/3",
          extras=(Extra("topic", "Theorem or concept", placeholder="Named as a textbook would name it"),
                  Extra("viewer", "Who is watching", placeholder="Their level, and what they already know", long=True),
                  Extra("duration", "Duration", ("45 seconds", "60 seconds", "90 seconds"), "60 seconds"),
                  Extra("narration", "Narration", ("A voice", "None: every word on screen"), "A voice"))),
     Card("motion-graphic", "Motion graphic", "motion", "Animation · one action, keyed",
          (Route("animation", "One keyed action"),),
+         image="motion-graphic.webp", alt="A jointed figure at a railing, one arm swept out toward a boat",
          extras=(Extra("duration", "Duration", ("2 seconds", "4 seconds", "8 seconds"), "4 seconds"),
                  Extra("loop", "Loop", ("Loops", "Plays once"), "Loops"))),
     Card("storyboard", "Storyboard", "image", "Image · 6 to 12 panels",
