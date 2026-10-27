@@ -133,6 +133,13 @@ label.ps-asset-upload { box-sizing: border-box; width: 148px; }
 .fr-doc-head > div { flex: 1; min-width: 0; }
 .fr-doc-head .fr-small { margin: var(--space-1) 0 0; }
 .fr-doc-code { max-height: 75vh; }
+/* A render a document names, opened in place under the text that names it. */
+.fr-prose a.fr-artifact-link { text-decoration: underline dotted; text-underline-offset: 3px; }
+.fr-prose a.fr-artifact-link[aria-expanded="true"] { text-decoration-style: solid; }
+.fr-artifact-figure { display: grid; gap: var(--space-1); justify-items: start; margin: var(--space-3) 0 var(--space-4); }
+.fr-artifact-figure :is(img, video) { display: block; max-width: 100%; max-height: 70vh; border-radius: var(--radius-md); background: var(--gallery); }
+.fr-artifact-figure iframe { width: 100%; height: 70vh; border: 1px solid var(--line); border-radius: var(--radius-md); }
+.fr-artifact-figure figcaption { margin: 0; }
 /* Markdown as a document. Headings at document sizes rather than the transcript's small ones; tables keep their
    columns and scroll sideways rather than squeezing, since direction.md's carry the evidence in them. */
 .fr-prose { font: 400 15px/24px var(--font-sans); color: var(--ink); overflow-wrap: anywhere; }

@@ -1635,6 +1635,26 @@ class DeliverableRouteTests(unittest.TestCase):
         self.assertNotIn('href="javascript:', text)
         self.assertIn('<a href="https://example.org" target="_blank" rel="noopener noreferrer">ok</a>', text)
 
+    def test_rendered_links_each_render_the_document_names_that_the_run_serves(self):
+        """concepts.md says "…is artifacts/03_matrix_a.png." The studio, not the agent, knows where that is served."""
+        project = self.root / "acme"
+        (project / "artifacts").mkdir(exist_ok=True)
+        for name in ("artifacts/03_matrix_a.png", "artifacts/03_kit.png", "output.webp"):
+            (project / name).write_bytes(b"RIFF")
+        (project / "documents" / "photo.png").write_bytes(b"\x89PNG")
+        (project / "findings.md").write_text(
+            "The matrix is artifacts/03_matrix_a.png. Also `03_kit.png`, `output.webp` and artifacts/missing.png.\n\n"
+            "Not documents/photo.png, nor https://example.org/artifacts/03_kit.png, nor `artifacts/../documents/photo.png`.\n\n"
+            "| a |\n| --- |\n| [named](https://example.org) artifacts/03_kit.png |\n", encoding="utf-8")
+
+        text = self.client.get("/runs/acme-1/deliverables/findings.md?rendered=1").text
+
+        links = re.findall(r'<a class="fr-artifact-link" data-artifact="([^"]+)"', text)
+        self.assertEqual(links, ["artifacts/03_matrix_a.png", "artifacts/03_kit.png", "output.webp", "artifacts/03_kit.png"])
+        self.assertIn('artifacts/03_matrix_a.png</a>. Also', text)  # the sentence's full stop stays outside the link
+        self.assertIn("<code>03_kit.png</code></a>", text)
+        self.assertNotIn("photo.png\"", text)
+
     def test_rendered_is_highlighted_source_for_a_script(self):
         """A script has no rendered form; it is code, so the panel gets the numbered listing."""
         page = self.client.get("/runs/acme-1/deliverables/artwork.js?rendered=1")

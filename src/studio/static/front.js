@@ -508,10 +508,38 @@
     doc.scrollIntoView({ behavior: 'smooth', block: 'start' });
     fetch(deliverableUrl(d.name) + (md ? '?rendered=1' : ''))
       .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
-      .then(function (html) { if (mine === asked) body.innerHTML = html; },
+      .then(function (html) { if (mine === asked) { body.innerHTML = html; artifactLinks(body); } },
             function () { if (mine === asked) body.textContent = d.name + ' could not be shown here. The Raw link opens the file itself.'; });
   }
   if (doc) doc.querySelector('[data-doc-close]').addEventListener('click', closeDoc);
+
+  // A render the document names (`artifacts/03_matrix_a.png`) arrives marked by the server, which links only what
+  // this run serves. A plain click shows it under the paragraph, list item or table that names it, and a second
+  // click puts it away; the href is the file itself, for a new tab or a save.
+  function artifactLinks(body) {
+    body.querySelectorAll('a[data-artifact]').forEach(function (a) {
+      var path = a.dataset.artifact, shown = null;
+      a.href = artifactUrl(path); a.setAttribute('aria-expanded', 'false');
+      a.addEventListener('click', function (ev) {
+        if (ev.button || ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.altKey) return;
+        ev.preventDefault();
+        if (shown) { shown.remove(); shown = null; a.setAttribute('aria-expanded', 'false'); return; }
+        shown = el('figure', 'fr-artifact-figure');
+        var media = VIDEO.test(path) ? el('video') : /\.pdf$/i.test(path) ? el('iframe') : el('img');
+        media.src = a.href;
+        if (media.tagName === 'VIDEO') { media.controls = true; media.muted = true; media.loop = true; media.autoplay = true; }
+        else if (media.tagName === 'IMG') media.alt = path;
+        else media.title = path;
+        var cap = el('figcaption', 'fr-small', path);
+        media.addEventListener('error', function () { cap.textContent = path + ' could not be shown here; the link opens the file itself.'; });
+        shown.appendChild(media); shown.appendChild(cap);
+        var item = a.closest('li'), block = a.closest('table') || a.closest('p, blockquote, h1, h2, h3, h4, h5, h6');
+        if (item && !(block && item.contains(block))) item.appendChild(shown);
+        else (block || a).insertAdjacentElement('afterend', shown);
+        a.setAttribute('aria-expanded', 'true');
+      });
+    });
+  }
 
   var source = new EventSource(base + '/runs/' + encodeURIComponent(run) + '/events');
   function on(type, fn) { source.addEventListener(type, function (m) { try { fn(JSON.parse(m.data)); } catch (err) { /* a malformed line is skipped, as the record reader does */ } }); }
