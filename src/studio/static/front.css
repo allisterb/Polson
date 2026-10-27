@@ -82,7 +82,14 @@ label.ps-otile { box-sizing: border-box; }
 .fr-seg-opt:has(input:focus-visible) { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 @media (max-width: 640px) { .fr-tech { grid-template-columns: 1fr; gap: var(--space-2); } }
 .fr-audiences { display: grid; gap: var(--space-2); }
-.fr-audience { display: grid; grid-template-columns: 24px minmax(0, 1fr) 150px; align-items: center; gap: var(--space-2); }
+.fr-audience { display: grid; grid-template-columns: 24px minmax(0, 1fr) 150px 170px; align-items: center; gap: var(--space-2); }
+/* On a phone the place takes the row and the age band and language sit under it. */
+@media (max-width: 720px) {
+  .fr-audience { grid-template-columns: 24px minmax(0, 1fr) minmax(0, 1fr); }
+  .fr-audience input { grid-column: 2 / 4; }
+  .fr-audience select[name="aud_age"] { grid-column: 2; }
+  .fr-audience select[name="aud_lang"] { grid-column: 3; }
+}
 .fr-audience input, .fr-audience select { box-sizing: border-box; height: var(--control-md); min-width: 0; padding: 0 var(--space-3); border: 1px solid var(--line-control); border-radius: var(--radius-md); background: var(--surface-raised); font: 400 15px/22px var(--font-sans); color: var(--ink); }
 .fr-letter { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font: 600 12px/1 var(--font-sans); }
 .fr-learned { display: grid; gap: var(--space-5); align-content: start; }

@@ -5271,7 +5271,11 @@ return canvas;
 
 - `Verify.film(comp: MotionComposition, video: string, options?: { computed?: object, scale?: string[] })` → `Promise<object>` — The film checked: `{ ok, passed, items, strays, counts, summary, model }`, or `{ ok: false, failureName, error, remedy }` when the watcher could not watch. `video` is project-relative. The watcher is told the film's length and asked for times in seconds; should it answer in another unit anyway — every time a tenth or a hundredth of the true one, in order, as it once did — the times are read at the scale that matches the texts, and the `summary` says so.
   - `items`: one per text set, each `{ text, from, to, seconds, source, detail, seen, readAs, readAt, status }`, `status` one of `'seen'`, `'missed'` or `'never shown'`.
-  - `strays`: one per reading of text the film never set, each `{ n, read, at, frame, near, kind, verdict, note }`, `kind` either `'different figure'` or `'never set'`.
+  - `strays`: one per reading of text the film never set, each `{ n, read, at, frame, near, kind, verdict, note }`, `kind` `'different figure'`, `'never set'`, or `'unreadable script'`.
+  - **Arabic is left to your eye.** The reader misread whole Arabic words that were drawn correctly (2026-10-27), so a text
+    in Arabic that it did not read as set is `status: 'unchecked'`, not `'missed'`, and an Arabic reading is a stray of kind
+    `'unreadable script'`; `counts.unchecked` counts them and the `summary` says so. Look at each frame and answer
+    `Verify.stray(n, 'misread' | 'real')` from what it shows. `Verify.image` does the same for a still.
   - `passed`: no unsourced figure, no stray still to look at, and no stray found real.
   - `scale`: the axis labels exactly as set, sourced as `scale`.
   - `computed`: maps a text exactly as set to its working, `{ '+454%': '582.3 / 105.1 − 1' }`. A key's figures also source those figures wherever else they are set: `{ 'Top 4.4%': '22 / 500' }` sources 4.4 inside a longer line.
@@ -6453,7 +6457,15 @@ comp.render(0.8);
 > **Timing is the channels' to carry**, and the corpus has two sources for it: Essa's thesis has an expression rise and fall exponentially and the eyes lag the mouth by about three frames in a smile; Stanchfield (Manual 25 §11) staggers the stops so parts do not all land on one frame. The example keys `AU6` a little after `AU12` for that reason. **`Motion.nodes.envelope({ at })` is Essa's curve as one node**: give a channel a hit rather than keys — `AU12: n.envelope({ at: 0.55, hold: 0.5 })`, `browTop: n.envelope({ at: 1.85, peak: 1.2 }, { from: 3 })`.
 ### Speech — `Motion.speech`
 
-`Motion.speech(text, options?)` → a line of dialogue as phonemes and mouth shapes over time, **from its text alone**. Options `{ start?, rate?, set?, pronounce?, guess?, audio?, lead?, minimum? }`.
+`Motion.speech(text, options?)` → a line of dialogue as phonemes and mouth shapes over time, **from its text alone**. Options `{ start?, rate?, set?, pronounce?, guess?, audio?, lead?, minimum?, language? }`.
+
+> [!IMPORTANT]
+> **A line in another language says so: `{ audio: spoken.path, language: 'ja' }`.** Everything below — the dictionary, the
+> guesses, the aligner — is English, and a Japanese or Hindi line once stopped the script with *"the aligner could not
+> place any word"*. With `language` other than `'en'` (or `'en-…'`), the line is **timed by its recording whole**: one
+> entry in `words`, the whole line, from where the voice starts to where it stops (`source: 'recording'`), with `start`
+> where the recording begins; no phonemes, and `rest` for the mouths, so it narrates and does not lip-sync. It needs
+> its `audio`, and refuses `pronounce`. `speech.language` says which; `speech.english` whether it was sounded word by word.
 
 - **The sounds are the dictionary's**: every word is looked up in the **CMU Pronouncing Dictionary** (Carnegie Mellon, as CMU Sphinx maintains it; 126,052 words), keeping its stress marks. It is fetched, not committed: `py tools/bootstrap.py --only speech` puts it beside the assembly, and without it `Motion.speech` says so. "the" before a vowel becomes *thee*; hyphenated words not in the dictionary are read as their parts. `pronounce: { zorblax: 'Z AO1 R B L AE0 K S' }` (CMU's 39 phonemes, each vowel with its stress 0, 1 or 2) gives a word its sounds, ahead of everything else, and chooses between a heteronym's readings (`pronounce: { read: 'R EH1 D' }`).
 - **What the dictionary lacks, the speech backend fills, when it is installed** (`py -3.13 tools/bootstrap.py --only speech-venv`; g2p-en in `python-speech/`): **a word no dictionary has is guessed**, and **a number is spelled out** — `4.5` is said "four point five", `$250` "two hundred fifty dollars", `3rd` "third", `2026` "twenty twenty-six"; `%` is "percent". Only those gaps leave the process, all in one call per line, and the answers are remembered. **Look at `speech.guessed`**: the guesses are plausible for invented words and weaker for names (measured: "Kaveh" lost its last syllable), so a character's name belongs in `pronounce`. **Without the backend, or with `guess: false`, those words and numbers are refused by name**, saying how to install it. Heteronyms are not guessed: the backend's table is weak on them, and in Preston Blair's chart most heteronyms show the same mouths either way.

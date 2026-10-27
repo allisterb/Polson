@@ -35,8 +35,11 @@
       if (!out) return;
       if (pop.hasAttribute('data-audiences')) {
         var who = Array.prototype.map.call(pop.querySelectorAll('[data-audience]'), function (row) {
-          var place = row.querySelector('input').value.trim(), age = row.querySelector('select');
-          return place ? place + (age.value ? ' (' + age.selectedOptions[0].textContent + ')' : '') : '';
+          var place = row.querySelector('input').value.trim(), age = row.querySelector('select[name=aud_age]');
+          var lang = row.querySelector('[data-language]'), said = [];
+          if (age && age.value) said.push(age.selectedOptions[0].textContent);
+          if (lang && lang.value) said.push('in ' + lang.selectedOptions[0].textContent);
+          return place ? place + (said.length ? ' (' + said.join(', ') + ')' : '') : '';
         }).filter(Boolean);
         out.textContent = who.length ? who.join(', ') : pop.hasAttribute('data-optional') ? 'Anyone (optional)' : 'Who is it for?';
         out.classList.toggle('is-empty', !who.length);
@@ -1113,10 +1116,11 @@
     placed.forEach(function (p) {
       var it = p.it, y = axis + p.lane * (barH + gap);
       var w = Math.max(x(it.to + 1 / 12) - x(it.from), 3);
-      var g = svgEl('g', { 'class': 'vt-bar vt-src-' + srcKey(it.source) + (it.status === 'missed' ? ' vt-missed' : '') }, svg);
+      var g = svgEl('g', { 'class': 'vt-bar vt-src-' + srcKey(it.source) + (it.status === 'missed' || it.status === 'unchecked' ? ' vt-missed' : '') }, svg);
       svgEl('title', {}, g).textContent = it.text.replace(/\n/g, ' ') + ' — on screen ' + it.from.toFixed(1) + '–' + it.to.toFixed(1) + ' s · '
         + (SOURCE[it.source] || it.source) + (it.detail ? ' (' + it.detail + ')' : '') + ' · '
-        + (it.status === 'seen' ? 'read by the watcher' + (it.readAs && it.readAs !== it.text ? ' as “' + it.readAs + '”' : '') : 'not read by the watcher');
+        + (it.status === 'seen' ? 'read by the watcher' + (it.readAs && it.readAs !== it.text ? ' as “' + it.readAs + '”' : '')
+          : it.status === 'unchecked' ? UNCHECKED : 'not read by the watcher');
       svgEl('rect', { x: x(it.from), y: y, width: w, height: barH, rx: 3 }, g);
       if (w > 34) svgEl('text', { x: x(it.from) + 4, y: y + 13 }, g).textContent = clipText(it.text.replace(/\n/g, ' '), Math.floor(w / 6.2));
     });
@@ -1143,9 +1147,10 @@
     var stroke = Math.max(W, H) / 400;
     (check.items || []).forEach(function (it) {
       if (it.status === 'off the canvas') return;
-      var g = svgEl('g', { 'class': 'vt-bar vt-src-' + srcKey(it.source) + (it.status === 'missed' ? ' vt-missed' : '') }, svg);
+      var g = svgEl('g', { 'class': 'vt-bar vt-src-' + srcKey(it.source) + (it.status === 'missed' || it.status === 'unchecked' ? ' vt-missed' : '') }, svg);
       svgEl('title', {}, g).textContent = it.text + ' · ' + (SOURCE[it.source] || it.source) + (it.detail ? ' (' + it.detail + ')' : '') + ' · '
-        + (it.status === 'seen' ? 'read' + (it.readAs && it.readAs !== it.text ? ' as “' + it.readAs + '”' : ' as set') : 'not read');
+        + (it.status === 'seen' ? 'read' + (it.readAs && it.readAs !== it.text ? ' as “' + it.readAs + '”' : ' as set')
+          : it.status === 'unchecked' ? UNCHECKED : 'not read');
       (it.boxes && it.boxes.length ? it.boxes : [it.box]).forEach(function (b) {
         if (b) svgEl('rect', { x: b[0], y: b[1], width: b[2], height: b[3], rx: stroke, 'stroke-width': stroke }, g);
       });
@@ -1153,14 +1158,20 @@
     return svg;
   }
 
+  // What an Arabic line's status says: the reader misreads Arabic, so its line is checked by eye, not read back.
+  var UNCHECKED = 'not checked: the reader cannot be trusted to read Arabic, so the studio checked it by eye';
+
   // The summary line and the legend, shared by a film's card and a still's.
   function verifySummary(check, what) {
     var items = check.items || [];
     var seen = items.filter(function (i) { return i.status === 'seen'; }).length;
+    var unchecked = items.filter(function (i) { return i.status === 'unchecked'; }).length;
     var unsourced = items.filter(function (i) { return i.source === 'unsourced figure'; }).length;
     var real = (check.strays || []).filter(function (s) { return s.verdict === 'real'; }).length;
     return items.length + ' texts ' + what + ' · ' + seen + ' read back as set by an independent ' + (check.video ? 'watcher' : 'reader')
-      + (check.model ? ' (' + check.model + ')' : '') + ' · ' + (unsourced ? unsourced + ' figure' + (unsourced === 1 ? '' : 's') + ' with no source' : 'every figure sourced')
+      + (check.model ? ' (' + check.model + ')' : '')
+      + (unchecked ? ' · ' + unchecked + ' in Arabic, which the reader cannot check' : '')
+      + ' · ' + (unsourced ? unsourced + ' figure' + (unsourced === 1 ? '' : 's') + ' with no source' : 'every figure sourced')
       + (real ? ' · ' + real + ' fault' + (real === 1 ? '' : 's') + ' found' : '')
       + (check.pending ? ' · ' + check.pending + ' reading' + (check.pending === 1 ? '' : 's') + ' still to be looked at' : '');
   }
@@ -1289,7 +1300,8 @@
         if (it.detail) src.appendChild(el('span', 'fr-small', ' ' + it.detail));
         tr.appendChild(src);
         tr.appendChild(el('td', '', it.status === 'seen' ? (it.readAs && it.readAs.replace(/\s+/g, ' ') !== it.text.replace(/\s+/g, ' ') ? '✓ as “' + it.readAs + '”' : '✓ as set')
-          : it.status === 'missed' ? 'not read (' + (it.seconds || 0).toFixed(1) + ' s on screen)' : '—'));
+          : it.status === 'missed' ? 'not read (' + (it.seconds || 0).toFixed(1) + ' s on screen)'
+          : it.status === 'unchecked' ? 'not checked: Arabic, checked by eye' : '—'));
         table.appendChild(tr);
       });
       card.appendChild(table);
@@ -1302,7 +1314,9 @@
           if (s.frame) { var img = el('img'); img.loading = 'lazy'; img.alt = 'The frame at ' + s.at + ' s'; img.src = base + '/runs/' + run + '/artifact/' + s.frame; row.appendChild(img); }
           var cap = el('figcaption', 'fr-small');
           cap.textContent = 'Read “' + s.read + '” at ' + s.at + ' s' + (s.near ? '; the film set “' + s.near + '”' : '') + '. '
-            + (s.verdict === 'real' ? 'A fault in the film.' : 'The frame shows what the film set: the watcher misread it.') + (s.note ? ' ' + s.note : '');
+            + (s.verdict === 'real' ? 'A fault in the film.' : s.kind === 'unreadable script'
+              ? 'Arabic, which the watcher cannot read reliably: the studio looked at the frame and it shows the line as set.'
+              : 'The frame shows what the film set: the watcher misread it.') + (s.note ? ' ' + s.note : '');
           row.appendChild(cap);
           list.appendChild(row);
         });
@@ -1331,7 +1345,8 @@
         if (it.detail) src.appendChild(el('span', 'fr-small', ' ' + it.detail));
         tr.appendChild(src);
         tr.appendChild(el('td', '', it.status === 'seen' ? (it.readAs && it.readAs.replace(/\s+/g, ' ') !== it.text.replace(/\s+/g, ' ') ? '✓ as “' + it.readAs + '”' : '✓ as set')
-          : it.status === 'missed' ? 'not read' + (it.closest ? ' (closest: “' + it.closest + '”)' : '') : 'off the canvas'));
+          : it.status === 'missed' ? 'not read' + (it.closest ? ' (closest: “' + it.closest + '”)' : '')
+          : it.status === 'unchecked' ? 'not checked: Arabic, checked by eye' : 'off the canvas'));
         table.appendChild(tr);
       });
       card.appendChild(table);

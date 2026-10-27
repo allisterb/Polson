@@ -143,7 +143,7 @@ public sealed partial class VerifyToolkit
                 ["seen"] = seen is not null,
                 ["readAs"] = Raw(seen?.Text),
                 ["readAt"] = seen?.From,
-                ["status"] = e.From is null ? "never shown" : seen is not null ? "seen" : "missed",
+                ["status"] = e.From is null ? "never shown" : seen is not null ? "seen" : FilmReadBack.Unreadable(e.Text) ? "unchecked" : "missed",
             };
         }).ToArray();
 
@@ -152,7 +152,8 @@ public sealed partial class VerifyToolkit
             var at = Math.Clamp((s.Reading.From ?? 0) + 0.25, 0, comp.Duration);
             var frame = $"artifacts/verify/stray-{i + 1}.png";
             var error = FFmpeg.Frame(full, at, ProjectPath.Resolve(projectRoot, frame, "frame", "Write"));
-            return new ReadBackStray(i + 1, Raw(s.Reading.Text)!, s.Reading.From, error is null ? frame : null, error, s.Near, s.Kind);
+            return new ReadBackStray(i + 1, Raw(s.Reading.Text)!, s.Reading.From, error is null ? frame : null, error, s.Near,
+                FilmReadBack.Unreadable(s.Reading.Text) ? "unreadable script" : s.Kind);
         }).ToList();
 
         return Hold(new FilmCheck(videoPath, comp.Duration, items, strays, answer.Provenance?.Model, answer.Provenance?.Endpoint)
@@ -217,7 +218,7 @@ public sealed partial class VerifyToolkit
                 ["seen"] = seen is not null,
                 ["readAs"] = Raw(seen),
                 ["closest"] = seen is null ? Raw(closest) : null,
-                ["status"] = s.On.Length == 0 ? "off the canvas" : seen is not null ? "seen" : "missed",
+                ["status"] = s.On.Length == 0 ? "off the canvas" : seen is not null ? "seen" : FilmReadBack.Unreadable(s.Text) ? "unchecked" : "missed",
             };
         }).ToArray();
 
@@ -226,10 +227,11 @@ public sealed partial class VerifyToolkit
         {
             // A crop around the line the reading resembles, where to look; otherwise the whole image is where.
             var near = onCanvas.Where(o => o.Text == s.Near).SelectMany(o => o.On).FirstOrDefault();
-            if (near is null) return new ReadBackStray(i + 1, Raw(s.Reading.Text)!, null, imagePath, null, s.Near, s.Kind);
+            var kind = FilmReadBack.Unreadable(s.Reading.Text) ? "unreadable script" : s.Kind;
+            if (near is null) return new ReadBackStray(i + 1, Raw(s.Reading.Text)!, null, imagePath, null, s.Near, kind);
             var crop = $"artifacts/verify/{name}-stray-{i + 1}.png";
             var error = Crop(pixels, near.Box, ProjectPath.Resolve(projectRoot, crop, "crop", "Write"));
-            return new ReadBackStray(i + 1, Raw(s.Reading.Text)!, null, error is null ? crop : imagePath, error, s.Near, s.Kind);
+            return new ReadBackStray(i + 1, Raw(s.Reading.Text)!, null, error is null ? crop : imagePath, error, s.Near, kind);
         }).ToList();
 
         return Hold(new ImageCheck(imagePath, still.Kind, still.Width, still.Height, items, strays, answer.Provenance?.Model, answer.Provenance?.Endpoint)
@@ -682,7 +684,8 @@ public sealed class ReadBackStray(int number, string read, double? at, string? f
     /// <summary>The text set nearest to it, when the reading resembles one: a different figure in a line the piece did set.</summary>
     public string? Near { get; } = near;
 
-    /// <summary><c>'different figure'</c> or <c>'never set'</c>.</summary>
+    /// <summary><c>'different figure'</c>, <c>'never set'</c>, or <c>'unreadable script'</c> — a reading of Arabic, which the
+    /// reader cannot be trusted with, so only the frame says whether it is the line as set.</summary>
     public string Kind { get; } = kind;
 
     /// <summary>Null until looked at; then <c>'misread'</c> or <c>'real'</c>.</summary>
@@ -752,6 +755,7 @@ public abstract class ReadBackCheck(string name, Dictionary<string, object?>[] i
             + (pending == 0 ? "" : $" {pending} reading{(pending == 1 ? "" : "s")} of text the {Piece} never set: look at {evidence} ({string.Join(", ", Strays.Where(s => s.Verdict is null).Select(s => s.Frame ?? "none saved"))}), then Verify.stray(n, 'misread' | 'real').")
             + (real == 0 ? "" : $" {real} confirmed fault{(real == 1 ? "" : "s")} in the {Piece}: fix and {Again} again.")
             + (Ignored.Length == 0 ? "" : $" {Ignored.Length} computed entr{(Ignored.Length == 1 ? "y was" : "ies were")} not used, as the working shows no arithmetic ({string.Join(", ", Ignored.Take(4).Select(k => $"'{Clip(k)}'"))}): a figure from a document is found on its page without one.")
+            + FilmReadBack.UncheckedNote(counts["unchecked"] is int u ? u : 0, Evidence)
             + Note;
         var result = new Dictionary<string, object?>
         {
@@ -784,6 +788,7 @@ public abstract class ReadBackCheck(string name, Dictionary<string, object?>[] i
         ["shown"] = Items.Length,
         ["seen"] = Items.Count(i => (string?)i["status"] == "seen"),
         ["missed"] = Items.Count(i => (string?)i["status"] == "missed"),
+        ["unchecked"] = Items.Count(i => (string?)i["status"] == "unchecked"),
         ["unsourced"] = Items.Count(i => (string?)i["source"] == "unsourced figure"),
         ["strays"] = Strays.Count,
         ["pending"] = Strays.Count(s => s.Verdict is null),
@@ -1059,6 +1064,22 @@ internal static class FilmReadBack
         var split = Regex.Replace(sb.ToString(), @"(?<=\d)(?=\p{L})|(?<=\p{L})(?=\d)", " ");
         return Regex.Replace(Regex.Replace(split, @"(?<!\d)\.|\.(?!\d)", " "), @"\s+", " ").Trim();
     }
+
+    /// <summary>
+    /// Whether a text is in a script the reader cannot be trusted to read: Arabic. In the language probe (2026-10-27) it read
+    /// a correctly drawn Arabic heading as different words, so a match or a miss of Arabic says nothing about the film. Such a
+    /// text is <c>unchecked</c> rather than missed, and a reading of it is a stray of kind <c>'unreadable script'</c>: the
+    /// studio's own eye on the frame is the check.
+    /// </summary>
+    internal static bool Unreadable(string? text) =>
+        (text ?? "").Any(c => c is >= '؀' and <= 'ۿ' or >= 'ݐ' and <= 'ݿ' or >= 'ࢠ' and <= 'ࣿ'
+            or >= 'ﭐ' and <= '﷿' or >= 'ﹰ' and <= '﻿' && char.IsLetter(c));
+
+    /// <summary>What the summary says when texts were left unchecked for their script.</summary>
+    internal static string UncheckedNote(int count, string piece) => count == 0 ? ""
+        : $" {count} text{(count == 1 ? " is" : "s are")} in Arabic, which the reader cannot be trusted to read: {(count == 1 ? "it is" : "they are")} "
+          + $"unchecked, not missed. Look at each in its {piece} yourself and compare it with the line as set, and say in direction.md "
+          + "that the Arabic was checked by eye and by translation back, not by the read-back.";
 
     /// <summary>The figures in a text, commas dropped, in order: "$40.4 billion (282 million)" is 40.4 and 282.</summary>
     internal static string[] Figures(string? text) =>

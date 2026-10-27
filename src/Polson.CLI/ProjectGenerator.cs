@@ -439,6 +439,10 @@ internal static class ProjectGenerator
             // not the workflow's: every one of them asks for plain files in the project directory.
             ["DELIVERABLES"] = Render("_shared", "deliverables.md", []),
 
+            // What an audience line naming a language asks: every word in it, each translated back before it is used.
+            // Shared by the workflows that make a piece per audience — the poster and the film — so the rule is one text.
+            ["LANGUAGE"] = Render("_shared", "language.md", []),
+
             // What earlier runs of this project left behind, and how to write for the next one.
             // Shared because a tool nobody is told to call is never called: `artifact.read` was
             // instrumented and stayed at zero across whole runs until the instructions said to look.

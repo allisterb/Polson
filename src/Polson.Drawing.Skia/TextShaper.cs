@@ -25,9 +25,10 @@ using HB = HarfBuzzSharp;
 internal static class TextShaper
 {
     #region Types
-    /// <summary>One run in one face: glyphs and their positions from the run's own origin, in pixels.</summary>
+    /// <summary>One run in one face: glyphs and their positions from the run's own origin, in pixels; each glyph's
+    /// advance; and where the run's characters are in the line (<see cref="Clusters"/> count from <see cref="Start"/>).</summary>
     internal sealed record Run(SKTypeface Typeface, ushort[] Glyphs, SKPoint[] Positions, uint[] Clusters, float Width,
-        bool RightToLeft);
+        bool RightToLeft, float[] Advances, int Start, int Length);
 
     /// <summary>A shaped line: runs in visual order, left to right, the tracking between them, and the whole advance.</summary>
     internal sealed record Line(Run[] Runs, float Spacing, float Width);
@@ -47,7 +48,8 @@ internal static class TextShaper
     #region Methods
     /// <summary>Shapes <paramref name="text"/> in <paramref name="font"/>, with <paramref name="spacing"/> pixels of
     /// tracking between clusters (never inside one, so a ligature or a joined letter stays whole).</summary>
-    public static Line Shape(string text, SKFont font, float spacing)
+    /// <param name="kerning">False sets it without the font's kerning, as Motion text's <c>kerning: false</c> asks.</param>
+    public static Line Shape(string text, SKFont font, float spacing, bool kerning = true)
     {
         if (string.IsNullOrEmpty(text)) return new Line([], spacing, 0f);
 
@@ -58,7 +60,7 @@ internal static class TextShaper
             var runs = new List<Run>();
             foreach (var (start, length, typeface, dir) in Segment(text, primary, probes))
             {
-                runs.Add(ShapeRun(text.Substring(start, length), typeface, font, dir == Dir.Rtl, spacing));
+                runs.Add(ShapeRun(text.Substring(start, length), typeface, font, dir == Dir.Rtl, spacing, kerning) with { Start = start, Length = length });
             }
 
             var ordered = VisualOrder(runs, ParagraphDirection(text));
@@ -198,7 +200,7 @@ internal static class TextShaper
         return units;
     }
 
-    private static Run ShapeRun(string text, SKTypeface typeface, SKFont font, bool rightToLeft, float spacing)
+    private static Run ShapeRun(string text, SKTypeface typeface, SKFont font, bool rightToLeft, float spacing, bool kerning = true)
     {
         var face = FaceFor(typeface);
         if (face is null) return Unshaped(text, typeface, font, rightToLeft, spacing);
@@ -207,7 +209,8 @@ internal static class TextShaper
         buffer.AddUtf16(text);
         buffer.Direction = rightToLeft ? HB.Direction.RightToLeft : HB.Direction.LeftToRight;
         buffer.GuessSegmentProperties();
-        face.Font.Shape(buffer);
+        if (kerning) face.Font.Shape(buffer);
+        else face.Font.Shape(buffer, HB.Feature.Parse("-kern"));
 
         var infos = buffer.GlyphInfos;
         var positions = buffer.GlyphPositions;
@@ -217,17 +220,19 @@ internal static class TextShaper
         var glyphs = new ushort[infos.Length];
         var points = new SKPoint[infos.Length];
         var clusters = new uint[infos.Length];
+        var advances = new float[infos.Length];
         var pen = 0f;
         for (var i = 0; i < infos.Length; i++)
         {
             glyphs[i] = (ushort)infos[i].Codepoint;
             clusters[i] = infos[i].Cluster;
             points[i] = new SKPoint(pen + positions[i].XOffset * scaleX, -positions[i].YOffset * scale);
-            pen += positions[i].XAdvance * scaleX;
+            advances[i] = positions[i].XAdvance * scaleX;
+            pen += advances[i];
             // Tracking falls between clusters, in visual order, so it never pulls a cluster apart.
             if (spacing != 0f && i < infos.Length - 1 && infos[i + 1].Cluster != infos[i].Cluster) pen += spacing;
         }
-        return new Run(typeface, glyphs, points, clusters, pen, rightToLeft);
+        return new Run(typeface, glyphs, points, clusters, pen, rightToLeft, advances, 0, text.Length);
     }
 
     /// <summary>A run in a face HarfBuzz could not read: character to glyph and advance, as before shaping.</summary>
@@ -237,13 +242,15 @@ internal static class TextShaper
         var glyphs = runFont.GetGlyphs(text);
         var widths = runFont.GetGlyphWidths(glyphs);
         var points = new SKPoint[glyphs.Length];
+        var clusters = new uint[glyphs.Length];
         var pen = 0f;
         for (var i = 0; i < glyphs.Length; i++)
         {
             points[i] = new SKPoint(pen, 0f);
+            clusters[i] = (uint)Math.Min(i, Math.Max(0, text.Length - 1));
             pen += widths[i] + (i < glyphs.Length - 1 ? spacing : 0f);
         }
-        return new Run(typeface, glyphs, points, new uint[glyphs.Length], pen, rightToLeft);
+        return new Run(typeface, glyphs, points, clusters, pen, rightToLeft, widths, 0, text.Length);
     }
 
     private static Face? FaceFor(SKTypeface typeface)

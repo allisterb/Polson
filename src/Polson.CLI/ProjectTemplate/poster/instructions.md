@@ -111,6 +111,8 @@ Taste({ op: 'profile', audience: '{"location":"Mexico City","age":"55_and_older"
 > **aggregate affinities**: the poster speaks to what an audience loves; it never depicts what an
 > audience "is", and never infers anything about a person.
 
+{{LANGUAGE}}
+
 ---
 
 ## Stage 4 — concepts

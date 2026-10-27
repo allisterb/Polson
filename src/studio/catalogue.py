@@ -38,6 +38,22 @@ AGE_BANDS: tuple[tuple[str, str], ...] = (
     ("24_and_younger", "24 and younger"), ("25_to_29", "25 to 29"), ("30_to_34", "30 to 34"),
     ("35_to_44", "35 to 44"), ("45_to_54", "45 to 54"), ("55_and_older", "55 and older"))
 
+#: The languages a poster or film can be made in for an audience, by code, English first and the default. Only those
+#: whose script the engine draws, a separate model reads back, and a voice speaks (probe 2026-10-27): German, Japanese,
+#: Chinese, Korean and Hindi measured, French, Spanish and Portuguese in German's Latin script. Arabic is offered too —
+#: drawn right since Motion text took the canvas's shaper, and voiced — but flagged, see `CHECKED_BY_EYE`.
+LANGUAGES: tuple[tuple[str, str], ...] = (
+    ("", "English"), ("de", "German"), ("fr", "French"), ("es", "Spanish"), ("pt", "Portuguese"),
+    ("ja", "Japanese"), ("zh-Hans", "Chinese (Simplified)"), ("ko", "Korean"), ("hi", "Hindi"), ("ar", "Arabic"))
+
+#: Languages whose text the read-back cannot vouch for: the reader misread whole Arabic words that were drawn correctly
+#: (probe 2026-10-27). Their lines are checked by translation back and by the studio's own eye on the frame, and every
+#: place the language is named says so, so nobody takes an unchecked line for a checked one.
+CHECKED_BY_EYE: frozenset[str] = frozenset({"ar"})
+
+#: What is said of such a language wherever it is named.
+EYE_NOTE = "checked by eye, not read back"
+
 #: The poster and trailer briefs name audiences A, B…. Six lets a set span regions (a western, an African, a Middle
 #: Eastern and an Asian audience, say); the run's time, tokens and Qloo budget grow with the count (`intake`).
 MAX_AUDIENCES = 6
@@ -311,17 +327,19 @@ class Commission:
     formats: list[Format]
     extras: list[tuple[str, str]]
     brief: str
-    audiences: list[tuple[str, str]] = field(default_factory=list)   # (place, age band code or "")
+    audiences: list[tuple[str, str, str]] = field(default_factory=list)   # (place, age band code or "", language code or "")
     #: Design techniques the visitor asked for and ruled out, by id (`techniques.parse`). Not in the brief: they are the
     #: director's settings, not the client's words, and reach the CLI as `--request` / `--deny`.
     request: list[str] = field(default_factory=list)
     deny: list[str] = field(default_factory=list)
 
     def audience_lines(self) -> list[str]:
-        """'Audience A: Tokyo, aged 45 to 54', as the poster and trailer briefs name them."""
-        words = dict(AGE_BANDS)
+        """'Audience A: Tokyo, aged 45 to 54, in Japanese', as the poster and trailer briefs name them. English unsaid."""
+        words, tongues = dict(AGE_BANDS), dict(LANGUAGES)
         return [f"Audience {chr(65 + i)}: {place}" + (f", aged {words[age]}" if age else "")
-                for i, (place, age) in enumerate(self.audiences)]
+                + (f", in {tongues[lang]}" if lang else "")
+                + (f" (its text {EYE_NOTE}: the read-back cannot read {tongues[lang]})" if lang in CHECKED_BY_EYE else "")
+                for i, (place, age, lang) in enumerate(self.audiences)]
 
     def brief_text(self, files: list[str]) -> str:
         """The brief as the agent will read it: the visitor's words, then what to deliver.
@@ -354,27 +372,33 @@ class Commission:
                 "sizes": [{"label": s.label, "width": s.width, "height": s.height} for s in self.sizes],
                 "formats": [f.ext for f in self.formats],
                 "extras": [{"label": k, "value": v} for k, v in self.extras],
-                "audiences": [{"letter": chr(65 + i), "place": p, "age": a, "ageLabel": dict(AGE_BANDS).get(a, "")}
-                              for i, (p, a) in enumerate(self.audiences)],
+                "audiences": [{"letter": chr(65 + i), "place": p, "age": a, "ageLabel": dict(AGE_BANDS).get(a, ""),
+                               "language": lang, "languageLabel": dict(LANGUAGES).get(lang, "") if lang else "",
+                               "readBack": lang not in CHECKED_BY_EYE}
+                              for i, (p, a, lang) in enumerate(self.audiences)],
                 "techniques": {"request": list(self.request), "deny": list(self.deny)}}
 
 
-def parse_audiences(places: list[str], ages: list[str]) -> list[tuple[str, str]]:
-    """Pairs of (place, age band) from the form's parallel lists, blank rows dropped. Raises `StudioError`."""
-    bands = {code for code, _ in AGE_BANDS}
+def parse_audiences(places: list[str], ages: list[str], languages: list[str] | None = None) -> list[tuple[str, str, str]]:
+    """(place, age band, language) from the form's parallel lists, blank rows dropped. Raises `StudioError`."""
+    bands, tongues = {code for code, _ in AGE_BANDS}, {code for code, _ in LANGUAGES}
+    languages = languages or []
     found = []
     for i, place in enumerate(places):
         place = " ".join((place or "").split())
         age = (ages[i] if i < len(ages) else "") or ""
+        lang = (languages[i] if i < len(languages) else "") or ""
         if not place:
-            if age:
+            if age or lang:
                 raise StudioError("Each audience needs a place, such as a city or a country.")
             continue
         if len(place) > 60 or not PLACE.match(place):
             raise StudioError(f"{place[:60]!r} does not read as a place name. Use a city or country, such as Mumbai.")
         if age and age not in bands:
             raise StudioError("Choose an age band from the list.")
-        found.append((place, age))
+        if lang not in tongues:
+            raise StudioError("Choose a language from the list.")
+        found.append((place, age, lang))
     if len(found) > MAX_AUDIENCES:
         raise StudioError(f"That is {len(found)} audiences; a request takes up to {MAX_AUDIENCES}.")
     return found
@@ -382,7 +406,7 @@ def parse_audiences(places: list[str], ages: list[str]) -> list[tuple[str, str]]
 
 def parse(card_slug: str, title: str, route: str, kind: str, sizes: list[str], custom: str,
           formats: list[str], extras: dict[str, str], brief: str,
-          places: list[str] | None = None, ages: list[str] | None = None) -> Commission:
+          places: list[str] | None = None, ages: list[str] | None = None, languages: list[str] | None = None) -> Commission:
     """Checks a composed request against the card's closed sets. Raises `StudioError` with a reason."""
     card = BY_SLUG.get(card_slug)
     if card is None:
@@ -437,7 +461,7 @@ def parse(card_slug: str, title: str, route: str, kind: str, sizes: list[str], c
         if value:
             pairs.append((extra.label, value))
 
-    audiences = parse_audiences(places or [], ages or []) if card.audiences else []
+    audiences = parse_audiences(places or [], ages or [], languages) if card.audiences else []
     if card.audiences and not audiences and not card.audiences_optional:
         raise StudioError(f"Say who the {card.title.lower()} is for: a place and, if it matters, an age band.")
 

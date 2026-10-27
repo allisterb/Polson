@@ -422,7 +422,8 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
                     styles=styles, offered=runs, designs=designs,
                     can_make=not state.observe_only or state.commissioner is not None,
                     drafts=not state.observe_only,
-                    form=form, route=route, refused=refused, ages=catalogue.AGE_BANDS,
+                    form=form, route=route, refused=refused, ages=catalogue.AGE_BANDS, languages=catalogue.LANGUAGES,
+                    checked_by_eye=catalogue.CHECKED_BY_EYE, eye_note=catalogue.EYE_NOTE,
                     max_audiences=catalogue.MAX_AUDIENCES, example_places=catalogue.EXAMPLE_PLACES,
                     accept=",".join(sorted(uploads.DOCUMENT_SUFFIXES)), max_files=uploads.MAX_FILES)
 
@@ -504,8 +505,8 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
                      card: str = Form(...), title: str = Form(""), route: str = Form("0"),
                      kind: str = Form(""), sizes: list[str] = Form([]), custom_size: str = Form(""),
                      formats: list[str] = Form([]), brief: str = Form(""), action: str = Form("save"),
-                     aud_place: list[str] = Form([]), aud_age: list[str] = Form([]), auto: str = Form(""),
-                     files: list[UploadFile] = File([])) -> Any:
+                     aud_place: list[str] = Form([]), aud_age: list[str] = Form([]), aud_lang: list[str] = Form([]),
+                     auto: str = Form(""), files: list[UploadFile] = File([])) -> Any:
         state = request.app.state
         form_data = await request.form()
         extras = {k[2:]: str(v) for k, v in form_data.items() if k.startswith("x_")}
@@ -513,7 +514,8 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
         autonomous = bool(auto.strip())
         form = {"title": title, "route": route, "kind": kind, "sizes": sizes, "custom_size": custom_size,
                 "formats": formats, "brief": brief, "extras": extras, "auto": "1" if autonomous else "",
-                "audiences": [{"place": p, "age": aud_age[i] if i < len(aud_age) else ""}
+                "audiences": [{"place": p, "age": aud_age[i] if i < len(aud_age) else "",
+                               "lang": aud_lang[i] if i < len(aud_lang) else ""}
                               for i, p in enumerate(aud_place)],
                 "techniques": techniques.states(form_data)}
 
@@ -525,12 +527,12 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
                 return composer(request, chosen, form, "This studio can watch requests but not make them. "
                                 "Use the create page instead.", 409)
             return await commissioned(request, chosen, form, title, route, kind, sizes, custom_size, formats,
-                                      extras, brief, aud_place, aud_age, files, autonomous)
+                                      extras, brief, aud_place, aud_age, files, autonomous, aud_lang)
 
         scratch = Path(tempfile.mkdtemp(prefix="polson-request-"))
         try:
             commission = catalogue.parse(card, title, route, kind, sizes, custom_size, formats, extras, brief,
-                                         aud_place, aud_age)
+                                         aud_place, aud_age, aud_lang)
             commission.request, commission.deny = techniques.parse(commission.workflow, form["techniques"])
             staged = await uploads.stage(files, scratch)
             commission.card.check_files([p.name for p in staged])
@@ -567,7 +569,7 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
     async def commissioned(request: Request, chosen: catalogue.Card, form: dict[str, Any], title: str,
                            route: str, kind: str, sizes: list[str], custom_size: str, formats: list[str],
                            extras: dict[str, str], brief: str, aud_place: list[str], aud_age: list[str],
-                           files: list[UploadFile], autonomous: bool = False) -> Any:
+                           files: list[UploadFile], autonomous: bool = False, aud_lang: list[str] | None = None) -> Any:
         """The composer on a host that commissions rather than drives: the ADK runtime.
 
         The commission is checked, staged and named here and made by the host's commissioner, which applies
@@ -580,7 +582,7 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
         scratch = Path(tempfile.mkdtemp(prefix="polson-request-"))
         try:
             commission = catalogue.parse(chosen.slug, title, route, kind, sizes, custom_size, formats, extras,
-                                         brief, aud_place, aud_age)
+                                         brief, aud_place, aud_age, aud_lang)
             commission.request, commission.deny = techniques.parse(commission.workflow, form.get("techniques", {}))
             types = commissioner.types(commission.workflow)
             if types is None:

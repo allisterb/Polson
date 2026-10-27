@@ -24,7 +24,7 @@
     </div>
     <div class="ps-rbar-fields">
       <span class="ps-field fr-static"><span class="ps-field-label">Workflow</span><span class="ps-field-value">{{ row.workflow }}</span></span>
-      {% for a in rec.audiences or [] %}<span class="ps-field fr-static"><span class="ps-field-label">Audience {{ a.letter }}</span><span class="ps-field-value">{{ a.place }}{% if a.ageLabel %}, {{ a.ageLabel }}{% endif %}</span></span>{% endfor %}
+      {% for a in rec.audiences or [] %}<span class="ps-field fr-static"><span class="ps-field-label">Audience {{ a.letter }}</span><span class="ps-field-value">{{ a.place }}{% if a.ageLabel %}, {{ a.ageLabel }}{% endif %}{% if a.languageLabel %}, in {{ a.languageLabel }}{% if a.readBack is false %} (checked by eye, not read back){% endif %}{% endif %}</span></span>{% endfor %}
       {% if rec.sizes %}<span class="ps-field fr-static"><span class="ps-field-label">Sizes</span><span class="ps-field-value">{% for s in rec.sizes %}{{ s.width }} × {{ s.height }}{{ ', ' if not loop.last }}{% endfor %}</span></span>{% endif %}
       {% if rec.formats %}<span class="ps-field fr-static"><span class="ps-field-label">Formats</span><span class="ps-field-value">{{ rec.formats|join(', ') }}</span></span>{% endif %}
       {% for x in rec.extras or [] %}<span class="ps-field fr-static"><span class="ps-field-label">{{ x.label }}</span><span class="ps-field-value">{{ x.value }}</span></span>{% endfor %}

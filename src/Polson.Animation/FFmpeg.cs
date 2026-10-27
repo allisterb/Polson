@@ -552,8 +552,43 @@ public static class FFmpeg
         return wav;
     }
 
-    /// <summary>A WAV's format tag, bits per sample, bytes per second and data length, or null when it is not a WAV it can read.</summary>
-    static (int Tag, int Bits, uint ByteRate, long DataBytes)? Wav(string fullPath)
+    /// <summary>
+    /// Where speech begins and ends in a 16-bit PCM WAV, in seconds from its start: the first and last 10 ms with sound
+    /// in them, a window counting as sound when its level reaches a twentieth of the loudest's. Null when there is none.
+    /// </summary>
+    /// <remarks>For a line <c>Motion.speech</c> cannot align — one in another language — this is its timing: the recording
+    /// says where the line is, so silence a voice leaves before and after is not counted as speaking.</remarks>
+    internal static (double Start, double End)? SpeechSpan(string pcm16Wav)
+    {
+        if (Wav(pcm16Wav) is not { Tag: 1, Bits: 16, ByteRate: > 0 } f || f.Channels < 1) return null;
+        var rate = (int)(f.ByteRate / (2 * f.Channels));
+        var window = Math.Max(1, rate / 100) * f.Channels;
+        var levels = new List<double>();
+        using (var r = new BinaryReader(File.OpenRead(pcm16Wav)))
+        {
+            r.BaseStream.Seek(f.DataStart, SeekOrigin.Begin);
+            // A header can claim more than a cut-short file holds.
+            var left = Math.Min(f.DataBytes, r.BaseStream.Length - f.DataStart) / 2;
+            while (left > 0)
+            {
+                var n = (int)Math.Min(window, left);
+                double sum = 0;
+                for (var i = 0; i < n; i++) { double s = r.ReadInt16(); sum += s * s; }
+                levels.Add(Math.Sqrt(sum / n));
+                left -= n;
+            }
+        }
+        if (levels.Count == 0 || levels.Max() < 1) return null;
+        var floor = levels.Max() / 20;
+        var first = levels.FindIndex(l => l >= floor);
+        var last = levels.FindLastIndex(l => l >= floor);
+        var seconds = (double)window / f.Channels / rate;
+        return (first * seconds, (last + 1) * seconds);
+    }
+
+    /// <summary>A WAV's format tag, bits per sample, bytes per second, data length, channels and where its samples begin,
+    /// or null when it is not a WAV it can read.</summary>
+    static (int Tag, int Bits, uint ByteRate, long DataBytes, int Channels, long DataStart)? Wav(string fullPath)
     {
         try
         {
@@ -561,7 +596,7 @@ public static class FFmpeg
             if (Encoding.ASCII.GetString(r.ReadBytes(4)) != "RIFF") return null;
             r.ReadUInt32();
             if (Encoding.ASCII.GetString(r.ReadBytes(4)) != "WAVE") return null;
-            (int Tag, int Bits, uint ByteRate)? fmt = null;
+            (int Tag, int Bits, uint ByteRate, int Channels)? fmt = null;
             while (r.BaseStream.Position + 8 <= r.BaseStream.Length)
             {
                 var id = Encoding.ASCII.GetString(r.ReadBytes(4));
@@ -569,17 +604,18 @@ public static class FFmpeg
                 if (id == "fmt " && size >= 16)
                 {
                     var tag = r.ReadUInt16();
-                    r.ReadBytes(6);
+                    var channels = r.ReadUInt16();
+                    r.ReadUInt32();
                     var byteRate = r.ReadUInt32();
                     r.ReadUInt16();
-                    fmt = (tag, r.ReadUInt16(), byteRate);
+                    fmt = (tag, r.ReadUInt16(), byteRate, channels);
                     r.BaseStream.Seek(size - 16 + (size & 1), SeekOrigin.Current);
                 }
                 else if (id == "data")
                 {
                     // A streamed WAV writes 0 or 0xFFFFFFFF here and means "to the end".
                     var bytes = size is 0 or uint.MaxValue ? r.BaseStream.Length - r.BaseStream.Position : size;
-                    return fmt is { } f ? (f.Tag, f.Bits, f.ByteRate, bytes) : null;
+                    return fmt is { } f ? (f.Tag, f.Bits, f.ByteRate, bytes, f.Channels, r.BaseStream.Position) : null;
                 }
                 else r.BaseStream.Seek(size + (size & 1), SeekOrigin.Current);
             }
