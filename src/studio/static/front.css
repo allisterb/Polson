@@ -178,6 +178,16 @@ label.ps-asset-upload { box-sizing: border-box; width: 148px; }
 .fr-summary dd { margin: 0; color: var(--ink); }
 .fr-brief-text { max-height: 260px; overflow: auto; margin: var(--space-3) 0 0; padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); background: var(--surface-sunken); font: 400 13px/18px var(--font-sans); white-space: pre-wrap; color: var(--ink); }
 details.fr-more > summary { cursor: pointer; font: 600 13px/18px var(--font-sans); color: var(--ink); }
+/* What a request is about, under its brief: a line beside the paragraphs, and one choice of several as pills. */
+.ps-brief-box input.fr-brief-line { display: block; box-sizing: border-box; width: 100%; padding: var(--space-3) var(--space-4); border: 0; outline: none; background: transparent; font: 400 15px/22px var(--font-sans); color: var(--ink); }
+.ps-brief-box input.fr-brief-line::placeholder { color: var(--ink-muted); }
+fieldset.fr-choice { margin: 0; padding: 0; border: 0; min-width: 0; }
+fieldset.fr-choice legend { padding: 0; margin-bottom: var(--space-1); }
+.fr-choice-row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.fr-choice-pill span { display: inline-block; padding: var(--space-1) var(--space-3); border: 1px solid var(--line-control); border-radius: var(--radius-pill); background: var(--surface-raised); font: 500 14px/22px var(--font-sans); color: var(--ink); cursor: pointer; }
+.fr-choice-pill:hover span { border-color: var(--accent); }
+.fr-choice-pill input:checked + span { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+.fr-choice-pill input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
 .fr-change { margin-top: var(--space-6); }
 .fr-change form { display: flex; gap: var(--space-2); }
 .fr-change textarea { flex: 1; min-height: 44px; padding: var(--space-2) var(--space-3); border: 1px solid var(--line-control); border-radius: var(--radius-md); background: var(--surface-raised); font: 400 15px/22px var(--font-sans); color: var(--ink); resize: vertical; }
