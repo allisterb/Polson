@@ -131,6 +131,22 @@ public class DocumentInteropTests : TestsRuntime, IDisposable
         Assert.Equal("InvalidRequest|true", Logged(result));
     }
 
+    /// <summary><c>Documents.find</c> reaches a script, awaited like <c>ask</c>, and its hits read as an array.</summary>
+    [Fact]
+    public async Task TestFindIsReachableFromAScript()
+    {
+        File.WriteAllText(Path.Combine(root, "notes.txt"), "Revenue was 215,938.");
+        JsDrawingEngine.Documents = new DocumentProcessor("k", new DocumentBudget(5), root);
+
+        var result = await Run("""
+            const f = await Documents.find('notes.txt', 'revenue');
+            log(f.success + '|' + f.hits.length + '|' + f.hits[0].page + '|' + f.unsearched.length);
+            """);
+
+        Assert.True(result.Success, result.Error);
+        Assert.Equal("true|1|1|0", Logged(result));
+    }
+
     /// <summary>
     /// A refusal is its own event, and it is not an asset requisition.
     /// </summary>

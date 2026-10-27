@@ -114,6 +114,46 @@ public sealed record DocumentOptions
 
 #region Results
 
+/// <summary>Where a phrase is in a document: <c>Documents.find(...)</c>. Free: no model reads anything.</summary>
+/// <remarks>JS-exposed: members are PascalCase here and camelCase in scripts (<c>hits</c>, <c>unsearched</c>).</remarks>
+public sealed record DocumentSearch
+{
+    public bool Success { get; init; }
+
+    /// <summary>The failure as a readable name — <c>'None'</c> when it succeeded.</summary>
+    public string FailureName => Failure.ToString();
+
+    public DocumentFailure Failure { get; init; }
+
+    public string? Error { get; init; }
+
+    /// <summary>The pages carrying the phrase, in page order, at most <see cref="DocumentProcessor.MaxHits"/>.</summary>
+    public DocumentHit[] Hits { get; init; } = [];
+
+    /// <summary>More pages carry it than <see cref="Hits"/> lists: find a longer phrase.</summary>
+    public bool More { get; init; }
+
+    /// <summary>Pages in the document.</summary>
+    public int Pages { get; init; }
+
+    /// <summary>Pages, from 1, with no text layer that have not been OCR'd yet, so were not searched. Asking a question of
+    /// a page OCRs it, and it is searched from then on.</summary>
+    public int[] Unsearched { get; init; } = [];
+}
+
+/// <summary>One page a phrase is on.</summary>
+public sealed record DocumentHit
+{
+    /// <summary>Counted from 1, as <c>[Page n]</c> and <c>pages</c> count them; not the number printed on the page.</summary>
+    public required int Page { get; init; }
+
+    /// <summary>How many times the phrase is on the page.</summary>
+    public required int Count { get; init; }
+
+    /// <summary>The first place it is, with the text around it, whitespace collapsed.</summary>
+    public required string Context { get; init; }
+}
+
 /// <summary>
 /// An answer read out of a supplied document.
 /// </summary>

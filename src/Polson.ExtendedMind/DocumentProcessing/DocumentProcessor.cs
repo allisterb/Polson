@@ -66,6 +66,12 @@ public class DocumentProcessor : Runtime, IDisposable
     /// <summary>Default model. Flash reads documents well and is what a budget is sized against.</summary>
     public const string DefaultModel = "gemini-2.5-flash";
 
+    /// <summary>Most pages <see cref="Find"/> lists; past it, <c>more</c> says a longer phrase is wanted.</summary>
+    public const int MaxHits = 40;
+
+    /// <summary>Characters of context <see cref="Find"/> gives either side of a match.</summary>
+    const int ContextChars = 80;
+
     public string Model { get; }
 
     /// <summary>Remaining allowance, readable by scripts so an agent can plan rather than hit a wall.</summary>
@@ -260,6 +266,89 @@ public class DocumentProcessor : Runtime, IDisposable
         inFlight[readKey] = reading;
         _ = reading.ContinueWith(_ => inFlight.TryRemove(readKey, out var _), TaskScheduler.Default);
         return await WaitFor(reading, named, useModel, ct);
+    }
+
+    /// <summary>
+    /// The pages a phrase is on: <c>Documents.find('documents/s1.pdf', 'Consolidated Statements of Operations')</c>.
+    /// </summary>
+    /// <param name="source">A project-relative path, or the bytes themselves.</param>
+    /// <param name="phrase">Words to find, matched ignoring case and how the text is broken across lines.</param>
+    /// <remarks>
+    /// <b>Free, offline and exact</b>: the page text the reader keeps, searched here, with no model and no budget. It is how
+    /// a long document's pages are found before <c>pages</c> asks them a question. A contents page cannot do it: the S-1
+    /// was printed from HTML, so its printed page numbers drift from the PDF's — printed page 5 is the PDF's twelfth — and
+    /// the gap grows through the document.
+    /// </remarks>
+    public async Task<DocumentSearch> Find(object? source, string? phrase, CancellationToken ct = default)
+    {
+        var wanted = Normal(phrase ?? "");
+        if (wanted.Length == 0) return new DocumentSearch { Failure = DocumentFailure.NoQuery, Error = "Nothing to find: give some words." };
+
+        byte[] bytes;
+        string mime;
+        string named;
+        try
+        {
+            (bytes, mime, named) = Read(source, new DocumentOptions());
+        }
+        catch (DocumentRefusal refusal)
+        {
+            return new DocumentSearch { Failure = refusal.Failure, Error = refusal.Message };
+        }
+
+        PagedText? paged;
+        try
+        {
+            paged = await PageText(bytes, mime, ct);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or TooManyScannedPages or TimeoutException)
+        {
+            return new DocumentSearch { Failure = DocumentFailure.ServiceError, Error = $"{named} could not be read as text: {ex.Message}" };
+        }
+        if (paged is null)
+            return new DocumentSearch { Failure = DocumentFailure.UnsupportedType,
+                Error = $"{named} cannot be searched: find reads PDFs and text files, and a PDF needs mutool." };
+
+        var hits = new List<DocumentHit>();
+        for (var p = 1; p <= paged.Pages.Count; p++)
+        {
+            var text = Normal(paged.Pages[p - 1]);
+            var at = text.IndexOf(wanted, StringComparison.Ordinal);
+            if (at < 0) continue;
+            var count = 0;
+            for (var i = at; i >= 0; i = text.IndexOf(wanted, i + wanted.Length, StringComparison.Ordinal)) count++;
+            var from = Math.Max(0, at - ContextChars);
+            var to = Math.Min(text.Length, at + wanted.Length + ContextChars);
+            hits.Add(new DocumentHit { Page = p, Count = count,
+                Context = (from > 0 ? "…" : "") + Collapse(paged.Pages[p - 1], from, to) + (to < text.Length ? "…" : "") });
+        }
+
+        int[] unsearched = [.. (paged.Scanned ?? []).Except(paged.OcrPages).Order()];
+        return new DocumentSearch { Success = true, Hits = [.. hits.Take(MaxHits)], More = hits.Count > MaxHits,
+            Pages = paged.Pages.Count, Unsearched = unsearched };
+    }
+
+    /// <summary>
+    /// A document's pages as text without asking a model, for <see cref="Find"/>; null when this reader has no way to.
+    /// </summary>
+    /// <remarks>A text file is one page. A PDF needs a page reader, which <see cref="NemotronDocumentProcessor"/> has; it
+    /// OCRs nothing here, so a scan not yet read is listed as unsearched rather than making a search slow.</remarks>
+    protected virtual Task<PagedText?> PageText(byte[] bytes, string mime, CancellationToken ct) =>
+        Task.FromResult(IsText(mime) ? new PagedText { Pages = [Encoding.UTF8.GetString(bytes)] } : null);
+
+    /// <summary>Whether a type is read as plain text: text files, JSON, XML.</summary>
+    protected static bool IsText(string mime) =>
+        mime.StartsWith("text/", StringComparison.OrdinalIgnoreCase) || mime is "application/json" or "application/xml";
+
+    /// <summary>Text as a search compares it: lower case, curly apostrophes straight, every run of whitespace one space.</summary>
+    private static string Normal(string s) =>
+        string.Join(' ', s.Replace('’', '\'').Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)).ToLowerInvariant();
+
+    /// <summary>Characters <c>from</c>–<c>to</c> of the page's normalised text, in its own case.</summary>
+    private static string Collapse(string page, int from, int to)
+    {
+        var plain = string.Join(' ', page.Replace('’', '\'').Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        return plain[from..Math.Min(to, plain.Length)];
     }
 
     /// <summary>The read waited on for <see cref="WaitSeconds"/>; past that, <c>Pending</c>, and it carries on into the cache.</summary>

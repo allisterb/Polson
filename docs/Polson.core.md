@@ -4970,9 +4970,22 @@ if (answer.unverified.length) error('Not on their pages: ' + answer.unverified.j
 > [!IMPORTANT]
 > **A long document is read a few pages at a time: `{ pages: '40-60, 75' }`.** Without it every page goes with every
 > question, and a 313-page S-1 is about 400k tokens a call: slow, and a long way for the model to look for one table.
-> Map the document once from its contents pages (`pages: '1-8'`: which page each section starts on, as `[Page n]`
-> counts them), then ask each question of the pages that hold its answer. Pages count from 1 like `[Page n]`, not as
-> printed. **Evidence is found only on the pages read**, so a quote from a page that was not sent is `unverified`; a
+> **Find the pages with `Documents.find`, then ask them.** `find` is free — no model, no budget — and exact; a contents
+> page is not, because printed page numbers drift from the PDF's (the S-1, printed from HTML, has printed page 5 on its
+> twelfth page, and the gap grows). Pages count from 1 like `[Page n]`, not as printed.
+>
+> ```javascript
+> const S1 = 'documents/s1.pdf';
+> const at = await Documents.find(S1, 'Consolidated Statements of Operations');   // every page naming the statement
+> // at.hits: [{ page: 25, count: 1, context: '…' }, …, { page: 263, … }] — the statement itself is the one whose context is its heading
+> const read = await Documents.ask(S1, 'Revenue for each period, as printed', { pages: '263', schema: SHAPE });
+> ```
+>
+> `hits` lists at most 40 pages, in page order, each with how often the phrase is on it and the text around its first
+> appearance; `more` is true when there are more (find a longer phrase). Matching ignores case and line breaks, so a
+> heading that wraps is still found. **`unsearched` lists scanned pages not yet OCR'd**, which `find` cannot see: an
+> empty `hits` with pages in `unsearched` is not proof the phrase is absent. Asking a question of a page OCRs it, and
+> it is searched from then on. **Evidence is found only on the pages read**, so a quote from a page that was not sent is `unverified`; a
 > page past the last is refused, for nothing; `provenance.pages` says how many were read; and the pages are part of the
 > cache key. A model sent the file whole cannot choose pages, and its `provenance.fallback` says it read them all.
 
@@ -5019,6 +5032,7 @@ if (answer.unverified.length) error('Not on their pages: ' + answer.unverified.j
 
 - `Documents.list()` → `DocumentEntry[]` — What the project holds, from its `documents/` folder. **Free, offline, unmetered, and works with no key** — finding out what exists must never cost what reading it costs. Files of a type this surface cannot declare are omitted rather than listed then refused, and the folder's own `README.md` is not listed.
 - `Documents.ask(source: string | byte[], query: string, options?: object)` → `Promise<DocumentAnswer>` — Reads the document and answers the question. `source` is a **project-relative path**, contained exactly as `outFile` is, or the bytes themselves. `options`: `{ model?: string, mimeType?: string, schema?: object, images?: boolean, pages?: string }` — `pages` as a print dialog takes them, `'40-60, 75'`, for a long document (above). A path that is not there comes back naming **what is**, so a near-miss costs one turn rather than several. With `schema` (a JSON Schema object), **`answer.text` is JSON in that shape** — `JSON.parse(answer.text)` — and the schema is part of the cache key.
+- `Documents.find(source: string | byte[], phrase: string)` → `Promise<DocumentSearch>` — **The pages a phrase is on, free.** No model reads anything and nothing is spent: the page text `ask` reads, searched for the words, ignoring case and line breaks. `{ success, hits: [{ page, count, context }], more, pages, unsearched, failureName, error }`; `page` counts from 1 as `pages` does. For a long document, find first and then `ask` with `pages` (above). Reads PDFs and text files.
 - `Documents.budget` → `DocumentBudget` — Remaining allowance. **Check before a run of reads.**
 - `Documents.model` → `string` — The first-choice model: Nemotron 3.5 Super VL when a Nemotron service is configured, else Gemini. `options.model` naming a `gemini-…` model sends the document whole to Gemini.
 - `Documents.isAvailable` → `boolean` — Whether a key is configured. `false` means every call refuses.
