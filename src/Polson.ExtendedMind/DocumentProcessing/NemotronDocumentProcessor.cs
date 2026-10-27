@@ -262,12 +262,28 @@ public class NemotronDocumentProcessor : DocumentProcessor
     }
 
     /// <summary>Whether page <paramref name="page"/> carries the quote: every figure in it, or the words when it has none.</summary>
+    /// <remarks>
+    /// Words are matched piece by piece, in order, between ellipses. A model quoting a long passage elides it ("…held by the
+    /// LTBT … not entitled to vote on any matter ."), and s1report1 lost two correct claims about who elects the S-1's board
+    /// because the whole quote was matched as one string. Each piece is still the page's own words, in the page's order.
+    /// </remarks>
     internal static bool Holds(PagedText paged, int page, string quote)
     {
         if (page < 1 || page > paged.Pages.Count) return false;
         var text = Normal(paged.Pages[page - 1]);
         var figures = Figure.Matches(quote).Select(m => m.Value.TrimEnd('.', ',')).Where(f => f.Length > 0).ToList();
-        return figures.Count > 0 ? figures.All(f => text.Contains(f, StringComparison.Ordinal)) : text.Contains(Normal(quote), StringComparison.Ordinal);
+        if (figures.Count > 0) return figures.All(f => text.Contains(f, StringComparison.Ordinal));
+
+        var pieces = Elision.Split(quote).Select(p => Normal(p).Trim(' ', '.', ',', ';', ':')).Where(p => p.Length > 1).ToList();
+        if (pieces.Count == 0) return false;
+        var at = 0;
+        foreach (var piece in pieces)
+        {
+            var found = text.IndexOf(piece, at, StringComparison.Ordinal);
+            if (found < 0) return false;
+            at = found + piece.Length;
+        }
+        return true;
     }
 
     private static string Normal(string s) => Space.Replace(s.Replace('’', '\''), " ").Trim().ToLowerInvariant();
@@ -308,6 +324,9 @@ public class NemotronDocumentProcessor : DocumentProcessor
 
     private static readonly Regex Figure = new(@"\d[\d,]*(?:\.\d+)?", RegexOptions.Compiled);
     private static readonly Regex Space = new(@"\s+", RegexOptions.Compiled);
+
+    /// <summary>An ellipsis in a quote, as a model writes one: three dots, spaced or not, or the single character.</summary>
+    private static readonly Regex Elision = new(@"\s*(?:\.\s?\.\s?\.|…)\s*", RegexOptions.Compiled);
     readonly NemotronChat chat;
     readonly DocumentPages? pages;
     #endregion

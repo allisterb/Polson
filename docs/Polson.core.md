@@ -4965,7 +4965,9 @@ if (answer.unverified.length) error('Not on their pages: ' + answer.unverified.j
 >
 > **A figure in `unverified` does not go into a piece.** Ask again, more narrowly, naming the table or the page.
 > `evidence[].page` counts the PDF's pages from 1; it is not the number printed on the page, though in many reports
-> they agree. A quote stitched from a table row (`Graphics $ 22,459`) is checked by its figures, so it is found.
+> they agree. A quote stitched from a table row (`Graphics $ 22,459`) is checked by its figures, so it is found. A quote
+> of words with no figure, elided as a long passage is (`…held by the LTBT … not entitled to vote`), is found when each
+> piece between the ellipses is on the page in that order.
 
 > [!IMPORTANT]
 > **A long document is read a few pages at a time: `{ pages: '40-60, 75' }`.** Without it every page goes with every
