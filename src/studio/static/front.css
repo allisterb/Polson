@@ -147,6 +147,11 @@ label.ps-asset-upload { box-sizing: border-box; width: 148px; }
 .fr-compare-bar { display: flex; align-items: center; gap: var(--space-3); }
 .fr-compare-seek { flex: 1; min-width: 0; accent-color: var(--accent); }
 .fr-compare-time { margin: 0; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fr-compare-bar > :is(a, button):not(:first-child) { flex: none; }
+.fr-compare-bar .fr-doc-action { margin-left: 4px; }
+.fr-compare-why { margin: 0; color: var(--ink-muted); }
+.fr-compare-why[hidden] { display: none; }
+@media (max-width: 640px) { .fr-compare-bar { flex-wrap: wrap; } .fr-compare-seek { flex-basis: 100%; order: 3; } }
 .fr-compare { display: grid; grid-template-columns: repeat(var(--cols, 2), minmax(0, 1fr)); gap: var(--space-4); }
 .fr-compare-cell { display: grid; gap: var(--space-2); margin: 0; align-content: start; }
 .fr-compare-cell video { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: contain; border-radius: var(--radius-md); background: var(--gallery); cursor: pointer; transition: opacity .2s; }

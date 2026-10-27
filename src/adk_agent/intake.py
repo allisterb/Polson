@@ -855,6 +855,9 @@ SAY = re.compile(r"^/runs/[^/]+/say$")
 #: `POST /runs/<id>/answer` — the director settling a question the agent stopped to ask.
 ANSWER = re.compile(r"^/runs/[^/]+/answer$")
 
+#: `POST /runs/<id>/comparison` — the audiences' finished films set side by side in one MP4 (`studio.compare`).
+COMPARISON = re.compile(r"^/runs/[^/]+/comparison$")
+
 
 def observing_only(method: str, path: str, root_path: str = "") -> bool:
     """Whether a request to the mounted studio is one an observer may make.
@@ -879,6 +882,10 @@ def observing_only(method: str, path: str, root_path: str = "") -> bool:
     page (`/requests/<name>/start`) and the studio's own `POST /projects` and `POST /runs` still need a
     driver, and are still refused.
 
+    **And one view: `POST /runs/<id>/comparison`.** A POST because it makes a file, but what it makes is a reading
+    of work already finished — the audiences' films side by side — written beside the run and made again only when
+    the films change. It drives no agent and needs no driver.
+
     **The subtlety is the path.** Middleware on a mounted app sees the *whole* path with `root_path`
     beside it — `/studio/observe`, not `/observe`; only route matching strips the prefix afterwards.
     Comparing the raw path refuses the one mutation this exists to allow, which is what the first
@@ -892,7 +899,7 @@ def observing_only(method: str, path: str, root_path: str = "") -> bool:
 
     path = path.rstrip("/")
     return (path == "/observe" or bool(SAY.match(path)) or bool(ANSWER.match(path))
-            or bool(REQUESTS.match(path)))
+            or bool(REQUESTS.match(path)) or bool(COMPARISON.match(path)))
 
 
 async def launch(app: FastAPI, name: str, message: str = OPENING) -> None:
