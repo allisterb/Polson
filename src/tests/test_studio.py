@@ -2001,6 +2001,43 @@ class DeliverableRouteTests(unittest.TestCase):
         body = self.client.get("/runs/acme-1/deliverables").json()["deliverables"]
         self.assertEqual(len([d for d in body if d["kind"] == "render"]), 1)
 
+    def test_the_piece_is_its_own_name_and_the_books_are_listed_apart(self):
+        """nightshift5: the last PNG was a probe and the last PDF the pitch, and the film was offered as four formats."""
+        for name in ("output.mp4", "output.webp", "artifacts/probe_end.png", "pitch.pdf", "process.pdf"):
+            self._made(name)
+        self._render_events(
+            {"type": "render", "ts": "2026-10-26T22:10:53Z", "artifact": "output.mp4", "format": "mp4", "motion": "video"},
+            {"type": "render", "ts": "2026-10-26T22:11:45Z", "artifact": "output.webp", "format": "webp", "motion": "animation"},
+            {"type": "render", "ts": "2026-10-26T22:18:11Z", "artifact": "pitch.pdf", "format": "pdf"},
+            {"type": "render", "ts": "2026-10-26T22:18:37Z", "artifact": "process.pdf", "format": "pdf"},
+            {"type": "render", "ts": "2026-10-26T22:19:21Z", "artifact": "pitch.pdf", "format": "pdf"},
+            {"type": "render", "ts": "2026-10-26T22:22:56Z", "artifact": "artifacts/probe_end.png", "format": "png"})
+
+        body = self.client.get("/runs/acme-1/deliverables").json()["deliverables"]
+
+        self.assertEqual([f["path"] for f in self._picture()["formats"]], ["output.mp4", "output.webp"])
+        books = [d for d in body if d["kind"] == "book"]
+        self.assertEqual([(b["name"], b["title"]) for b in books], [("pitch.pdf", "Pitch"), ("process.pdf", "Process book")])
+        self.assertEqual(self.client.get(f"/runs/acme-1/artifact/{books[0]['path']}").status_code, 200)
+        self.assertNotIn("probe_end.png", json.dumps(body))
+        # Written last, from the documents, so listed after them.
+        self.assertEqual([d["kind"] for d in body], ["render", "document", "document", "document", "book", "book"])
+
+    def test_without_a_named_piece_the_latest_moving_render_names_it(self):
+        """A workflow that names no file: the film's name, and only its formats."""
+        for name in ("artifacts/teaser.mp4", "artifacts/teaser.webp", "artifacts/probe.png"):
+            self._made(name)
+        self._render_events(
+            {"type": "render", "ts": "2026-10-26T10:00:00Z", "artifact": "artifacts/teaser.mp4", "format": "mp4", "motion": "video"},
+            {"type": "render", "ts": "2026-10-26T10:01:00Z", "artifact": "artifacts/teaser.webp", "format": "webp", "motion": "animation"},
+            {"type": "render", "ts": "2026-10-26T10:02:00Z", "artifact": "artifacts/probe.png", "format": "png"})
+
+        self.assertEqual([f["format"] for f in self._picture()["formats"]], ["mp4", "webp"])
+
+    def test_every_document_has_a_name_a_reader_would_use(self):
+        self.assertEqual([d["title"] for d in self.client.get("/runs/acme-1/deliverables").json()["deliverables"]],
+                         ["Brief", "Drawing script", "Accuracy"])
+
     def _picture(self):
         body = self.client.get("/runs/acme-1/deliverables").json()["deliverables"]
         return next((d for d in body if d["kind"] == "render"), None)

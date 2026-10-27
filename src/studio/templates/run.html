@@ -1199,7 +1199,7 @@
     if (!items.length) { delivered.hidden = true; return; }
 
     deliverables.innerHTML = items.map(
-      (d) => d.kind === 'render' ? finalRow(d) : docRow(d)).join('');
+      (d) => d.kind === 'render' ? finalRow(d) : d.kind === 'book' ? bookRow(d) : docRow(d)).join('');
     delivered.hidden = false;
 
     // The direction is a deliverable like the others and, where there is one, also the panel below. The listing
@@ -1318,6 +1318,19 @@
       // An explicit name: the row's text lives in spans, and a link a screen reader announces as
       // "link" with no name is one nobody can act on.
       `<a class="doc" href="${href}" data-name="${esc(d.name)}" ` +
+      `aria-label="${esc(d.name)} — ${esc(d.what)}" title="open ${esc(d.name)}">` +
+      `<span class="docname">${esc(d.name)}</span>` +
+      `<span class="hint">${esc(d.what)}</span>` +
+      `<span class="docsize">${size(d.bytes)}</span></a>` +
+      copyButton(href) + `</li>`;
+  }
+
+  // A book the run set (`pitch.pdf`): a render, so served by the artifact route, and opened in the browser's own
+  // viewer in a new tab. A `.doc` for its look, with no `data-name`, so the text overlay leaves it alone.
+  function bookRow(d) {
+    const href = `${base}/runs/${runId}/artifact/${d.path.split('/').map(encodeURIComponent).join('/')}`;
+    return `<li class="row">` +
+      `<a class="doc" href="${href}" target="_blank" rel="noopener" ` +
       `aria-label="${esc(d.name)} — ${esc(d.what)}" title="open ${esc(d.name)}">` +
       `<span class="docname">${esc(d.name)}</span>` +
       `<span class="hint">${esc(d.what)}</span>` +
