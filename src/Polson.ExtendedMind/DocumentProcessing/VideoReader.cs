@@ -91,8 +91,9 @@ public class VideoReader : DocumentProcessor
     /// (<c>Verify.claim</c>), as text after the query, with no media at all.
     /// </summary>
     protected override async Task<Generation> Generate(
-        byte[] bytes, string mime, string query, string model, string? schema, bool images, CancellationToken ct)
+        byte[] bytes, string mime, string query, string model, string? schema, bool images, int[]? pages, CancellationToken ct)
     {
+        // A clip, a frame or a claim sheet has no pages to choose; the engine's own calls never pass them.
         var kind = mime.StartsWith("image/", StringComparison.OrdinalIgnoreCase) ? "image_url" : "video_url";
         var content = mime == TextType
             ? new JsonArray(new JsonObject { ["type"] = "text", ["text"] = query + "\n\n" + System.Text.Encoding.UTF8.GetString(bytes) })

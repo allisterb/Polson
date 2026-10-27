@@ -2,6 +2,7 @@ namespace Polson.Tests.ExtendedMind;
 
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 
 using global::Polson.Tests;
@@ -316,6 +317,52 @@ public class DocumentProcessorTests : TestsRuntime, IDisposable
         var answer = await processor.Ask("a.txt", "what does it say", new DocumentOptions { Schema = schema });
 
         Assert.Equal("InvalidRequest", answer.FailureName);
+        Assert.Equal(0, processor.Calls);
+        Assert.Equal(0, budget.Spent);
+    }
+
+    /// <summary>A page list is read as a print dialog reads one, and anything else is not a list.</summary>
+    [Fact]
+    public void APageListReadsAsAPrintDialogDoes()
+    {
+        Assert.Equal([.. Enumerable.Range(40, 21), 75], DocumentProcessor.ParsePages("40-60, 75"));
+        Assert.Equal([1, 2, 3], DocumentProcessor.ParsePages("3,1, 2-3"));
+        Assert.Equal([7, 8], DocumentProcessor.ParsePages("7–8"));                 // an en dash, as typeset
+        foreach (var bad in new[] { "", " ", "0", "5-3", "a", "1-", "-2", "1-2-3", "1,,2" })
+            Assert.Null(DocumentProcessor.ParsePages(bad));
+        Assert.Equal("1-3,5,7-8", DocumentProcessor.PageList([1, 2, 3, 5, 7, 8]));
+    }
+
+    /// <summary>The pages reach the reader, are part of the cache key, and one choice has one spelling.</summary>
+    [Fact]
+    public async Task ChosenPagesReachTheReaderAndArePartOfTheCacheKey()
+    {
+        var budget = new DocumentBudget(5);
+        var processor = new FakeProcessor(budget, root, new DocumentCache(Path.Combine(root, "cache")));
+        File.WriteAllText(Path.Combine(root, "a.txt"), "hello");
+
+        await processor.Ask("a.txt", "what does it say", new DocumentOptions { Pages = "1" });
+        var same = await processor.Ask("a.txt", "what does it say", new DocumentOptions { Pages = "1-1" });
+        var whole = await processor.Ask("a.txt", "what does it say");
+
+        Assert.True(same.Provenance!.FromCache);   // "1-1" is "1"
+        Assert.False(whole.Provenance!.FromCache); // every page is another read
+        Assert.Equal(2, processor.Calls);
+        Assert.Equal(new int[]?[] { [1], null }, processor.Pages);
+    }
+
+    /// <summary>A page list that is not one is refused before anything is spent, saying how to write one.</summary>
+    [Fact]
+    public async Task AMalformedPageListIsRefusedForNothing()
+    {
+        var budget = new DocumentBudget(5);
+        var processor = new FakeProcessor(budget, root, null);
+        File.WriteAllText(Path.Combine(root, "a.txt"), "hello");
+
+        var answer = await processor.Ask("a.txt", "what does it say", new DocumentOptions { Pages = "pages 3 to 5" });
+
+        Assert.Equal("InvalidRequest", answer.FailureName);
+        Assert.Contains("'40-60, 75'", answer.Error);
         Assert.Equal(0, processor.Calls);
         Assert.Equal(0, budget.Spent);
     }
@@ -640,7 +687,7 @@ public class DocumentProcessorTests : TestsRuntime, IDisposable
         public int Calls { get; private set; }
 
         protected override async Task<Generation> Generate(
-            byte[] bytes, string mime, string query, string model, string? schema, bool images,
+            byte[] bytes, string mime, string query, string model, string? schema, bool images, int[]? pages,
             System.Threading.CancellationToken ct)
         {
             Calls += 1;
@@ -663,12 +710,15 @@ public class DocumentProcessorTests : TestsRuntime, IDisposable
 
         public System.Collections.Generic.List<string?> Schemas { get; } = [];
 
+        public System.Collections.Generic.List<int[]?> Pages { get; } = [];
+
         protected override Task<Generation> Generate(
-            byte[] bytes, string mime, string query, string model, string? schema, bool images,
+            byte[] bytes, string mime, string query, string model, string? schema, bool images, int[]? pages,
             System.Threading.CancellationToken ct)
         {
             Calls += 1;
             Schemas.Add(schema);
+            Pages.Add(pages);
             return Task.FromResult(new Generation($"answer to '{query}'", 100, null));
         }
     }

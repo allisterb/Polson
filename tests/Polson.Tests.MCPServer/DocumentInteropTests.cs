@@ -114,6 +114,23 @@ public class DocumentInteropTests : TestsRuntime, IDisposable
         Assert.NotEqual("UnsupportedType", Logged(result));
     }
 
+    /// <summary>A <c>pages</c> literal binds: a list that is not one is refused, which only a bound option can be.</summary>
+    [Fact]
+    public async Task TestAPagesLiteralBinds()
+    {
+        File.WriteAllText(Path.Combine(root, "notes.txt"), "Revenue was 215,938.");
+        JsDrawingEngine.Documents = new Answering(new DocumentBudget(5), root, new DocumentCache(Path.Combine(root, "cache")));
+
+        var result = await Run("""
+            const bad = await Documents.ask('notes.txt', 'What was revenue?', { pages: 'three to five' });
+            const good = await Documents.ask('notes.txt', 'What was revenue?', { pages: '1' });
+            log(bad.failureName + '|' + good.success);
+            """);
+
+        Assert.True(result.Success, result.Error);
+        Assert.Equal("InvalidRequest|true", Logged(result));
+    }
+
     /// <summary>
     /// A refusal is its own event, and it is not an asset requisition.
     /// </summary>
@@ -218,7 +235,7 @@ public class DocumentInteropTests : TestsRuntime, IDisposable
         : DocumentProcessor("test-key", budget, root, "fake-model", cache)
     {
         protected override Task<Generation> Generate(
-            byte[] bytes, string mime, string query, string model, string? schema, bool images,
+            byte[] bytes, string mime, string query, string model, string? schema, bool images, int[]? pages,
             System.Threading.CancellationToken ct) =>
             Task.FromResult(new Generation("215,938", 10, null));
     }
