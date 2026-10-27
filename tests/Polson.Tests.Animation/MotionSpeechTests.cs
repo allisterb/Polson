@@ -221,6 +221,67 @@ public class MotionSpeechTests : TestsRuntime
 
     const string ProbeLine = "Who knew? Bob moved the moon so far, for fun!";
 
+    /// <summary>A mono 16 kHz WAV in the temp folder: silence, a tone standing in for a voice, silence.</summary>
+    static string ToneWav(double before, double voice, double after)
+    {
+        const int rate = 16000;
+        var samples = Enumerable.Range(0, (int)((before + voice + after) * rate)).Select(i =>
+        {
+            var t = i / (double)rate;
+            return (short)(t >= before && t < before + voice ? Math.Sin(2 * Math.PI * 220 * t) * 12000 : 0);
+        }).ToArray();
+        var path = Path.Combine(Path.GetTempPath(), $"polson-speech-{Guid.NewGuid():N}.wav");
+        using var w = new BinaryWriter(File.Create(path));
+        w.Write("RIFF"u8); w.Write(36 + samples.Length * 2); w.Write("WAVE"u8);
+        w.Write("fmt "u8); w.Write(16); w.Write((short)1); w.Write((short)1); w.Write(rate); w.Write(rate * 2);
+        w.Write((short)2); w.Write((short)16);
+        w.Write("data"u8); w.Write(samples.Length * 2);
+        foreach (var s in samples) w.Write(s);
+        return path;
+    }
+
+    /// <summary>
+    /// A line in another language is timed by its recording whole: from where the voice starts to where it stops, one
+    /// span, no phonemes and no mouths. A Japanese line once stopped the script with "could not place any word".
+    /// </summary>
+    [Fact]
+    public void ALineInAnotherLanguageIsTimedByItsRecordingWhole()
+    {
+        var wav = ToneWav(0.5, 1.2, 0.4);
+        try
+        {
+            var s = Say("ワンクリックで、車が来る。", ("audio", wav), ("language", "ja"), ("start", 2d));
+            Assert.Equal("ja", s.Language);
+            Assert.False(s.English);
+            var word = Assert.Single(s.Words);
+            Assert.Equal("ワンクリックで、車が来る。", word["word"]);
+            Assert.Equal("recording", word["source"]);
+            Assert.InRange((double)word["start"]!, 2.49, 2.52);
+            Assert.InRange((double)word["end"]!, 3.69, 3.72);
+            Assert.InRange(s.End, 3.69, 3.72);
+            Assert.Empty(s.Phonemes);
+            Assert.Equal(["rest"], s.Names);
+            Assert.Equal(wav, s.Audio);
+        }
+        finally { File.Delete(wav); }
+    }
+
+    /// <summary>English is the default; another language needs its recording, takes no English phonemes, and is a code.</summary>
+    [Fact]
+    public void AnotherLanguageIsRefusedWhatOnlyEnglishCanDo()
+    {
+        Assert.True(Say("cat").English);
+        Assert.Equal("en", Say("cat").Language);
+        Assert.Contains("needs its recording", Assert.Throws<ArgumentException>(() => Say("車が来る", ("language", "ja"))).Message);
+        Assert.Throws<ArgumentException>(() => Say("車が来る", ("language", "Japanese please")));
+        var wav = ToneWav(0.1, 0.5, 0.1);
+        try
+        {
+            Assert.Throws<ArgumentException>(() => Say("Auto", ("audio", wav), ("language", "de"), ("pronounce", Opts(("auto", "AO1 T OW0")))));
+        }
+        finally { File.Delete(wav); }
+    }
+
     /// <summary>
     /// Timed against a recording, every word sits where the voice says it, not where the rules would put it. Measured by
     /// the aligner on this recording: "Bob" at 1.44 s and "for" at 3.99 s, which the rules put at 1.30 s and 3.30 s.

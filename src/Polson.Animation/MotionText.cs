@@ -14,8 +14,6 @@ using Polson.Drawing.Svg;
 
 using SkiaSharp;
 
-using HB = HarfBuzzSharp;
-
 using static MotionTextSelectors;
 
 /// <summary>
@@ -774,28 +772,16 @@ internal sealed class MotionTextLayer : MotionLayer
         public required int Words { get; init; }
         public int LineCount => LineGlyphs.Length;
 
+        /// <remarks>
+        /// <b>Shaped by <see cref="TextShaper"/>, the canvas's shaper</b>: a face for every character and runs in visual
+        /// order. Shaped as one run in one face, Arabic set "4.2" as "2.4" — HarfBuzz reversed the whole line, number and
+        /// all — and its brackets as boxes, which Noto Sans Arabic does not have (probe, 2026-10-27). A glyph from a
+        /// fallback face is drawn here; the <c>.sif</c> names one family for the whole text, so Synfig sets it in that.
+        /// </remarks>
         public static TextShape Build(string text, SKTypeface typeface, bool kerning)
         {
             var upem = typeface.UnitsPerEm;
             using var font = new SKFont(typeface, upem) { Hinting = SKFontHinting.None, Subpixel = true, LinearMetrics = true };
-
-            byte[] bytes;
-            int index;
-            using (var stream = typeface.OpenStream(out index))
-            {
-                bytes = new byte[stream.Length];
-                stream.Read(bytes, bytes.Length);
-            }
-            // In memory HarfBuzz owns, not a managed array: shaping crashed the test host with an access violation in
-            // hb_shape_full whenever enough had run before it to bring on a collection, and never alone — the signature of
-            // native code reading bytes the GC has moved. HB.Blob.FromStream hands HarfBuzz a managed buffer.
-            var native = System.Runtime.InteropServices.Marshal.AllocHGlobal(bytes.Length);
-            System.Runtime.InteropServices.Marshal.Copy(bytes, 0, native, bytes.Length);
-            using var blob = new HB.Blob(native, bytes.Length, HB.MemoryMode.ReadOnly, () => System.Runtime.InteropServices.Marshal.FreeHGlobal(native));
-            using var face = new HB.Face(blob, index);
-            using var hb = new HB.Font(face);
-            hb.SetScale(upem, upem);
-            HB.Feature[] features = kerning ? [] : [HB.Feature.Parse("-kern")];
 
             var glyphs = new List<ShapedGlyph>();
             var lineGlyphs = new List<int[]>();
@@ -828,23 +814,29 @@ internal sealed class MotionTextLayer : MotionLayer
                 var mine = new List<int>();
                 if (s.Length > 0)
                 {
-                    using var buffer = new HB.Buffer();
-                    buffer.AddUtf16(s);
-                    buffer.GuessSegmentProperties();
-                    hb.Shape(buffer, features);
-                    var infos = buffer.GlyphInfos;
-                    var positions = buffer.GlyphPositions;
-                    var clusters = infos.Select(x => (int)x.Cluster).Distinct().Order().ToArray();
-                    for (var k = 0; k < infos.Length; k++)
+                    // At the em's own size, so positions and advances come back in font units, as the outlines are.
+                    foreach (var run in TextShaper.Shape(s, font, 0f, kerning).Runs)
                     {
-                        var cluster = (int)infos[k].Cluster;
-                        var next = clusters.FirstOrDefault(c => c > cluster, s.Length);
-                        var gi = Math.Max(0, Array.FindLastIndex(starts, st => st <= cluster));
-                        var path = font.GetGlyphPath((ushort)infos[k].Codepoint);
-                        if (path is { IsEmpty: true }) { path.Dispose(); path = null; }
-                        glyphs.Add(new ShapedGlyph(path, positions[k].XAdvance, path is null ? 0 : -path.Bounds.Top,
-                            s[cluster..next], line, charIndex[gi], noSpaceIndex[gi], wordIndex[gi], space[gi]));
-                        mine.Add(glyphs.Count - 1);
+                        using var other = ReferenceEquals(run.Typeface, typeface) ? null
+                            : new SKFont(run.Typeface, upem) { Hinting = SKFontHinting.None, Subpixel = true, LinearMetrics = true };
+                        var glyphFont = other ?? font;
+                        var bounds = run.Clusters.Select(c => run.Start + (int)c).Distinct().Order().ToArray();
+                        var pen = 0f;
+                        for (var k = 0; k < run.Glyphs.Length; k++)
+                        {
+                            var cluster = run.Start + (int)run.Clusters[k];
+                            var next = bounds.FirstOrDefault(c => c > cluster, run.Start + run.Length);
+                            var gi = Math.Max(0, Array.FindLastIndex(starts, st => st <= cluster));
+                            var path = glyphFont.GetGlyphPath(run.Glyphs[k]);
+                            if (path is { IsEmpty: true }) { path.Dispose(); path = null; }
+                            // A mark's offset from where its advance puts it (an Arabic vowel sign, a Nastaliq rise), in its outline.
+                            var (dx, dy) = (run.Positions[k].X - pen, run.Positions[k].Y);
+                            if (path is not null && (dx != 0 || dy != 0)) path.Transform(SKMatrix.CreateTranslation(dx, dy));
+                            glyphs.Add(new ShapedGlyph(path, run.Advances[k], path is null ? 0 : -path.Bounds.Top,
+                                s[cluster..next], line, charIndex[gi], noSpaceIndex[gi], wordIndex[gi], space[gi]));
+                            mine.Add(glyphs.Count - 1);
+                            pen += run.Advances[k];
+                        }
                     }
                 }
                 lineGlyphs.Add([.. mine]);

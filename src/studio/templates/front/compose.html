@@ -33,13 +33,14 @@
       {%- set given = form.audiences if form.audiences is defined else [] -%}
       <details class="fr-pop" data-audiences {% if card.audiences_optional %}data-optional{% endif %}>
         <summary class="ps-field"><span class="ps-field-label">Audience{% if not card.audiences_optional %}<span class="ps-req" aria-hidden="true"> *</span>{% endif %}</span><span class="ps-field-value" data-summary>{{ 'Anyone (optional)' if card.audiences_optional else 'Who is it for?' }}</span>{{ m.icon('chevron-down', 18) }}</summary>
-        <section class="ps-ogrid fr-panel fr-narrow" aria-label="Audience">
+        <section class="ps-ogrid fr-panel" aria-label="Audience">
           <h3 class="ps-ogrid-title">Who is it for?</h3>
           {% if card.audiences_optional %}
           <p class="ps-ogrid-hint">Optional. Name a place, and an age band if it matters, and the {{ card.piece }} is made in that audience's conventions: paced from what they watch, its figures written as they write them. With more than one, a {{ card.piece }} for each, the figures the same.</p>
           {% else %}
           <p class="ps-ogrid-hint">A place and an age band for each audience. With more than one, the studio makes {{ 'an' if card.piece == 'ad' else 'a' }} {{ card.piece }} for each and compares what they love.</p>
           {% endif %}
+          <p class="ps-ogrid-hint">Each can be in English or in that audience's language; every line in another language is translated back and checked, and a narrated film is voiced in it too.</p>
           <div class="fr-audiences">
             {% for i in range(max_audiences) %}
             {%- set a = given[i] if i < given|length else {} -%}
@@ -49,6 +50,9 @@
               <select name="aud_age" aria-label="Audience {{ 'ABCDEF'[i] }} age band">
                 <option value="">Any age</option>
                 {% for code, words in ages %}<option value="{{ code }}" {{ 'selected' if a.age == code }}>{{ words }}</option>{% endfor %}
+              </select>
+              <select name="aud_lang" aria-label="Audience {{ 'ABCDEF'[i] }} language" data-language>
+                {% for code, words in languages %}<option value="{{ code }}" {{ 'selected' if (a.lang or '') == code }}>{{ words }}{% if code in checked_by_eye %} ({{ eye_note }}){% endif %}</option>{% endfor %}
               </select>
             </div>
             {% endfor %}

@@ -216,6 +216,8 @@ per stage is a dozen clicks for six. Put every audience's proposed answer in one
 its letter (*A: …; B: …; C: …*), with an option to accept them all; ask about one audience alone only
 when its answer would change the others'.
 
+{{LANGUAGE}}
+
 ---
 
 ## Stage 2 — beats

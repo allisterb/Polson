@@ -235,12 +235,32 @@ class CatalogueTests(unittest.TestCase):
 
     def test_audiences_are_places_with_an_optional_age_band(self):
         self.assertEqual(catalogue.parse_audiences(["  São   Paulo ", "Mexico City", ""], ["", "55_and_older", ""]),
-                         [("São Paulo", ""), ("Mexico City", "55_and_older")])
+                         [("São Paulo", "", ""), ("Mexico City", "55_and_older", "")])
         for places, ages, words in ((["", ""], ["30_to_34", ""], "needs a place"),
                                     (["<script>"], [""], "place name"),
                                     (list("ABCDEFG"), [""] * 7, "up to 6")):
             with self.subTest(places=places), self.assertRaisesRegex(StudioError, words):
                 catalogue.parse_audiences(places, ages)
+
+    def test_an_audience_may_be_in_its_own_language_from_the_list(self):
+        """English unsaid; another language named on the brief's line and in the record; one not offered refused."""
+        two = catalogue.parse("poster", "Seoul", "0", "film", ["1200x1800"], "", [".png"], {}, "A poster.",
+                              places=["Seoul", "London"], ages=["25_to_29", ""], languages=["ko", ""])
+        self.assertEqual([("Seoul", "25_to_29", "ko"), ("London", "", "")], two.audiences)
+        text = two.brief_text([])
+        self.assertIn("Audience A: Seoul, aged 25 to 29, in Korean", text)
+        self.assertIn("Audience B: London\n", text)
+        self.assertEqual(("ko", "Korean"), (two.record()["audiences"][0]["language"], two.record()["audiences"][0]["languageLabel"]))
+        cairo = catalogue.parse("poster", "Cairo", "0", "film", ["1200x1800"], "", [".png"], {}, "A poster.",
+                                places=["Cairo"], ages=[""], languages=["ar"])
+        self.assertIn("Audience A: Cairo, in Arabic (its text checked by eye, not read back", cairo.brief_text([]))
+        self.assertFalse(cairo.record()["audiences"][0]["readBack"])
+        self.assertTrue(two.record()["audiences"][0]["readBack"])
+        for bad in ("he", "fa", "Klingon"):
+            with self.subTest(bad=bad), self.assertRaisesRegex(StudioError, "language from the list"):
+                catalogue.parse_audiences(["Cairo"], [""], [bad])
+        with self.assertRaisesRegex(StudioError, "needs a place"):
+            catalogue.parse_audiences([""], [""], ["ja"])
 
     def test_a_report_explainers_audiences_are_optional(self):
         """With places, a film per audience in its conventions; without, one film for whoever the brief describes."""
@@ -248,7 +268,7 @@ class CatalogueTests(unittest.TestCase):
         self.assertEqual([], none.audiences)
         two = catalogue.parse("report-explainer", "NVDA", "0", "", ["1920x1080"], "", [".mp4"], {}, "Explain the 10-K.",
                               places=["Mumbai", "Tokyo"], ages=["35_to_44", ""])
-        self.assertEqual([("Mumbai", "35_to_44"), ("Tokyo", "")], two.audiences)
+        self.assertEqual([("Mumbai", "35_to_44", ""), ("Tokyo", "", "")], two.audiences)
         text = two.brief_text([])
         self.assertIn("Audience A: Mumbai", text)
         self.assertIn("One film per audience", text)

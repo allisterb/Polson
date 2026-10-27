@@ -63,6 +63,42 @@ public class VerifyTests : TestsRuntime, IDisposable
         Assert.Empty(outcome.Strays);
     }
 
+    /// <summary>
+    /// Lines in other scripts are seen as set, read back the way Nemotron read them in the language probe (2026-10-27):
+    /// Hindi without the nukta (बाज़ार as बाजार, an accepted spelling), Chinese with ASCII brackets for full-width ones,
+    /// Japanese and Korean exactly. The figure in each still has to be the one set.
+    /// </summary>
+    [Fact]
+    public void TestLinesInOtherScriptsAreSeenAsSetDespiteMarksAndBracketForms()
+    {
+        var shown = new[]
+        {
+            Shown("अमेरिकी बाज़ार: 4.2 अरब डॉलर (अनुमान)", 0, 3), Shown("美国市场：42亿美元（估计）", 3, 6),
+            Shown("ワンクリックで、車が来る。", 6, 9), Shown("미국 시장: 42억 달러 (추정)", 9, 12),
+        };
+        var outcome = FilmReadBack.Match(shown, [Read("अमेरिकी बाजार: 4.2 अरब डॉलर (अनुमान)", 1), Read("美国市场： 42亿美元 (估计)", 4),
+            Read("ワンクリックで、車が来る。", 7), Read("미국 시장: 42억 달러 (추정)", 10)]);
+
+        Assert.All(outcome.Seen, r => Assert.NotNull(r));
+        Assert.Empty(outcome.Strays);
+
+        var wrong = FilmReadBack.Match([Shown("美国市场：42亿美元（估计）", 0, 3)], [Read("美国市场：24亿美元（估计）", 1)]);
+        Assert.Null(wrong.Seen[0]);
+    }
+
+    /// <summary>Arabic is a script the reader cannot be trusted with: an Arabic text or reading is recognised; others are not.</summary>
+    [Fact]
+    public void TestArabicIsTheScriptLeftToTheEye()
+    {
+        Assert.True(FilmReadBack.Unreadable("السوق الأمريكية: 4.2 مليار دولار"));
+        Assert.True(FilmReadBack.Unreadable("Revenue — الإيرادات"));
+        Assert.False(FilmReadBack.Unreadable("美国市场：42亿美元"));
+        Assert.False(FilmReadBack.Unreadable("अमेरिकी बाज़ार: 4.2"));
+        Assert.False(FilmReadBack.Unreadable("٤٫٢"));     // Arabic-Indic digits alone are a figure, which the reader does read
+        Assert.Contains("2 texts are in Arabic", FilmReadBack.UncheckedNote(2, "frame"));
+        Assert.Equal("", FilmReadBack.UncheckedNote(0, "frame"));
+    }
+
     /// <summary>The report film's case: the line was set with $974M and read with $744M. Not a match — a stray to look at.</summary>
     [Fact]
     public void TestTheSameLineWithADifferentFigureIsAStrayNotAMatch()

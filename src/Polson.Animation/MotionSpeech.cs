@@ -69,6 +69,31 @@ public sealed class MotionSpeech
             if (!File.Exists(audioFile)) throw new ArgumentException($"{who}: there is no recording at '{path}'.");
         }
 
+        // A line in another language: the pronouncing dictionary and its guesser are English, so its words cannot be sounded
+        // or aligned (a Japanese line was refused as "no word placed"). Its recording times it whole instead: where the
+        // voice starts and stops, the line as one span, and no mouths, since there are no sounds to give them.
+        Language = o["language"] switch
+        {
+            null => "en",
+            string s when Regex.IsMatch(s, @"^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$") => s,
+            var v => throw new ArgumentException($"{who}'s language is a language code such as 'ja' or 'de', not {v}.")
+        };
+        if (!English)
+        {
+            if (audioFile is null)
+                throw new ArgumentException($"{who}: a line in '{Language}' needs its recording, audio: — the rules that time a line "
+                    + "without one sound English words.");
+            if (o["pronounce"] is not null) throw new ArgumentException($"{who}: pronounce is English phonemes, and this line is in '{Language}'.");
+            if (string.IsNullOrWhiteSpace(text)) throw new ArgumentException($"{who} needs a line to speak.");
+            var wav = FFmpeg.AlignerWav(audioFile, Audio!, who);
+            var (from, to) = FFmpeg.SpeechSpan(wav) ?? (0, FFmpeg.WavSeconds(wav) ?? 0);
+            words.Add((text, Start + from, Start + to, text, "recording", null));
+            guessed = [];
+            End = Start + to;
+            segments = Segments(minimum);
+            return;
+        }
+
         // Words, numbers and pauses; then what each says; then when each spoken word is; then its sounds within that.
         var tokens = Tokenize(text, who);
         var said = Resolve(tokens, pronounce, guess, who, out guessed);
@@ -128,7 +153,7 @@ public sealed class MotionSpeech
     #endregion
 
     #region Fields
-    static readonly string[] Keys = ["start", "rate", "set", "pronounce", "guess", "audio", "lead", "minimum"];
+    static readonly string[] Keys = ["start", "rate", "set", "pronounce", "guess", "audio", "lead", "minimum", "language"];
 
     private readonly double lead;
     private readonly string? audioFile;
@@ -150,6 +175,14 @@ public sealed class MotionSpeech
 
     /// <summary>Whether the words' times are a recording's rather than the rules'.</summary>
     public bool Aligned => audioFile is not null;
+
+    /// <summary>The line's language, as given (<c>'en'</c> unless said). Any other is timed by its recording whole: one
+    /// span in <see cref="Words"/>, no phonemes and no mouths.</summary>
+    public string Language { get; }
+
+    /// <summary>Whether the line is English, whose words the dictionary sounds and the aligner places one by one.</summary>
+    public bool English => Language.Equals("en", StringComparison.OrdinalIgnoreCase)
+        || Language.StartsWith("en-", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// What the recording says by itself, as the aligner's model hears it with no line to hold it to: upper-case words,
@@ -190,7 +223,8 @@ public sealed class MotionSpeech
     /// <summary>
     /// Every word as written: <c>{ word, start, end, said, source, confidence }</c>, <c>said</c> what was pronounced (a
     /// number's words, <c>'four point five'</c>), <c>source</c> where its sounds came from, as for a phoneme, and
-    /// <c>confidence</c> the aligner's (0 to 1) when timed against a recording, null otherwise.
+    /// <c>confidence</c> the aligner's (0 to 1) when timed against a recording, null otherwise. A line in another
+    /// language is one entry, the whole line, <c>source</c> <c>'recording'</c>: from where its voice starts to where it stops.
     /// </summary>
     public IReadOnlyList<Dictionary<string, object?>> Words => [.. words.Select(w => new Dictionary<string, object?>
     {
