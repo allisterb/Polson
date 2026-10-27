@@ -270,13 +270,13 @@ def when(stamp: str) -> str:
 
 
 def learned_from(project: Path, run: Run | None, events: list[dict[str, Any]]) -> dict[str, Any]:
-    """What the run learned from its audiences, or {} before it has written `direction.md`."""
+    """What the run learned from its audiences, or {} before it has fetched a profile or written `direction.md`."""
     try:
         text = (project / "direction.md").read_text(encoding="utf-8", errors="replace")
     except OSError:
         text = ""
     found = direction_mod.learned(text, events, run.since if run else None)
-    return found if (found["profiles"] or found["compare"] or found["audiences"]) else {}
+    return found if (found["compare"] or found["audiences"]) else {}
 
 
 def unique_id(root: Path, title: str) -> str:

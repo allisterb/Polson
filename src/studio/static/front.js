@@ -391,18 +391,44 @@
 
       // One piece per audience (final_a, final_b…) gets a switch; the viewer prefers a looping .webp to a
       // video player, and each piece carries its own downloads.
-      function present(d) {
-        var media = d.formats.filter(function (f) { return /\.webp$/i.test(f.path); })[0]
-                 || d.formats.filter(function (f) { return IMAGE.test(f.path) || VIDEO.test(f.path); })[0];
-        if (media) show(media.path);
-        var what = d.what || 'the finished piece';
-        caption.textContent = what.charAt(0).toUpperCase() + what.slice(1);
-        downloads.textContent = '';
+      function still(d) {
+        return d.formats.filter(function (f) { return /\.webp$/i.test(f.path); })[0]
+            || d.formats.filter(function (f) { return IMAGE.test(f.path) || VIDEO.test(f.path); })[0];
+      }
+      function whatOf(d) { var what = d.what || 'the finished piece'; return what.charAt(0).toUpperCase() + what.slice(1); }
+      function fillDownloads(box, d) {
         d.formats.forEach(function (f) {
           var a = el('a', 'ps-btn ps-btn-secondary ps-btn-sm'); a.href = artifactUrl(f.path); a.setAttribute('download', '');
           a.appendChild(icon('download', 16)); a.appendChild(document.createTextNode('.' + f.format));
-          downloads.appendChild(a);
+          box.appendChild(a);
         });
+      }
+      function present(d) {
+        var media = still(d);
+        if (media) show(media.path);
+        caption.textContent = whatOf(d);
+        downloads.textContent = '';
+        fillDownloads(downloads, d);
+      }
+
+      // The Deliverables tab: every piece at once, each with its downloads.
+      var finishedList = page.querySelector('[data-finished-list]');
+      if (finishedList) {
+        finishedList.textContent = '';
+        pieces.forEach(function (d) {
+          var card = el('figure', 'fr-finished-piece'), media = still(d);
+          if (media && VIDEO.test(media.path)) {
+            var v = el('video'); v.src = artifactUrl(media.path); v.controls = true; v.preload = 'metadata'; v.muted = true;
+            card.appendChild(v);
+          } else if (media) {
+            var img = el('img'); img.src = artifactUrl(media.path); img.alt = whatOf(d); img.loading = 'lazy';
+            card.appendChild(img);
+          }
+          var cap = el('figcaption'); cap.appendChild(el('span', 'fr-small', whatOf(d)));
+          var box = el('div', 'fr-downloads'); fillDownloads(box, d); cap.appendChild(box);
+          card.appendChild(cap); finishedList.appendChild(card);
+        });
+        page.querySelector('[data-finished]').hidden = !pieces.length;
       }
       var old = page.querySelector('[data-pieces]'); if (old) old.remove();
       if (pieces.length > 1) {
@@ -421,13 +447,7 @@
       }
       if (pieces.length) present(pieces[0]);
 
-      // direction.md is written at the end, so the learned panel is fetched again once the run has delivered.
-      fetch(base + '/requests/' + encodeURIComponent(page.dataset.name) + '/learned').then(function (r) { return r.ok ? r.text() : ''; }).then(function (html) {
-        var slot = page.querySelector('[data-learned]');
-        if (!html || !slot) return;
-        var box = document.createElement('div'); box.innerHTML = html;
-        var fresh = box.querySelector('[data-learned]'); if (fresh) slot.replaceWith(fresh);
-      });
+      loadLearned();
 
       data.deliverables.forEach(function (d) {
         if (d.kind === 'document') {
@@ -443,7 +463,29 @@
         }
       });
       page.querySelector('[data-documents]').hidden = !docs.children.length;
+      deliverablesTab();
     });
+  }
+
+  // What the studio learned: the pace counts arrive with each profile query and the titles with direction.md, so the
+  // panel is fetched again whenever the Qloo views are (loadTaste) and once the run has delivered.
+  function loadLearned() {
+    return fetch(base + '/requests/' + encodeURIComponent(page.dataset.name) + '/learned').then(function (r) { return r.ok ? r.text() : ''; }).then(function (html) {
+      var slot = page.querySelector('[data-learned]');
+      if (!html || !slot) return;
+      var box = document.createElement('div'); box.innerHTML = html;
+      var fresh = box.querySelector('[data-learned]'); if (fresh) slot.replaceWith(fresh);
+      deliverablesTab();
+    }).catch(function () { /* the panel stays as it was */ });
+  }
+  // The Deliverables tab shows once it has anything: a piece, a document, or something learned.
+  function deliverablesTab() {
+    var tab = views && views.querySelector('.ps-tab[data-view="deliverables"]');
+    if (!tab) return;
+    var learnedBox = page.querySelector('[data-learned]');
+    tab.hidden = !(page.querySelector('[data-finished-list]').children.length || page.querySelector('[data-doc-list]').children.length
+                   || (learnedBox && !learnedBox.hidden));
+    if (!tab.hidden && viewFromHash() === 'deliverables' && tab.getAttribute('aria-selected') !== 'true') select('deliverables');
   }
 
   // The reading panel: a delivered document opened under the piece. Markdown arrives rendered by the server
@@ -1311,6 +1353,7 @@
   var tasteLoading = null;
   function loadTaste() {
     if (tasteLoading) return tasteLoading;
+    loadLearned();
     tasteLoading = fetch(base + '/requests/' + encodeURIComponent(page.dataset.name) + '/taste')
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (data) {
