@@ -44,8 +44,9 @@ from sse_starlette.sse import EventSourceResponse
 
 try:
     from markdown_it import MarkdownIt
+    from markdown_it.token import Token
 except ImportError:  # Named in requirements.in; an environment installed before 2026-10-19 lacks it.
-    MarkdownIt = None
+    MarkdownIt = Token = None
 
 from orchestrator import csm
 from orchestrator.events import read_events
@@ -219,6 +220,63 @@ def _link_opens_apart(self, tokens, idx, options, env):
     return self.renderToken(tokens, idx, options, env)
 
 
+#: A render named in a document's prose: `artifacts/03_matrix_a.png`, `output.webp`, `05_sheet_a.png`. Not inside
+#: a URL or a longer path; whether it is linked is decided by `artifact_ref`, so a near miss is left as text.
+ARTIFACT_MENTION = re.compile(r"(?<![\w/.:-])((?:[\w-]+/)*[\w-][\w.-]*\.(?:webp|png|jpe?g|svg|mp4|webm|pdf))(?![\w/-])", re.I)
+
+
+def _link_artifacts(state) -> None:
+    """Makes each render a document mentions a link the reading panel opens in place (`data-artifact`).
+
+    The agent writes the path as the project knows it, in backticks or not; the studio, which knows where the run
+    is served, turns it into a link. No href is written here: the page builds it from its own base and run, the
+    same way it builds every other artifact URL, so the fragment does not need to know where it will be shown.
+    """
+    resolve = state.env.get("artifact") if isinstance(state.env, dict) else None
+    if resolve is None:
+        return
+    for block in state.tokens:
+        if block.type != "inline" or not block.children:
+            continue
+        out, depth = [], 0
+        for tok in block.children:
+            depth += tok.type == "link_open"
+            depth -= tok.type == "link_close"
+            if depth or tok.type not in ("text", "code_inline"):
+                out.append(tok)
+                continue
+            if tok.type == "code_inline":
+                ref = tok.content.strip()
+                path = resolve(ref) if ARTIFACT_MENTION.fullmatch(ref) else None
+                out += _artifact_link(path, [tok]) if path else [tok]
+                continue
+            pos = 0
+            for m in ARTIFACT_MENTION.finditer(tok.content):
+                if (path := resolve(m.group(1))) is None:
+                    continue
+                if m.start() > pos:
+                    out.append(_text(tok.content[pos:m.start()]))
+                out += _artifact_link(path, [_text(m.group(1))])
+                pos = m.end()
+            if pos == 0:
+                out.append(tok)
+            elif pos < len(tok.content):
+                out.append(_text(tok.content[pos:]))
+        block.children = out
+
+
+def _text(content: str):
+    tok = Token("text", "", 0)
+    tok.content = content
+    return tok
+
+
+def _artifact_link(path: str, inner: list) -> list:
+    opening = Token("link_open", "a", 1)
+    opening.attrs = {"class": "fr-artifact-link", "data-artifact": path}
+    return [opening, *inner, Token("link_close", "a", -1)]
+
+
 #: A delivered Markdown document as HTML, for the client page's reading panel.
 #:
 #: CommonMark plus tables and strikethrough, which is what the agents write. **Raw HTML is off**, and that
@@ -230,6 +288,7 @@ MARKDOWN = None if MarkdownIt is None else (
     MarkdownIt("commonmark", {"html": False}).enable(["table", "strikethrough"]).disable("image"))
 if MARKDOWN is not None:
     MARKDOWN.add_render_rule("link_open", _link_opens_apart)
+    MARKDOWN.core.ruler.push("artifact_links", _link_artifacts)
 
 #: What a run *delivers*, as opposed to what it rendered: the documents beside the picture.
 #:
@@ -630,29 +689,11 @@ def create_app(root: Path | None = None, registry: Registry | None = None,
         guessed the name.
         """
         run = found(app.state.registry, run_id)
-
-        suffix = Path(name).suffix.lower()
-        if suffix not in ARTIFACT_SUFFIXES or private(name):
-            # Refused on the name alone, before touching the disk: whether the file exists is not
-            # something a visitor should be able to learn about a path we would never serve.
+        path = artifact_file(run, name)
+        if path is None:
             raise HTTPException(status_code=404, detail=f"not an artifact: {name}")
 
-        try:
-            path = contain(run.project.root, name)
-        except StudioError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
-
-        if private(path.relative_to(Path(run.project.root).resolve()).as_posix()):
-            # The same rule after resolution, so `artifacts/../documents/x.jpg` cannot walk round it.
-            raise HTTPException(status_code=404, detail=f"not an artifact: {name}")
-
-        if suffix in RECORDED_ONLY_SUFFIXES and not recorded_render(run, path):
-            raise HTTPException(status_code=404, detail=f"not an artifact: {name}")
-
-        if not path.is_file():
-            raise HTTPException(status_code=404, detail=f"no such artifact: {name}")
-
-        if suffix == ".pdf":
+        if path.suffix.lower() == ".pdf":
             # Inline, so a click opens it in the browser's viewer; named, so saving it keeps the name.
             return ReleasingFileResponse(path, media_type="application/pdf",
                                          headers={"Content-Disposition": f'inline; filename="{path.name}"',
@@ -762,7 +803,8 @@ def create_app(root: Path | None = None, registry: Registry | None = None,
             if MARKDOWN is None:
                 raise HTTPException(status_code=501, detail="markdown-it-py is not installed in this environment; "
                                                             "see src/studio/requirements.in")
-            return HTMLResponse(MARKDOWN.render(source))
+            # A render the document names becomes a link the panel opens in place, if this run serves that file.
+            return HTMLResponse(MARKDOWN.render(source, {"artifact": lambda ref: artifact_ref(run, ref)}))
 
         return HTMLResponse(highlight(source, JavascriptLexer() if code else MarkdownLexer(),
                                       FORMATTER if code else PROSE))
@@ -843,6 +885,40 @@ def recorded_render(run: Run, path: Path) -> bool:
         except StudioError:
             continue
     return False
+
+
+def artifact_file(run: Run, name: str) -> Path | None:
+    """The file the artifact route serves for `name`, or None if it would refuse it.
+
+    Containment says *inside the project* and the suffix allowlist says *and it is a render*. A refusal is
+    decided on the name alone, before the disk is touched, wherever it can be: whether a file exists is not
+    something a visitor should learn about a path we would never serve.
+    """
+    suffix = Path(name).suffix.lower()
+    if suffix not in ARTIFACT_SUFFIXES or private(name):
+        return None
+    try:
+        path = contain(run.project.root, name)
+    except StudioError:
+        return None
+    # The same rule after resolution, so `artifacts/../documents/x.jpg` cannot walk round it.
+    if private(path.relative_to(Path(run.project.root).resolve()).as_posix()):
+        return None
+    if suffix in RECORDED_ONLY_SUFFIXES and not recorded_render(run, path):
+        return None
+    return path if path.is_file() else None
+
+
+def artifact_ref(run: Run, ref: str) -> str | None:
+    """The project-relative path a document's mention of a render names, if the artifact route would serve it.
+
+    Documents name renders as the project knows them (`artifacts/03_matrix_a.png`, `output.webp`) and, in a list
+    after one such path, by file name alone (`03_kit.png`), so a bare name is also tried under `artifacts/`.
+    """
+    for candidate in (ref, f"artifacts/{ref}") if "/" not in ref else (ref,):
+        if artifact_file(run, candidate) is not None:
+            return candidate
+    return None
 
 
 #: Rasters before vector in the finished-piece row. The first entry is what the page shows when a
