@@ -1,25 +1,37 @@
-{#- What the studio learned from the audiences: profile counts, comparePace's summary and the titles each pace
-    rests on, all in the run's own words (studio.direction.learned). Plain words for a client: no request line, no raw
-    payload. -#}
-{% if learned and (learned.profiles or learned.compare or learned.audiences) %}
-<section class="fr-card fr-learned" data-learned>
-  <p class="fr-eyebrow" style="margin:0">What the studio learned</p>
-  {% if learned.profiles %}
-  <p class="fr-small" style="margin:0">Taste profiles of
-    {% for p in learned.profiles %}{{ p.label }}{% if p.distinctive %} ({{ p.distinctive }} distinctive titles){% endif %}{{ ', ' if not loop.last and loop.revindex > 2 else (' and ' if not loop.last else '') }}{% endfor %}.</p>
-  {% endif %}
+{#- What the studio learned from the audiences (studio.direction.learned): each profile's pace counts from the run's
+    events, the titles the pace rests on and comparePace's summary in the run's own words. Plain words for a client: no
+    request line, no raw payload. Shown on the Deliverables tab, and swapped in by front.js as the run fetches. -#}
+{% if learned and (learned.compare or learned.audiences) %}
+<section class="fr-card fr-learned" data-learned aria-labelledby="learned-title">
+  <div>
+    <h2 class="fr-heading" id="learned-title" style="margin:0">What the studio learned</h2>
+    <p class="fr-small" style="margin:0">From Qloo taste profiles: the aggregate tastes of a place and an age band, never facts
+      about a person.</p>
+  </div>
+  {% for a in learned.audiences %}
+  <div class="fr-learned-aud">
+    <p class="ps-label" style="margin:0">{{ a.name }}{% if a.who %} · {{ a.who }}{% endif %}</p>
+    {% if a.pace %}
+    <p style="margin:0">Of the {{ a.pace.n }} films and shows in its taste profile, <strong>{{ a.pace.fast }}</strong> are tagged
+      fast-paced and <strong>{{ a.pace.slow }}</strong> slow-paced{% if a.pace.share is not none %}: {{ a.pace.share }}% of the
+      paced ones are fast{% endif %}.</p>
+    {#- The Audiences tab's bar: fast and slow as shares of the whole list, the rest untagged. -#}
+    <div class="fr-bar" role="img" aria-label="{{ a.pace.fast }} fast-paced and {{ a.pace.slow }} slow-paced of {{ a.pace.n }}">
+      <span class="fr-bar-fast" style="width: {{ (100 * a.pace.fast / a.pace.n)|round(1) }}%" title="{{ a.pace.fast }} fast-paced"></span>
+      <span class="fr-bar-slow" style="width: {{ (100 * a.pace.slow / a.pace.n)|round(1) }}%" title="{{ a.pace.slow }} slow-paced"></span>
+    </div>
+    {% elif a.distinctive %}
+    <p style="margin:0">{{ a.distinctive }} distinctive titles in its taste profile.</p>
+    {% endif %}
+    {% if a.fast %}<p class="fr-titles">Fast-paced favourites the studio cites: {% for t in a.fast %}<em>{{ t }}</em>{{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}
+    {% if a.slow %}<p class="fr-titles">Slow-paced favourites the studio cites: {% for t in a.slow %}<em>{{ t }}</em>{{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}
+  </div>
+  {% endfor %}
   {% if learned.compare %}
   <div>
     <p class="ps-label" style="margin:0 0 var(--space-1)">Between the audiences</p>
     <p class="fr-quote">{{ learned.compare }}</p>
   </div>
   {% endif %}
-  {% for a in learned.audiences %}
-  <div>
-    <p class="ps-label" style="margin:0">{{ a.title }}</p>
-    {% if a.fast %}<p class="fr-titles">Fast-paced favourites: {% for t in a.fast %}<em>{{ t }}</em>{{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}
-    {% if a.slow %}<p class="fr-titles">Slow-paced favourites: {% for t in a.slow %}<em>{{ t }}</em>{{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}
-  </div>
-  {% endfor %}
 </section>
 {% else %}<div data-learned hidden></div>{% endif %}

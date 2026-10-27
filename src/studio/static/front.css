@@ -85,7 +85,9 @@ label.ps-otile { box-sizing: border-box; }
 .fr-audience { display: grid; grid-template-columns: 24px minmax(0, 1fr) 150px; align-items: center; gap: var(--space-2); }
 .fr-audience input, .fr-audience select { box-sizing: border-box; height: var(--control-md); min-width: 0; padding: 0 var(--space-3); border: 1px solid var(--line-control); border-radius: var(--radius-md); background: var(--surface-raised); font: 400 15px/22px var(--font-sans); color: var(--ink); }
 .fr-letter { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font: 600 12px/1 var(--font-sans); }
-.fr-learned { display: grid; gap: var(--space-4); }
+.fr-learned { display: grid; gap: var(--space-5); align-content: start; }
+.fr-learned-aud { display: grid; gap: var(--space-2); }
+.fr-learned-aud .fr-titles { margin: 0; }
 .fr-quote { margin: 0; padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); background: var(--surface-sunken); font: 400 15px/22px var(--font-sans); color: var(--ink); }
 .fr-titles { margin: var(--space-1) 0 0; font: 400 13px/18px var(--font-sans); color: var(--ink-muted); }
 .fr-titles em { font-style: italic; color: var(--ink); }
@@ -111,7 +113,21 @@ label.ps-asset-upload { box-sizing: border-box; width: 148px; }
 .fr-docs a { color: var(--ink); text-decoration: none; font-weight: 500; }
 .fr-docs a:hover, .fr-docs a[aria-current] { color: var(--accent); }
 
-/* The reading panel: a delivered document opened under the piece. */
+/* The Deliverables tab: the finished work and what the studio wrote beside what it learned, the reader under both. */
+.fr-deliver { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(300px, 1fr); gap: var(--space-6); align-items: start;
+  max-width: 1320px; margin: 0 auto; padding: var(--space-6) var(--space-6) var(--space-8); box-sizing: border-box; }
+.fr-deliver[hidden] { display: none; }
+.fr-deliver:not(:has(> .fr-learned)) { grid-template-columns: minmax(0, 1fr); }
+.fr-deliver-main { display: grid; gap: var(--space-6); }
+.fr-deliver > .fr-doc { grid-column: 1 / -1; margin-top: 0; }
+.fr-deliver .fr-card > .fr-heading { margin: 0 0 var(--space-4); }
+.fr-finished { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--space-5); }
+.fr-finished-piece { display: grid; gap: var(--space-2); margin: 0; }
+.fr-finished-piece :is(img, video) { display: block; width: 100%; max-height: 420px; object-fit: contain; border-radius: var(--radius-md); background: var(--gallery); }
+.fr-finished-piece figcaption { display: grid; gap: var(--space-2); }
+@media (max-width: 960px) { .fr-deliver { grid-template-columns: 1fr; } }
+
+/* The reading panel: a delivered document opened from the Deliverables tab. */
 .fr-doc { margin-top: var(--space-6); }
 .fr-doc-head { display: flex; align-items: flex-start; gap: var(--space-2); margin-bottom: var(--space-4); }
 .fr-doc-head > div { flex: 1; min-width: 0; }

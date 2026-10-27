@@ -9,6 +9,7 @@ the directory shape the generator writes, and no test presses Start.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import tempfile
 import unittest
@@ -370,9 +371,38 @@ class LearnedTests(unittest.TestCase):
         from studio import direction
         found = direction.learned(DIRECTION, self.EVENTS)
         self.assertEqual(found["compare"][:30], "Audience A: 54% fast (14 fast,")
-        self.assertEqual(found["audiences"], [{"title": "Film A: Tokyo, 45–54", "fast": ["The Mandalorian", "Akiba Maid War"],
+        # "Film A" in the direction is the profile labelled "audience A": the letter ties them.
+        self.assertEqual(found["audiences"], [{"name": "Audience A", "who": "", "distinctive": 82, "pace": None,
+                                               "fast": ["The Mandalorian", "Akiba Maid War"],
                                                "slow": ["Minari", "The Farewell"]}])
-        self.assertEqual(found["profiles"], [{"label": "audience A", "distinctive": 82}])
+
+    def test_the_pace_counts_come_from_the_profile_before_any_direction(self):
+        from studio import direction
+        profile = {"type": "taste.query", "id": "t4", "op": "profile", "label": "audience A", "distinctive": 76,
+                   "audience": {"place": "Berlin", "age": "30_to_34", "gender": None},
+                   "pace": {"fast": 15, "slow": 6, "n": 46, "fastShare": 0.714}}
+        [a] = direction.learned("", [profile])["audiences"]
+        self.assertEqual((a["who"], a["pace"], a["fast"]), ("Berlin, 30 to 34", {"fast": 15, "slow": 6, "n": 46, "share": 71}, []))
+
+    def test_a_profile_fetched_again_is_shown_once(self):
+        from studio import direction
+        again = [dict(self.EVENTS[0]), dict(self.EVENTS[0], distinctive=90)]
+        self.assertEqual([a["distinctive"] for a in direction.learned("", again)["audiences"]], [90])
+
+    def test_titles_written_as_prose_under_a_pace_heading_are_read(self):
+        from studio import direction
+        text = ("## Audience A — Berlin, 30–34\n\n### Space\n\nThe fast list is *Wrong*.\n\n### Pace\n\n"
+                "`pace()`: **fast 15, slow 6, n 46 — a 71% fast share.** The fast list is led by *Uncut Gems*, "
+                "*The Marvelous Mrs. Maisel*, *Vikings*; the slow list is *Suspiria*, *Victoria*.\n\n"
+                "### Grade\n\n*Midsommar* is tagged slow.\n")
+        [a] = direction.learned(text, self.EVENTS[:1])["audiences"]
+        self.assertEqual(a["fast"], ["Uncut Gems", "The Marvelous Mrs. Maisel", "Vikings"])
+        self.assertEqual(a["slow"], ["Suspiria", "Victoria"])
+
+    def test_titles_no_profile_matches_are_kept_under_their_heading(self):
+        from studio import direction
+        found = direction.learned(DIRECTION, [])
+        self.assertEqual([(a["name"], a["pace"]) for a in found["audiences"]], [("Film A: Tokyo, 45–54", None)])
 
     def test_no_request_line_ever_reaches_it(self):
         from studio import direction
@@ -380,7 +410,7 @@ class LearnedTests(unittest.TestCase):
 
     def test_a_run_without_a_direction_has_nothing_to_say(self):
         from studio import direction
-        self.assertEqual(direction.learned("", []), {"profiles": [], "compare": "", "audiences": []})
+        self.assertEqual(direction.learned("", []), {"compare": "", "audiences": []})
 
 
 class FrontRoutingTests(unittest.TestCase):
@@ -581,6 +611,9 @@ class FrontRoutingTests(unittest.TestCase):
             self.assertIn("What the studio learned", page, path)
             self.assertIn("The Mandalorian", page, path)
             self.assertNotIn("/v2/insights", page, path)
+        # Something learned is enough to show the Deliverables tab before anything is delivered.
+        tab = re.search(r'<button[^>]*data-view="deliverables"[^>]*>', self.client.get("/requests/pair").text).group(0)
+        self.assertNotIn("hidden", tab)
 
     def test_a_project_from_another_host_is_shown_but_not_offered_a_run(self):
         p = project_dir(self.root, "elsewhere", workflow="painting", policy=False)
@@ -951,12 +984,12 @@ class TitleListTests(unittest.TestCase):
     def test_a_title_with_a_full_stop_is_kept_and_so_are_those_after_it(self):
         from studio import direction
         cell = "Fast titles: *Dr. Strangelove*, *Mr. Nobody*, *Heat*. Slow titles: *Minari*."
-        self.assertEqual(direction._titles_after(cell, "fast titles"), ["Dr. Strangelove", "Mr. Nobody", "Heat"])
-        self.assertEqual(direction._titles_after(cell, "slow titles"), ["Minari"])
+        self.assertEqual(direction._titles_after(cell, "fast"), ["Dr. Strangelove", "Mr. Nobody", "Heat"])
+        self.assertEqual(direction._titles_after(cell, "slow"), ["Minari"])
 
     def test_a_sentence_before_any_title_ends_the_list(self):
         from studio import direction
-        self.assertEqual(direction._titles_after("Fast titles: none. Slow titles: *Minari*.", "fast titles"), [])
+        self.assertEqual(direction._titles_after("Fast titles: none. Slow titles: *Minari*.", "fast"), [])
 
 
 if __name__ == "__main__":

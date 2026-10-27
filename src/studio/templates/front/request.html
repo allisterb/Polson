@@ -39,6 +39,8 @@
       transcript in this design, from the same event stream; the sense-making curve stays on that page. -#}
   <nav class="ps-tabs fr-views" role="tablist" aria-label="Request views">
     <button class="ps-tab" type="button" role="tab" id="tab-progress" aria-controls="panel-progress" aria-selected="true" data-view="progress">Progress</button>
+    {#- The finished work, what the studio wrote and what it learned, up front. Appears once there is any (front.js). -#}
+    <button class="ps-tab" type="button" role="tab" id="tab-deliverables" aria-controls="panel-deliverables" aria-selected="false" tabindex="-1" data-view="deliverables" {% if not learned %}hidden{% endif %}>Deliverables</button>
     <button class="ps-tab" type="button" role="tab" id="tab-agent" aria-controls="panel-agent" aria-selected="false" tabindex="-1" data-view="agent">Agent<span class="ps-tab-count" data-agent-count></span></button>
     {#- How the run used Qloo. Each tab appears once the run has something to show in it (front.js, from /taste). -#}
     <button class="ps-tab" type="button" role="tab" id="tab-audiences" aria-controls="panel-audiences" aria-selected="false" tabindex="-1" data-view="audiences" hidden>Audiences</button>
@@ -66,19 +68,6 @@
         <div class="fr-downloads" data-downloads></div>
       </div>
 
-      {#- A document from "What the studio wrote", read here rather than as raw text in another tab. -#}
-      <section class="fr-card fr-doc" data-doc hidden aria-labelledby="doc-title">
-        <header class="fr-doc-head">
-          <div>
-            <h2 class="fr-heading fr-spec" id="doc-title" data-doc-title></h2>
-            <p class="fr-small" data-doc-what></p>
-          </div>
-          <a class="ps-btn ps-btn-quiet ps-btn-sm" data-doc-raw target="_blank" rel="noopener">Raw</a>
-          <button class="ps-btn ps-btn-quiet ps-btn-sm" type="button" data-doc-close>Close</button>
-        </header>
-        <div data-doc-body></div>
-      </section>
-
       {% if can_run and row.status in ('delivered', 'stopped') %}
       <section class="fr-change fr-card">
         <h2 class="fr-heading">Ask for a change</h2>
@@ -105,13 +94,6 @@
         </div>
       </section>
 
-      {% include "front/learned.html" %}
-
-      <section class="fr-card" data-documents hidden>
-        <p class="fr-eyebrow">What the studio wrote</p>
-        <ul class="fr-docs" data-doc-list></ul>
-      </section>
-
       <section class="fr-card">
         <p class="fr-eyebrow">The request</p>
         <dl class="fr-summary">
@@ -131,6 +113,33 @@
   </div>
 
   {% if run %}
+  <section class="fr-deliver" id="panel-deliverables" role="tabpanel" aria-labelledby="tab-deliverables" hidden>
+    <div class="fr-deliver-main">
+      <section class="fr-card" data-finished hidden aria-labelledby="finished-title">
+        <h2 class="fr-heading" id="finished-title">The finished work</h2>
+        <div class="fr-finished" data-finished-list></div>
+      </section>
+      <section class="fr-card" data-documents hidden aria-labelledby="documents-title">
+        <h2 class="fr-heading" id="documents-title">What the studio wrote</h2>
+        <ul class="fr-docs" data-doc-list></ul>
+      </section>
+    </div>
+    {% include "front/learned.html" %}
+
+    {#- A document from "What the studio wrote", read here rather than as raw text in another tab. -#}
+    <section class="fr-card fr-doc" data-doc hidden aria-labelledby="doc-title">
+      <header class="fr-doc-head">
+        <div>
+          <h2 class="fr-heading fr-spec" id="doc-title" data-doc-title></h2>
+          <p class="fr-small" data-doc-what></p>
+        </div>
+        <a class="ps-btn ps-btn-quiet ps-btn-sm" data-doc-raw target="_blank" rel="noopener">Raw</a>
+        <button class="ps-btn ps-btn-quiet ps-btn-sm" type="button" data-doc-close>Close</button>
+      </header>
+      <div data-doc-body></div>
+    </section>
+  </section>
+
   <section class="fr-agent" id="panel-agent" role="tabpanel" aria-labelledby="tab-agent" hidden data-agent>
     <p class="fr-agent-now" data-agent-now hidden><span class="ps-run-dot" aria-hidden="true"></span><span data-agent-did></span><span class="fr-spec" data-agent-ago></span></p>
     <ol class="fr-log" role="log" aria-label="What the agent thought and did" data-agent-log></ol>

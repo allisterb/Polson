@@ -18,6 +18,8 @@ from collections.abc import Iterable
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
+from . import catalogue
+
 #: A direction file is a page of tables, not a book. Anything longer is truncated, said so, and still served.
 MAX_DIRECTION = 200_000
 
@@ -174,44 +176,96 @@ _HANDLE = re.compile(r"\bt\d{1,3}\s*\((audience\s+[A-Z])\)", re.I)
 _ITALIC = re.compile(r"(?<!\*)\*([^*\n]{1,80})\*(?!\*)")
 
 
-def learned(text: str, events: Iterable[dict[str, Any]], since: str | None = None) -> dict[str, Any]:
-    """What a run learned from its audiences, in the run's own words, for a client-facing page.
+#: Where a run's list of fast or slow titles begins: `Fast titles:`, `the fast list is led by`, `slow-paced favourites`.
+_PACE_LIST = {kind: re.compile(rf"\b{kind}(?:[- ]paced)?\s+(?:titles|list|favou?rites)\b", re.I) for kind in ("fast", "slow")}
 
-    Three things and nothing else: the profiles fetched (label and how many distinctive titles each had), the
-    `comparePace` summary from "Between the audiences", and the titles each audience's pace rests on from its
-    **Pace** row. Plain words for a client, so no request line and no raw payload: the profiles come from counts on
-    `taste.query` events rather than from what they returned, and titles only as the agent wrote them into
-    `direction.md`. (Qloo's terms forbid *storing* responses in a public repository; showing a run's results as
-    evidence, with their source and limits, is what the hackathon kit asks for — `docs/SAFE_USE.md`.)
+#: `Audience A`, `Film B`: the letter that ties a direction heading to the profile fetched for it.
+_LETTER = re.compile(r"\b(?i:audience|film|poster|piece)\s+([A-Z])\b")
+
+
+def learned(text: str, events: Iterable[dict[str, Any]], since: str | None = None) -> dict[str, Any]:
+    """What a run learned from its audiences, for a client-facing page.
+
+    Each audience profile fetched — who it is, how many distinctive titles it had, and its pace counts — comes from the
+    run's `taste.query` events, so it shows as soon as the query is made, whatever the direction's wording. The titles
+    each pace rests on, and the `comparePace` summary from "Between the audiences", are the agent's own, as it wrote them
+    into `direction.md`. Plain words for a client, so no request line and no raw payload. (Qloo's terms forbid *storing*
+    responses in a public repository; showing a run's results as evidence, with their source and limits, is what the
+    hackathon kit asks for — `docs/SAFE_USE.md`.)
     """
     text = text[:MAX_DIRECTION]
-    profiles = [{"label": e.get("label") or e.get("id") or "", "distinctive": e.get("distinctive")}
-                for e in events
-                if e.get("type") == "taste.query" and e.get("op") == "profile"
-                and not (since and (e.get("ts") or "") < since)]
+    profiles: dict[str, dict[str, Any]] = {}
+    for e in events:
+        if e.get("type") == "taste.query" and e.get("op") == "profile" and not (since and (e.get("ts") or "") < since):
+            profiles[e.get("label") or e.get("id") or ""] = e  # a profile fetched again replaces the earlier one
 
     compare = ""
     section = _section(text, "between the audiences")
     if section and (m := _COMPARE.search(section)):
         compare = _HANDLE.sub(lambda h: h.group(1)[0].upper() + h.group(1)[1:], " ".join(m.group(1).split()))
 
-    audiences, heading = [], ""
-    for line in text.splitlines():
-        if (h := _HEADING.match(line)) and len(h.group(1)) == 2:
-            heading = h.group(2).strip("*_ ")
-            continue
-        if not line.lstrip().startswith("|"):
-            continue
-        row = cells(line)
-        if len(row) < 2 or not row[0].strip("*_ ").lower().startswith("pace"):
-            continue
-        evidence = row[1]
-        fast = _titles_after(evidence, "fast titles")
-        slow = _titles_after(evidence, "slow titles")
-        if fast or slow:
-            audiences.append({"title": heading, "fast": fast, "slow": slow})
+    titles = _pace_titles(text)
+    audiences = []
+    for label, e in profiles.items():
+        letter = (m.group(1) if (m := _LETTER.search(label)) else "")
+        heading = next((h for h in titles if letter and (m := _LETTER.search(h)) and m.group(1) == letter), None)
+        if heading is None and len(profiles) == 1 and len(titles) == 1:
+            heading = next(iter(titles))
+        pace = e.get("pace") if isinstance(e.get("pace"), dict) else None
+        audiences.append({"name": label[:1].upper() + label[1:], "who": _who(e.get("audience")),
+                          "distinctive": e.get("distinctive"), "pace": _pace(pace),
+                          **(titles.pop(heading) if heading is not None else {"fast": [], "slow": []})})
+    # Titles under a heading no profile matched are still the run's words; they are shown under that heading.
+    audiences += [{"name": h, "who": "", "distinctive": None, "pace": None, **t} for h, t in titles.items()]
+    return {"compare": compare, "audiences": audiences}
 
-    return {"profiles": profiles, "compare": compare, "audiences": audiences}
+
+def _who(audience: Any) -> str:
+    """`Berlin, 30 to 34`: an audience as a profile event records it, in a reader's words."""
+    if not isinstance(audience, dict):
+        return ""
+    ages = dict(catalogue.AGE_BANDS)
+    parts = [audience.get("place"), ages.get(audience.get("age") or "", audience.get("age")), audience.get("gender")]
+    return ", ".join(str(p) for p in parts if p)
+
+
+def _pace(pace: dict[str, Any] | None) -> dict[str, Any] | None:
+    """A profile's pace counts, with the fast share as a whole percentage; None when the profile carried none."""
+    if not pace or not isinstance(pace.get("n"), int) or not pace["n"]:
+        return None
+    fast, slow = pace.get("fast") or 0, pace.get("slow") or 0
+    return {"fast": fast, "slow": slow, "n": pace["n"],
+            "share": round(100 * fast / (fast + slow)) if fast + slow else None}
+
+
+def _pace_titles(text: str) -> dict[str, dict[str, list[str]]]:
+    """The fast and slow titles a direction names, by the `##` heading they sit under.
+
+    Two forms are read: a table row whose first cell is **Pace**, and the body under a `###` or `####` heading
+    naming pace. nightshift5 wrote the second, in prose ("The fast list is led by *Uncut Gems*, …"), and a reader of
+    the first alone showed nothing; neither form is set by the templates, so both are taken.
+    """
+    places: list[tuple[str, str]] = []
+    heading, under = "", None
+    for line in text.splitlines():
+        if h := _HEADING.match(line):
+            if len(h.group(1)) == 2:
+                heading = h.group(2).strip("*_ ")
+            under = len(places) if len(h.group(1)) > 2 and re.search(r"\bpace\b", h.group(2), re.I) else None
+            if under is not None:
+                places.append((heading, ""))
+            continue
+        if under is not None:
+            places[under] = (heading, places[under][1] + "\n" + line)
+        elif line.lstrip().startswith("|") and len(row := cells(line)) >= 2 and row[0].strip("*_ ").lower().startswith("pace"):
+            places.append((heading, row[1]))
+
+    found: dict[str, dict[str, list[str]]] = {}
+    for heading, body in places:
+        entry = found.setdefault(heading, {"fast": [], "slow": []})
+        for kind in ("fast", "slow"):
+            entry[kind] = entry[kind] or _titles_after(body, kind)
+    return {h: t for h, t in found.items() if t["fast"] or t["slow"]}
 
 
 def _section(text: str, name: str) -> str:
@@ -228,22 +282,22 @@ def _section(text: str, name: str) -> str:
     return "\n".join(out)
 
 
-def _titles_after(cell: str, label: str) -> list[str]:
-    """The italic titles in the sentence that `label` begins: 'Fast titles: *A*, *B*.' gives [A, B]."""
-    low = cell.lower()
-    at = low.find(label)
-    if at < 0:
-        return []
-    rest = cell[at + len(label):]
-    # The sentence ends at a full stop *between* titles, never at one inside a title: *Dr. Strangelove*
-    # would otherwise end the list at "Dr." and lose itself and every title after it.
-    titles, pos = [], 0
-    for m in _ITALIC.finditer(rest):
-        if re.search(r"\.(\s|$)", rest[pos:m.start()]):
-            break
-        titles.append(m.group(1))
-        pos = m.end()
-    return titles[:8]
+def _titles_after(cell: str, kind: str) -> list[str]:
+    """The italic titles in the first `kind` ("fast" or "slow") list that names any: 'Fast titles: *A*, *B*.' and
+    'the fast list is led by *A*, *B*; …' both give [A, B]."""
+    for start in _PACE_LIST[kind].finditer(cell):
+        rest = cell[start.end():]
+        # The list ends at a full stop or semicolon *between* titles, never at one inside a title: *Dr. Strangelove*
+        # would otherwise end it at "Dr." and lose itself and every title after it.
+        titles, pos = [], 0
+        for m in _ITALIC.finditer(rest):
+            if re.search(r"[.;](\s|$)", rest[pos:m.start()]):
+                break
+            titles.append(m.group(1))
+            pos = m.end()
+        if titles:
+            return titles[:8]
+    return []
 
 
 def explain(text: str, events: Iterable[dict[str, Any]], since: str | None = None) -> dict[str, Any]:
