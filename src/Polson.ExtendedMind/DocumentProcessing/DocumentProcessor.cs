@@ -161,6 +161,13 @@ public class DocumentProcessor : Runtime, IDisposable
             return Refused(DocumentFailure.InvalidRequest, $"The schema is not a JSON Schema object: {ex.Message}");
         }
 
+        int[]? pages = null;
+        if (opts.Pages is not null && (pages = ParsePages(opts.Pages)) is null)
+        {
+            return Refused(DocumentFailure.InvalidRequest,
+                $"pages '{opts.Pages}' is not a page list. Write it as a print dialog takes it, counted from 1: '40-60, 75'.");
+        }
+
         byte[] bytes;
         string mime;
         string named;
@@ -186,8 +193,10 @@ public class DocumentProcessor : Runtime, IDisposable
 
         // The cache key carries everything that changes the answer, and a schema reshapes it.
         var images = opts.Images ?? true;
-        var keyQuery = (schema is null ? query : query + "\nschema:" + schema) + (images ? "\nimages:on" : "\nimages:off");
-        // Both ways named, so an answer cached before page images existed is never served as one made with them.
+        var keyQuery = (schema is null ? query : query + "\nschema:" + schema) + (images ? "\nimages:on" : "\nimages:off")
+            + (pages is null ? "" : "\npages:" + PageList(pages));
+        // Both ways named, so an answer cached before page images existed is never served as one made with them. Pages
+        // are named only when chosen, so every answer cached before they existed is still the whole document's.
 
         // Before the budget check, not after — a hit costs nothing, so it must still be served when
         // the allowance is spent. Checking affordability first would refuse a read that was free.
@@ -246,7 +255,7 @@ public class DocumentProcessor : Runtime, IDisposable
         // The read is its own task, not the script's: a long document can take longer than a script has (one took 28 s
         // and another 31 s of a 30 s limit, 2026-10-20). Waited on for `WaitSeconds`; past that the script is told it is
         // pending, and the read finishes into the cache for the next run. Never cancelled by the script's end for that reason.
-        var reading = Read(bytes, mime, query, useModel, schema, images, hash, keyQuery, named);
+        var reading = Read(bytes, mime, query, useModel, schema, images, pages, hash, keyQuery, named);
         if (cache is null || WaitSeconds <= 0) return await reading;
         inFlight[readKey] = reading;
         _ = reading.ContinueWith(_ => inFlight.TryRemove(readKey, out var _), TaskScheduler.Default);
@@ -265,12 +274,12 @@ public class DocumentProcessor : Runtime, IDisposable
 
     /// <summary>One read, from the service to the cache: the part of <c>ask</c> that may outlive the script that started it.</summary>
     private async Task<DocumentAnswer> Read(byte[] bytes, string mime, string query, string useModel, string? schema, bool images,
-        string hash, string keyQuery, string named)
+        int[]? pages, string hash, string keyQuery, string named)
     {
         var ct = CancellationToken.None;
         try
         {
-            var generated = await Generate(bytes, mime, query, useModel, schema, images, ct);
+            var generated = await Generate(bytes, mime, query, useModel, schema, images, pages, ct);
             var (text, tokens, finish) = (generated.Text, generated.Tokens, generated.Finish);
             var answeredBy = generated.Model ?? useModel;
 
@@ -363,6 +372,12 @@ public class DocumentProcessor : Runtime, IDisposable
         {
             return Attempted(DocumentFailure.Cancelled, "Cancelled.", named, useModel);
         }
+        catch (DocumentRefusal refusal)
+        {
+            // Decided once the document was open (a page past its last), before anything was sent: it costs nothing.
+            budget.Spent -= 1;
+            return Refused(refusal.Failure, refusal.Message, named);
+        }
         catch (Exception ex)
         {
             return Attempted(Classify(ex), ex.Message, named, useModel);
@@ -382,9 +397,14 @@ public class DocumentProcessor : Runtime, IDisposable
     /// </remarks>
     /// <param name="schema">A JSON Schema the answer must follow, as JSON text; null for prose.</param>
     /// <param name="images">Whether pictures may go to the model as page images; a model sent the whole file sees them anyway.</param>
-    protected virtual Task<Generation> Generate(
-        byte[] bytes, string mime, string query, string model, string? schema, bool images, CancellationToken ct) =>
-        GenerateInline(bytes, mime, query, model, schema, ct);
+    /// <param name="pages">The pages chosen, counted from 1, ascending; null for all of them.</param>
+    protected virtual async Task<Generation> Generate(
+        byte[] bytes, string mime, string query, string model, string? schema, bool images, int[]? pages, CancellationToken ct)
+    {
+        // A model sent the file whole reads every page; said rather than silently widened.
+        var whole = await GenerateInline(bytes, mime, query, model, schema, ct);
+        return pages is null ? whole : whole with { Fallback = PagesIgnored };
+    }
 
     /// <summary>The document sent whole to Gemini, which reads it itself. Overridable for tests.</summary>
     protected virtual async Task<Generation> GenerateInline(
@@ -506,6 +526,29 @@ public class DocumentProcessor : Runtime, IDisposable
         _ => JsonSerializer.Serialize(schema),
     };
 
+    /// <summary>A print dialog's page list, <c>'40-60, 75'</c>, as page numbers from 1, ascending and once each; null when
+    /// it is not one.</summary>
+    internal static int[]? ParsePages(string spec)
+    {
+        var pages = new SortedSet<int>();
+        foreach (var part in spec.Split(',', StringSplitOptions.TrimEntries))
+        {
+            var ends = part.Split(['-', '–'], StringSplitOptions.TrimEntries);
+            if (ends.Length is < 1 or > 2 || !int.TryParse(ends[0], out var from)
+                || !int.TryParse(ends[^1], out var to) || from < 1 || to < from || to - from >= MaxPagesChosen)
+                return null;
+            for (var p = from; p <= to; p++) pages.Add(p);
+            if (pages.Count > MaxPagesChosen) return null;
+        }
+        return pages.Count == 0 ? null : [.. pages];
+    }
+
+    /// <summary>Pages as the shortest list naming them, <c>40-60,75</c>: one spelling per choice, for the cache key.</summary>
+    internal static string PageList(int[] pages) => string.Join(",", pages
+        .Select((p, i) => (Page: p, Run: p - i))
+        .GroupBy(x => x.Run)
+        .Select(g => g.First().Page == g.Last().Page ? $"{g.First().Page}" : $"{g.First().Page}-{g.Last().Page}"));
+
     /// <summary>
     /// What the scan found in an answer, in the same wording research findings use.
     /// </summary>
@@ -607,6 +650,12 @@ public class DocumentProcessor : Runtime, IDisposable
     #endregion
 
     #region Fields
+    /// <summary>The <c>provenance.fallback</c> of a read that was asked for some pages and had to send the whole file.</summary>
+    protected const string PagesIgnored = "the whole document was read: this reader cannot choose pages";
+
+    /// <summary>Most pages one call may choose; a choice is for narrowing, and every page is what no choice reads.</summary>
+    const int MaxPagesChosen = 2000;
+
     readonly System.Collections.Concurrent.ConcurrentDictionary<string, Task<DocumentAnswer>> inFlight = new();
     readonly Client? client;
     readonly DocumentBudget budget;
@@ -642,9 +691,9 @@ public class DocumentProcessor : Runtime, IDisposable
     /// <remarks>
     /// Internal to the read step so that every locally-decidable problem can be raised where it is
     /// noticed and still returned as a value at the boundary, rather than each call site having to
-    /// thread a tuple back out.
+    /// thread a tuple back out. Protected for the one decided after the document is open: a page past its last.
     /// </remarks>
-    private sealed class DocumentRefusal(DocumentFailure failure, string message) : Exception(message)
+    protected sealed class DocumentRefusal(DocumentFailure failure, string message) : Exception(message)
     {
         public DocumentFailure Failure { get; } = failure;
     }

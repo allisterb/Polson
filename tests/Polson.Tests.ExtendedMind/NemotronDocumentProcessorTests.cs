@@ -414,6 +414,99 @@ public class NemotronDocumentProcessorTests : TestsRuntime, IDisposable
         Assert.DoesNotContain("image_url", handler.Bodies.Single());
     }
 
+    /// <summary>Only the chosen pages are sent, each under its own number, and evidence counts only on a page that was sent.</summary>
+    [Fact]
+    public async Task TestChosenPagesAloneAreSentUnderTheirOwnNumbers()
+    {
+        var pages = new DocumentPages(Path.Combine(root, "pages"));
+        if (!pages.IsAvailable) { Info("Skipped: no mutool."); return; }
+
+        // No 7 in the figures: this test font's text layer extracts it as "/".
+        var path = Pdf("s1.pdf", "Contents", "Revenue 215,938", "Costs 102,614", "Risk factors");
+        var handler = new Handler(HttpStatusCode.OK, Reply("215,938", (2, "Revenue 215,938"), (4, "Risk factors")));
+        using var reader = Make(handler);
+
+        var answer = await reader.Ask(path, "What was revenue?", new DocumentOptions { Pages = "2-3" });
+
+        Assert.True(answer.Success, answer.Error);
+        Assert.Equal(2, answer.Provenance!.Pages);
+        // Page 4 does say "Risk factors", but it was never sent: a quote from it rests on nothing.
+        Assert.Equal([true, false], answer.Evidence.Select(e => e.Found));
+        var sent = handler.Bodies.Single().Replace("\\n", "\n");
+        Assert.Contains("[Page 2]\nRevenue 215,938", sent);
+        Assert.Contains("[Page 3]\nCosts 102,614", sent);
+        Assert.DoesNotContain("[Page 1]", sent);
+        Assert.DoesNotContain("[Page 4]", sent);
+        Assert.Contains("Only some of the document", sent);   // the body's JSON escapes the apostrophe that follows
+    }
+
+    /// <summary>
+    /// Scans outside the chosen pages are not OCR'd, so they cannot send the read to Gemini: the S-1's 19 picture pages
+    /// once sent a question of its income statement there whole.
+    /// </summary>
+    [Fact]
+    public async Task TestScansOutsideTheChosenPagesDoNotSendTheReadElsewhere()
+    {
+        var pages = new DocumentPages(Path.Combine(root, "pages"));
+        if (!pages.IsAvailable) { Info("Skipped: no mutool."); return; }
+
+        var last = NemotronDocumentProcessor.MaxOcrPages + 2;
+        var path = Pdf("mixed.pdf", [.. Enumerable.Repeat("", last - 1), "Revenue 215,938"]);
+        var handler = new Handler(HttpStatusCode.OK, Reply("215,938", (last, "Revenue 215,938")));
+        using var reader = Make(handler);
+
+        var chosen = await reader.Ask(path, "What was revenue?", new DocumentOptions { Pages = $"{last}" });
+        var whole = await reader.Ask(path, "What was revenue?");
+
+        Assert.True(chosen.Success, chosen.Error);
+        Assert.Null(chosen.Provenance!.Fallback);
+        Assert.True(Assert.Single(chosen.Evidence).Found);
+        Assert.Single(handler.Bodies);
+        Assert.Contains("scans", whole.Provenance!.Fallback);   // every page still needs every scan read
+        Assert.Equal(1, reader.InlineCalls);
+    }
+
+    /// <summary>A page past the last is refused once the document is open, before anything is sent, and costs nothing.</summary>
+    [Fact]
+    public async Task TestAPagePastTheLastIsRefusedForNothing()
+    {
+        var pages = new DocumentPages(Path.Combine(root, "pages"));
+        if (!pages.IsAvailable) { Info("Skipped: no mutool."); return; }
+
+        var path = Pdf("short.pdf", "One", "Two");
+        var handler = new Handler(HttpStatusCode.OK, Reply("unused"));
+        var budget = new DocumentBudget(10);
+        using var reader = new Reader("gemini-key", [Nebius()], budget, root, pages, new HttpClient(handler));
+
+        var answer = await reader.Ask(path, "What does it say?", new DocumentOptions { Pages = "2-5" });
+
+        Assert.Equal("InvalidRequest", answer.FailureName);
+        Assert.Contains("the document has 2", answer.Error);
+        Assert.Empty(handler.Bodies);
+        Assert.Equal(0, reader.InlineCalls);   // not a fallback: Gemini would read pages that do not exist either
+        Assert.Equal(0, budget.Spent);
+    }
+
+    /// <summary>When Nemotron cannot answer, Gemini reads the same chosen pages, as marked text, never the whole file.</summary>
+    [Fact]
+    public async Task TestWhenNemotronFailsGeminiReadsOnlyTheChosenPages()
+    {
+        var pages = new DocumentPages(Path.Combine(root, "pages"));
+        if (!pages.IsAvailable) { Info("Skipped: no mutool."); return; }
+
+        var path = Pdf("s1.pdf", "Contents", "Revenue 215,938", "Costs 102,614");
+        using var reader = Make(new Handler(HttpStatusCode.InternalServerError, """{"detail":"no"}"""));
+
+        var answer = await reader.Ask(path, "What was revenue?", new DocumentOptions { Pages = "2" });
+
+        Assert.True(answer.Success, answer.Error);
+        Assert.NotNull(answer.Provenance!.Fallback);
+        Assert.Equal(1, answer.Provenance.Pages);
+        Assert.Equal("text/plain", reader.LastInline.Mime);
+        Assert.Contains("[Page 2]\nRevenue 215,938", reader.LastInline.Text);
+        Assert.DoesNotContain("Contents", reader.LastInline.Text);
+    }
+
     [Fact]
     public async Task TestWithoutANemotronEndpointGeminiIsTheFirstChoice()
     {
@@ -434,10 +527,14 @@ public class NemotronDocumentProcessorTests : TestsRuntime, IDisposable
     {
         public int InlineCalls { get; private set; }
 
+        /// <summary>What Gemini was last sent, as its type and its text.</summary>
+        public (string Mime, string Text) LastInline { get; private set; }
+
         protected override Task<Generation> GenerateInline(
             byte[] bytes, string mime, string query, string model, string? schema, CancellationToken ct)
         {
             InlineCalls += 1;
+            LastInline = (mime, System.Text.Encoding.UTF8.GetString(bytes));
             return Task.FromResult(new Generation("gemini answer", 50, "STOP") { Model = model });
         }
     }

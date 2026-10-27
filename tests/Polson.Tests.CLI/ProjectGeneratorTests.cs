@@ -630,6 +630,8 @@ public partial class ProjectGeneratorTests : TestsRuntime, IDisposable
         var pitch = File.ReadAllText(Path.Combine(root, "pitch", "GEMINI.md"));
         Assert.Contains("## The type: pitch", pitch, StringComparison.Ordinal);
         Assert.Contains("A projection looks like a projection", pitch, StringComparison.Ordinal);
+        Assert.Contains("### Stage 1a — the questions an investor asks of it", pitch, StringComparison.Ordinal);
+        Assert.Contains("**Why now**, if the deck says", pitch, StringComparison.Ordinal);
         Assert.Contains($"### Manual 13 — {PolsonManuals.Find("13")!.Title}", pitch, StringComparison.Ordinal);
         Assert.Equal(90, ProjectGenerator.DeadlineFor("motion", null, "pitch"));
         Assert.Equal(70, ProjectGenerator.DeadlineFor("motion", null, "report"));

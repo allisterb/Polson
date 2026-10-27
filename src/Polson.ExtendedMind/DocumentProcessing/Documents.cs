@@ -99,6 +99,15 @@ public sealed record DocumentOptions
 
     /// <summary>Whether a PDF's chart, diagram and photo pages go to the model as images too; true unless set false.</summary>
     public bool? Images { get; init; }
+
+    /// <summary>The pages to read, as a print dialog takes them: <c>'40-60, 75'</c>, counted from 1 like the <c>[Page n]</c>
+    /// markers. Null reads every page.</summary>
+    /// <remarks>
+    /// For a long document. A 313-page S-1 is about 400k tokens, all of it sent with every question; its contents page
+    /// says where each section is, so map it once (<c>pages: '1-8'</c>) and ask each question of the pages that hold it.
+    /// Evidence is found only on the pages read. Part of the cache key.
+    /// </remarks>
+    public string? Pages { get; init; }
 }
 
 #endregion
@@ -256,7 +265,7 @@ public sealed record DocumentProvenance
     /// <summary>How the document reached the model: <c>'inline'</c> (sent whole), <c>'text'</c> (its text layer), or <c>'text+ocr'</c>.</summary>
     public string Route { get; init; } = "inline";
 
-    /// <summary>Pages read as text; 0 when the document was sent whole.</summary>
+    /// <summary>Pages read as text — only those chosen, when <c>pages</c> chose some; 0 when the document was sent whole.</summary>
     public int Pages { get; init; }
 
     /// <summary>Why the first-choice model did not answer, when another did; null when it did.</summary>

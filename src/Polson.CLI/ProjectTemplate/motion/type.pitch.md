@@ -54,7 +54,7 @@ const ASK = 'This is a startup pitch deck. Summarise its case section by section
     + 'says: no figure, team member, competitor or claim it does not contain.';
 const KINDS = ['actual', 'projection', 'scenario', 'target', 'estimate'];
 const SECTIONS = ['problem', 'solution', 'product', 'why_now', 'market', 'traction', 'business_model', 'competition',
-    'go_to_market', 'team', 'financials', 'ask', 'use_of_funds', 'other'];
+    'advantage', 'go_to_market', 'team', 'risks', 'financials', 'ask', 'use_of_funds', 'other'];
 const SHAPE = { type: 'object', required: ['sections'], properties: { sections: { type: 'array', items: {
     type: 'object', required: ['section', 'page', 'claim', 'figures'], properties: {
         section: { type: 'string', enum: SECTIONS },
@@ -95,6 +95,54 @@ the model and the deck disagree on a figure, both are the company's: show neithe
   Put each in Q1 for the director to confirm, label it in `direction.md` as *read from the image on p. N*, and never
   let it stand as checked. A caption too small or blurred to read is not read: leave it out and say so.
 - **Record it**: `Stage.check('every figure on screen was found on its page', …, 'N found, M computed, K from the brief, L left out')`.
+
+### Stage 1a — the questions an investor asks of it
+
+**A deck is read by people deciding whether to back the founders, and they come to it with questions of their own.**
+Calacanis (*Angel*, 2017) spends the first half of every founder meeting on four, and the second half on quick
+tactical ones; the nine below are his, in our words. Put them to the deck in **one** call, after the reading and before
+any scene is planned:
+
+```javascript
+const QUESTIONS = [
+    'What is the company building: the product, in one sentence?',                          // ch. 18: the four
+    'Why are the founders doing this: the personal reason the deck gives, if it gives one?',
+    'Why now: what has changed that makes this possible, or needed, at this moment?',
+    'What is the founders\' unfair advantage: what they have or know that competitors and fast followers do not?',
+    'Who does the deck name as competitors or alternatives?',                               // ch. 19: the tactical five
+    'How does the company make money?',
+    'What does it charge?',
+    'What does an average customer spend, or an average transaction come to?',
+    'What reasons does the deck itself give that the company might fail: its risks?'];
+const ASKED = await Documents.ask(DECK,
+    'An investor reading this deck asks the questions below. For each, say whether the deck answers it; if it does, give '
+    + 'the page and the answer in the deck\'s own words, quoting its sentence. If it does not, say so: never answer from '
+    + 'general knowledge or from what a deck like this usually says.\n' + QUESTIONS.map((q, i) => `${i + 1}. ${q}`).join('\n'),
+    { schema: { type: 'object', required: ['answers'], properties: { answers: { type: 'array', items: { type: 'object',
+        required: ['n', 'answered', 'page', 'answer', 'quote'], properties: { n: { type: 'integer' }, answered: { type: 'boolean' },
+            page: { type: 'integer' }, answer: { type: 'string' }, quote: { type: 'string' } } } } } } });
+if (!ASKED.success) { error(ASKED.remedy); exit(ASKED.failureName); }
+const answers = JSON.parse(ASKED.text).answers;
+const gaps = answers.filter(a => !a.answered).map(a => QUESTIONS[a.n - 1]);
+Stage.note(`an investor's questions: ${answers.length - gaps.length} of ${QUESTIONS.length} answered by the deck; `
+    + `not answered: ${gaps.join(' | ') || 'none'}`, { once: true });
+```
+
+What the answers are for:
+
+- **They choose the scenes.** An answered question is a scene, or part of one (see *Scenes*); the four founder questions
+  make the film's first half. An answer is the model's reading of the deck: anything it puts on screen passes the
+  figure check and Stage 1b like every other claim.
+- **An unanswered question is a gap, and the film never fills it.** Nothing goes on screen that the deck does not say,
+  however obvious the answer. The gaps go to the director in **Q1**: for the company's own pitch they are what an
+  investor will ask that the deck does not answer, and the founder can answer them in the brief or the deck before it
+  is sent; for a retelling they are noted and left.
+- **Some answers are warnings.** Calacanis names the weakest answers he hears: a founder doing it *to make money*, or
+  *because a big company does not*; *we have no competition*; and no risks at all, which he reads as a founder unable
+  to see their own business plainly (chs. 18–19). Where the deck gives one of these, the film still shows the deck's
+  claim as the deck's, and Q1 says what an investor will make of it.
+- **They go in `process.pdf`**, as *An investor's read*: the nine questions, each with its page and the deck's answer,
+  or *not in the deck*. It is the part of the process book a founder will use most.
 
 ### Stage 1b — every label confirmed by the deck
 
@@ -153,6 +201,23 @@ Stage.check('every figure\'s label is the deck\'s own claim', unsupported.length
   does not make a better one.
 - **The ask is as stated.** The amount, the instrument and the use of funds come from the brief or the deck, in their
   words. Where neither gives an amount — *"raise a few million"* — the film says that, not a number.
+- **The ask carries its basis.** An investor's first question of a valuation is how the company arrived at it, and the
+  good answers are traction — revenue, users, growth (Calacanis, ch. 21). Where the deck states a valuation or a
+  raise and what it rests on, the ask scene shows both, as a projection shows its derivation. Where it states no basis,
+  the ask stands alone and Q1 says that an investor will ask for one.
+- **The founders' reason is theirs, in their words.** Calacanis backs founders rather than ideas, and weighs most
+  why *these* people are doing this (ch. 17–18). Where the deck says — an origin, a problem they lived — the founders'
+  scene carries it, attributed; where it does not, the scene is names, roles and the advantage the deck claims, and
+  nothing is supplied. **Never write a founder's motive the documents do not give**: an invented origin story is the
+  most persuasive thing a pitch film could add, and the most false.
+- **Risks as the deck states them.** Where the deck names reasons it might fail — regulation, supply, a dependency — they
+  get a scene of their own, set as plainly as the rest: an investor trusts a founder who names their risks more than one
+  who names none (ch. 19). Where it names none, there is no risk scene and the gap goes to Q1. Never add a risk the
+  documents do not name.
+- **Name how far along the company is.** Investors place a startup on a ladder before they read its numbers: an idea,
+  a plan, mock-ups, a prototype, a minimum viable product, a beta, then users, then paying customers (Calacanis,
+  ch. 21). The traction scene says which rung the deck shows, in the deck's terms, and its evidence; a company with
+  revenue says revenue, never *traction* alone.
 - **Market size honestly.** Total, serviceable and obtainable markets as the deck gives them, each with its kind
   (*estimate*). Nested circles are drawn **by area** (`Scale.radiusFor`): 10.6M inside 1.9B is a dot, and that is the
   point. A dot too small to see gets a label, never a larger radius.
@@ -168,25 +233,35 @@ Stage.check('every figure\'s label is the deck\'s own claim', unsupported.length
 
 ### Scenes
 
-The deck has more than the film can hold. **Choose by an investor's questions, in an investor's order**, and drop a
-section rather than rush one:
+The deck has more than the film can hold. **Choose by an investor's questions, in an investor's order** — Stage 1a's
+answers say which the deck can carry — and drop a scene rather than rush one. The first half answers Calacanis's four
+founder questions, as his meetings do (ch. 18); the second, his tactical ones (ch. 19):
 
 1. **Title** (3–4 s): the company and one line of what it does — and, for a retelling, *"Based on <company>'s <year>
    pitch deck"*.
 2. **The problem** — who has it and what it costs them, with the deck's figure for it.
-3. **The solution** — what the company does about it, shown as simply as the deck shows it.
-4. **The market** — total, serviceable, obtainable, by area.
-5. **Traction or progress** — results so far, solid; or, at the earliest stage, the milestones reached.
-6. **The business model** — how it makes money, with its basis (fee × volume).
-7. **Competition or advantage**, if the deck has it.
-8. **The team**, if the deck has it — names and roles in type.
-9. **The projections** — open marks, labelled, scenarios together, basis shown.
-10. **The ask** — the amount and what it buys, in the company's words. The film ends on it.
-11. **End card** (4 s): the sources (the documents and the pages used), *"Projections are the company's estimates."*,
+3. **The solution** — what the company is building, shown as simply as the deck shows it. *What are you working on?*
+4. **Why now**, if the deck says — what changed that makes this possible or needed now: a cost that fell, a device that
+   spread, a rule that changed. Calacanis counts it among the most important questions of all, since most ideas have
+   been tried before and win only when the market is ready (ch. 18).
+5. **The founders**, if the deck names them — names and roles in type, the reason they give for doing this, and the
+   advantage they claim over competitors and fast followers. *Why are you doing this?* and *What's your unfair
+   advantage?*
+6. **The market** — total, serviceable, obtainable, by area.
+7. **Traction or progress** — the rung the company is on, and results so far, solid.
+8. **The business model** — how it makes money, with its basis (fee × volume), and what it charges and what an average
+   customer spends where the deck gives them.
+9. **Competition**, if the deck has it — named as the deck names it.
+10. **Risks**, if the deck names them — as plainly as the rest.
+11. **The projections** — open marks, labelled, scenarios together, basis shown.
+12. **The ask** — the amount, what it rests on, and what it buys, in the company's words. The film ends on it.
+13. **End card** (4 s): the sources (the documents and the pages used), *"Projections are the company's estimates."*,
     and for a retelling *"A retelling for illustration. Not affiliated with <company>."*
 
 **About ten seconds a scene**, a little more where a projection's basis must be read. Ninety seconds holds about seven
-of these; two minutes about nine; three minutes all of them. Put the scene list, with its length per scene, in Q1.
+of these; two minutes about nine; three minutes all of them. **What to drop, when the length will not hold them all**:
+the second half before the first, and within it competition, then the market; the four founder questions and the ask
+stay while the deck answers them. Put the scene list, with its length per scene and what was dropped, in Q1.
 
 **The length is the brief's.** Cut it only on a measurement, never on an estimate: encode one scene first, time it,
 and multiply. A run once cut a two-minute brief to 87 seconds on an estimate of 65 minutes' encoding, then finished
@@ -258,8 +333,8 @@ once, before the beats, and record it in `direction.md` with its reasons.
   (*Design for Motion*, ch. 4): a cover naming the company as the client; the case in a sentence and the treatment
   beside its shape; the design board; a frame of each scene with its figure and the page it came from; the ask, as
   the resolve frame; what happens next; and *Thank you.* Set it in the film's typeface and accent on a neutral ground.
-  `process.pdf` carries the scene list and the label confirmations — the evidence a client can check, kept out of the
-  pitch's way.
+  `process.pdf` carries the scene list, the label confirmations and *An investor's read* (Stage 1a) — the evidence a
+  client can check, kept out of the pitch's way.
 - **Your palette, not the company's.** One accent and its tints on a neutral; contrast 4.5 : 1 for text. Do not rebuild
   the company's identity — its colour as the whole palette, its typeface, its devices. For a retelling this is the
   whole difference between a film *about* the deck and one passing as the company's.
@@ -342,21 +417,25 @@ number: look at its frame before deciding. The check records its own verdict; do
   figures, each marked found, computed, from the brief, from an image, or left out, **with its kind and its label's
   confirmation from Stage 1b**; every
   disagreement between a derivation and its printed result, and between the deck and the model; and the sections
-  dropped for length. The director confirms the case before anything moves.
+  dropped for length. **Then an investor's read** (Stage 1a): the questions the deck does not answer, and any answer an
+  investor will take as a warning, each with what they will make of it. The director confirms the case before anything
+  moves, and may answer a gap in the brief; an answer given there is the brief's, marked as such, never the deck's.
 - **Q2** the tone, pace and voice.
 - **Q3** and **Q4** as the instructions say: the design board, then the sheet.
 
 ### direction.md
 
 The documents (file, what each is, its date, pages), **who read them** (`provenance.model`, `route`, any fallback),
-how the film is told and why, then **one section per scene**: the claim, every figure with its kind, page and the quote
+how the film is told and why, **an investor's read** — the nine questions as a `Question | Answered | Page | The deck's
+answer` table, gaps and warnings included — then **one section per scene**: the claim, every figure with its kind, page and the quote
 it was found in, every computed value with its working, every figure from the brief, anything left out and why. Then
 the shared system — type, palette, the marks for actual and projected — with its reasons. The read-back's result goes
 last.
 
 **The audience gets a section of its own, before the scenes**: who is watching and where, as the brief has it, then
 one row per choice made for them in the `Choice | Evidence | Kind` table the instructions describe — **Brief**,
-**Qloo** (pace and grade from a profile), **Research** (Bazley et al., Zhang & Han), **Rule** (this type's: projections
+**Qloo** (pace and grade from a profile), **Research** (Bazley et al., Zhang & Han; Calacanis, *Angel*, for the
+scene order and the investor's questions), **Rule** (this type's: projections
 marked, scenarios together, figures in the audience's conventions with Unicode CLDR as the evidence), and **Assumed**.
 A choice the audience did not change says so. **With several audiences, one such section per audience**, then the
 instructions' *Between the audiences*, which for a pitch says first what every film shares: the scenes, the figures,

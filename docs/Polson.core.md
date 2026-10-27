@@ -4968,6 +4968,15 @@ if (answer.unverified.length) error('Not on their pages: ' + answer.unverified.j
 > they agree. A quote stitched from a table row (`Graphics $ 22,459`) is checked by its figures, so it is found.
 
 > [!IMPORTANT]
+> **A long document is read a few pages at a time: `{ pages: '40-60, 75' }`.** Without it every page goes with every
+> question, and a 313-page S-1 is about 400k tokens a call: slow, and a long way for the model to look for one table.
+> Map the document once from its contents pages (`pages: '1-8'`: which page each section starts on, as `[Page n]`
+> counts them), then ask each question of the pages that hold its answer. Pages count from 1 like `[Page n]`, not as
+> printed. **Evidence is found only on the pages read**, so a quote from a page that was not sent is `unverified`; a
+> page past the last is refused, for nothing; `provenance.pages` says how many were read; and the pages are part of the
+> cache key. A model sent the file whole cannot choose pages, and its `provenance.fallback` says it read them all.
+
+> [!IMPORTANT]
 > **A PDF's charts, diagrams and photos go along as images.** When the document is read, each page is drawn small
 > without its text and measured: a page with enough non-text ink in enough colours — a chart, a map, a diagram, a
 > photo, not a table's grey shading — is kept as a 150 dpi image, at most 8 (Token Factory's limit), and sent with the
@@ -5009,7 +5018,7 @@ if (answer.unverified.length) error('Not on their pages: ' + answer.unverified.j
 ## `Documents`
 
 - `Documents.list()` → `DocumentEntry[]` — What the project holds, from its `documents/` folder. **Free, offline, unmetered, and works with no key** — finding out what exists must never cost what reading it costs. Files of a type this surface cannot declare are omitted rather than listed then refused, and the folder's own `README.md` is not listed.
-- `Documents.ask(source: string | byte[], query: string, options?: object)` → `Promise<DocumentAnswer>` — Reads the document and answers the question. `source` is a **project-relative path**, contained exactly as `outFile` is, or the bytes themselves. `options`: `{ model?: string, mimeType?: string, schema?: object, images?: boolean }`. A path that is not there comes back naming **what is**, so a near-miss costs one turn rather than several. With `schema` (a JSON Schema object), **`answer.text` is JSON in that shape** — `JSON.parse(answer.text)` — and the schema is part of the cache key.
+- `Documents.ask(source: string | byte[], query: string, options?: object)` → `Promise<DocumentAnswer>` — Reads the document and answers the question. `source` is a **project-relative path**, contained exactly as `outFile` is, or the bytes themselves. `options`: `{ model?: string, mimeType?: string, schema?: object, images?: boolean, pages?: string }` — `pages` as a print dialog takes them, `'40-60, 75'`, for a long document (above). A path that is not there comes back naming **what is**, so a near-miss costs one turn rather than several. With `schema` (a JSON Schema object), **`answer.text` is JSON in that shape** — `JSON.parse(answer.text)` — and the schema is part of the cache key.
 - `Documents.budget` → `DocumentBudget` — Remaining allowance. **Check before a run of reads.**
 - `Documents.model` → `string` — The first-choice model: Nemotron 3.5 Super VL when a Nemotron service is configured, else Gemini. `options.model` naming a `gemini-…` model sends the document whole to Gemini.
 - `Documents.isAvailable` → `boolean` — Whether a key is configured. `false` means every call refuses.

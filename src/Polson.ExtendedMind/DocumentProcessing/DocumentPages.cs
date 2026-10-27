@@ -72,14 +72,23 @@ public class DocumentPages : Runtime
     /// <param name="pdf">The file's bytes.</param>
     /// <param name="hash">Its content hash, which names the cache entry.</param>
     /// <param name="maxOcrPages">Most scanned pages to OCR in this call.</param>
+    /// <param name="need">The pages, from 1, that must be readable: only scans among them are OCR'd. Null for every page.</param>
     /// <exception cref="InvalidOperationException">No <c>mutool</c>, or it failed.</exception>
-    /// <exception cref="TooManyScannedPages">More scanned pages than <paramref name="maxOcrPages"/>, or no Tesseract for one.</exception>
-    public async Task<PagedText> Read(byte[] pdf, string hash, int maxOcrPages, CancellationToken ct = default)
+    /// <exception cref="TooManyScannedPages">More scans to OCR than <paramref name="maxOcrPages"/>, or no Tesseract for one.</exception>
+    /// <remarks>
+    /// <b>OCR is done when a page is needed, and kept.</b> The S-1 has 19 pages of pictures among 313, and reading every one
+    /// first refused the whole document — even a question of one page of plain text — and sent it to Gemini whole. Each
+    /// page is OCR'd once, the first time a read needs it, and the cache says which have been.
+    /// </remarks>
+    public async Task<PagedText> Read(byte[] pdf, string hash, int maxOcrPages, IReadOnlyCollection<int>? need = null,
+        CancellationToken ct = default)
     {
         if (Mutool is null) throw new InvalidOperationException("mutool was not found, so a PDF cannot be read as text.");
 
         var dir = Path.Combine(directory, hash);
         var manifest = Path.Combine(dir, "pages.json");
+        var source = Path.Combine(dir, "source.pdf");
+        PagedText? read = null;
         if (File.Exists(manifest))
         {
             try
@@ -87,7 +96,7 @@ public class DocumentPages : Runtime
                 // An entry from before page images were kept has no `VisualPages`, and is read again.
                 if (JsonSerializer.Deserialize<PagedText>(await File.ReadAllTextAsync(manifest, ct)) is { Pages.Count: > 0, VisualPages: { } visual } cached
                     && visual.All(p => File.Exists(ImagePath(dir, p))))
-                    return cached;
+                    read = cached;
             }
             catch (JsonException ex)
             {
@@ -95,40 +104,53 @@ public class DocumentPages : Runtime
             }
         }
 
+        // An entry from before scans were OCR'd on demand has no `Scanned`: it OCR'd every scan, so all are done.
+        var scanned = read is null ? null : read.Scanned ?? [.. read.OcrPages];
+        var missing = scanned?.Except(read!.OcrPages).Where(p => need is null || need.Contains(p)).ToList();
+        if (read is not null && missing!.Count == 0) return read;
+
         Directory.CreateDirectory(dir);
-        var source = Path.Combine(dir, "source.pdf");
         await File.WriteAllBytesAsync(source, pdf, ct);
         try
         {
-            await Run(Mutool, ["draw", "-q", "-F", "txt", "-o", Path.Combine(dir, "page%04d.txt"), source], TextTimeout, ct);
-            var files = Directory.GetFiles(dir, "page*.txt").OrderBy(f => f, StringComparer.Ordinal).ToArray();
-            if (files.Length == 0) throw new InvalidOperationException("mutool produced no pages.");
-
-            var pages = files.Select(File.ReadAllText).ToList();
-            var scanned = Enumerable.Range(0, pages.Count)
-                .Where(i => pages[i].Count(c => !char.IsWhiteSpace(c)) < ScannedBelowCharacters).ToList();
-
-            if (scanned.Count > 0 && Tesseract is null)
-                throw new TooManyScannedPages(scanned.Count, $"{scanned.Count} page(s) are scans and tesseract was not found.");
-            if (scanned.Count > maxOcrPages)
-                throw new TooManyScannedPages(scanned.Count,
-                    $"{scanned.Count} of {pages.Count} pages are scans; OCR here reads at most {maxOcrPages} inside a script's time.");
-
-            foreach (var i in scanned)
+            if (read is null)
             {
-                var image = Path.Combine(dir, $"ocr{i + 1:0000}.png");
-                await Run(Mutool, ["draw", "-q", "-r", "300", "-c", "gray", "-o", image, source, (i + 1).ToString()], TextTimeout, ct);
-                var stem = Path.Combine(dir, $"ocr{i + 1:0000}");
+                await Run(Mutool, ["draw", "-q", "-F", "txt", "-o", Path.Combine(dir, "page%04d.txt"), source], TextTimeout, ct);
+                var files = Directory.GetFiles(dir, "page*.txt").OrderBy(f => f, StringComparer.Ordinal).ToArray();
+                if (files.Length == 0) throw new InvalidOperationException("mutool produced no pages.");
+
+                var text = files.Select(File.ReadAllText).ToList();
+                scanned = [.. Enumerable.Range(1, text.Count).Where(p => text[p - 1].Count(c => !char.IsWhiteSpace(c)) < ScannedBelowCharacters)];
+
+                var visual = await VisualPages(source, dir, ct);
+                foreach (var p in visual)
+                    await Run(Mutool, ["draw", "-q", "-r", ImageDpi.ToString(), "-o", ImagePath(dir, p), source, p.ToString()], TextTimeout, ct);
+
+                read = new PagedText { Pages = text, Scanned = scanned, VisualPages = visual };
+                await File.WriteAllTextAsync(manifest, JsonSerializer.Serialize(read), ct);
+                missing = [.. scanned.Where(p => need is null || need.Contains(p))];
+            }
+
+            if (missing!.Count > 0 && Tesseract is null)
+                throw new TooManyScannedPages(missing.Count, $"{missing.Count} page(s) needed are scans and tesseract was not found.");
+            if (missing.Count > maxOcrPages)
+                throw new TooManyScannedPages(missing.Count, need is null
+                    ? $"{missing.Count} of {read.Pages.Count} pages are scans; OCR here reads at most {maxOcrPages} inside a script's time."
+                    : $"{missing.Count} of the pages asked for are scans; OCR here reads at most {maxOcrPages} inside a script's time.");
+            if (missing.Count == 0) return read;
+
+            var pages = read.Pages.ToList();
+            foreach (var p in missing)
+            {
+                var image = Path.Combine(dir, $"ocr{p:0000}.png");
+                await Run(Mutool, ["draw", "-q", "-r", "300", "-c", "gray", "-o", image, source, p.ToString()], TextTimeout, ct);
+                var stem = Path.Combine(dir, $"ocr{p:0000}");
                 await Run(Tesseract!, [image, stem], OcrTimeout, ct);
-                pages[i] = File.Exists(stem + ".txt") ? await File.ReadAllTextAsync(stem + ".txt", ct) : "";
+                pages[p - 1] = File.Exists(stem + ".txt") ? await File.ReadAllTextAsync(stem + ".txt", ct) : "";
                 File.Delete(image);
             }
 
-            var visual = await VisualPages(source, dir, ct);
-            foreach (var p in visual)
-                await Run(Mutool, ["draw", "-q", "-r", ImageDpi.ToString(), "-o", ImagePath(dir, p), source, p.ToString()], TextTimeout, ct);
-
-            var read = new PagedText { Pages = pages, OcrPages = [.. scanned.Select(i => i + 1)], VisualPages = visual };
+            read = read with { Pages = pages, OcrPages = [.. read.OcrPages.Concat(missing).Order()] };
             await File.WriteAllTextAsync(manifest, JsonSerializer.Serialize(read), ct);
             return read;
         }
@@ -292,6 +314,10 @@ public sealed record PagedText
 
     /// <summary>Pages, counted from 1, whose text came from OCR rather than the text layer.</summary>
     public IReadOnlyList<int> OcrPages { get; init; } = [];
+
+    /// <summary>Pages, counted from 1, with no text layer: each is OCR'd when a read first needs it, and is then in
+    /// <see cref="OcrPages"/>. Null in an entry from before, which OCR'd them all.</summary>
+    public int[]? Scanned { get; init; }
 
     /// <summary>Pages, counted from 1, whose pictures are kept as images for the model; null in an entry from before them.</summary>
     public int[]? VisualPages { get; init; }
