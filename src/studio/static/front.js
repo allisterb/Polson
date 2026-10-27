@@ -416,9 +416,14 @@
         fillDownloads(downloads, d);
       }
 
-      // The Deliverables tab: every piece at once, each with its downloads.
+      // The Deliverables tab: every piece at once, each with its downloads. Films for several audiences play together.
       var finishedList = page.querySelector('[data-finished-list]');
-      if (finishedList) {
+      var films = pieces.map(function (d) { return d.formats.filter(function (f) { return VIDEO.test(f.path); })[0]; });
+      if (finishedList && pieces.length > 1 && films.every(Boolean)) {
+        finishedList.textContent = '';
+        compare(finishedList, pieces, films, fillDownloads);
+        page.querySelector('[data-finished]').hidden = false;
+      } else if (finishedList) {
         finishedList.textContent = '';
         pieces.forEach(function (d) {
           var card = el('figure', 'fr-finished-piece'), media = still(d);
@@ -481,6 +486,124 @@
       });
       page.querySelector('[data-documents]').hidden = !docs.children.length;
       deliverablesTab();
+    });
+  }
+
+  // One film per audience, side by side on one clock, so a moment in one is the same moment in the others. The longest
+  // film is the clock; a shorter one holds its last frame until the clock passes back under its end. One film's sound
+  // at a time, chosen on its cell: several narrations at once, in several languages, cannot be listened to.
+  function compare(box, pieces, films, fillDownloads) {
+    var who = {};
+    try {
+      var labels = page.querySelector('[data-audience-labels]');
+      JSON.parse(labels ? labels.textContent : '[]').forEach(function (a) { who[a.letter] = a; });
+    } catch (e) { /* the labels fall back to the letter */ }
+    function mmss(s) { s = Math.max(0, Math.round(s || 0)); return Math.floor(s / 60) + ':' + ('0' + s % 60).slice(-2); }
+
+    var wrap = el('div', 'fr-compare-wrap'), bar = el('div', 'fr-compare-bar');
+    var play = el('button', 'ps-btn ps-btn-primary ps-btn-sm', 'Play all'); play.type = 'button';
+    var seek = el('input', 'fr-compare-seek'); seek.type = 'range'; seek.min = '0'; seek.max = '0'; seek.step = '0.01'; seek.value = '0';
+    seek.setAttribute('aria-label', 'Position in every film');
+    var time = el('span', 'fr-small fr-compare-time', '0:00 / 0:00');
+    bar.appendChild(play); bar.appendChild(seek); bar.appendChild(time);
+
+    var grid = el('div', 'fr-compare'); grid.style.setProperty('--cols', pieces.length > 4 ? 3 : 2);
+    var cells = pieces.map(function (d, i) {
+      var letter = d.audience || (/audience ([A-Z])/i.exec(d.what || '') || [])[1] || String(i + 1), a = who[letter] || {};
+      var cell = el('figure', 'fr-compare-cell'), v = el('video');
+      v.src = artifactUrl(films[i].path); v.muted = true; v.playsInline = true; v.preload = 'auto';
+      v.title = 'Play or pause every film';
+      var cap = el('figcaption'), head = el('div', 'fr-compare-head');
+      var name = el('span', 'fr-compare-name', 'Audience ' + letter + (a.place ? ' · ' + a.place : ''));
+      var detail = [a.ageLabel, a.languageLabel && 'in ' + a.languageLabel].filter(Boolean).join(', ');
+      var length = el('span', 'fr-small fr-compare-length');
+      var sound = el('button', 'ps-btn ps-btn-quiet ps-btn-sm fr-compare-sound', 'Sound'); sound.type = 'button';
+      sound.setAttribute('aria-pressed', 'false'); sound.title = 'Hear audience ' + letter + ' and mute the others';
+      head.appendChild(name); head.appendChild(sound);
+      cap.appendChild(head);
+      var line = el('div', 'fr-small'); if (detail) line.appendChild(document.createTextNode(detail + ' · ')); line.appendChild(length);
+      cap.appendChild(line);
+      var downloads = el('div', 'fr-downloads'); fillDownloads(downloads, d); cap.appendChild(downloads);
+      cell.appendChild(v); cell.appendChild(cap); grid.appendChild(cell);
+      return { v: v, cell: cell, length: length, sound: sound };
+    });
+    wrap.appendChild(bar); wrap.appendChild(grid); box.appendChild(wrap);
+
+    var playing = false, clock = cells[0], total = 0, loop = 0;
+    function known() {
+      if (!playing) cells.forEach(function (c) { if (c.v.duration > (clock.v.duration || 0)) clock = c; });
+      total = clock.v.duration || 0; seek.max = String(total);
+      cells.forEach(function (c) { if (c.v.duration > 0) c.length.textContent = mmss(c.v.duration); });
+      at(clock.v.currentTime);
+    }
+    function at(t) { seek.value = String(t); time.textContent = mmss(t) + ' / ' + mmss(total); }
+    // Every film to the clock's time: a shorter one parks on its last frame. The others are drawn in by playing up to a
+    // tenth faster or slower, since a seek every few frames stutters; only a jump or half a second's drift seeks.
+    function align(t, hard) {
+      cells.forEach(function (c) {
+        if (c === clock || !(c.v.duration > 0)) return;
+        var over = t >= c.v.duration - 0.05;
+        c.cell.classList.toggle('is-ended', over && c.v.duration < total - 0.05);   // a full-length film is not "short"
+        if (over) {
+          if (!c.v.paused) c.v.pause();
+          if (c.v.currentTime < c.v.duration - 0.1) c.v.currentTime = c.v.duration;
+        } else {
+          var drift = c.v.currentTime - t;
+          if (hard || Math.abs(drift) > 0.5) { c.v.currentTime = t; drift = 0; }
+          c.v.playbackRate = Math.abs(drift) < 0.02 ? 1 : 1 - Math.max(-0.1, Math.min(0.1, drift * 2));
+          if (playing && c.v.paused) c.v.play().catch(function () { /* muted autoplay is allowed; a refusal leaves it parked */ });
+          if (!playing && !c.v.paused) c.v.pause();
+        }
+      });
+      clock.cell.classList.remove('is-ended');
+    }
+    function tick(mine) {
+      if (!playing || mine !== loop) return;                    // stopped, or a later start runs its own
+      if (!wrap.isConnected) { playing = false; return; }      // the listing was redrawn
+      var t = clock.v.currentTime;
+      // A film seeking, or with no frame yet where it is, holds the others, so a slow one is not left seconds behind. Not
+      // one merely short of buffer: a paused film can stay so, as browsers stop loading paused media, and all would wait
+      // for ever. One that stalls while playing falls behind, is seeked by `align`, and then holds the rest.
+      if (cells.some(function (c) { return (c.v.seeking || c.v.readyState < 2) && !(t >= c.v.duration - 0.05); }))
+        cells.forEach(function (c) { if (!c.v.paused) c.v.pause(); });
+      else {
+        if (clock.v.paused && !clock.v.ended) clock.v.play().catch(function () { /* tried again next frame */ });
+        align(t, false);
+      }
+      at(t);
+      // A timer, not requestAnimationFrame: that stops in a hidden tab, which left the films running apart and a hold
+      // that could never let go.
+      setTimeout(tick, 50, mine);
+    }
+    function start() {
+      if (clock.v.ended || clock.v.currentTime >= total - 0.05) { clock.v.currentTime = 0; align(0, true); }
+      playing = true; play.textContent = 'Pause all';
+      // Played here, in the click, for the browser's autoplay rule; a hold's pause interrupting it is not a refusal.
+      clock.v.play().catch(function (e) { if (e && e.name === 'NotAllowedError') stop(); });
+      tick(++loop);
+    }
+    function stop() {
+      playing = false; play.textContent = 'Play all';
+      cells.forEach(function (c) { c.v.pause(); });
+      align(clock.v.currentTime, true); at(clock.v.currentTime);
+    }
+    function toggle() { if (playing) stop(); else start(); }
+
+    play.addEventListener('click', toggle);
+    seek.addEventListener('input', function () {
+      var t = Number(seek.value); clock.v.currentTime = t; align(t, true); at(t);
+    });
+    cells.forEach(function (c) {
+      c.v.addEventListener('loadedmetadata', known);
+      c.v.addEventListener('ended', function () { if (playing && c === clock) stop(); });
+      c.v.addEventListener('click', toggle);
+      c.sound.addEventListener('click', function () {
+        var on = c.sound.getAttribute('aria-pressed') !== 'true';
+        cells.forEach(function (o) {
+          o.v.muted = !(on && o === c);
+          o.sound.setAttribute('aria-pressed', on && o === c ? 'true' : 'false');
+        });
+      });
     });
   }
 
