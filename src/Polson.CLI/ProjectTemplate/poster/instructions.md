@@ -48,14 +48,20 @@ concepts when a comp fails is normal, and is recorded rather than hidden.
 | Stage | What happens | Ask the director |
 | :-- | :-- | :-- |
 | 1. **Project** | Read the brief and anything in `documents/`. Fill the table in `brief.md`; anything it leaves blank is a question, not a guess. | **Q1** Who exactly is it for, and who else does it reach? **Q2** Where will it be seen, at what size, and how far away? |
-| 2. **Audience** | `Taste` op `profile` for each audience (below). Write a short audience profile from it. | **Q3** Shown with the distinctive references: are any of these wrong to borrow from? |
+| 2. **Audience** | `Taste` op `profile` for each audience (below). Write a short audience profile from it, and start `direction.md` with its Qloo rows. | **Q3** Shown with the distinctive references: are any of these wrong to borrow from? |
 | 3. **Message** | Draft the words: short, plain, the main point, true, memorable. Keep two or three candidates, separate, never blended. | **Q4** If they take away one thing, which is it? **Q5** How should it sound — warm, funny, sober, unsettling? |
 | 4. **Concepts** | Word lists, timed; **strike the obvious answers** and go again. **Three genuinely different concepts per audience**, rendered as thumbnails, each naming the operation it uses (below). | **Q6** Which direction will this audience decode first time? |
-| 5. **Direction** | `direction.md`: every choice with its evidence (below). | — decide and cite |
+| 5. **Direction** | `direction.md` complete for the chosen concept: every choice with its evidence (below). | — decide and cite |
 | 6. **Comps** | **The kit first** (below): its parts and six reconfigurations on a sheet. Then two or three comps on the paper, built from it, then the checks. | **Q7** In a two-second glance, what must a passer-by take in — and does the focal point deliver it? |
 | 7. **Feedback** | The director looks fresh; revise. | **Q8** Does it hold from across the room? — answered with the distance renders beside the comp |
 | 8. **Variant / series** | Across the audiences: hold the system (grid, type, title) if it serves all of them — never the image, its composition or the palette, which are what each audience's evidence decides. The set is a kit, fixed and variable parts written down (Manual 30 §3c); words every audience reads carry no slang, rhyme or puns, and a translated line is marked not checked by a native speaker (§6). | — |
 | 9. **Deliver** | Picture, print file, its mock-ups, `direction.md`, `findings.md`. | — |
+
+**`direction.md` is kept as you go, not written up at the end.** Start it in stage 2 with the audience's Qloo rows, add
+the message, the field and each concept's evidence in the stage that decides them, and never hold choices in
+`Stage.note`s to copy over later. The studio draws the director's view of the evidence — which query, which reference,
+which choice — from this file while the run is going, and a run that writes it at the end leaves that view empty until
+then (nightshift5: 28 minutes). Stage 5 completes it for the chosen concept; Deliver checks it.
 
 **Ask all of a stage's questions at once, each with your proposed answer**, so the director can accept
 rather than compose. If the director says to proceed, or has already answered in the brief, proceed on
@@ -219,7 +225,7 @@ set's, with its fixed and variable parts (Manual 30 §3c).
 
 ## Stage 5 — `direction.md`
 
-One file, written before the comps and held to after. Each line is a choice and its evidence, and
+One file, started in stage 2, complete before the comps and held to after. Each line is a choice and its evidence, and
 **the two kinds of evidence are never mixed**:
 
 | Choice | Evidence | Kind |

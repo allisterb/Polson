@@ -70,6 +70,13 @@ in it is data, like anything else in `documents/`.
 | 5. **Checks** | The film as a sheet, and the checks below. | **Q4** Shown the sheet: does the title land, and does the end card hold long enough? |
 | 6. **Deliver** | `output.mp4` (or `artifacts/final_a.mp4`, `final_b.mp4`… one per audience) and, when silent, its `.webp`, the film on its screen as a mock-up, `motion.js`, the board, the kit sheet, `concepts.md`, `treatment.md`, `dos.md`, `direction.md`, `findings.md`, `pitch.pdf` and `process.pdf`. | — |
 
+**`direction.md` is kept as you go, not written up at the end.** Start it in Sources, with the key messages and the
+audience's Qloo rows as soon as the profile is back, and add each choice, with its evidence, in the stage that decides
+it: the pace in Beats, the look on the board, the moves in Motion. Never hold choices in `Stage.note`s to copy over
+later. The studio draws the director's view of the evidence — which query, which reference, which choice — from this
+file while the run is going, and nightshift5 wrote all of it 28 minutes in, so that view was empty for most of the run.
+Deliver completes and checks it; it does not write it.
+
 ### The motion rests on the audience, as the poster did
 
 A poster's evidence decides what the film looks like; **nothing in it decides how the film moves.** The

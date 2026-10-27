@@ -1349,6 +1349,15 @@
   ['taste.query', 'taste.contrast', 'taste.check', 'film.verify', 'film.stray', 'image.verify', 'image.stray', 'derivation.verify', 'claim.verify', 'check'].forEach(function (kind) {
     on(kind, function () { clearTimeout(tasteTimer); tasteTimer = setTimeout(loadTaste, 800); });
   });
+  // Choices is drawn from direction.md, which the agent writes with its own file tools, not through the engine, so no
+  // event above marks it: nightshift5's last edit came after its last check and an open page never showed it. The
+  // record has the call, not its result, so the reload waits for the write to land.
+  on('tool.call', function (e) {
+    var args = e.args || {};
+    if (Object.keys(args).some(function (k) { return typeof args[k] === 'string' && /(^|[\\/])direction\.md$/.test(args[k]); })) {
+      clearTimeout(tasteTimer); tasteTimer = setTimeout(loadTaste, 2500);
+    }
+  });
   if (views) loadTaste();
   // endregion
   later();
