@@ -546,10 +546,16 @@ class FrontRoutingTests(unittest.TestCase):
         self.assertIn('name="x_duration"', page[:brief])      # a choice stays in the bar
 
     def test_the_startup_pitch_composer_asks_for_its_terms_and_makes_audiences_optional(self):
+        """What the pitch is about (the company, how it is told, its stage) is with the brief; how it is made in the bar."""
         page = self.client.get("/compose/startup-pitch").text
         brief = page.index('id="brief"')
-        for key in ("company", "told_as", "stage", "duration", "narration"):
+        for key in ("duration", "narration"):
             self.assertIn(f'name="x_{key}"', page[:brief], f"{key} should be in the header")
+        for key in ("company", "told_as", "stage"):
+            self.assertNotIn(f'name="x_{key}"', page[:brief], f"{key} should be with the brief")
+            self.assertGreater(page.index(f'name="x_{key}"'), brief)
+        self.assertIn('<input class="fr-brief-line" id="x_company" name="x_company"', page)
+        self.assertIn('name="x_stage" value="As the deck says" checked', page)
         self.assertGreater(page.index('<textarea id="x_raise" name="x_raise" rows="2"'), brief)
         self.assertGreater(page.index('<textarea id="x_use_of_funds" name="x_use_of_funds"'), brief)
         self.assertIn("data-audiences data-optional", page)

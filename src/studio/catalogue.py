@@ -92,6 +92,13 @@ class Extra:
     long: bool = False
     #: A long field's box height in lines: a claim is a sentence or two, a viewer a paragraph.
     rows: int = 5
+    #: Drawn under the brief, with what the request is about (the company, its stage), rather than in the bar with how
+    #: the piece is made (its duration, narration). A long field always is.
+    about: bool = False
+
+    @property
+    def under_brief(self) -> bool:
+        return self.long or self.about
 
 
 @dataclass(frozen=True)
@@ -173,7 +180,7 @@ CARDS: tuple[Card, ...] = (
     # workflow's `product` type; its evidence method is `docs/internal/product-ad-probe.md`.
     Card("product-ad", "Product ad", "video", "Video · 15 seconds, one ad per audience",
          (Route("motion", "Motion graphics ad"),),
-         image="product-ad.webp", alt="The end card of an ad for a canned cold brew coffee",
+         image="product-ad.webp", alt="A matte black can of cold brew coffee beside its name and call to action",
          # What the director types goes under the brief, where there is room to write it; the bar keeps the choices.
          extras=(Extra("product", "Product", placeholder="Its name, and what it is", long=True, rows=2),
                  Extra("comparables", "Comparable brands", placeholder="Two or three real brands like it", long=True, rows=2),
@@ -198,11 +205,11 @@ CARDS: tuple[Card, ...] = (
     Card("startup-pitch", "Startup pitch", "video", "Video · 2 minutes from the deck, one film per investor audience",
          (Route("motion", "Motion graphics pitch"),),
          image="startup-pitch.webp", alt="The ask from a retold startup pitch deck",
-         extras=(Extra("company", "Company", placeholder="Its name, as the deck gives it"),
+         extras=(Extra("company", "Company", placeholder="Its name, as the deck gives it", about=True),
                  Extra("told_as", "Told as", ("The company's own pitch", "A retelling of a past deck"),
-                       "The company's own pitch"),
+                       "The company's own pitch", about=True),
                  Extra("stage", "Stage", ("As the deck says", "Pre-seed", "Seed", "Series A", "Series B or later"),
-                       "As the deck says"),
+                       "As the deck says", about=True),
                  Extra("raise", "The raise", placeholder="Amount and instrument, as the company states it; blank for the deck's words",
                        long=True, rows=2),
                  Extra("use_of_funds", "Use of funds", placeholder="What the money is for, if the deck does not say", long=True),

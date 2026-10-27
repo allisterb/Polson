@@ -140,8 +140,9 @@
       }
     });
 
-    // The brief counter.
-    var brief = form.querySelector('[data-count]'), counter = form.querySelector('[data-counter]');
+    // The brief counter. The text box, not the first [data-count]: the Graphic design field's tally spans carry it too,
+    // come first, and have no value, so the counter threw and every handler after it was never attached.
+    var brief = form.querySelector('textarea[data-count]'), counter = form.querySelector('[data-counter]');
     if (brief && counter) {
       var count = function () { counter.textContent = brief.value.length + ' / ' + brief.maxLength; };
       brief.addEventListener('input', count); count();

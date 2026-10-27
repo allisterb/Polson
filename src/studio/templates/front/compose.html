@@ -171,7 +171,7 @@
         </section>
       </details>
 
-      {% for x in card.extras if not x.long %}
+      {% for x in card.extras if not x.under_brief %}
         {% if x.options %}
         <details class="fr-pop">
           <summary class="ps-field"><span class="ps-field-label">{{ x.label }}</span><span class="ps-field-value" data-summary>{{ extras_in.get(x.key) or x.default }}</span>{{ m.icon('chevron-down', 18) }}</summary>
@@ -238,14 +238,34 @@
         <div class="ps-brief-foot"><span class="ps-brief-count" data-counter>0 / 6000</span><span class="fr-small">Sizes, formats and files are added to the brief for you.</span></div>
       </div>
     </section>
-    {% for x in card.extras if x.long %}
+    {#- What the request is about, in the order the card gives it: a paragraph, a line, or one choice of several. -#}
+    {% for x in card.extras if x.under_brief %}
+    {% if x.options %}
+    <fieldset class="ps-brief fr-choice">
+      <legend class="ps-label">{{ x.label }}</legend>
+      <div class="fr-choice-row">
+        {% for o in x.options %}
+        <label class="fr-choice-pill">
+          <input class="fr-vh" type="radio" name="x_{{ x.key }}" value="{{ o }}" {{ 'checked' if (extras_in.get(x.key) or x.default) == o }}>
+          <span>{{ o }}</span>
+        </label>
+        {% endfor %}
+      </div>
+    </fieldset>
+    {% else %}
     <section class="ps-brief">
       <label class="ps-label" for="x_{{ x.key }}">{{ x.label }}</label>
       <div class="ps-brief-box">
+        {% if x.long %}
         <textarea id="x_{{ x.key }}" name="x_{{ x.key }}" rows="{{ x.rows }}" maxlength="2000"
                   placeholder="{{ x.placeholder }}">{{ extras_in.get(x.key, '') }}</textarea>
+        {% else %}
+        <input class="fr-brief-line" id="x_{{ x.key }}" name="x_{{ x.key }}" maxlength="200"
+               placeholder="{{ x.placeholder }}" value="{{ extras_in.get(x.key, '') }}">
+        {% endif %}
       </div>
     </section>
+    {% endif %}
     {% endfor %}
     </div>
   </div>
