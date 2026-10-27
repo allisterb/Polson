@@ -992,6 +992,7 @@ def final_renders(run: Run) -> list[dict[str, Any]]:
         piece = final_render(run, only=lambda artifact, l=letter: Path(artifact).stem == f"final_{l}")
         if piece:
             piece["what"] = f"the finished piece for audience {letter.upper()}"
+            piece["audience"] = letter.upper()
             pieces.append(piece)
     return pieces
 

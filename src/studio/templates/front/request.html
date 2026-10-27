@@ -119,6 +119,8 @@
       <section class="fr-card" data-finished hidden aria-labelledby="finished-title">
         <h2 class="fr-heading" id="finished-title">The finished work</h2>
         <div class="fr-finished" data-finished-list></div>
+        {#- Who each audience is, for the labels on the side-by-side films (front.js). -#}
+        <script type="application/json" data-audience-labels>{{ (rec.audiences or [])|tojson }}</script>
       </section>
       <section class="fr-card" data-documents hidden aria-labelledby="documents-title">
         <h2 class="fr-heading" id="documents-title">What the studio wrote</h2>
