@@ -96,6 +96,28 @@ log(`${read.provenance.model} via ${read.provenance.route}, ${read.provenance.pa
   not break revenue out by country beyond these four"). An honest gap is a result; a plausible figure is the failure.
 - **Record it**: `Stage.check('every figure on screen was found on its page', …, 'N found, M computed, K left out')`.
 
+### A long document: find the pages, then ask them
+
+**Past about a hundred pages, ask each question of its own pages, not of the whole document.** A 313-page S-1 is about
+400k tokens sent with every question, and it has 19 pages of pictures, which sent every whole-document read to Gemini —
+whose answers carry no evidence, so not one figure could be checked. Asked of its one page, the same revenue question
+went to Nemotron as 2,941 tokens, and all three figures came back found on the page. So for a long document:
+
+1. **Find each question's pages with `Documents.find`** — free, no model, exact. Look for the words the answer sits
+   under: a statement's heading (`'Consolidated Statements of Operations'`), a section's title (`'Use of Proceeds'`), a
+   defined term. A heading is named on many pages — the contents, the summary, every cross-reference — and the page
+   that *is* the statement is the one whose `context` begins with it. **Never take pages from the contents page**: a
+   filing printed from a web page numbers its pages differently from the PDF, and the gap grows through the document.
+2. **Ask each question of its pages**, `{ pages: '263-264', schema: SHAPE }` — the page found and the next, since a
+   table often runs over. One call per question, each at the top of `motion.js` like the reading above; each is cached.
+3. **A summary table and the statement it comes from are both the filing's.** Prefer the audited statement; where the
+   summary and the statement disagree, show neither until the director says which (Q1).
+4. **`unsearched` pages are scans `find` cannot see yet.** If a phrase is not found and pages are unsearched, ask a
+   question of those pages (which reads them) before concluding the document does not say.
+
+A first filing can leave figures blank — an S-1 before pricing prints *"approximately $ ,"* for the offering. That is
+an answer: the scene says the figure is not yet set, in those words.
+
 ### The rules of a report
 
 - **Every number on screen is either printed in the document and found on its page, or computed in the script from

@@ -351,6 +351,23 @@ public class DocumentProcessorTests : TestsRuntime, IDisposable
         Assert.Equal(new int[]?[] { [1], null }, processor.Pages);
     }
 
+    /// <summary>A text file is one page to <c>find</c>, which counts each match and needs no key; a missing file is refused.</summary>
+    [Fact]
+    public async Task FindReadsATextFileAsOnePageWithoutAKey()
+    {
+        var processor = new DocumentProcessor(null, new DocumentBudget(5), root);
+        File.WriteAllText(Path.Combine(root, "a.txt"), "Risk Factors\nOur risk\nfactors include the following. RISK FACTORS again.");
+
+        var found = await processor.Find("a.txt", "risk factors");
+        var missing = await processor.Find("nope.txt", "risk");
+
+        Assert.True(found.Success, found.Error);
+        var hit = Assert.Single(found.Hits);
+        Assert.Equal((1, 3), (hit.Page, hit.Count));
+        Assert.StartsWith("Risk Factors Our risk factors", hit.Context);
+        Assert.False(missing.Success);
+    }
+
     /// <summary>A page list that is not one is refused before anything is spent, saying how to write one.</summary>
     [Fact]
     public async Task AMalformedPageListIsRefusedForNothing()

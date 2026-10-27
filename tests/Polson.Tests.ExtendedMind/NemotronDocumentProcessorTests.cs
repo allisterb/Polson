@@ -466,6 +466,40 @@ public class NemotronDocumentProcessorTests : TestsRuntime, IDisposable
         Assert.Equal(1, reader.InlineCalls);
     }
 
+    /// <summary>
+    /// <c>find</c> names the pages a phrase is on, from the page text alone: nothing is sent, nothing spent, no scan OCR'd,
+    /// and a scan not yet read is listed as unsearched rather than passed over in silence.
+    /// </summary>
+    [Fact]
+    public async Task TestFindNamesThePagesAPhraseIsOnAndSpendsNothing()
+    {
+        var pages = new DocumentPages(Path.Combine(root, "pages"));
+        if (!pages.IsAvailable) { Info("Skipped: no mutool."); return; }
+
+        // Page 1 is long enough to count as text: under 16 characters a page is taken for a scan.
+        var path = Pdf("s1.pdf", "Table of Contents, page one", "Consolidated Statements of Operations", null,
+            "Revenue in the Statements of Operations");
+        var handler = new Handler(HttpStatusCode.OK, Reply("unused"));
+        var budget = new DocumentBudget(10);
+        using var reader = new Reader(null, [Nebius()], budget, root, pages, new HttpClient(handler));
+
+        var found = await reader.Find(path, "statements  of\noperations");   // any case, any break between the words
+        var none = await reader.Find(path, "use of proceeds");
+        var blank = await reader.Find(path, "  ");
+
+        Assert.True(found.Success, found.Error);
+        Assert.Equal([2, 4], found.Hits.Select(h => h.Page));
+        Assert.Contains("Statements of Operations", found.Hits[0].Context);
+        Assert.Equal(4, found.Pages);
+        Assert.Equal([3], found.Unsearched);       // the scan, not yet OCR'd
+        Assert.True(none.Success);
+        Assert.Empty(none.Hits);
+        Assert.Equal("NoQuery", blank.FailureName);
+        Assert.Empty(handler.Bodies);
+        Assert.Equal(0, reader.InlineCalls);
+        Assert.Equal(0, budget.Spent);
+    }
+
     /// <summary>A page past the last is refused once the document is open, before anything is sent, and costs nothing.</summary>
     [Fact]
     public async Task TestAPagePastTheLastIsRefusedForNothing()

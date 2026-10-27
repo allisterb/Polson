@@ -160,6 +160,14 @@ public class NemotronDocumentProcessor : DocumentProcessor
         return inline with { Model = inline.Model ?? GeminiModel, Fallback = chosen is null ? why : why + "; " + PagesIgnored };
     }
 
+    /// <summary>A PDF's page text from the same cache <c>ask</c> reads, with nothing OCR'd: an unread scan is unsearched.</summary>
+    protected override async Task<PagedText?> PageText(byte[] bytes, string mime, CancellationToken ct)
+    {
+        if (!mime.Equals("application/pdf", StringComparison.OrdinalIgnoreCase)) return await base.PageText(bytes, mime, ct);
+        if (pages is not { IsAvailable: true }) return null;
+        return await pages.Read(bytes, Convert.ToHexString(SHA256.HashData(bytes))[..32], MaxOcrPages, need: [], ct);
+    }
+
     /// <summary>The pages read, each under its own [Page n] marker.</summary>
     private static string Marked(PagedText paged, int[] read)
     {
