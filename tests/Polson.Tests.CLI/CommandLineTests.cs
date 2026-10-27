@@ -87,6 +87,28 @@ public class CommandLineTests : TestsRuntime
     }
 
     /// <summary>
+    /// A refused <c>compare</c> exits 1 and says why. <c>Main</c>'s catch-all logs to file and exits 0, so a refusal reaching
+    /// it would read to the studio as a file made, and the page would offer a link to nothing.
+    /// </summary>
+    [Fact]
+    public async Task TestARefusedComparisonExitsNonZeroAndSaysWhy()
+    {
+        var films = Path.Combine(Path.GetTempPath(), $"polson-films-{Guid.NewGuid():N}.json");
+        File.WriteAllText(films, """[{"path": "a.mp4", "title": "Audience A", "detail": ""}]""");
+        try
+        {
+            var (exitCode, output) = await RunAsync(TimeSpan.FromSeconds(30), "compare", "out.mp4", "--films", films);
+
+            Assert.Equal(1, exitCode);
+            Assert.Contains("2 to 6 films", output);
+        }
+        finally
+        {
+            File.Delete(films);
+        }
+    }
+
+    /// <summary>
     /// A bare invocation prints the verbs and exits, rather than starting the server.
     /// </summary>
     /// <remarks>

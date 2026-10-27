@@ -68,6 +68,25 @@ public class TechniquesOptions : Options
     #endregion
 }
 
+[Verb("compare", HelpText = "Set 2 to 6 finished films side by side in one MP4, each labelled and held on its last frame until the longest ends: one audience's film beside another's.")]
+public class CompareOptions : Options
+{
+    #region Properties
+    [Value(0, MetaName = "output", Required = true, HelpText = "The .mp4 to write.")]
+    public string Output { get; set; } = string.Empty;
+
+    // A file, not arguments: the labels are a director's words (a place, a language), and words on a command line mean quoting.
+    [Option("films", Required = true, HelpText = "A JSON file listing the films in order: [{\"path\": \"a.mp4\", \"title\": \"Audience A · Dubai\", \"detail\": \"in Arabic\"}, ...].")]
+    public string Films { get; set; } = string.Empty;
+
+    [Option("width", Required = false, Default = 1920, HelpText = "The video's width in pixels, 640 to 3840. 3840 keeps four 1080p films at full size.")]
+    public int Width { get; set; }
+
+    [Option("sound", Required = false, Default = 0, HelpText = "The film, counting from 1, whose sound the video keeps. 0, the default, is silent: several narrations at once cannot be listened to.")]
+    public int Sound { get; set; }
+    #endregion
+}
+
 [Verb("reset", HelpText = "Clear a project's previous run so it can be run again, keeping the brief, the instructions and everything else that was generated.")]
 public class ResetOptions : Options
 {

@@ -117,7 +117,7 @@ internal class Program : Runtime
             with.HelpWriter = Console.Error;
         });
 
-        var result = parser.ParseArguments<ServerOptions, EvalOptions, CreateProjectOptions, ResetOptions, ReportOptions, PreserveChatlogOptions, TechniquesOptions>(args);
+        var result = parser.ParseArguments<ServerOptions, EvalOptions, CreateProjectOptions, ResetOptions, ReportOptions, PreserveChatlogOptions, TechniquesOptions, CompareOptions>(args);
         try
         {
             await result.MapResult(
@@ -128,6 +128,7 @@ internal class Program : Runtime
                 (ReportOptions opts) => HandleReportArgs(opts),
                 (PreserveChatlogOptions opts) => Task.FromResult(ChatlogPreserver.Run(opts)),
                 (TechniquesOptions opts) => HandleTechniquesArgs(opts),
+                (CompareOptions opts) => HandleCompareArgs(opts),
                 errs => ReportParseFailure(errs)
             );
         }
@@ -817,6 +818,33 @@ internal class Program : Runtime
         {
             Console.WriteLine($"  {t.Id,-20} {t.Name} ({t.Source}) — {string.Join(", ", t.Workflows)}{(t.Evidence.Judged is null ? "" : "; judged, not measured")}");
             Console.WriteLine($"  {"",-20} {t.Summary}");
+        }
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// The audiences' films side by side in one MP4, for the studio's Deliverables tab. Prints what it wrote as JSON; a
+    /// refusal is one line on stderr and exit 1, which the studio shows as it is.
+    /// </summary>
+    /// <remarks>Caught here rather than by <c>Main</c>, whose catch-all logs to file and exits 0: the studio would then
+    /// offer a file that was never written.</remarks>
+    static Task HandleCompareArgs(CompareOptions opts)
+    {
+        try
+        {
+            ConfigureVideo();
+            using var json = System.Text.Json.JsonDocument.Parse(File.ReadAllText(opts.Films));
+            string Text(System.Text.Json.JsonElement e, string name) =>
+                e.TryGetProperty(name, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String ? v.GetString()! : "";
+            var films = json.RootElement.EnumerateArray().Select(e => new Comparison.Film(Text(e, "path"), Text(e, "title"), Text(e, "detail"))).ToArray();
+            var bytes = Comparison.Write(films, opts.Output, opts.Width, opts.Sound > 0 ? opts.Sound - 1 : null);
+            Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { path = Path.GetFullPath(opts.Output), bytes }));
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or InvalidOperationException or TimeoutException
+                                   or System.Text.Json.JsonException or UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine(ex.Message);
+            Environment.ExitCode = 1;
         }
         return Task.CompletedTask;
     }

@@ -52,6 +52,7 @@ from orchestrator import csm
 from orchestrator.events import read_events
 
 from . import archive
+from . import compare
 from . import direction as direction_mod
 from . import front
 from . import projects
@@ -749,7 +750,24 @@ def create_app(root: Path | None = None, registry: Registry | None = None,
         # as they are written last, from the documents above.
         written.extend(books(run, {f["path"] for p in pieces for f in p["formats"]}))
 
-        return JSONResponse({"deliverables": written})
+        # The audiences' films side by side in one file, when it has been made from these very films; `comparable` says
+        # the page may offer to make it.
+        films = compare.films(Path(run.project.root), pieces, front.read_request(Path(run.project.root)).get("audiences") or [])
+        return JSONResponse({"deliverables": written, "comparable": bool(films),
+                             "comparison": compare.current(Path(run.project.root), films) if films else None})
+
+    @app.post("/runs/{run_id}/comparison")
+    async def make_comparison(run_id: str) -> JSONResponse:
+        """Makes the audiences' films into one MP4 side by side, or returns the one already made from them."""
+        run = found(app.state.registry, run_id)
+        root = Path(run.project.root)
+        films = compare.films(root, final_renders(run), front.read_request(root).get("audiences") or [])
+        if not films:
+            raise HTTPException(status_code=409, detail="This run has no films for several audiences to set side by side.")
+        try:
+            return JSONResponse(await compare.build(root, films))
+        except StudioError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.get("/runs/{run_id}/deliverables/{name}")
     async def serve_deliverable(run_id: str, name: str, raw: int = 0, rendered: int = 0) -> Response:

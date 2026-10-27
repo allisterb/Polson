@@ -216,6 +216,13 @@ class ObservingOnlyBoundaryTests(unittest.TestCase):
                         "/studio/answering", "/studio/runs/answer"):
             self.assertFalse(intake.observing_only("POST", attempt, "/studio"), attempt)
 
+    def test_comparing_the_audiences_films_is_allowed(self):
+        """A file made from finished work, driving nothing; anchored at both ends as the verbs above are."""
+        self.assertTrue(intake.observing_only("POST", "/studio/runs/acme-watch-1/comparison", "/studio"))
+        for attempt in ("/studio/runs/x/comparison/../../projects", "/studio/runs/x/comparison/more",
+                        "/studio/comparison", "/studio/runs/comparison"):
+            self.assertFalse(intake.observing_only("POST", attempt, "/studio"), attempt)
+
     def test_creating_and_starting_are_still_refused(self):
         self.assertFalse(intake.observing_only("POST", "/studio/projects", "/studio"))
         self.assertFalse(intake.observing_only("POST", "/studio/runs", "/studio"))

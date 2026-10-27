@@ -401,6 +401,80 @@ public static class FFmpeg
         }
     }
 
+    /// <summary>
+    /// Sets <paramref name="cells"/> — finished videos, each at its place and size — over <paramref name="background"/>,
+    /// a <paramref name="width"/>×<paramref name="height"/> RGBA frame carrying the labels, into the MP4
+    /// <paramref name="output"/>, <paramref name="seconds"/> long. A film shorter than that holds its last frame, dimmed,
+    /// as the page's grid does. With <paramref name="sound"/> the sound is that cell's; without it the video is silent.
+    /// </summary>
+    /// <remarks>
+    /// The background arrives raw over stdin, as <see cref="Encode"/>'s frames do, and is held for the whole length by
+    /// <c>loop</c>; the videos are read as <see cref="Join"/> reads parts. Each is fitted inside its cell keeping its
+    /// shape, so a film of another aspect is letterboxed rather than stretched. Written beside the output and moved into
+    /// place only when ffmpeg succeeds.
+    /// </remarks>
+    internal static long Grid(SKBitmap background, IReadOnlyList<GridCell> cells, double fps, double seconds, int? sound,
+        string output, string who)
+    {
+        if (Executable is not { } exe)
+            throw new InvalidOperationException($"{who} needs the 'ffmpeg' program and none was found: {Install}.");
+        string N(double x) => x.ToString("0.######", CultureInfo.InvariantCulture);
+        var (w, h) = (background.Width, background.Height);
+        var partial = $"{output}.{Guid.NewGuid():N}.part";
+
+        var args = new List<string> { "-hide_banner", "-nostdin", "-loglevel", "error", "-y",
+            "-protocol_whitelist", "pipe", "-f", "rawvideo", "-pix_fmt", "rgba", "-video_size", $"{w}x{h}",
+            "-framerate", N(fps), "-i", "pipe:0" };
+        foreach (var c in cells)
+            args.AddRange(["-protocol_whitelist", "file", "-f", c.Format == VideoFormat.Mp4 ? "mov" : "matroska", "-i", "file:" + c.FullPath]);
+
+        // The labels once, held; then each film fitted to its cell, held on its last frame and dimmed past its end, laid
+        // on in turn. bt709 throughout, as Arguments has it.
+        var graph = new StringBuilder($"[0:v]loop=loop=-1:size=1:start=0,fps={N(fps)},scale=out_color_matrix=bt709:out_range=tv,format=yuv420p[bg0]");
+        for (var i = 0; i < cells.Count; i++)
+        {
+            var c = cells[i];
+            graph.Append($";[{i + 1}:v]fps={N(fps)},scale={c.Width}:{c.Height}:force_original_aspect_ratio=decrease:flags=lanczos")
+                .Append(":in_color_matrix=bt709:in_range=tv:out_color_matrix=bt709:out_range=tv,")
+                .Append($"pad={c.Width}:{c.Height}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,format=yuv420p,tpad=stop_mode=clone:stop=-1");
+            if (c.Seconds < seconds - 0.05)
+                graph.Append($",lutyuv=y='16+(val-16)*0.55':u='128+(val-128)*0.6':v='128+(val-128)*0.6':enable='gte(t,{N(c.Seconds)})'");
+            graph.Append($"[v{i}];[bg{i}][v{i}]overlay={c.X}:{c.Y}:format=yuv420[bg{i + 1}]");
+        }
+        if (sound is { } s) graph.Append($";[{s + 1}:a]aresample=48000,apad[a]");
+        args.AddRange(["-filter_complex", graph.ToString(), "-map", $"[bg{cells.Count}]"]);
+        if (sound is not null) args.AddRange(["-map", "[a]", "-c:a", "aac", "-b:a", "192k"]);
+
+        var cap = (long)Math.Round(w * (double)h * fps * 80 / 500 / 1000);
+        args.AddRange(["-c:v", "libx264", "-preset", "fast", "-tune", "animation", "-crf", "18",
+            "-maxrate", $"{cap}k", "-bufsize", $"{cap * 2}k", "-pix_fmt", "yuv420p",
+            "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
+            "-t", N(seconds), "-movflags", "+faststart", "-f", "mp4", "file:" + partial]);
+
+        using var process = Process.Start(Info(exe, [.. args])) ?? throw new InvalidOperationException($"{who}: ffmpeg would not start.");
+        var stderr = process.StandardError.ReadToEndAsync();
+        _ = process.StandardOutput.ReadToEndAsync();
+        try
+        {
+            var stdin = process.StandardInput.BaseStream;
+            try { stdin.Write(background.GetPixelSpan()); } catch (IOException) { /* ffmpeg stopped reading; its stderr says why */ }
+            Close(stdin);
+            if (!process.WaitForExit(FinishMs))
+            {
+                Kill(process);
+                throw new TimeoutException($"{who}: ffmpeg did not finish within {FinishMs / 1000} s.");
+            }
+            if (process.ExitCode != 0)
+                throw new InvalidOperationException($"{who}: ffmpeg failed (exit {process.ExitCode}). {Trim(stderr.Result)}");
+            MoveIntoPlace(partial, output, who);
+            return new FileInfo(output).Length;
+        }
+        finally
+        {
+            File.Delete(partial);
+        }
+    }
+
     /// <summary>The command line, every piece of it from typed values.</summary>
     static IEnumerable<string> Arguments(int w, int h, double fps, int frameCount, string output, VideoFormat format,
         int quality, IReadOnlyList<AudioTrack> tracks)
@@ -720,5 +794,8 @@ public static class FFmpeg
 
     /// <summary>A finished video as ffmpeg reads it: codec, size, frames a second, length in seconds, and whether it has sound.</summary>
     internal sealed record VideoInfo(string Codec, int Width, int Height, double Fps, double Seconds, bool HasAudio);
+
+    /// <summary>One film in a <see cref="Grid"/>: where it is, how it is read, its length, and the cell it is fitted into.</summary>
+    internal sealed record GridCell(string FullPath, VideoFormat Format, double Seconds, int X, int Y, int Width, int Height);
     #endregion
 }

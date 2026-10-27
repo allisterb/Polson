@@ -421,7 +421,7 @@
       var films = pieces.map(function (d) { return d.formats.filter(function (f) { return VIDEO.test(f.path); })[0]; });
       if (finishedList && pieces.length > 1 && films.every(Boolean)) {
         finishedList.textContent = '';
-        compare(finishedList, pieces, films, fillDownloads);
+        compare(finishedList, pieces, films, fillDownloads, data);
         page.querySelector('[data-finished]').hidden = false;
       } else if (finishedList) {
         finishedList.textContent = '';
@@ -492,7 +492,7 @@
   // One film per audience, side by side on one clock, so a moment in one is the same moment in the others. The longest
   // film is the clock; a shorter one holds its last frame until the clock passes back under its end. One film's sound
   // at a time, chosen on its cell: several narrations at once, in several languages, cannot be listened to.
-  function compare(box, pieces, films, fillDownloads) {
+  function compare(box, pieces, films, fillDownloads, listing) {
     var who = {};
     try {
       var labels = page.querySelector('[data-audience-labels]');
@@ -506,6 +506,33 @@
     seek.setAttribute('aria-label', 'Position in every film');
     var time = el('span', 'fr-small fr-compare-time', '0:00 / 0:00');
     bar.appendChild(play); bar.appendChild(seek); bar.appendChild(time);
+
+    // The same films as one file to send on (`polson compare`): saved when made, else made on a click, as it takes
+    // a minute or more and most runs are never compared.
+    function saved(made) {
+      var a = el('a', 'ps-btn ps-btn-secondary ps-btn-sm'); a.href = artifactUrl(made.path); a.setAttribute('download', 'comparison.mp4');
+      a.title = 'The films side by side in one video, silent, each held on its last frame';
+      a.appendChild(icon('download', 16)); a.appendChild(document.createTextNode('Side by side .mp4'));
+      if (made.bytes) a.appendChild(el('span', 'fr-doc-action', megabytes(made.bytes)));
+      return a;
+    }
+    var why = el('span', 'fr-small fr-compare-why'); why.hidden = true;
+    if (listing && listing.comparison) bar.appendChild(saved(listing.comparison));
+    else if (listing && listing.comparable) {
+      var make = el('button', 'ps-btn ps-btn-secondary ps-btn-sm', 'Make side by side .mp4'); make.type = 'button';
+      make.title = 'Set these films side by side in one video to send on';
+      make.addEventListener('click', function () {
+        make.disabled = true; make.textContent = 'Making… about a minute'; why.hidden = true;
+        fetch(base + '/runs/' + encodeURIComponent(run) + '/comparison', { method: 'POST' })
+          .then(function (r) { return r.json().then(function (body) { if (!r.ok) throw new Error(body.detail || r.status); return body; }); })
+          .then(function (made) { make.replaceWith(saved(made)); },
+                function (e) {
+                  make.disabled = false; make.textContent = 'Make side by side .mp4';
+                  why.textContent = 'Not made: ' + e.message; why.hidden = false;
+                });
+      });
+      bar.appendChild(make);
+    }
 
     var grid = el('div', 'fr-compare'); grid.style.setProperty('--cols', pieces.length > 4 ? 3 : 2);
     var cells = pieces.map(function (d, i) {
@@ -527,7 +554,7 @@
       cell.appendChild(v); cell.appendChild(cap); grid.appendChild(cell);
       return { v: v, cell: cell, length: length, sound: sound };
     });
-    wrap.appendChild(bar); wrap.appendChild(grid); box.appendChild(wrap);
+    wrap.appendChild(bar); wrap.appendChild(why); wrap.appendChild(grid); box.appendChild(wrap);
 
     var playing = false, clock = cells[0], total = 0, loop = 0;
     function known() {
