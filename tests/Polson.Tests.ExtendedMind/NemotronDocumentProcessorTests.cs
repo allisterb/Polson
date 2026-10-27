@@ -145,6 +145,24 @@ public class NemotronDocumentProcessorTests : TestsRuntime, IDisposable
         Assert.True(NemotronDocumentProcessor.Holds(paged, 1, "graphics"));     // words, when there is no figure
     }
 
+    /// <summary>
+    /// A quote of a long passage, elided as a model writes one, is found piece by piece in the page's order — and only then.
+    /// </summary>
+    [Fact]
+    public void TestAnElidedQuoteIsFoundPieceByPieceInOrder()
+    {
+        var paged = new PagedText { Pages = ["The trust holds the Class T share, which generally has the authority to\nelect "
+            + "and remove the Class T directors. Holders of Class N stock are not entitled to vote on any matter."] };
+
+        Assert.True(NemotronDocumentProcessor.Holds(paged, 1,
+            "which generally has the authority to elect and remove the Class T directors ... not entitled to vote on any matter ."));
+        Assert.True(NemotronDocumentProcessor.Holds(paged, 1, "The trust holds the Class T share… Class N stock"));
+        // In another order, or with a piece the page does not have, it is not the page's quote.
+        Assert.False(NemotronDocumentProcessor.Holds(paged, 1, "not entitled to vote on any matter ... The trust holds"));
+        Assert.False(NemotronDocumentProcessor.Holds(paged, 1, "The trust holds the Class T share ... elects every director"));
+        Assert.False(NemotronDocumentProcessor.Holds(paged, 1, "..."));
+    }
+
     [Fact]
     public async Task TestAPdfIsReadAsPageTextByMutool()
     {

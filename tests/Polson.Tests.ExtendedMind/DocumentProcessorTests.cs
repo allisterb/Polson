@@ -325,9 +325,9 @@ public class DocumentProcessorTests : TestsRuntime, IDisposable
     [Fact]
     public void APageListReadsAsAPrintDialogDoes()
     {
-        Assert.Equal([.. Enumerable.Range(40, 21), 75], DocumentProcessor.ParsePages("40-60, 75"));
-        Assert.Equal([1, 2, 3], DocumentProcessor.ParsePages("3,1, 2-3"));
-        Assert.Equal([7, 8], DocumentProcessor.ParsePages("7–8"));                 // an en dash, as typeset
+        Assert.Equal([.. Enumerable.Range(40, 21), 75], DocumentProcessor.ParsePages("40-60, 75")!);
+        Assert.Equal([1, 2, 3], DocumentProcessor.ParsePages("3,1, 2-3")!);
+        Assert.Equal([7, 8], DocumentProcessor.ParsePages("7–8")!);                // an en dash, as typeset
         foreach (var bad in new[] { "", " ", "0", "5-3", "a", "1-", "-2", "1-2-3", "1,,2" })
             Assert.Null(DocumentProcessor.ParsePages(bad));
         Assert.Equal("1-3,5,7-8", DocumentProcessor.PageList([1, 2, 3, 5, 7, 8]));
