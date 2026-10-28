@@ -194,7 +194,7 @@ put in the audience's language.
 
 A contact sheet shows you the film; it does not tell you whether a viewer will read what you set, or whether what you set is true. That takes a third reader with nothing invested in the film.
 - **`comp.texts()`** lists every text the composition shows and the seconds it is on screen, read from the composition itself. That is the ground truth.
-- **`Verify.film(comp, 'output.mp4')`** has a separate model watch the *encoded* film and transcribe it, holds the transcription against that list, and looks up where each text came from: the brief, a document's page, a Qloo answer, research, or a figure you say you computed.
+- **`Verify.film(comp, 'output.mp4')`** has a separate model watch the *encoded* film and transcribe it, holds the transcription against that list, and looks up where each text came from: the brief, a document's page, a Qloo answer, research, or a figure you say you computed. The watcher is Gemini unless the studio is set to Nemotron (`Video.reader` says which); Nemotron cannot be trusted with Hindi, so on it a Hindi line is left to your eye, as Arabic always is.
 
 What comes back is three findings:
 - **A text set but not read** usually held too briefly or was set too small. That is a reading-time fault before it is the watcher's.

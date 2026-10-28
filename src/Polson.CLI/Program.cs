@@ -272,8 +272,16 @@ internal class Program : Runtime
     {
         var budget = ResolveDocumentBudget(Setting("Video:Budget"), DefaultVideoBudget, "Video:Budget");
         var cacheDir = Setting("Video:CacheDir") ?? Path.Combine(projectDir, ".polson", "video");
+        var cache = new DocumentCache(cacheDir);
 
-        var reader = new VideoReader(NemotronEndpoints(), new DocumentBudget(budget), projectDir, cache: new DocumentCache(cacheDir));
+        // Gemini unless Nemotron is asked for; Nemotron too when Gemini has no key, rather than no reader at all.
+        var key = Setting("ApiKeys:GoogleAgentPlatform");
+        var gemini = ResolveVerifyReader(Setting("Verify:Reader") ?? Environment.GetEnvironmentVariable(VerifyReaderVariable)) == VideoReader.GeminiReader;
+        if (gemini && key is null)
+            Warn("Verify:Reader is gemini but ApiKeys:GoogleAgentPlatform is not set; films are read by Nemotron instead.");
+        var reader = gemini && key is not null
+            ? new VideoReader(key, new DocumentBudget(budget), projectDir, Setting("Verify:Model") ?? VideoReader.DefaultGeminiModel, cache)
+            : new VideoReader(NemotronEndpoints(), new DocumentBudget(budget), projectDir, cache: cache);
         JsDrawingEngine.Video = reader;
 
         if (!reader.IsAvailable)
@@ -284,8 +292,22 @@ internal class Program : Runtime
         }
         else
         {
-            Info("Video watching enabled (model: {0}{1}; budget: {2} clips).", reader.Model, Served(reader.Endpoints), budget);
+            Info("Video watching enabled (reader: {0}; model: {1}{2}; budget: {3} clips).", reader.Reader, reader.Model,
+                Served(reader.Endpoints), budget);
         }
+    }
+
+    /// <summary>The environment variable that chooses the reader when <c>Verify:Reader</c> is not set; the studio reads it too.</summary>
+    internal const string VerifyReaderVariable = "POLSON_VERIFY_READER";
+
+    /// <summary><c>gemini</c> (the default) or <c>nemotron</c>; any other value is reported and the default used.</summary>
+    internal static string ResolveVerifyReader(string? configured)
+    {
+        var value = configured?.Trim().ToLowerInvariant();
+        if (string.IsNullOrEmpty(value) || value == VideoReader.GeminiReader) return VideoReader.GeminiReader;
+        if (value == VideoReader.NemotronReader) return VideoReader.NemotronReader;
+        Warn("Ignoring Verify:Reader='{0}': it must be '{1}' or '{2}'. Using '{1}'.", configured!, VideoReader.GeminiReader, VideoReader.NemotronReader);
+        return VideoReader.GeminiReader;
     }
 
     /// <summary>

@@ -32,5 +32,16 @@ public class NemotronPreferTests
     [InlineData("Nebius")]
     public void TestNebiusCanBePreferredWithNimAsItsBackup(string prefer) =>
         Assert.Equal([Nebius, Nim], Program.ResolveNemotronEndpoints(prefer, Nim, Nebius));
+
+    /// <summary><c>Verify:Reader</c>: Gemini unless Nemotron is named; a typo costs the choice, not the reading.</summary>
+    [Theory]
+    [InlineData(null, VideoReader.GeminiReader)]
+    [InlineData("", VideoReader.GeminiReader)]
+    [InlineData("Gemini", VideoReader.GeminiReader)]
+    [InlineData("nemotron", VideoReader.NemotronReader)]
+    [InlineData(" Nemotron ", VideoReader.NemotronReader)]
+    [InlineData("nebius", VideoReader.GeminiReader)]
+    public void TestFilmsAreReadByGeminiUnlessNemotronIsNamed(string? configured, string expected) =>
+        Assert.Equal(expected, Program.ResolveVerifyReader(configured));
     #endregion
 }

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import functools
 import json
+import os
 import re
 import unicodedata
 from dataclasses import dataclass, field
@@ -54,6 +55,25 @@ LANGUAGES: tuple[tuple[str, str], ...] = (
 #: (probe 2026-10-27). Their lines are checked by translation back and by the studio's own eye on the frame, and every
 #: place the language is named says so, so nobody takes an unchecked line for a checked one.
 CHECKED_BY_EYE: frozenset[str] = frozenset({"ar"})
+
+#: Which service reads the films back, as the engine's `Verify:Reader` falls back to it: `gemini` (the default) or
+#: `nemotron`. Set it in the studio's environment, which the MCP server it starts inherits, so both agree.
+VERIFY_READER_ENV = "POLSON_VERIFY_READER"
+
+#: Languages Nemotron cannot be trusted to read back, added to `CHECKED_BY_EYE` when it is the reader, so a demo on
+#: Nemotron shows which to avoid. Hindi: on becool3 (2026-10-28) it read a correctly drawn film's credits as unrelated
+#: sentences, where Gemini read the same film almost exactly. Arabic is in `CHECKED_BY_EYE` whichever reads.
+NEMOTRON_UNREADABLE: frozenset[str] = frozenset({"hi"})
+
+
+def verify_reader() -> str:
+    """`nemotron` when the environment names it, else `gemini`, as the engine decides."""
+    return "nemotron" if os.environ.get(VERIFY_READER_ENV, "").strip().lower() == "nemotron" else "gemini"
+
+
+def checked_by_eye() -> frozenset[str]:
+    """The languages whose text the read-back cannot vouch for with this studio's reader."""
+    return CHECKED_BY_EYE | (NEMOTRON_UNREADABLE if verify_reader() == "nemotron" else frozenset())
 
 #: What is said of such a language wherever it is named.
 EYE_NOTE = "checked by eye, not read back"
@@ -406,7 +426,7 @@ class Commission:
         words, tongues = dict(AGE_BANDS), dict(LANGUAGES)
         return [f"Audience {chr(65 + i)}: {place}" + (f", aged {words[age]}" if age else "")
                 + (f", in {tongues[lang]}" if lang else "")
-                + (f" (its text {EYE_NOTE}: the read-back cannot read {tongues[lang]})" if lang in CHECKED_BY_EYE else "")
+                + (f" (its text {EYE_NOTE}: the read-back cannot read {tongues[lang]})" if lang in checked_by_eye() else "")
                 for i, (place, age, lang) in enumerate(self.audiences)]
 
     def brief_text(self, files: list[str]) -> str:
@@ -442,7 +462,7 @@ class Commission:
                 "extras": [{"label": k, "value": v} for k, v in self.extras],
                 "audiences": [{"letter": chr(65 + i), "place": p, "age": a, "ageLabel": dict(AGE_BANDS).get(a, ""),
                                "language": lang, "languageLabel": dict(LANGUAGES).get(lang, "") if lang else "",
-                               "readBack": lang not in CHECKED_BY_EYE}
+                               "readBack": lang not in checked_by_eye()}
                               for i, (p, a, lang) in enumerate(self.audiences)],
                 "techniques": {"request": list(self.request), "deny": list(self.deny)}}
 

@@ -47,7 +47,7 @@ public sealed partial class VerifyToolkit
         if (claim.Length > MaxClaimLength) throw new ArgumentException($"Verify.claim takes a claim of at most {MaxClaimLength} characters; split a longer passage into its claims.");
         var (name, context, budget) = ClaimOptions(options, claim);
         if (video is null || !video.IsAvailable)
-            return Failed("NotConfigured", "No Nemotron endpoint is configured, so nothing can write the check.", "Configure ApiKeys:NvidiaNIM or Token Factory.");
+            return Failed("NotConfigured", "No reader is configured, so nothing can write the check.", NoReader);
 
         var asked = "Claim: " + claim.Trim() + (context is null ? "" : "\nContext, the figures the claim rests on: " + context);
         var answer = await video.Ask(Encoding.UTF8.GetBytes(asked), ClaimSheet, new DocumentOptions { MimeType = VideoReader.TextType });
@@ -70,7 +70,7 @@ public sealed partial class VerifyToolkit
             "holds" => $"Holds: {checks.Count} check{(checks.Count == 1 ? "" : "s")} passed ({string.Join("; ", checks.Take(4).Select(c => c["what"]))}).",
             "fails" => $"Fails: {string.Join("; ", failing.Take(4).Select(c => $"{c["what"]}" + (c["detail"] is string d ? $" ({Clip(d, 160)})" : "")))}.",
             _ => $"Not checked: {error}",
-        } + " The check is Nemotron's code, run in the engine; read it in `code`.";
+        } + " The check is the reader's code, run in the engine; read it in `code`.";
 
         var result = new Dictionary<string, object?>
         {

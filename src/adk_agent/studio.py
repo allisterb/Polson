@@ -227,6 +227,18 @@ def roles_in(project: Path) -> list[tuple[str, str, str]]:
     return found
 
 
+#: Settings the engine reads from its environment, passed on by name: the MCP client otherwise gives the server only a
+#: short list of safe variables (`mcp.client.stdio.get_default_environment`), so `POLSON_VERIFY_READER=nemotron` set
+#: for the studio would not reach the engine: it would read films with Gemini while the form flagged Hindi for Nemotron.
+SERVER_ENV = ("POLSON_VERIFY_READER",)
+
+
+def server_env() -> dict[str, str]:
+    """The MCP client's default environment for the server, with `SERVER_ENV` added where set."""
+    from mcp.client.stdio import get_default_environment
+    return get_default_environment() | {k: os.environ[k] for k in SERVER_ENV if os.environ.get(k)}
+
+
 def toolset_for(project: Path, cli_dll: Path | None = None) -> McpToolset:
     """The whole .NET engine, as one ADK toolset.
 
@@ -245,6 +257,7 @@ def toolset_for(project: Path, cli_dll: Path | None = None) -> McpToolset:
             server_params=StdioServerParameters(
                 command="dotnet",
                 args=[str(dll), "server", "--project-dir", str(project)],
+                env=server_env(),
             ),
             timeout=STDIO_TIMEOUT_SECONDS,
         ),

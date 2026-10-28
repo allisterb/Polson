@@ -132,7 +132,9 @@ Taste({ op: 'profile', audience: '{"location":"Mumbai","age":"45_to_54"}', label
 
 A brief that names several audiences — a poster made for two to six cities — gets **one film per audience,
 made in this one run.** The set is designed as a system: the comparison between the audiences is made before
-any film is planned, and the shared parts are shared on purpose.
+any film is planned, and the shared parts are shared on purpose. **The run is one campaign**: hold its core design
+across the set and change only what each audience's evidence decides. Do not invent a different design per audience
+to look inventive; a director who wants that commissions each audience in its own run.
 
 - **Fetch every audience's profile first**, each with its own label (`'audience A'`, `'audience B'`, …), and
   compare their pace before writing any beats — `comparePace` for two, `comparePaceAll` for more. That result

@@ -496,12 +496,17 @@ public class DocumentProcessor : Runtime, IDisposable
     }
 
     /// <summary>The document sent whole to Gemini, which reads it itself. Overridable for tests.</summary>
+    protected virtual Task<Generation> GenerateInline(
+        byte[] bytes, string mime, string query, string model, string? schema, CancellationToken ct) =>
+        GenerateInline(bytes, mime, query, model, schema, null, ct);
+
+    /// <summary>The same, with a clip sampled at <paramref name="fps"/> frames a second rather than the model's default of one.</summary>
     protected virtual async Task<Generation> GenerateInline(
-        byte[] bytes, string mime, string query, string model, string? schema, CancellationToken ct)
+        byte[] bytes, string mime, string query, string model, string? schema, double? fps, CancellationToken ct)
     {
         var parts = new List<Part>
         {
-            new() { InlineData = new Blob { MimeType = mime, Data = bytes } },
+            new() { InlineData = new Blob { MimeType = mime, Data = bytes }, VideoMetadata = fps is { } f ? new VideoMetadata { Fps = f } : null },
             new() { Text = query },
         };
 
