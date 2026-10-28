@@ -54,6 +54,7 @@ from orchestrator.events import read_events
 from . import archive
 from . import compare
 from . import direction as direction_mod
+from . import verification
 from . import front
 from . import projects
 from . import observe as observe_mod
@@ -746,6 +747,12 @@ def create_app(root: Path | None = None, registry: Registry | None = None,
                 entry["panel"] = "why"
             written.append(entry)
 
+        # The run's checks as the record has them, failures and fixes included: written by the studio, never read from a
+        # file the agent could have written (`studio.verification`).
+        if (checked := verification.document(read_events(run.project.server_events), run.since)) is not None:
+            written.append({"kind": "document", "name": verification.NAME, "title": verification.TITLE,
+                            "what": verification.WHAT, "bytes": len(checked.encode("utf-8"))})
+
         # The books the run set (`Stage.book`), which are not the piece: a motion run's pitch and process book. Last,
         # as they are written last, from the documents above.
         written.extend(books(run, {f["path"] for p in pieces for f in p["formats"]}))
@@ -793,22 +800,14 @@ def create_app(root: Path | None = None, registry: Registry | None = None,
         """
         run = found(app.state.registry, run_id)
 
-        if name not in DELIVERABLE_NAMES:
-            # On the name alone, before the disk is touched — as `serve_artifact` does, and for the
-            # same reason: whether a file we would never serve exists is not a visitor's to learn.
-            raise HTTPException(status_code=404, detail=f"not a deliverable: {name}")
-
-        try:
-            path = contain(run.project.root, name)
-        except StudioError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
-
-        if not path.is_file():
-            # Distinct from "not a deliverable" in wording only — both are 404, since the difference
-            # is not something worth publishing. The listing is how the page avoids asking at all.
-            raise HTTPException(status_code=404, detail=f"not written yet: {name}")
-
-        source = path.read_text(encoding="utf-8", errors="replace")
+        if name == verification.NAME:
+            # Made from the record on every request, never read from disk: a `verification.md` the agent wrote is not this.
+            made = verification.document(read_events(run.project.server_events), run.since)
+            if made is None:
+                raise HTTPException(status_code=404, detail="this run recorded no checks")
+            source = made
+        else:
+            source = deliverable_text(run, name)
         code = name.endswith(".js")
 
         # `?raw=1` is what a *shared* link needs to be. The page fetches the highlighted fragment for
@@ -864,6 +863,26 @@ def create_app(root: Path | None = None, registry: Registry | None = None,
 #: An interjection is a sentence, not a brief. Longer direction belongs in the brief, which is
 #: sanitised on the way in; this reaches a running agent directly, so it stays short.
 MAX_INTERJECTION = 2000
+
+
+def deliverable_text(run: Run, name: str) -> str:
+    """A delivered document's text, by its name in `DELIVERABLES`. Raises a 404 for any other name or a file not there."""
+    if name not in DELIVERABLE_NAMES:
+        # On the name alone, before the disk is touched — as `serve_artifact` does, and for the
+        # same reason: whether a file we would never serve exists is not a visitor's to learn.
+        raise HTTPException(status_code=404, detail=f"not a deliverable: {name}")
+
+    try:
+        path = contain(run.project.root, name)
+    except StudioError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    if not path.is_file():
+        # Distinct from "not a deliverable" in wording only — both are 404, since the difference
+        # is not something worth publishing. The listing is how the page avoids asking at all.
+        raise HTTPException(status_code=404, detail=f"not written yet: {name}")
+
+    return path.read_text(encoding="utf-8", errors="replace")
 
 
 def contain(root: Path, name: str) -> Path:

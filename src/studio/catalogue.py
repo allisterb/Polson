@@ -149,6 +149,15 @@ class Card:
         """The type this card always runs, or ''. Not offered as a choice: the card is the choice."""
         return self.types[0] if self.types is not None and len(self.types) == 1 else ""
 
+    @property
+    def default_type(self) -> str:
+        """
+        The type a card runs when none is chosen, where its types are one family — a report, or a report on an S-1
+        (`report.s1`). "The studio's choice" means nothing there, and an untyped motion project is a film trailer.
+        """
+        family = self.types[0] if self.types and len(self.types) > 1 else ""
+        return family if family and all(t.startswith(family + ".") for t in self.types[1:]) else ""
+
     def check_files(self, names: list[str]) -> None:
         """Refuses a request missing the file this card needs. Raises `StudioError`."""
         if self.needs and not any(n.lower().endswith(self.needs) for n in names):
@@ -208,13 +217,20 @@ CARDS: tuple[Card, ...] = (
     # motion workflow's `report` type: Nemotron reads the PDF as page text through `Documents.ask`, and every figure
     # on screen is one the engine found on its page. Audiences are optional: with places, a film for each, paced from
     # its Qloo profile and with its figures written as that place writes them (Locale.number); without, one film.
-    Card("report-explainer", "Report explainer", "video", "Video · 45 seconds, questions answered from a report",
+    # **The document's kind** is the choice on the card: a kind the studio knows (`report.10k`, an annual report;
+    # `report.s1`, an IPO prospectus) brings the questions its readers take to it, so the director's own become optional;
+    # any other is answered as asked.
+    Card("report-explainer", "Financial report explainer", "video", "Video · 45 seconds, questions answered from a filing",
          (Route("motion", "Motion graphics explainer"),),
          image="report-explainer.webp", alt="A shareholder letter's question answered on screen: where the capacity is built",
          extras=(Extra("viewer", "Who is watching", placeholder="Who they are, and what they already know", long=True),
-                 Extra("questions", "Their questions", placeholder="One question a line, up to five", long=True),
+                 Extra("questions", "Their questions",
+                       placeholder="One question a line, up to five. For a 10-K or an S-1, optional: its readers' are asked too",
+                       long=True),
                  Extra("duration", "Duration", ("45 seconds", "60 seconds"), "45 seconds")),
-         audiences=True, audiences_optional=True, types=("report",), needs=".pdf"),
+         style_label="Document", type_labels={"report": "Any report", "report.10k": "Form 10-K (annual report)",
+                                              "report.s1": "Form S-1 (IPO prospectus)"},
+         audiences=True, audiences_optional=True, types=("report", "report.10k", "report.s1"), needs=".pdf"),
     # A startup's case told to investors from its own pitch deck, and a financial model or metrics where it has them. The
     # motion workflow's `pitch` type: the documents read and checked as a report's are, every projection drawn and
     # labelled as one, the ask as stated. With places, a film per investor audience in its conventions; without, one.
@@ -426,7 +442,7 @@ def parse(card_slug: str, title: str, route: str, kind: str, sizes: list[str], c
     offered = {t for t, _ in types_for(card, chosen.workflow)}
     if kind and kind not in offered:
         raise StudioError(f"{card.title} does not offer that {card.style_label.lower()}.")
-    kind = card.fixed_type or kind
+    kind = card.fixed_type or kind or card.default_type
 
     presets = {s.key: s for s in SIZES[card.kind]}
     picked = [presets[k] for k in dict.fromkeys(sizes) if k in presets]

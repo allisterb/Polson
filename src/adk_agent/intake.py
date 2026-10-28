@@ -107,8 +107,9 @@ WORKFLOWS: dict[str, tuple[str, ...]] = {
     # read by Nemotron through `Documents.ask` and needing no Qloo. **No type is a film trailer**, so it is in
     # `UNTYPED_IS_A_CHOICE` below.
     # `pitch` tells a startup's case from its own deck (and model) to investors, every projection marked as one; with
-    # places, a film per investor audience in its conventions.
-    "motion": ("pitch", "product", "report"),
+    # places, a film per investor audience in its conventions. `report.10k` and `report.s1` are reports on a Form 10-K and
+    # a Form S-1, with the questions their readers take to them asked as well as the director's.
+    "motion": ("pitch", "product", "report", "report.10k", "report.s1"),
     # **The Nebius entry's.** A theorem or concept explained in the model's own argument, every formula and claim checked
     # before it is drawn (`Equation`, `Verify.derivation`, `Verify.claim`, whose code Nemotron writes) and the film read
     # back after. Untyped. Documents are optional material (lecture notes, a textbook page), never the subject.

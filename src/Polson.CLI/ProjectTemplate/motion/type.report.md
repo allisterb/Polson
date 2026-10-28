@@ -118,6 +118,8 @@ went to Nemotron as 2,941 tokens, and all three figures came back found on the p
 A first filing can leave figures blank — an S-1 before pricing prints *"approximately $ ,"* for the offering. That is
 an answer: the scene says the figure is not yet set, in those words.
 
+{{FILING}}
+
 ### The rules of a report
 
 - **Every number on screen is either printed in the document and found on its page, or computed in the script from
@@ -170,9 +172,12 @@ The film is **title → one scene per question → end card**:
    answers share one headline, that headline in a line: the summary first, the scenes as its evidence.
 2. **Each question** (8–12 s): the question first, in the audience's words, held long enough to read; then the
    answer — the figure arriving large, or bars growing (a `comp.rectangle` with one corner keyed — the three
-   growing bars in the SDK reference's *Vector animation* section); then the headline sentence; then the **source line**, small and steady: *"Form 10-K,
-   p. 51"*, **at 32 px or more at 1080p** — the read-back's watcher misread 26–30 px muted lines ("2026" as "2025") and
-   could not read the page numbers at all. **The source line is a claim too**: name the statement or table as the document titles it ("Revenue by
+   growing bars in the SDK reference's *Vector animation* section); then the headline sentence; then the **source line**: *"Form 10-K,
+   p. 51"*, **a footnote** — about 22–24 px at 1080p, the muted ink at 4.5 : 1 or better, steady, in a corner of the frame the
+   figure does not use. Readable when the viewer looks for it, never competing with the answer. **Give it `desc: 'source'`**
+   (`comp.text({ …, desc: 'source line' })`): `Verify.film` then counts it as a citation, not grading it and not raising
+   a stray when the watcher misreads its page, which it does at this size ("2026" as "2025"). The figures it cites are
+   checked as themselves. **The source line is a claim too**: name the statement or table as the document titles it ("Revenue by
    End Market", not your question's "revenue by market platform") — the title is in the evidence, or ask for it — and
    never an Item number or section you did not read there. The page is `evidence.page`, the PDF's page; where the printed page number differs, give the printed one
    and say which in `direction.md`.
@@ -207,7 +212,7 @@ once, before the beats, and record it in `direction.md` with its reasons.
   character at a time shows "$6", "$60" and "$60.9" on the way, numbers the document never printed. Animate a figure
   as one word (`basedOn: 'words'`) or as a whole.
 - **Type as the design.** One family, the figures in a heavy weight and the units smaller and lighter beside them
-  (*$215.9* large, *billion* small), the question above in a calmer weight, the source line small and steady. A
+  (*$215.9* large, *billion* small), the question above in a calmer weight, the source line a footnote. A
   scene's figures share a baseline or a column, so the eye compares them without hunting.
 - **Cuts and wipes, not dissolves, between scenes.** A dissolve lays one scene's figures over the next one's — a
   frame where two sets of numbers are on screen at once, readable as neither. A `comp.wipe` or a cut keeps every

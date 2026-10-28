@@ -576,7 +576,7 @@ class StarterTests(unittest.TestCase):
         first, when selecting the lone type would have turned every film trailer into an ad; the mark stays, so a
         trailer stays untyped however many types it gains or loses."""
         body = TestClient(_app()).get("/new").text
-        self.assertIn('value="motion" data-types="pitch,product,report" data-untyped="1"', body)
+        self.assertIn('value="motion" data-types="pitch,product,report,report.10k,report.s1" data-untyped="1"', body)
         self.assertNotIn('value="poster" data-types="film,product" data-untyped', body)
 
     def test_switching_workflow_cannot_leave_an_unoffered_type_selected(self):

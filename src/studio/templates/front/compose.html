@@ -82,18 +82,22 @@
 
       {% for i, opts in styles.items() if opts %}
       <details class="fr-pop" data-route="{{ i }}" {{ 'hidden' if i != route }}>
-        <summary class="ps-field"><span class="ps-field-label">{{ card.style_label }}</span><span class="ps-field-value" data-summary>Studio's choice</span>{{ m.icon('chevron-down', 18) }}</summary>
+        {#- A card whose types are one family (a report, a report on an S-1) has a default, not a studio's choice. -#}
+        {%- set fallback = card.default_type -%}
+        <summary class="ps-field"><span class="ps-field-label">{{ card.style_label }}</span><span class="ps-field-value" data-summary>{{ card.type_labels.get(fallback, "Studio's choice") if fallback else "Studio's choice" }}</span>{{ m.icon('chevron-down', 18) }}</summary>
         <fieldset class="ps-ogrid fr-panel" style="margin:0" {{ 'disabled' if i != route }}>
-          <legend class="ps-ogrid-title" style="float:left; width:100%">{{ card.style_label }}</legend><p class="ps-ogrid-hint" style="clear:both">Choose one, or let the studio choose</p>
+          <legend class="ps-ogrid-title" style="float:left; width:100%">{{ card.style_label }}</legend><p class="ps-ogrid-hint" style="clear:both">{{ 'Choose one' if fallback else 'Choose one, or let the studio choose' }}</p>
           <div class="ps-ogrid-tiles" style="--cols: 3">
+            {% if not fallback %}
             <label class="ps-otile fr-plain" data-label="Studio's choice">
               <input class="fr-vh" type="radio" name="kind" value="" {{ 'checked' if i == route and not form.kind }}>
               <span class="ps-otile-check" aria-hidden="true">{{ m.icon('check', 14) }}</span>
               <span class="ps-otile-text"><span class="ps-otile-label">Let the studio choose</span></span>
             </label>
+            {% endif %}
             {% for value, label in opts %}
             <label class="ps-otile fr-plain" data-label="{{ label }}">
-              <input class="fr-vh" type="radio" name="kind" value="{{ value }}" {{ 'checked' if i == route and form.kind == value }}>
+              <input class="fr-vh" type="radio" name="kind" value="{{ value }}" {{ 'checked' if i == route and (form.kind == value or (not form.kind and value == fallback)) }}>
               <span class="ps-otile-check" aria-hidden="true">{{ m.icon('check', 14) }}</span>
               <span class="ps-otile-text"><span class="ps-otile-label">{{ label }}</span></span>
             </label>

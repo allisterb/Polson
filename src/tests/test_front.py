@@ -744,7 +744,7 @@ class FakeCommissioner:
     """Stands in for `adk_agent.intake.Commissioner`: offers drawing (review only) and the infographics."""
 
     TYPES = {"drawing": ("review",), "vector_infographic": ("editorial", "swiss"), "infographic": ("editorial",),
-             "motion": ("pitch", "product", "report")}
+             "motion": ("pitch", "product", "report", "report.10k", "report.s1")}
 
     def __init__(self, root: Path, refuse: Exception | None = None) -> None:
         self.root, self.refuse, self.made = root, refuse, []
@@ -851,6 +851,22 @@ class CommissionedComposerTests(unittest.TestCase):
         made = self.commissioner.made[0]
         self.assertEqual((made["workflow"], made["kind"], made["documents"]), ("motion", "report", ["nvda-10k.pdf"]))
         self.assertIn("  1. How big was revenue?", made["brief"])
+
+    def test_a_report_on_an_s1_is_commissioned_as_one_and_needs_no_questions(self):
+        """The card's document kind: an S-1 brings an investor's questions, so the director need not write any."""
+        data = self.trailer("report-explainer", kind="report.s1", aud_place=[], aud_age=[])
+        reply = self.client.post("/requests", data=data, files=[("files", ("s-1.pdf", b"%PDF-1.4", "application/pdf"))],
+                                 follow_redirects=False)
+        self.assertEqual(reply.status_code, 303, reply.text[:300])
+        self.assertEqual((self.commissioner.made[0]["workflow"], self.commissioner.made[0]["kind"]), ("motion", "report.s1"))
+
+    def test_the_report_card_offers_its_document_kinds_and_no_studios_choice(self):
+        """A report or a report on an S-1: one family, so "Any report" is the default, never an untyped trailer."""
+        page = self.client.get("/compose/report-explainer").text
+        self.assertIn("Form S-1 (IPO prospectus)", page)
+        self.assertIn("Form 10-K (annual report)", page)
+        self.assertIn('value="report" checked', page)
+        self.assertNotIn("Let the studio choose", page)
 
     def test_a_startup_pitch_is_commissioned_as_a_pitch_trailer_with_its_deck(self):
         data = self.trailer("startup-pitch", x_company="UberCab", aud_place=["Singapore", "London"])

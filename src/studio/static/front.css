@@ -422,6 +422,7 @@ fieldset.fr-choice legend { padding: 0; margin-bottom: var(--space-1); }
 .vt-src-qloo { --vt: #7a4fd1; }
 .vt-src-research { --vt: var(--done); }
 .vt-src-scale { --vt: var(--line-control); }
+.vt-src-citation { --vt: var(--line-control); }
 .vt-src-own-words { --vt: var(--ink-muted); }
 .vt-src-unsourced-figure { --vt: var(--failed); }
 .fr-vkey[class*="vt-src-"] { border-color: var(--vt); background: color-mix(in srgb, var(--vt) 16%, transparent); }
