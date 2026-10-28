@@ -595,6 +595,8 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
             offered = [t for t, _ in catalogue.types_for(chosen, commission.workflow) if t in types]
             if not commission.kind and len(offered) == 1:
                 commission.kind = offered[0]
+            elif not commission.kind and chosen.default_type in offered:
+                commission.kind = chosen.default_type
             staged = await uploads.stage(files, scratch)
             commission.card.check_files([p.name for p in staged])
             name = commissioner.free_name(commission.title)

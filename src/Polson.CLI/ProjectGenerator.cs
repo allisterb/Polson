@@ -412,7 +412,7 @@ internal static class ProjectGenerator
             ["BRIEF"] = brief,
             ["INSTRUCTIONS_FILE"] = host.Instructions,
             ["ISOLATION"] = Isolation(sdk),
-            ["TYPE"] = type.Length > 0 ? Render(workflow, $"type.{type}.md", []) : "",
+            ["TYPE"] = TypeText(workflow, type),
 
             // Shared across every workflow, and rendered from one file so the four instruction
             // templates cannot drift apart on the rule that matters most. `_shared` is not a
@@ -723,7 +723,7 @@ internal static class ProjectGenerator
     internal static int DeadlineFor(string workflow, int? requested, string type = "") =>
         requested is { } given
             ? Math.Max(0, given)
-            : type.Length > 0 && WorkflowDeadlines.TryGetValue($"{workflow}.{type}", out var forType) ? forType
+            : type.Length > 0 && WorkflowDeadlines.TryGetValue($"{workflow}.{TypeFamily(type)}", out var forType) ? forType
             : WorkflowDeadlines.TryGetValue(workflow, out var value) ? value : 0;
 
     /// <summary>
@@ -740,6 +740,22 @@ internal static class ProjectGenerator
     /// </para>
     /// </remarks>
     static string[] TypesFor(string workflow) => TemplateNames($"{workflow}.type", trailing: true);
+
+    /// <summary>
+    /// The family a type belongs to: <c>report</c> for <c>report.s1</c>, the type itself when it has none. What is keyed by
+    /// type — manuals, deadlines — is keyed by family, so a document kind inherits everything its family has.
+    /// </summary>
+    static string TypeFamily(string type) => type.Split('.', 2)[0];
+
+    /// <summary>
+    /// A type's instructions. A dotted type is a kind within its family — <c>report.s1</c> is a report on an S-1 — so it is
+    /// the family's text with the kind's own in its <c>{{FILING}}</c>; a family's type alone leaves that empty.
+    /// </summary>
+    static string TypeText(string workflow, string type) => type.Length == 0 ? ""
+        : Render(workflow, $"type.{TypeFamily(type)}.md", new()
+        {
+            ["FILING"] = type.Contains('.') ? Render(workflow, $"type.{type}.md", []).TrimEnd() : "",
+        });
 
     /// <summary>
     /// Reads workflow or type names out of the embedded resource manifest.
@@ -1525,7 +1541,7 @@ internal static class ProjectGenerator
     static StudioManual[] JudgmentManualsFor(string workflow, string type = "")
     {
         IEnumerable<string> ids = JudgmentManuals.TryGetValue(workflow, out var forWorkflow) ? forWorkflow : [];
-        if (type.Length > 0 && TypeManuals.TryGetValue($"{workflow}.{type}", out var forType)) ids = ids.Concat(forType);
+        if (type.Length > 0 && TypeManuals.TryGetValue($"{workflow}.{TypeFamily(type)}", out var forType)) ids = ids.Concat(forType);
         return [.. ids.Distinct().Select(PolsonManuals.Find).OfType<StudioManual>()];
     }
 

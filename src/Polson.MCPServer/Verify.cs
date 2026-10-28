@@ -125,12 +125,19 @@ public sealed partial class VerifyToolkit
             && double.TryParse(figure, NumberStyles.Float, CultureInfo.InvariantCulture, out var value)
             && counting.Any(c => c.Covers(value, r.From, FilmReadBack.Slack)
                 && FilmReadBack.Normal(FilmReadBack.Canon(c.Format.Format(value))) == FilmReadBack.Normal(FilmReadBack.Canon(r.Text)));
-        match = match with { Strays = [.. match.Strays.Where(s => !MidCount(s.Reading))] };
+        // A citation (`desc: 'source…'`) is where a figure came from, not a claim on screen, and is set at footnote size: the
+        // watcher misreads small type ("2026" as "2025"), and a page number read wrong is the watcher's error, not the
+        // film's. So it is neither graded nor raised as a stray; the figures it cites are checked as themselves.
+        var citations = texts.Select(t => t.GetValueOrDefault("desc") is string d && d.TrimStart().StartsWith("source", StringComparison.OrdinalIgnoreCase)).ToArray();
+        var cited = expected.Where((_, i) => citations[i]).Select(e => e.Text).ToHashSet();
+        match = match with { Strays = [.. match.Strays.Where(s => !MidCount(s.Reading) && !(s.Near is { } near && cited.Contains(near)))] };
 
         var items = expected.Select((e, i) =>
         {
             // An axis label comp.axes drew is a ruler, not a claim: sourced as a scale without being declared.
-            var source = texts[i].GetValueOrDefault("kind") as string is "tick" or "axis" ? (Kind: "scale", Detail: (string?)"axis label") : sources.Classify(e.Text, computed, scale);
+            var source = citations[i] ? (Kind: "citation", Detail: (string?)"source line")
+                : texts[i].GetValueOrDefault("kind") as string is "tick" or "axis" ? (Kind: "scale", Detail: (string?)"axis label")
+                : sources.Classify(e.Text, computed, scale);
             var seen = match.Seen[i];
             return new Dictionary<string, object?>
             {
@@ -143,7 +150,8 @@ public sealed partial class VerifyToolkit
                 ["seen"] = seen is not null,
                 ["readAs"] = Raw(seen?.Text),
                 ["readAt"] = seen?.From,
-                ["status"] = e.From is null ? "never shown" : seen is not null ? "seen" : FilmReadBack.Unreadable(e.Text) ? "unchecked" : "missed",
+                ["status"] = e.From is null ? "never shown" : citations[i] ? "citation" : seen is not null ? "seen"
+                    : FilmReadBack.Unreadable(e.Text) ? "unchecked" : "missed",
             };
         }).ToArray();
 
@@ -756,11 +764,16 @@ public abstract class ReadBackCheck(string name, Dictionary<string, object?>[] i
             + (real == 0 ? "" : $" {real} confirmed fault{(real == 1 ? "" : "s")} in the {Piece}: fix and {Again} again.")
             + (Ignored.Length == 0 ? "" : $" {Ignored.Length} computed entr{(Ignored.Length == 1 ? "y was" : "ies were")} not used, as the working shows no arithmetic ({string.Join(", ", Ignored.Take(4).Select(k => $"'{Clip(k)}'"))}): a figure from a document is found on its page without one.")
             + FilmReadBack.UncheckedNote(counts["unchecked"] is int u ? u : 0, Evidence)
+            + (Inconclusive(counts) ? $" The reader saw {counts["seen"]} of the {(int)counts["seen"]! + (int)counts["missed"]!} texts it "
+                + $"could check, under half, so this read-back cannot vouch for the {Piece}: hold texts longer or set them larger and "
+                + $"{Again} again. If the {Evidence}s show them plainly, the reader is at fault: say so in direction.md." : "")
             + Note;
         var result = new Dictionary<string, object?>
         {
             ["ok"] = true,
-            ["passed"] = unsourced == 0 && pending == 0 && real == 0,
+            // The claim is that every text "was read as set": a reader that saw under half of them has not shown that.
+            // nvdatenk1 passed with 0 of 92 seen, because coverage was never part of the verdict.
+            ["passed"] = unsourced == 0 && pending == 0 && real == 0 && !Inconclusive(counts),
             [NameKey] = Name,
             ["items"] = Items.Cast<object?>().ToArray(),
             ["strays"] = Strays.Select(s => (object?)s.Dict()).ToArray(),
@@ -783,11 +796,16 @@ public abstract class ReadBackCheck(string name, Dictionary<string, object?>[] i
     /// <summary>Why a missed text may have been missed: its seconds on screen, or its size.</summary>
     protected abstract string MissedNote(Dictionary<string, object?> item);
 
+    /// <summary>Whether the reader saw under half of the texts it could check (at least three), so the check says little.</summary>
+    private static bool Inconclusive(Dictionary<string, object?> counts) =>
+        (int)counts["seen"]! + (int)counts["missed"]! is var checkable && checkable >= 3 && (int)counts["seen"]! * 2 < checkable;
+
     private Dictionary<string, object?> Counts() => new()
     {
         ["shown"] = Items.Length,
         ["seen"] = Items.Count(i => (string?)i["status"] == "seen"),
         ["missed"] = Items.Count(i => (string?)i["status"] == "missed"),
+        ["citations"] = Items.Count(i => (string?)i["status"] == "citation"),
         ["unchecked"] = Items.Count(i => (string?)i["status"] == "unchecked"),
         ["unsourced"] = Items.Count(i => (string?)i["source"] == "unsourced figure"),
         ["strays"] = Strays.Count,
@@ -900,7 +918,26 @@ internal static class FilmReadBack
     /// exactly: the same line with a different figure is a stray, kind <c>'different figure'</c>, not a match. A text of
     /// several lines is seen when every line is read.
     /// </summary>
+    /// <remarks>
+    /// **A reading of several lines that matches nothing is read again line by line.** The watcher can transcribe a whole
+    /// scene as one block: nvdatenk1's (2026-10-28) eight-line scorecard came back as one reading per scene, no set line
+    /// was similar enough to a block, and a film whose every line was read scored 0 of 92 seen with nine strays, each of
+    /// them only lines the film set. Matched first as read, so a block that is one set text of several lines still pairs
+    /// whole; split only where that leaves it unmatched, and the split kept only when it sees more.
+    /// </remarks>
     internal static Outcome Match(IReadOnlyList<Shown> shown, IReadOnlyList<Reading> read)
+    {
+        var asRead = MatchOnce(shown, read);
+        var blocks = asRead.Strays.Select(u => u.Reading).Where(r => r.Text.Contains('\n')).ToHashSet();
+        if (blocks.Count == 0) return asRead;
+        var split = MatchOnce(shown, [.. read.SelectMany(r => blocks.Contains(r) ? Lines(r) : [r])]);
+        return split.Seen.Count(s => s is not null) > asRead.Seen.Count(s => s is not null) ? split : asRead;
+
+        static IEnumerable<Reading> Lines(Reading r) =>
+            r.Text.Split('\n').Select(l => l.Trim()).Where(l => Normal(l).Length > 0).Select(l => r with { Text = l });
+    }
+
+    private static Outcome MatchOnce(IReadOnlyList<Shown> shown, IReadOnlyList<Reading> read)
     {
         var used = new bool[read.Count];
         var seen = new Reading?[shown.Count];

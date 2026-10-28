@@ -583,6 +583,49 @@ public partial class ProjectGeneratorTests : TestsRuntime, IDisposable
     }
 
     /// <summary>
+    /// A dotted type is a kind within its family: <c>report.s1</c> is the report type with an S-1's questions in it, the
+    /// family's manuals and deadline, and recorded as itself. A plain report carries none of the S-1 text.
+    /// </summary>
+    [Fact]
+    public void TestAReportOnAnS1IsTheReportTypeWithAnInvestorsQuestions()
+    {
+        Assert.True(ProjectGenerator.Create(Options("s1", o => { o.Workflow = "motion"; o.Type = "report.s1"; })));
+        Assert.True(ProjectGenerator.Create(Options("plain", o => { o.Workflow = "motion"; o.Type = "report"; })));
+
+        var s1 = File.ReadAllText(Path.Combine(root, "s1", "GEMINI.md"));
+        var plain = File.ReadAllText(Path.Combine(root, "plain", "GEMINI.md"));
+        const string section = "### The document is a Form S-1: the questions an investor brings to it";
+
+        Assert.Contains("## The type: report", s1, StringComparison.Ordinal);
+        Assert.Contains(section, s1, StringComparison.Ordinal);
+        Assert.Contains("const S1_QUESTIONS = [", s1, StringComparison.Ordinal);
+        Assert.True(s1.IndexOf("### A long document", StringComparison.Ordinal) < s1.IndexOf(section, StringComparison.Ordinal),
+            "the S-1 section builds on find-then-ask, so it comes after it");
+        Assert.Contains($"### Manual 13 — {PolsonManuals.Find("13")!.Title}", s1, StringComparison.Ordinal);
+        Assert.DoesNotContain(section, plain, StringComparison.Ordinal);
+        Assert.DoesNotContain("{{FILING}}", s1 + plain, StringComparison.Ordinal);
+        Assert.Contains("\"type\": \"report.s1\"", File.ReadAllText(Path.Combine(root, "s1", "project.json")), StringComparison.Ordinal);
+        Assert.Equal(ProjectGenerator.DeadlineFor("motion", null, "report"), ProjectGenerator.DeadlineFor("motion", null, "report.s1"));
+        // The kind's file is the generator's to place, never a file of its own in the project.
+        Assert.Empty(Directory.GetFiles(Path.Combine(root, "s1"), "*s1.md", SearchOption.AllDirectories));
+    }
+
+    /// <summary>A report on a 10-K is the report type with a professional's questions, keyed to the form's Items.</summary>
+    [Fact]
+    public void TestAReportOnA10KIsTheReportTypeWithAProfessionalsQuestions()
+    {
+        Assert.True(ProjectGenerator.Create(Options("tenk", o => { o.Workflow = "motion"; o.Type = "report.10k"; })));
+
+        var tenk = File.ReadAllText(Path.Combine(root, "tenk", "GEMINI.md"));
+        Assert.Contains("## The type: report", tenk, StringComparison.Ordinal);
+        Assert.Contains("### The document is a Form 10-K: what a professional reads it for", tenk, StringComparison.Ordinal);
+        Assert.Contains("const TENK_QUESTIONS = [", tenk, StringComparison.Ordinal);
+        Assert.DoesNotContain("const S1_QUESTIONS", tenk, StringComparison.Ordinal);
+        Assert.DoesNotContain("{{FILING}}", tenk, StringComparison.Ordinal);
+        Assert.Contains("\"type\": \"report.10k\"", File.ReadAllText(Path.Combine(root, "tenk", "project.json")), StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// `--auto`: the instructions say nobody will answer, the manifest records it for the ADK runtime, the Antigravity
     /// config runs the agent autonomous, and Claude Code's own question tool is denied. Without it, none of that.
     /// </summary>

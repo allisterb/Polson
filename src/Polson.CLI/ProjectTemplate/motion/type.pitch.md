@@ -320,7 +320,9 @@ once, before the beats, and record it in `direction.md` with its reasons.
 - **Figures arrive whole.** A figure rises, fades or scales into place as the number it is — **never a counter that
   ticks up** and **no character cascade on a figure**: both put numbers on screen the documents never printed.
 - **Type as the design.** One family; figures heavy, units smaller beside them; the claim in a calmer weight; the
-  source line small and steady, **at 32 px or more at 1080p**, naming the deck and its page (*"Pitch deck, p. 7"*).
+  source line a footnote — about 22–24 px at 1080p, the muted ink at 4.5 : 1 or better, steady — naming the deck and its
+  page (*"Pitch deck, p. 7"*), with `desc: 'source'` so `Verify.film` counts it as a citation, not grading it at a size
+  the watcher misreads.
 - **Cuts and wipes, not dissolves**: a dissolve lays one scene's figures over the next one's. No motion blur on text.
 - **Carry a figure across a change of scene instead of setting it twice.** Where the next scene builds on a figure —
   the market size the business model then divides — keep it in a group outside both scenes and change the scene around

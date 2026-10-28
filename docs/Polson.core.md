@@ -5270,7 +5270,10 @@ return canvas;
 ## `Verify`
 
 - `Verify.film(comp: MotionComposition, video: string, options?: { computed?: object, scale?: string[] })` → `Promise<object>` — The film checked: `{ ok, passed, items, strays, counts, summary, model }`, or `{ ok: false, failureName, error, remedy }` when the watcher could not watch. `video` is project-relative. The watcher is told the film's length and asked for times in seconds; should it answer in another unit anyway — every time a tenth or a hundredth of the true one, in order, as it once did — the times are read at the scale that matches the texts, and the `summary` says so.
-  - `items`: one per text set, each `{ text, from, to, seconds, source, detail, seen, readAs, readAt, status }`, `status` one of `'seen'`, `'missed'` or `'never shown'`.
+  - `items`: one per text set, each `{ text, from, to, seconds, source, detail, seen, readAs, readAt, status }`, `status` one of `'seen'`, `'missed'`, `'citation'` or `'never shown'`.
+  - **A source line is a citation.** Give it `desc: 'source…'` (`comp.text({ …, desc: 'source line' })`) and set it at footnote size: its `status` and `source` are `'citation'`, it is not graded, and a reading of it with another page number is not a stray, since the reader misreads type that small. The figures it cites are checked as themselves.
+  - **Coverage counts.** `passed` is false when the reader saw under half of the texts it could check (three or more, citations and Arabic aside), and the `summary` says so: a read-back that saw little cannot vouch for the film. Hold texts longer or set them larger; if the frames show them plainly, the reader is at fault, and `direction.md` says so.
+  - **A scene read as one block is read line by line.** The reader sometimes transcribes a whole scene as one reading of many lines; where that matches nothing, each line is matched on its own, and only a line the film never set becomes a stray.
   - `strays`: one per reading of text the film never set, each `{ n, read, at, frame, near, kind, verdict, note }`, `kind` `'different figure'`, `'never set'`, or `'unreadable script'`.
   - **Arabic is left to your eye.** The reader misread whole Arabic words that were drawn correctly (2026-10-27), so a text
     in Arabic that it did not read as set is `status: 'unchecked'`, not `'missed'`, and an Arabic reading is a stray of kind

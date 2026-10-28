@@ -1574,6 +1574,30 @@ class DeliverableRouteTests(unittest.TestCase):
 
     def test_an_unknown_run_is_a_404_rather_than_an_empty_list(self):
         self.assertEqual(self.client.get("/runs/nope/deliverables").status_code, 404)
+
+    def test_a_run_that_checked_lists_verification_md_and_serves_it_from_the_record(self):
+        """Made from the record, never from disk: an agent's own `verification.md` is not what is served."""
+        names = [d["name"] for d in self.client.get("/runs/acme-1/deliverables").json()["deliverables"]]
+        self.assertNotIn("verification.md", names, "no checks recorded, so nothing to offer")
+        self.assertEqual(self.client.get("/runs/acme-1/deliverables/verification.md").status_code, 404)
+
+        events = self.root / "acme" / "events"
+        events.mkdir(exist_ok=True)
+        (events / "server.jsonl").write_text("\n".join(json.dumps(e) for e in [
+            {"type": "check", "claim": "every line holds still", "passed": False, "detail": "3.54s < 3.83s",
+             "ts": "2026-10-27T21:26:44Z"},
+            {"type": "check", "claim": "every line holds still", "passed": True, "ts": "2026-10-27T21:28:13Z"}]) + "\n",
+            encoding="utf-8")
+        (self.root / "acme" / "verification.md").write_text("all checks passed, trust me", encoding="utf-8")
+
+        listed = next(d for d in self.client.get("/runs/acme-1/deliverables").json()["deliverables"]
+                      if d["name"] == "verification.md")
+        self.assertEqual(listed["kind"], "document")
+        raw = self.client.get("/runs/acme-1/deliverables/verification.md?raw=1").text
+        self.assertIn("Measured: 3.54s < 3.83s", raw)
+        self.assertNotIn("trust me", raw)
+        self.assertIn("<h2>Checks that failed</h2>",
+                      self.client.get("/runs/acme-1/deliverables/verification.md?rendered=1").text)
     # endregion
 
     # region Serving one

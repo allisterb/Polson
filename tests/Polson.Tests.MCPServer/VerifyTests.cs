@@ -112,6 +112,35 @@ public class VerifyTests : TestsRuntime, IDisposable
         Assert.Equal(("never set", null), (outcome.Strays[1].Kind, outcome.Strays[1].Near));
     }
 
+    /// <summary>
+    /// nvdatenk1: the watcher wrote each scene as one multi-line block, and a film whose every line was read scored 0 of 92
+    /// seen with nine strays. A block that matches nothing is read line by line; a line in it the film never set is still a
+    /// stray, on its own.
+    /// </summary>
+    [Fact]
+    public void TestAScenesLinesReadAsOneBlockAreEachSeen()
+    {
+        var shown = new[] { Shown("Revenue", 5, 15), Shown("$215.9B", 5, 15), Shown("Operating income", 5, 15), Shown("$130.4B", 5, 15) };
+        var outcome = FilmReadBack.Match(shown, [Read("Revenue\n$215.9B\nOperating income\n$130.4B", 6)]);
+
+        Assert.Equal(["Revenue", "$215.9B", "Operating income", "$130.4B"], outcome.Seen.Select(r => r?.Text));
+        Assert.Empty(outcome.Strays);
+
+        var extra = FilmReadBack.Match(shown, [Read("Revenue\n$215.9B\nOperating income\n$130.4B\nGHOST LINE", 6)]);
+        Assert.All(extra.Seen, r => Assert.NotNull(r));
+        Assert.Equal("GHOST LINE", Assert.Single(extra.Strays).Reading.Text);
+    }
+
+    /// <summary>A block that is one set text of several lines still pairs whole, as it did before blocks were split.</summary>
+    [Fact]
+    public void TestABlockThatIsOneTextOfSeveralLinesStillPairsWhole()
+    {
+        var outcome = FilmReadBack.Match([Shown("Unofficial study —\nnot affiliated with the studio.", 10, 15)],
+            [Read("Unofficial study —\nnot affiliated with the studio.", 11)]);
+        Assert.Equal("Unofficial study —\nnot affiliated with the studio.", outcome.Seen[0]?.Text);
+        Assert.Empty(outcome.Strays);
+    }
+
     [Fact]
     public void TestALineReadFarFromItsTimeIsNotItsReadingAndLinesReadApartMakeTheWhole()
     {
@@ -277,6 +306,61 @@ public class VerifyTests : TestsRuntime, IDisposable
         Assert.Equal(["film.verify", "check", "film.stray", "check", "film.stray", "check"], recorded);
         Assert.Throws<ArgumentException>(() => later.Stray(9, "misread"));
         Assert.Throws<ArgumentException>(() => later.Stray(1, "maybe"));
+    }
+
+    /// <summary>A film of three lines and a source line, encoded at 320 × 180 for 3 s, and the reader's answer to it.</summary>
+    private async Task<Dictionary<string, object?>> CheckFilm(string name, JsonArray read)
+    {
+        var motion = new MotionToolkit(root);
+        var comp = motion.Composition(new Hashtable { ["width"] = 320d, ["height"] = 180d, ["fps"] = 12d, ["duration"] = 3d });
+        comp.Fill(new Hashtable { ["color"] = "#ffffff" });
+        comp.Text(new Hashtable { ["text"] = "BE COOL", ["family"] = "Arial", ["size"] = 30d, ["origin"] = new[] { 160d, 30d } });
+        comp.Text(new Hashtable { ["text"] = "Returned $974 million", ["family"] = "Arial", ["size"] = 16d, ["origin"] = new[] { 160d, 70d } });
+        comp.Text(new Hashtable { ["text"] = "Revenues rose", ["family"] = "Arial", ["size"] = 16d, ["origin"] = new[] { 160d, 100d } });
+        comp.Text(new Hashtable { ["text"] = "Shareholder letter, p. 2", ["family"] = "Arial", ["size"] = 9d, ["origin"] = new[] { 160d, 160d },
+            ["desc"] = "source line" });
+        comp.SaveVideo(name);
+        using var video = new VideoReader([new NemotronEndpoint(NemotronEndpoint.Nebius, "https://tf.example/v1", "k", NemotronEndpoint.NebiusModel)],
+            new DocumentBudget(5), root, http: new HttpClient(new Answer(new JsonObject { ["items"] = read }.ToJsonString())));
+        return await new VerifyToolkit(video, root, null).Film(comp, name);
+    }
+
+    /// <summary>
+    /// A source line (<c>desc: 'source…'</c>) is a citation, set at footnote size: neither graded nor a stray when the reader
+    /// gets its page wrong, as small type is misread. The texts it cites are checked as themselves.
+    /// </summary>
+    [Fact]
+    public async Task TestASourceLineIsACitationNotGradedAndItsMisreadingIsNoStray()
+    {
+        if (!FFmpeg.Available || !SkiaSharp.SKFontManager.Default.GetFontFamilies().Contains("Arial")) { Info("Skipped: needs ffmpeg and Arial."); return; }
+
+        var result = await CheckFilm("cited.mp4", new JsonArray(
+            new JsonObject { ["text"] = "BE COOL\nReturned $974 million\nRevenues rose\nShareholder letter, p. 7", ["from"] = 0, ["to"] = 3 }));
+
+        Assert.True((bool)result["ok"]!, result.GetValueOrDefault("error") as string);
+        var items = ((object?[])result["items"]!).Cast<Dictionary<string, object?>>().ToArray();
+        Assert.Equal(["seen", "seen", "seen", "citation"], items.Select(i => (string)i["status"]!));
+        Assert.Equal("citation", items[3]["source"]);
+        Assert.Empty((object?[])result["strays"]!);
+        Assert.True((bool)result["passed"]!, (string)result["summary"]!);
+    }
+
+    /// <summary>
+    /// nvdatenk1 passed with 0 of 92 texts seen: coverage was not part of the verdict. A reader that saw under half of what it
+    /// could check cannot vouch for the film, and the check says so rather than passing.
+    /// </summary>
+    [Fact]
+    public async Task TestAReadBackThatSawUnderHalfTheTextsDoesNotPass()
+    {
+        if (!FFmpeg.Available || !SkiaSharp.SKFontManager.Default.GetFontFamilies().Contains("Arial")) { Info("Skipped: needs ffmpeg and Arial."); return; }
+
+        var half = await CheckFilm("half.mp4", new JsonArray(new JsonObject { ["text"] = "BE COOL", ["from"] = 0, ["to"] = 3 }));
+        Assert.False((bool)half["passed"]!);
+        Assert.Contains("saw 1 of the 3 texts it could check, under half", (string)half["summary"]!);
+
+        var most = await CheckFilm("most.mp4", new JsonArray(new JsonObject { ["text"] = "BE COOL", ["from"] = 0, ["to"] = 3 },
+            new JsonObject { ["text"] = "Revenues rose", ["from"] = 0, ["to"] = 3 }));
+        Assert.True((bool)most["passed"]!, (string)most["summary"]!);
     }
 
     /// <summary>

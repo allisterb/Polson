@@ -1231,7 +1231,9 @@
 
   // ── Verification: what the film shows, where each came from, and whether a watcher read it ──
   var SOURCE = { brief: 'Brief', document: 'Document', computed: 'Computed', qloo: 'Qloo', research: 'Research',
-                 scale: 'Scale', 'own words': 'Own words', 'unsourced figure': 'No source' };
+                 scale: 'Scale', citation: 'Citation', 'own words': 'Own words', 'unsourced figure': 'No source' };
+  // A source line (desc 'source…') is a footnote: where the figures came from, not a claim, so not graded.
+  var CITATION = 'a citation: not graded, as footnote-sized type is misread';
   function srcKey(s) { return String(s || 'own words').replace(/\s+/g, '-'); }
   var SVGNS = 'http://www.w3.org/2000/svg';
   function svgEl(name, attrs, parent) {
@@ -1270,7 +1272,7 @@
       svgEl('title', {}, g).textContent = it.text.replace(/\n/g, ' ') + ' — on screen ' + it.from.toFixed(1) + '–' + it.to.toFixed(1) + ' s · '
         + (SOURCE[it.source] || it.source) + (it.detail ? ' (' + it.detail + ')' : '') + ' · '
         + (it.status === 'seen' ? 'read by the watcher' + (it.readAs && it.readAs !== it.text ? ' as “' + it.readAs + '”' : '')
-          : it.status === 'unchecked' ? UNCHECKED : 'not read by the watcher');
+          : it.status === 'unchecked' ? UNCHECKED : it.status === 'citation' ? CITATION : 'not read by the watcher');
       svgEl('rect', { x: x(it.from), y: y, width: w, height: barH, rx: 3 }, g);
       if (w > 34) svgEl('text', { x: x(it.from) + 4, y: y + 13 }, g).textContent = clipText(it.text.replace(/\n/g, ' '), Math.floor(w / 6.2));
     });
@@ -1451,7 +1453,8 @@
         tr.appendChild(src);
         tr.appendChild(el('td', '', it.status === 'seen' ? (it.readAs && it.readAs.replace(/\s+/g, ' ') !== it.text.replace(/\s+/g, ' ') ? '✓ as “' + it.readAs + '”' : '✓ as set')
           : it.status === 'missed' ? 'not read (' + (it.seconds || 0).toFixed(1) + ' s on screen)'
-          : it.status === 'unchecked' ? 'not checked: Arabic, checked by eye' : '—'));
+          : it.status === 'unchecked' ? 'not checked: Arabic, checked by eye'
+          : it.status === 'citation' ? CITATION : '—'));
         table.appendChild(tr);
       });
       card.appendChild(table);
@@ -1548,9 +1551,14 @@
       if (rc) {
         var p = el('p', 'fr-small', rc.passed ? 'All ' + rc.checked + ' Qloo references in the direction were returned by the queries they cite. '
           : rc.unverified + ' Qloo reference' + (rc.unverified === 1 ? ' was' : 's were') + ' not found in the query cited. ');
-        var link = el('button', 'ps-btn ps-btn-quiet ps-btn-sm', 'See the evidence map'); link.type = 'button';
-        link.addEventListener('click', function () { select('choices'); });
-        p.appendChild(link); sc.appendChild(p);
+        // Named by where it goes: the evidence map is the Choices tab, and only offered when that tab is there to open.
+        var choicesTab = views && views.querySelector('.ps-tab[data-view="choices"]');
+        if (choicesTab && !choicesTab.hidden) {
+          var link = el('button', 'ps-btn ps-btn-quiet ps-btn-sm', 'See them on the Choices tab'); link.type = 'button';
+          link.addEventListener('click', function () { select('choices'); });
+          p.appendChild(link);
+        }
+        sc.appendChild(p);
       }
       docs.forEach(function (d) { sc.appendChild(el('p', 'fr-small', d.document + ' — read by ' + (d.model || 'a model') + ', every figure checked against its page')); });
       box.appendChild(sc);
