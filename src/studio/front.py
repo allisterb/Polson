@@ -66,6 +66,18 @@ def read_request(project: Path) -> dict[str, Any]:
         return {}
 
 
+def can_say(run: Run | None) -> bool:
+    """Whether words typed on the request page will reach the agent while it works.
+
+    A driven run hears them through its own director. An observed one only where it is an ADK run in this process, whose
+    plugin hands them over at its next tool call (`adk_agent.interject`). A Claude Code or Antigravity run watched here has
+    no channel: its words would be queued for nobody and recorded as said, which is worse than offering no box at all.
+    """
+    if run is None or not run.live:
+        return False
+    return not run.observed or (observe_mod._channel() is not None and run.project.sdk == "adk")
+
+
 def run_for(registry: Registry, project: Path) -> Run | None:
     """The run to show for a project: a live driven run first, then the newest of any kind."""
     root = project.resolve()
@@ -462,8 +474,8 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
         # A driven run answers through its own director. An observed one only where the agent is in this
         # process (the ADK runtime); elsewhere the host owns the question and the page shows it read-only.
         answerable = run is not None and (not run.observed or observe_mod._ask_channel() is not None)
-
         return page(request, "request.html", "requests", row=row, run=run, brief=brief, answerable=answerable,
+                    sayable=can_say(run),
                     card=row["card"],
                     learned=learned_from(project, run, row["events"]),
                     notice=notices.pop(name, ""))

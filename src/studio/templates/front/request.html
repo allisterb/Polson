@@ -84,6 +84,21 @@
     <aside class="fr-side-stack">
       <div data-questions></div>
 
+      {#- The co-creative channel: words the person volunteers while the studio works, not answers to its questions.
+          Offered only where they will reach the agent (front.py `sayable`); hidden once the run ends (front.js). -#}
+      {% if sayable %}
+      <section class="fr-card fr-say" data-say>
+        <p class="fr-eyebrow">Say something to the studio</p>
+        <form data-say-form>
+          <textarea name="text" required maxlength="2000" rows="2" placeholder="Make the accent warmer, and hold the title a beat longer."></textarea>
+          <div class="fr-say-foot">
+            <span class="fr-small" data-say-status>It reaches the agent at its next step, mid-work.</span>
+            <button class="ps-btn ps-btn-primary ps-btn-sm" type="submit">Send</button>
+          </div>
+        </form>
+      </section>
+      {% endif %}
+
       <section class="fr-card">
         <p class="fr-eyebrow">Progress</p>
         <ol class="ps-run" data-timeline>

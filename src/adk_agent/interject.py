@@ -111,6 +111,16 @@ def make_plugin(project_dir: str | Path):
 
     project = Path(project_dir).name
 
+    # The hand-over goes into the record as well as the log: the page says "sent" when the words are queued and could
+    # only guess when the agent had them. Optional, as the plugin is: a record that cannot be written is no reason to
+    # withhold the words.
+    try:
+        from orchestrator.events import EventLog
+        delivered_log: Any = EventLog(Path(project_dir) / "events" / "director.jsonl", "director")
+    except Exception as exc:                                    # pragma: no cover - import guard
+        _logger.warning("polson interject: deliveries will not be recorded (%s)", exc)
+        delivered_log = None
+
     class InterjectPlugin(BasePlugin):
         """Hands the director's words to the agent at its next tool call."""
 
@@ -137,6 +147,11 @@ def make_plugin(project_dir: str | Path):
 
             _logger.warning("polson interject: delivered %d line(s) to %s via %s",
                          len(lines), project, getattr(tool, "name", "?"))
+            if delivered_log is not None:
+                try:
+                    delivered_log.append("message.delivered", lines=len(lines), tool=getattr(tool, "name", None))
+                except Exception as exc:                        # noqa: BLE001 - the words are delivered either way
+                    _logger.warning("polson interject: delivery not recorded (%s)", exc)
             return amended
 
     return InterjectPlugin()

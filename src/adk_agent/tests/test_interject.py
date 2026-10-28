@@ -11,7 +11,9 @@ its directive on every `FunctionTool` call, and the advice was never delivered b
 from __future__ import annotations
 
 import asyncio
+import json
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -174,11 +176,32 @@ class InterjectPluginTests(unittest.IsolatedAsyncioTestCase):
 
     def setUp(self) -> None:
         interject.take("acme")
-        self.plugin = interject.make_plugin(Path("/wherever/acme"))
+        # A real folder: a delivery is now recorded in the project's director.jsonl.
+        self.tmp = tempfile.TemporaryDirectory()
+        self.project = Path(self.tmp.name) / "acme"
+        self.plugin = interject.make_plugin(self.project)
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
 
     async def _call(self, result):
         return await self.plugin.after_tool_callback(
             tool=FakeTool(), tool_args={}, tool_context=None, result=result)
+
+    async def test_a_delivery_is_recorded_so_the_page_can_say_the_agent_has_it(self):
+        """The page says "sent" when the words are queued; this event is when the agent took them."""
+        interject.offer("acme", "make it red")
+        interject.offer("acme", "and bigger")
+        await self._call({"ok": True})
+
+        lines = (self.project / "events" / "director.jsonl").read_text(encoding="utf-8").splitlines()
+        delivered = [json.loads(line) for line in lines if '"message.delivered"' in line]
+        self.assertEqual(len(delivered), 1)
+        self.assertEqual(delivered[0]["lines"], 2)
+
+    async def test_nothing_is_recorded_when_nothing_was_delivered(self):
+        await self._call({"ok": True})
+        self.assertFalse((self.project / "events" / "director.jsonl").exists())
 
     async def test_an_empty_queue_leaves_the_result_untouched(self):
         """None is ADK's 'unchanged', and it is the answer on nearly every call."""

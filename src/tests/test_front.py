@@ -656,6 +656,9 @@ class FrontRoutingTests(unittest.TestCase):
         self.assertIn('id="panel-agent"', page)
         self.assertIn("data-agent-log", page)
         self.assertRegex(page, r'id="panel-progress" role="tabpanel"')
+        self.assertNotIn("data-say", page, "a record nobody is driving here has no one to speak to")
+        with mock.patch.object(front, "can_say", return_value=True):
+            self.assertIn("Say something to the studio", self.client.get("/requests/harbour").text)
 
     def test_a_request_with_a_record_has_the_qloo_views_hidden_until_there_is_something_to_show(self):
         p = project_dir(self.root, "harbour", workflow="poster")
@@ -987,6 +990,20 @@ class AdkStatusTests(unittest.TestCase):
         live = mock.Mock(observed=True, live=True, status="watching")
         with mock.patch.object(front.observe_mod, "_ask_channel", return_value=None):
             self.assertEqual(front.status_of(p, live, [{"type": "run.start"}]), "running")
+
+    def test_words_are_offered_only_where_they_will_reach_the_agent(self):
+        """A driven run, or an ADK run in this process; never a Claude Code run watched here, whose words go nowhere."""
+        adk, claude = mock.Mock(sdk="adk"), mock.Mock(sdk="claude")
+        driven = mock.Mock(observed=False, live=True)
+        with mock.patch.object(front.observe_mod, "_channel", return_value=mock.Mock()):
+            self.assertTrue(front.can_say(driven))
+            self.assertTrue(front.can_say(mock.Mock(observed=True, live=True, project=adk)))
+            self.assertFalse(front.can_say(mock.Mock(observed=True, live=True, project=claude)))
+            self.assertFalse(front.can_say(mock.Mock(observed=True, live=False, project=adk)), "finished: nothing listening")
+            self.assertFalse(front.can_say(None))
+        with mock.patch.object(front.observe_mod, "_channel", return_value=None):
+            self.assertFalse(front.can_say(mock.Mock(observed=True, live=True, project=adk)), "not on the ADK runtime")
+            self.assertTrue(front.can_say(driven))
 
     def test_without_a_channel_it_is_simply_running(self):
         p = project_dir(self.root, "elsewhere")
