@@ -43,11 +43,40 @@ public class VideoReader : DocumentProcessor
     {
         chat = new NemotronChat(endpoints, http);
     }
+
+    /// <summary>
+    /// A reader served by Gemini rather than Nemotron, with the express key in <c>ApiKeys:GoogleAgentPlatform</c>.
+    /// <c>Verify:Reader</c> chooses (<c>gemini</c>, the default, or <c>nemotron</c>).
+    /// </summary>
+    /// <remarks>
+    /// Measured 2026-10-28 on eleven films Nemotron had read for <c>Verify.film</c>, the same files and question: Hindi 10 of
+    /// 12 lines exact against Nemotron's 4, with the times in seconds where Nemotron wrote "0:09" as 0.09; a dense report
+    /// film 72 of 82 against 36; English, Portuguese and Japanese even.
+    /// </remarks>
+    public VideoReader(string? geminiKey, DocumentBudget budget, string? projectRoot = null, string model = DefaultGeminiModel,
+        DocumentCache? cache = null)
+        : base(geminiKey, budget, projectRoot, model, cache)
+    {
+        chat = new NemotronChat([], null);
+        Reader = GeminiReader;
+    }
     #endregion
 
     #region Properties
     /// <summary>Default model: Nemotron 3.5 Super VL, by the name <see cref="NemotronChat"/> sends as each endpoint's own id.</summary>
     public const string DefaultVideoModel = NemotronChat.DefaultModel;
+
+    /// <summary>The Gemini reader's default model.</summary>
+    public const string DefaultGeminiModel = "gemini-3.8-flash";
+
+    /// <summary>What <c>Verify:Reader</c> names: the service that reads films, frames and claim sheets.</summary>
+    public const string GeminiReader = "gemini", NemotronReader = "nemotron";
+
+    /// <summary><see cref="GeminiReader"/> or <see cref="NemotronReader"/>.</summary>
+    public string Reader { get; } = NemotronReader;
+
+    /// <summary>Frames a second Gemini samples a clip at: twice its default, as Nemotron samples, so a short hold is not missed.</summary>
+    const double GeminiFps = 2;
 
     /// <summary>The configured services that serve Nemotron, in the order they are tried. Not for scripts: <c>provenance.endpoint</c> says which answered.</summary>
     internal IReadOnlyList<NemotronEndpoint> Endpoints => chat.Endpoints;
@@ -75,7 +104,7 @@ public class VideoReader : DocumentProcessor
     /// <summary>This reader's limit: <see cref="MaxVideoBytes"/> unless set, which tests do to exercise a copy cheaply.</summary>
     internal int MaxClipBytes { get; init; } = MaxVideoBytes;
 
-    public override bool IsAvailable => chat.IsAvailable;
+    public override bool IsAvailable => Reader == GeminiReader ? CanReadInline : chat.IsAvailable;
 
     protected override string Kind => "video";
 
@@ -94,6 +123,11 @@ public class VideoReader : DocumentProcessor
         byte[] bytes, string mime, string query, string model, string? schema, bool images, int[]? pages, CancellationToken ct)
     {
         // A clip, a frame or a claim sheet has no pages to choose; the engine's own calls never pass them.
+        if (Reader == GeminiReader)
+        {
+            var read = await GenerateInline(bytes, mime, query, model, schema, mime.StartsWith("video/", StringComparison.OrdinalIgnoreCase) ? GeminiFps : null, ct);
+            return read with { Model = read.Model ?? model, Endpoint = GeminiReader };
+        }
         var kind = mime.StartsWith("image/", StringComparison.OrdinalIgnoreCase) ? "image_url" : "video_url";
         var content = mime == TextType
             ? new JsonArray(new JsonObject { ["type"] = "text", ["text"] = query + "\n\n" + System.Text.Encoding.UTF8.GetString(bytes) })

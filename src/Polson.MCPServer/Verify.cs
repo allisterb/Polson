@@ -74,7 +74,7 @@ public sealed partial class VerifyToolkit
         if (string.IsNullOrWhiteSpace(videoPath)) throw new ArgumentException("Verify.film needs the encoded film: Verify.film(comp, 'output.mp4').");
         var (computed, _, ignored, scale) = Options(options, "Verify.film", allowName: false);
         if (video is null || !video.IsAvailable)
-            return Failed("NotConfigured", "No Nemotron endpoint is configured, so nothing can watch the film.", "Configure ApiKeys:NvidiaNIM or Token Factory.");
+            return Failed("NotConfigured", "No reader is configured, so nothing can watch the film.", NoReader);
 
         var full = ProjectPath.Resolve(projectRoot, videoPath, "video", "Read");
         if (!File.Exists(full)) throw new FileNotFoundException($"Verify.film: '{videoPath}' is not in the project. Encode it first.", full);
@@ -151,7 +151,7 @@ public sealed partial class VerifyToolkit
                 ["readAs"] = Raw(seen?.Text),
                 ["readAt"] = seen?.From,
                 ["status"] = e.From is null ? "never shown" : citations[i] ? "citation" : seen is not null ? "seen"
-                    : FilmReadBack.Unreadable(e.Text) ? "unchecked" : "missed",
+                    : FilmReadBack.Unreadable(e.Text, Devanagari) ? "unchecked" : "missed",
             };
         }).ToArray();
 
@@ -162,11 +162,11 @@ public sealed partial class VerifyToolkit
             var frame = $"artifacts/verify/{Path.GetFileNameWithoutExtension(full)}-stray-{i + 1}.png";
             var error = FFmpeg.Frame(full, at, ProjectPath.Resolve(projectRoot, frame, "frame", "Write"));
             return new ReadBackStray(i + 1, Raw(s.Reading.Text)!, s.Reading.From, error is null ? frame : null, error, s.Near,
-                FilmReadBack.Unreadable(s.Reading.Text) ? "unreadable script" : s.Kind);
+                FilmReadBack.Unreadable(s.Reading.Text, Devanagari) ? "unreadable script" : s.Kind);
         }).ToList();
 
         return Hold(new FilmCheck(videoPath, comp.Duration, items, strays, answer.Provenance?.Model, answer.Provenance?.Endpoint)
-            { Hash = Hash(full), Ignored = ignored, TimeScale = timeScale, Watched = over is null ? null : watched, FilmBytes = over, Limit = limit });
+            { Hash = Hash(full), Ignored = ignored, UnreadableScripts = Scripts, TimeScale = timeScale, Watched = over is null ? null : watched, FilmBytes = over, Limit = limit });
     }
 
     /// <summary>
@@ -180,7 +180,7 @@ public sealed partial class VerifyToolkit
         var (computed, name, ignored, scale) = Options(options, "Verify.image", allowName: true);
         var still = Still.Of(source);
         if (video is null || !video.IsAvailable)
-            return Failed("NotConfigured", "No Nemotron endpoint is configured, so nothing can read the image.", "Configure ApiKeys:NvidiaNIM or Token Factory.");
+            return Failed("NotConfigured", "No reader is configured, so nothing can read the image.", NoReader);
 
         var imagePath = $"artifacts/verify/{name}.png";
         var full = ProjectPath.Resolve(projectRoot, imagePath, "image", "Write");
@@ -227,7 +227,7 @@ public sealed partial class VerifyToolkit
                 ["seen"] = seen is not null,
                 ["readAs"] = Raw(seen),
                 ["closest"] = seen is null ? Raw(closest) : null,
-                ["status"] = s.On.Length == 0 ? "off the canvas" : seen is not null ? "seen" : FilmReadBack.Unreadable(s.Text) ? "unchecked" : "missed",
+                ["status"] = s.On.Length == 0 ? "off the canvas" : seen is not null ? "seen" : FilmReadBack.Unreadable(s.Text, Devanagari) ? "unchecked" : "missed",
             };
         }).ToArray();
 
@@ -236,7 +236,7 @@ public sealed partial class VerifyToolkit
         {
             // A crop around the line the reading resembles, where to look; otherwise the whole image is where.
             var near = onCanvas.Where(o => o.Text == s.Near).SelectMany(o => o.On).FirstOrDefault();
-            var kind = FilmReadBack.Unreadable(s.Reading.Text) ? "unreadable script" : s.Kind;
+            var kind = FilmReadBack.Unreadable(s.Reading.Text, Devanagari) ? "unreadable script" : s.Kind;
             if (near is null) return new ReadBackStray(i + 1, Raw(s.Reading.Text)!, null, imagePath, null, s.Near, kind);
             var crop = $"artifacts/verify/{name}-stray-{i + 1}.png";
             var error = Crop(pixels, near.Box, ProjectPath.Resolve(projectRoot, crop, "crop", "Write"));
@@ -244,7 +244,7 @@ public sealed partial class VerifyToolkit
         }).ToList();
 
         return Hold(new ImageCheck(imagePath, still.Kind, still.Width, still.Height, items, strays, answer.Provenance?.Model, answer.Provenance?.Endpoint)
-            { Hash = Hash(full), Ignored = ignored });
+            { Hash = Hash(full), Ignored = ignored, UnreadableScripts = Scripts });
     }
 
     /// <summary>
@@ -639,6 +639,16 @@ public sealed partial class VerifyToolkit
     private readonly Action<string, IReadOnlyDictionary<string, object?>>? record;
     private ReadBackCheck? last;
 
+    /// <summary>What to configure when there is no reader.</summary>
+    internal const string NoReader = "Verify:Reader gemini (the default) needs ApiKeys:GoogleAgentPlatform; nemotron needs ApiKeys:NvidiaNIM or "
+        + "ApiKeys:NebiusTokenFactory with NebiusTokenFactory:BaseUrl.";
+
+    /// <summary>Whether this reader is Nemotron, which cannot be trusted with Hindi's Devanagari (see <see cref="FilmReadBack.Unreadable"/>).</summary>
+    private bool Devanagari => video?.Reader == VideoReader.NemotronReader;
+
+    /// <summary>The scripts this reader leaves unchecked, as a check's summary names them.</summary>
+    private string Scripts => Devanagari ? "Arabic or Hindi" : "Arabic";
+
     /// <summary>Each piece's latest check without a session, as <see cref="SessionContext.ReadBacks"/> holds them with one.</summary>
     private readonly Dictionary<string, ReadBackCheck> checks = new(StringComparer.OrdinalIgnoreCase);
 
@@ -744,6 +754,9 @@ public abstract class ReadBackCheck(string name, Dictionary<string, object?>[] i
     public string Name { get; } = name;
     public List<ReadBackStray> Strays { get; } = strays;
 
+    /// <summary>The scripts its reader cannot be trusted to read, as the summary names them.</summary>
+    public string UnreadableScripts { get; init; } = "Arabic";
+
     /// <summary>The bytes read, so checking them again can keep the verdicts already given.</summary>
     public string? Hash { get; init; }
 
@@ -792,7 +805,7 @@ public abstract class ReadBackCheck(string name, Dictionary<string, object?>[] i
             + (pending == 0 ? "" : $" {pending} reading{(pending == 1 ? "" : "s")} of text the {Piece} never set: look at {evidence} ({string.Join(", ", Strays.Where(s => s.Verdict is null).Select(s => s.Frame ?? "none saved"))}), then Verify.stray('{Name}', n, 'misread' | 'real').")
             + (real == 0 ? "" : $" {real} confirmed fault{(real == 1 ? "" : "s")} in the {Piece}: fix and {Again} again.")
             + (Ignored.Length == 0 ? "" : $" {Ignored.Length} computed entr{(Ignored.Length == 1 ? "y was" : "ies were")} not used, as the working shows no arithmetic ({string.Join(", ", Ignored.Take(4).Select(k => $"'{Clip(k)}'"))}): a figure from a document is found on its page without one.")
-            + FilmReadBack.UncheckedNote(counts["unchecked"] is int u ? u : 0, Evidence)
+            + FilmReadBack.UncheckedNote(counts["unchecked"] is int u ? u : 0, Evidence, UnreadableScripts)
             + (Inconclusive(counts) ? $" The reader saw {counts["seen"]} of the {(int)counts["seen"]! + (int)counts["missed"]!} texts it "
                 + $"could check, under half, so this read-back cannot vouch for the {Piece}: hold texts longer or set them larger and "
                 + $"{Again} again. If the {Evidence}s show them plainly, the reader is at fault: say so in direction.md." : "")
@@ -1163,20 +1176,22 @@ internal static class FilmReadBack
     }
 
     /// <summary>
-    /// Whether a text is in a script the reader cannot be trusted to read: Arabic. In the language probe (2026-10-27) it read
-    /// a correctly drawn Arabic heading as different words, so a match or a miss of Arabic says nothing about the film. Such a
-    /// text is <c>unchecked</c> rather than missed, and a reading of it is a stray of kind <c>'unreadable script'</c>: the
-    /// studio's own eye on the frame is the check.
+    /// Whether a text is in a script the reader cannot be trusted to read: Arabic, and with <paramref name="devanagari"/> (the
+    /// Nemotron reader) Hindi's Devanagari. In the language probe (2026-10-27) Nemotron read a correctly drawn Arabic heading as
+    /// different words, and on becool3's Hindi film (2026-10-28) it read the credits as unrelated sentences, so a match or a
+    /// miss in those scripts says nothing about the film. Such a text is <c>unchecked</c> rather than missed, and a reading of
+    /// it is a stray of kind <c>'unreadable script'</c>: the studio's own eye on the frame is the check. Gemini read the same
+    /// Hindi film almost exactly; its Arabic is unmeasured, so Arabic stays unchecked whichever reads.
     /// </summary>
-    internal static bool Unreadable(string? text) =>
-        (text ?? "").Any(c => c is >= '؀' and <= 'ۿ' or >= 'ݐ' and <= 'ݿ' or >= 'ࢠ' and <= 'ࣿ'
-            or >= 'ﭐ' and <= '﷿' or >= 'ﹰ' and <= '﻿' && char.IsLetter(c));
+    internal static bool Unreadable(string? text, bool devanagari = false) =>
+        (text ?? "").Any(c => (c is >= '؀' and <= 'ۿ' or >= 'ݐ' and <= 'ݿ' or >= 'ࢠ' and <= 'ࣿ'
+            or >= 'ﭐ' and <= '﷿' or >= 'ﹰ' and <= '﻿' || devanagari && c is >= 'ऀ' and <= 'ॿ') && char.IsLetter(c));
 
-    /// <summary>What the summary says when texts were left unchecked for their script.</summary>
-    internal static string UncheckedNote(int count, string piece) => count == 0 ? ""
-        : $" {count} text{(count == 1 ? " is" : "s are")} in Arabic, which the reader cannot be trusted to read: {(count == 1 ? "it is" : "they are")} "
+    /// <summary>What the summary says when texts were left unchecked for their script, <paramref name="scripts"/> naming them.</summary>
+    internal static string UncheckedNote(int count, string piece, string scripts = "Arabic") => count == 0 ? ""
+        : $" {count} text{(count == 1 ? " is" : "s are")} in {scripts}, which the reader cannot be trusted to read: {(count == 1 ? "it is" : "they are")} "
           + $"unchecked, not missed. Look at each in its {piece} yourself and compare it with the line as set, and say in direction.md "
-          + "that the Arabic was checked by eye and by translation back, not by the read-back.";
+          + $"that the {scripts} was checked by eye and by translation back, not by the read-back.";
 
     /// <summary>The figures in a text, commas dropped, in order: "$40.4 billion (282 million)" is 40.4 and 282.</summary>
     internal static string[] Figures(string? text) =>

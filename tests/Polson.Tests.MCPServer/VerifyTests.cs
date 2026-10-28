@@ -99,6 +99,19 @@ public class VerifyTests : TestsRuntime, IDisposable
         Assert.Equal("", FilmReadBack.UncheckedNote(0, "frame"));
     }
 
+    /// <summary>
+    /// With Nemotron reading, Hindi joins Arabic: on becool3's Hindi film it read the credits as unrelated sentences. A
+    /// Devanagari text is then unchecked and the summary names both scripts; Gemini, which read that film, is trusted with it.
+    /// </summary>
+    [Fact]
+    public void TestHindiIsLeftToTheEyeOnlyWhenNemotronReads()
+    {
+        Assert.True(FilmReadBack.Unreadable("अमेरिकी बाज़ार: 4.2", devanagari: true));
+        Assert.False(FilmReadBack.Unreadable("अमेरिकी बाज़ार: 4.2"));
+        Assert.False(FilmReadBack.Unreadable("४.२", devanagari: true));   // Devanagari digits alone are a figure
+        Assert.Contains("3 texts are in Arabic or Hindi", FilmReadBack.UncheckedNote(3, "frame", "Arabic or Hindi"));
+    }
+
     /// <summary>The report film's case: the line was set with $974M and read with $744M. Not a match — a stray to look at.</summary>
     [Fact]
     public void TestTheSameLineWithADifferentFigureIsAStrayNotAMatch()

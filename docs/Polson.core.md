@@ -5141,7 +5141,8 @@ What the answer rests on, so a figure drawn from a document traces back to the d
 Answers a question about a **video in the project** — a reference spot the director supplied in
 `documents/`, or one of your own renders in `artifacts/`. It is `Documents.ask` for something that
 moves: the same path rules, the same answer, the same budget, cache and scan. The clip is watched by
-Nemotron 3.5 Super VL — on NVIDIA's NIM API or Nebius Token Factory, the other as backup — whatever model you are.
+Gemini 3.8 Flash, or by Nemotron 3.5 Super VL (on NVIDIA's NIM API or Nebius Token Factory, the other as backup) where the
+studio is set to it — whatever model you are. `Video.reader` says which.
 
 ```javascript
 for (const v of Video.list()) log(`${v.path}  ${v.bytes}B`);   // the director's clips, free
@@ -5186,7 +5187,7 @@ for (const s of JSON.parse(shots.text).shots) log(`${s.start_s}-${s.end_s}s  ${s
 
 - `Video.list()` → `DocumentEntry[]` — The clips in the project's `documents/` folder. Free and offline. Your own renders are not listed; pass their path.
 - `Video.ask(source: string | byte[], query: string, options?: object)` → `Promise<DocumentAnswer>` — Watches the clip and answers. `options`: `{ model?: string, mimeType?: string, schema?: object }`, as for `Documents.ask`; with `schema`, `answer.text` is JSON in that shape.
-- `Video.budget` → `DocumentBudget` — Remaining clips. `Video.model` → `string` · `Video.isAvailable` → `boolean`
+- `Video.budget` → `DocumentBudget` — Remaining clips. `Video.model` → `string` · `Video.isAvailable` → `boolean` · `Video.reader` → `'gemini' | 'nemotron'` — which service watches clips, set by the studio (`Verify:Reader`, Gemini by default). It also reads `Verify.film`'s films, `Verify.image`'s stills and `Verify.claim`'s sheets. On Nemotron, Hindi's Devanagari is left unchecked like Arabic: it misread a Hindi film's credits as unrelated sentences, which Gemini read almost exactly.
 
 The answer is a `DocumentAnswer`, with the same `failureName` values, `remedy`, `warnings` and
 `provenance`; a refusal says "document" in places, and means the clip. Every watch is recorded as a
@@ -5210,7 +5211,7 @@ Checks a finished film (`Verify.film`) or a still (`Verify.image`) three ways, a
   **A text with figures is sourced figure by figure.** A line can carry a document's figure and one you computed, so each figure is looked for on its own: on the documents' pages first, then among the figures of your `computed` keys, then in research and the brief. `detail` names where each was found. A figure found nowhere makes the text an **`unsourced figure`**, with `detail` naming it, and fails the check.
 
   **`computed` is for arithmetic, not citations.** An entry whose working shows no arithmetic (a digit and an operator) is set aside, and the summary names it. A live run passed `'2016': 'Period covered from FT methodology'` and `'20': 'FT rank 20'`. A figure from a document is found on its page without help, and a label claiming it would have sourced "Across 20 American Countries" from Qloo's peer ranked 20th. The figure check cannot tell what a figure is said to mean. That the article's 20 countries were *eligible*, not represented, is for you to read.
-- **What a viewer sees** is a model's reading. Nemotron (the reader behind `Video.ask`) transcribes the encoded film or the rendered image, and the transcription is compared with what the piece set.
+- **What a viewer sees** is a model's reading. The reader behind `Video.ask` (Gemini by default, or Nemotron; `Video.reader`) transcribes the encoded film or the rendered image, and the transcription is compared with what the piece set.
 
 This is how a Polson piece differs from a generated one: every word and number on it has a source, and an independent reader read it.
 
@@ -5300,7 +5301,7 @@ return canvas;
   - **The steps as the reader read them are checked too**, when the latest `Verify.film` or `Verify.image` read them. `read` holds that pair's verdict on the readings, whether read as set or misread. A reading that breaks the chain is reported in the summary against the reading, not the derivation, and does not change `passed`.
   - `domain`, `integers` and `samples` are `Equation.equivalent`'s. `budget` is the milliseconds for the whole derivation (15,000; at most 25,000), shared between the steps.
   - Recorded as `derivation.verify` and as the check `Derivation <name>: every step follows from the last` (`name` defaults to `'derivation'`). `Stage.check` refuses a claim beginning `Derivation `: run the check, do not write its verdict.
-- `Verify.claim(claim: string, options?: { name?: string, context?: string, budget?: number })` → `Promise<object>` — **A claim checked by code Nemotron writes.** Nemotron reads the claim, as the piece states it, and writes a short JavaScript check using `Equation.equivalent`, the derivation check and arithmetic. The engine runs that code, and its result is the verdict. Returns `{ ok, passed, verdict, name, claim, checks, code, error, summary, model, endpoint }`, or `{ ok: false, failureName, error, remedy }` when the model could not be asked (`Pending`: run the same call again).
+- `Verify.claim(claim: string, options?: { name?: string, context?: string, budget?: number })` → `Promise<object>` — **A claim checked by code the reader writes** (`Video.reader`: Gemini, or Nemotron). It reads the claim, as the piece states it, and writes a short JavaScript check using `Equation.equivalent`, the derivation check and arithmetic. The engine runs that code, and its result is the verdict. Returns `{ ok, passed, verdict, name, claim, checks, code, error, summary, model, endpoint }`, or `{ ok: false, failureName, error, remedy }` when the model could not be asked (`Pending`: run the same call again).
   - Use it for what the piece says in words or as a figure: "revenue grew 46%", "the area under x² from 0 to 3 is 9", "the sum of the first n odd numbers is n²". Pass the figures the claim rests on as `context` ("revenue 2019 $399.0M, 2020 $582.3M") when they are not in the claim itself.
   - `verdict` is `'holds'` (it recorded checks, and every one passed), `'fails'`, `'unchecked'` (no checks recorded), `'error'` (the code did not run to its end) or `'refused'` (a check passed by a literal `true`, which proves nothing). `passed` is true only for `'holds'`.
   - `checks` are `{ what, passed, detail }`, one per thing the claim asserts. **`code` is the check itself: read it.** It shows exactly what was tested, so a check of the wrong thing can be seen.

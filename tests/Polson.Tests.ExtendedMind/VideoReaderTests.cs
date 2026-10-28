@@ -156,9 +156,46 @@ public class VideoReaderTests : TestsRuntime, IDisposable
         Assert.True(answer.Success, answer.Error);
         Assert.NotEmpty(answer.Warnings);
     }
+
+    /// <summary>
+    /// <c>Verify:Reader</c> gemini (the default): the clip goes to Gemini at two frames a second, and nothing to Nemotron.
+    /// Measured 2026-10-28, Gemini read Hindi and dense report films far better.
+    /// </summary>
+    [Fact]
+    public async Task TestTheGeminiReaderSendsTheClipToGeminiAtTwoFramesASecond()
+    {
+        using var reader = new FakeGemini(root);
+        Assert.Equal(VideoReader.GeminiReader, reader.Reader);
+        Assert.Equal(VideoReader.DefaultGeminiModel, reader.Model);
+        Assert.True(reader.IsAvailable);
+
+        var answer = await reader.Ask("documents/spot.mp4", "List the text on screen.");
+
+        Assert.True(answer.Success, answer.Error);
+        Assert.Equal("gemini answer", answer.Text);
+        Assert.Equal(VideoReader.GeminiReader, answer.Provenance!.Endpoint);
+        Assert.Equal(("video/mp4", 2d), reader.Last);
+
+        using var keyless = new VideoReader((string?)null, new DocumentBudget(5), root);
+        Assert.False(keyless.IsAvailable);
+        Assert.Equal(VideoReader.NemotronReader, Reader(new Handler(HttpStatusCode.OK, Reply("x"))).Reader);
+    }
     #endregion
 
     #region Types
+    /// <summary>The Gemini reader with Gemini faked: it answers "gemini answer" and keeps the type and frame rate it was sent.</summary>
+    private sealed class FakeGemini(string root) : VideoReader("test-gemini-key", new DocumentBudget(5), root)
+    {
+        public (string Mime, double? Fps) Last { get; private set; }
+
+        protected override Task<Generation> GenerateInline(
+            byte[] bytes, string mime, string query, string model, string? schema, double? fps, CancellationToken ct)
+        {
+            Last = (mime, fps);
+            return Task.FromResult(new Generation("gemini answer", 40, "STOP") { Model = model });
+        }
+    }
+
     /// <summary>Answers every request with one canned response, and keeps what it was sent.</summary>
     private sealed class Handler(HttpStatusCode status, string body) : HttpMessageHandler
     {

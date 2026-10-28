@@ -9,6 +9,7 @@ the directory shape the generator writes, and no test presses Start.
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import tempfile
@@ -286,6 +287,20 @@ class CatalogueTests(unittest.TestCase):
                 catalogue.parse_audiences(["Cairo"], [""], [bad])
         with self.assertRaisesRegex(StudioError, "needs a place"):
             catalogue.parse_audiences([""], [""], ["ja"])
+
+    def test_hindi_is_checked_by_eye_only_when_nemotron_reads(self):
+        """Nemotron misread becool3's Hindi credits as unrelated sentences; Gemini, the default reader, read them."""
+        def delhi():
+            return catalogue.parse("poster", "Delhi", "0", "film", ["1200x1800"], "", [".png"], {}, "A poster.",
+                                   places=["Mumbai, India"], ages=[""], languages=["hi"])
+        with mock.patch.dict(os.environ, {catalogue.VERIFY_READER_ENV: ""}):
+            self.assertEqual("gemini", catalogue.verify_reader())
+            self.assertTrue(delhi().record()["audiences"][0]["readBack"])
+            self.assertNotIn("checked by eye", delhi().brief_text([]))
+        with mock.patch.dict(os.environ, {catalogue.VERIFY_READER_ENV: "Nemotron"}):
+            self.assertEqual({"ar", "hi"}, set(catalogue.checked_by_eye()))
+            self.assertFalse(delhi().record()["audiences"][0]["readBack"])
+            self.assertIn("in Hindi (its text checked by eye, not read back", delhi().brief_text([]))
 
     def test_a_report_explainers_audiences_are_optional(self):
         """With places, a film per audience in its conventions; without, one film for whoever the brief describes."""

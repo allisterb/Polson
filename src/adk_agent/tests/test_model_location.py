@@ -20,6 +20,14 @@ KEY = {"GOOGLE_API_KEY": "AQ.test-key-not-real"}
 
 
 class ModelLocationTests(unittest.TestCase):
+    def test_the_verify_reader_reaches_the_engine(self):
+        """The MCP client passes the server only safe variables; POLSON_VERIFY_READER is passed on by name."""
+        with mock.patch.dict(os.environ, {"POLSON_VERIFY_READER": "nemotron"}):
+            self.assertEqual(studio.server_env()["POLSON_VERIFY_READER"], "nemotron")
+            self.assertNotIn("GOOGLE_API_KEY", studio.server_env(), "nothing else is added")
+        with mock.patch.dict(os.environ, {"POLSON_VERIFY_READER": ""}):
+            self.assertNotIn("POLSON_VERIFY_READER", studio.server_env())
+
     def test_without_a_location_the_model_is_its_name_as_before(self):
         with mock.patch.dict(os.environ, {**KEY}, clear=False):
             os.environ.pop(studio.MODEL_LOCATION_ENV, None)

@@ -115,8 +115,8 @@ is served from cache, but the turn that asks again is not.
 - **A counterexample at a negative `x` usually means the step holds only where `x` is positive.** Pass that domain
   (`{ domain: { x: [0, 10] } }`) and **say it on screen too**: an identity shown without its condition is a wrong
   identity.
-- **`Verify.claim` on every claim in words** — "the area is 4/3", "the sum of the first n odd numbers is n²". Nemotron
-  writes the code that checks it and the engine runs it; the verdict is the code's. **Read `code` before trusting a
+- **`Verify.claim` on every claim in words** — "the area is 4/3", "the sum of the first n odd numbers is n²". The reader
+  (`Video.reader`) writes the code that checks it and the engine runs it; the verdict is the code's. **Read `code` before trusting a
   pass**: a check of the wrong thing shows there and nowhere else. A claim that **fails** comes out of the film. Run
   them together, as above: each takes a few seconds, and one that outlives the script comes back `Pending` and
   finishes into the cache — run the script again.
