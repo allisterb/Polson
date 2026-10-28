@@ -120,6 +120,25 @@ label.ps-asset-upload { box-sizing: border-box; width: 148px; }
 .fr-docs a { color: var(--ink); text-decoration: none; font-weight: 500; }
 .fr-docs a:hover, .fr-docs a[aria-current] { color: var(--accent); }
 
+/* The audience picker: a place chosen from the list, and why one was not accepted. */
+.fr-audience input[data-place]:invalid { border-color: var(--failed); }
+.fr-place-why { color: var(--failed); margin-top: var(--space-2); }
+.fr-place-why[hidden] { display: none; }
+.fr-place-menu { position: fixed; z-index: 60; max-height: 280px; overflow-y: auto; box-sizing: border-box; padding: var(--space-1);
+  background: var(--surface-raised); border: 1px solid var(--line); border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.25); }
+.fr-place-menu[hidden] { display: none; }
+.fr-place-option { padding: 6px 10px; border-radius: 6px; cursor: pointer; font: 400 14px/20px var(--font-sans); color: var(--ink); }
+.fr-place-option:hover, .fr-place-option[aria-selected="true"] { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.fr-place-option .fr-small { color: var(--ink-muted); margin: 0; }
+
+/* The Progress card's clock: time spent, and time left of the deadline. */
+.fr-clock { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); margin: var(--space-4) 0 0;
+  padding-top: var(--space-3); border-top: 1px solid var(--line); font: 600 14px/20px var(--font-sans); font-variant-numeric: tabular-nums; }
+.fr-clock[hidden] { display: none; }
+.fr-clock .fr-small { margin: 0; }
+.fr-clock.is-over .fr-small { color: var(--attention); }
+
 /* Speaking to the studio while it works. */
 .fr-say[hidden] { display: none; }
 .fr-say form { display: grid; gap: var(--space-2); margin-top: var(--space-2); }
@@ -212,6 +231,13 @@ label.ps-asset-upload { box-sizing: border-box; width: 148px; }
 .fr-summary dt { color: var(--ink-muted); }
 .fr-summary dd { margin: 0; color: var(--ink); }
 .fr-brief-text { max-height: 260px; overflow: auto; margin: var(--space-3) 0 0; padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); background: var(--surface-sunken); font: 400 13px/18px var(--font-sans); white-space: pre-wrap; color: var(--ink); }
+/* The brief as a document: Markdown rendered, so the text wraps as prose rather than as typed, and its own headings are
+   kept small in a narrow column. */
+.fr-brief-doc { white-space: normal; max-height: 360px; }
+.fr-brief-doc :is(h1, h2, h3) { font-size: 14px; line-height: 20px; margin: var(--space-3) 0 var(--space-1); }
+.fr-brief-doc :is(h1, h2, h3):first-child { margin-top: 0; }
+.fr-brief-doc :is(p, ul, ol, table, blockquote) { margin: 0 0 var(--space-2); }
+.fr-brief-doc table { display: block; overflow-x: auto; font-size: 12px; }
 details.fr-more > summary { cursor: pointer; font: 600 13px/18px var(--font-sans); color: var(--ink); }
 /* What a request is about, under its brief: a line beside the paragraphs, and one choice of several as pills. */
 .ps-brief-box input.fr-brief-line { display: block; box-sizing: border-box; width: 100%; padding: var(--space-3) var(--space-4); border: 0; outline: none; background: transparent; font: 400 15px/22px var(--font-sans); color: var(--ink); }

@@ -142,8 +142,12 @@ LABELS: dict[str, str] = {
 
 #: The host's request ceiling, in seconds. Cloud Run's `--timeout`, whose own maximum for a service
 #: is 3600 — so this is not a number that can simply be raised when a longer run is wanted.
+#:
+#: **Its own variable, `POLSON_HOST_TIMEOUT_SECONDS`.** It read `POLSON_REQUEST_TIMEOUT_SECONDS`, which `studio` reads
+#: as one model call's timeout (180 s): raising it to let a local run past 38 minutes (anthropic_s_1_narrated, 7800)
+#: also let one hung Gemini call wait 130 minutes rather than be retried at three, and the run lost 13 minutes to one.
 try:
-    REQUEST_TIMEOUT_SECONDS = max(60.0, float(os.environ.get("POLSON_REQUEST_TIMEOUT_SECONDS", "3600")))
+    REQUEST_TIMEOUT_SECONDS = max(60.0, float(os.environ.get("POLSON_HOST_TIMEOUT_SECONDS", "3600")))
 except ValueError:
     REQUEST_TIMEOUT_SECONDS = 3600.0
 
@@ -282,7 +286,20 @@ def _base_token_cap() -> int | None:
 #: Deliver and had not written its findings; ftcexplainer3 (3.5 Flash) hit 2M in its build stage after 57 turns.
 #: `motion.pitch` at twice, keyed like `DEADLINES`: about nine scenes and their narration against a trailer's handful, and
 #: no measured run behind it yet.
-TOKEN_SCALE: dict[str, float] = {"math_explainer": 2.0, "motion.pitch": 2.0}
+#: `motion.report` at twice too, its kinds (`report.s1`, `report.10k`) with it: reading a long filing is the cost.
+#: anthropic_s_1 (3.8 Flash, 2026-10-28, three audiences, S-1) spent its 3M on the reading, three profiles and one design
+#: board in 17 minutes — 66 calls, each resending ~180k tokens of context — and was halted before any film was encoded.
+TOKEN_SCALE: dict[str, float] = {"math_explainer": 2.0, "motion.pitch": 2.0, "motion.report": 2.0}
+
+#: A further multiple when the brief asks for a voice (`- Narration: Enabled`), keyed as `TOKEN_SCALE` is. Only where
+#: the type's scale was set for a silent film: a pitch is narrated by default and its scale already counts it.
+#: anthropic_s_1_narrated_2 (3.8 Flash, 2026-10-28, three audiences, S-1, narrated) had spent 4.5M of 6M at 38
+#: minutes, with every line recorded and the boards drawn but no film encoded: by then each call resent ~245k tokens,
+#: ~28k billable even cached. The Claude Code run of the silent brief took 284 turns.
+NARRATION_SCALE: dict[str, float] = {"motion.report": 2.0}
+
+#: How the composer writes a voice into the brief.
+NARRATION_ON = re.compile(r"^- Narration: Enabled\s*$", re.MULTILINE)
 
 
 def token_budget(workflow: str, brief: str, kind: str = "") -> int | None:
@@ -292,7 +309,12 @@ def token_budget(workflow: str, brief: str, kind: str = "") -> int | None:
     for, so a set of n gets n/2 of it; a workflow in `TOKEN_SCALE` gets its multiple. None also means *leave it
     alone*: an uncapped host stays uncapped.
     """
-    scale = TOKEN_SCALE.get(f"{workflow}.{kind}", TOKEN_SCALE.get(workflow, 1.0))
+    # A kind of a type (`report.s1`) takes its own entry, else its family's (`report`), else its workflow's.
+    family = kind.split(".", 1)[0]
+    keyed = lambda table: table.get(f"{workflow}.{kind}", table.get(f"{workflow}.{family}", table.get(workflow, 1.0)))
+    scale = keyed(TOKEN_SCALE)
+    if NARRATION_ON.search(brief):
+        scale *= keyed(NARRATION_SCALE)
     n = audiences_in(brief)
     if workflow in PER_AUDIENCE_MINUTES and n > 2:
         scale *= n / 2

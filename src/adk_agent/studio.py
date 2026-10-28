@@ -32,6 +32,7 @@ import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from google.adk.agents.llm_agent import Agent
 from google.adk.apps import App
@@ -105,6 +106,11 @@ INSTRUCTIONS_FILENAMES = ("GEMINI.md", "CLAUDE.md")
 #: of retries; one-word probes straight after got 13 s, then two 429s (one after 83 s), while 3.5 Flash answered
 #: in 1.3 s and 2.5 Pro in 2–3 s on the same key. 3.8 Flash answered all three, but in 9–30 s.
 DEFAULT_MODEL = "gemini-3.8-flash"
+
+#: Where to send model calls, when not where an express key goes by itself (`model_for`).
+MODEL_LOCATION_ENV = "POLSON_MODEL_LOCATION"
+#: The project the location belongs to: its id (`polson`) or its number.
+MODEL_PROJECT_ENV = "POLSON_MODEL_PROJECT"
 
 #: The .NET server has a runtime to start before it speaks MCP. ADK's default is 5s, which is a cold
 #: start away from being too short, and the failure is an empty toolset rather than a stack trace.
@@ -1835,7 +1841,44 @@ that is not working is the usual way a deadline is missed.
 """
 
 
-def advisor_for(project: Path, model: str, perception: list) -> Agent:
+def model_for(name: str) -> Any:
+    """The model agents are built with: `name` as it is, or a Gemini whose calls go to `POLSON_MODEL_LOCATION`.
+
+    **An express key is routed to us-central1, whatever host it is sent to**, and some models are not served there.
+    `gemini-4-argon` (probed 2026-10-28) answered at `locations/global` with this key and was not found at us-central1,
+    which is where a plain call went. `GOOGLE_CLOUD_LOCATION=global` cannot fix it: when google-genai finds a location
+    and an API key both in the environment, the location wins and the key is dropped, so the client wants application-
+    default credentials instead (`_api_client.py`, google-genai 2.22). So the location goes in the request's path: a
+    client rooted at `…/projects/<project>/locations/<location>/`, signed with the same key. ADK documents overriding
+    the client for options it does not expose (`google.adk.models.Gemini`).
+
+    The name stays the model's own (`gemini-4-argon`), not a resource path, so the turn log and the run record name the
+    model as they always have.
+    """
+    location = os.environ.get(MODEL_LOCATION_ENV, "").strip()
+    if not location:
+        return name
+    project = os.environ.get(MODEL_PROJECT_ENV, "").strip()
+    key = os.environ.get("GOOGLE_API_KEY", "").strip()
+    if not project:
+        raise ConfigError(f"{MODEL_LOCATION_ENV}={location} needs {MODEL_PROJECT_ENV}: the project id (e.g. polson) or number "
+                          "the location belongs to.")
+    if not key:
+        raise ConfigError(f"{MODEL_LOCATION_ENV} sends model calls with the express key in GOOGLE_API_KEY, and none is set. "
+                          "For application-default credentials instead, unset it and set GOOGLE_CLOUD_PROJECT and "
+                          "GOOGLE_CLOUD_LOCATION.")
+
+    from google import genai
+    from google.adk.models import Gemini
+
+    client = genai.Client(enterprise=True, api_key=key, http_options=types.HttpOptions(
+        base_url=f"https://aiplatform.googleapis.com/v1beta1/projects/{project}/locations/{location}/",
+        # The base is the collection itself: paths are joined to it as they are, with no version or location added.
+        base_url_resource_scope=types.ResourceScope.COLLECTION))
+    return Gemini(model=name, client=client)
+
+
+def advisor_for(project: Path, model: Any, perception: list) -> Agent:
     """The agent behind `ask_facilitator`. Looking tools only — deliberately no drawing."""
     return Agent(
         model=model,
@@ -1889,6 +1932,8 @@ def build(
     # model and the engine path are deployment facts. POLSON_CLI_DLL especially — a container's
     # layout is not the repository's.
     chosen_model = model or os.environ.get("POLSON_MODEL", "").strip() or DEFAULT_MODEL
+    # One model object for every agent, so they share one client; the name above stays the plain model id.
+    llm = model_for(chosen_model)
     chosen_dll = cli_dll or os.environ.get("POLSON_CLI_DLL", "").strip() or None
     autonomous = autonomous_in(project)
     instruction = Verbatim(instructions_for(project) + (AUTONOMOUS_ADDENDUM if autonomous else RUNTIME_ADDENDUM))
@@ -1973,14 +2018,14 @@ def build(
     # `include_plugins=False` keeps the watchdog out of the advisor's own sub-run, so a supervisor
     # cannot end up supervising the consultation it caused.
     advice = (
-        [AgentTool(agent=advisor_for(project, chosen_model, looking), include_plugins=False)]
+        [AgentTool(agent=advisor_for(project, llm, looking), include_plugins=False)]
         if roles
         else []
     )
 
     sub_agents = [
         Agent(
-            model=chosen_model,
+            model=llm,
             name=name,
             description=description,
             instruction=Verbatim(prompt + role_deadline_note(plan.get(name), allowance)),
@@ -1996,7 +2041,7 @@ def build(
     ]
 
     return Agent(
-        model=chosen_model,
+        model=llm,
         name=root_name,
         description=(
             "Coordinates a multi-agent design studio." if sub_agents else

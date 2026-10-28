@@ -158,7 +158,8 @@ public sealed partial class VerifyToolkit
         var strays = match.Strays.Select((s, i) =>
         {
             var at = Math.Clamp((s.Reading.From ?? 0) + 0.25, 0, comp.Duration);
-            var frame = $"artifacts/verify/stray-{i + 1}.png";
+            // Named for the film: becool3 checked films B then C, and C's `stray-1.png` overwrote B's before it was looked at.
+            var frame = $"artifacts/verify/{Path.GetFileNameWithoutExtension(full)}-stray-{i + 1}.png";
             var error = FFmpeg.Frame(full, at, ProjectPath.Resolve(projectRoot, frame, "frame", "Write"));
             return new ReadBackStray(i + 1, Raw(s.Reading.Text)!, s.Reading.From, error is null ? frame : null, error, s.Near,
                 FilmReadBack.Unreadable(s.Reading.Text) ? "unreadable script" : s.Kind);
@@ -277,31 +278,29 @@ public sealed partial class VerifyToolkit
     /// (it shows what the piece set; the reader misread it) or <c>'real'</c> (it shows what was read: a fault in the piece).
     /// Returns the check as it now stands. Refused in the script that ran the check: nothing has been looked at yet.
     /// </summary>
-    public Dictionary<string, object?> Stray(int number, string verdict, string? note = null)
+    public Dictionary<string, object?> Stray(int number, string verdict, string? note = null) =>
+        Settle((session?.ReadBack ?? last) ?? throw new InvalidOperationException("Verify.stray: run Verify.film or Verify.image first; there is no check to settle."),
+            number, verdict, note);
+
+    /// <summary>
+    /// A stray of one piece's latest check, whichever was checked last: <paramref name="piece"/> is the film as it was
+    /// checked (<c>'artifacts/final_b.mp4'</c>, or <c>'final_b'</c>), or a still's <c>name</c>.
+    /// </summary>
+    public Dictionary<string, object?> Stray(string piece, int number, string verdict, string? note = null)
     {
-        var check = (session?.ReadBack ?? last) ?? throw new InvalidOperationException("Verify.stray: run Verify.film or Verify.image first; there is no check to settle.");
-        var stray = check.Strays.FirstOrDefault(s => s.Number == number)
-            ?? throw new ArgumentException($"Verify.stray: there is no stray {number}; the check has {check.Strays.Count}.");
-        if (ReferenceEquals(check, madeHere))
-            throw new InvalidOperationException($"Verify.stray: look at the {check.Evidence} first. A stray is settled in a later script than the check, "
-                + $"after you have seen {stray.Frame ?? check.Name} (return Skia.Image.load('{stray.Frame ?? check.Name}') from a script to see it).");
-        var v = verdict?.Trim().ToLowerInvariant();
-        if (v is not ("misread" or "real"))
-            throw new ArgumentException($"Verify.stray's verdict is 'misread' (the {check.Evidence} shows what the {check.Piece} set) or 'real' (a fault in the {check.Piece}).");
-        stray.Verdict = v;
-        stray.Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
-        record?.Invoke($"{check.Piece}.stray", new Dictionary<string, object?>
-        {
-            [check.NameKey] = check.Name, ["n"] = number, ["read"] = stray.Read, ["at"] = stray.At, ["frame"] = stray.Frame,
-            ["near"] = stray.Near, ["verdict"] = v, ["note"] = stray.Note,
-        });
-        var result = check.Result();
-        RecordCheck(check, result);
-        return result;
+        var held = session?.ReadBacks ?? checks;
+        var key = Key(piece);
+        var check = held.Values.FirstOrDefault(c => Key(c.Name) == key || c.Name.Equals(piece?.Trim(), StringComparison.OrdinalIgnoreCase))
+            ?? throw new ArgumentException($"Verify.stray: '{piece}' has not been checked"
+                + (held.Count == 0 ? "; run Verify.film or Verify.image first." : $". Checked: {string.Join(", ", held.Values.Select(c => $"'{c.Name}'"))}."));
+        return Settle(check, number, verdict, note);
     }
     #endregion
 
     #region Internal methods
+    /// <summary>A piece's name as <c>Verify.stray</c> matches it: its file name without the folder or extension, lower case.</summary>
+    internal static string Key(string? name) => Path.GetFileNameWithoutExtension((name ?? "").Trim()).ToLowerInvariant();
+
     /// <summary>
     /// The derivation check itself, recorded by neither: <see cref="Derivation"/> records it, and a claim's check calls it
     /// from inside <see cref="Claim"/>'s sandbox, where the claim is what is recorded. <paramref name="readBack"/> checks
@@ -406,19 +405,46 @@ public sealed partial class VerifyToolkit
     #endregion
 
     #region Private methods
+    /// <summary>Settles one stray of <paramref name="check"/>: refused in the script that ran the check.</summary>
+    private Dictionary<string, object?> Settle(ReadBackCheck check, int number, string verdict, string? note)
+    {
+        var others = (session?.ReadBacks ?? checks).Count > 1;
+        var stray = check.Strays.FirstOrDefault(s => s.Number == number)
+            ?? throw new ArgumentException($"Verify.stray: there is no stray {number} in '{check.Name}'; its check has {check.Strays.Count}."
+                + (others ? " To settle another piece's, name it: Verify.stray('artifacts/final_b.mp4', n, 'misread')." : ""));
+        if (madeHere.Contains(check))
+            throw new InvalidOperationException($"Verify.stray: look at the {check.Evidence} first. A stray is settled in a later script than the check, "
+                + $"after you have seen {stray.Frame ?? check.Name} (return Skia.Image.load('{stray.Frame ?? check.Name}') from a script to see it).");
+        var v = verdict?.Trim().ToLowerInvariant();
+        if (v is not ("misread" or "real"))
+            throw new ArgumentException($"Verify.stray's verdict is 'misread' (the {check.Evidence} shows what the {check.Piece} set) or 'real' (a fault in the {check.Piece}).");
+        stray.Verdict = v;
+        stray.Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
+        record?.Invoke($"{check.Piece}.stray", new Dictionary<string, object?>
+        {
+            [check.NameKey] = check.Name, ["n"] = number, ["read"] = stray.Read, ["at"] = stray.At, ["frame"] = stray.Frame,
+            ["near"] = stray.Near, ["verdict"] = v, ["note"] = stray.Note,
+        });
+        var result = check.Result();
+        RecordCheck(check, result);
+        return result;
+    }
+
     /// <summary>
     /// The check held for <see cref="Stray"/>, recorded, and returned as the script receives it. Checking the same bytes
     /// again keeps the verdicts already given to the same readings, so a re-render that changed nothing is not re-settled.
     /// </summary>
     private Dictionary<string, object?> Hold(ReadBackCheck check)
     {
-        if ((session?.ReadBack ?? last) is { } before && before.Name == check.Name && before.Hash == check.Hash && check.Hash is not null)
+        var held = session?.ReadBacks ?? checks;
+        if (held.GetValueOrDefault(check.Name) is { } before && before.Hash == check.Hash && check.Hash is not null)
             foreach (var s in check.Strays)
                 if (before.Strays.FirstOrDefault(b => b.Verdict is not null && b.Read == s.Read && b.Near == s.Near) is { } settled)
                     (s.Verdict, s.Note) = (settled.Verdict, settled.Note);
+        held[check.Name] = check;
         if (session is not null) session.ReadBack = check;
         else last = check;
-        madeHere = check;
+        madeHere.Add(check);
         record?.Invoke($"{check.Piece}.verify", check.Event());
         var result = check.Result();
         RecordCheck(check, result);
@@ -613,8 +639,11 @@ public sealed partial class VerifyToolkit
     private readonly Action<string, IReadOnlyDictionary<string, object?>>? record;
     private ReadBackCheck? last;
 
-    /// <summary>The check this script ran: its strays cannot have been looked at yet.</summary>
-    private ReadBackCheck? madeHere;
+    /// <summary>Each piece's latest check without a session, as <see cref="SessionContext.ReadBacks"/> holds them with one.</summary>
+    private readonly Dictionary<string, ReadBackCheck> checks = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The checks this script ran: their strays cannot have been looked at yet.</summary>
+    private readonly HashSet<ReadBackCheck> madeHere = [];
     #endregion
 
     #region Types
@@ -760,7 +789,7 @@ public abstract class ReadBackCheck(string name, Dictionary<string, object?>[] i
             + (missed.Length == 0 ? "" : $", {missed.Length} missed ({string.Join("; ", missed.Take(4).Select(m => $"\"{Clip((string)m["text"]!)}\" {MissedNote(m)}"))})")
             + $". Sources: {string.Join(", ", bySource)}."
             + (unsourced == 0 ? "" : $" {unsourced} figure{(unsourced == 1 ? " has" : "s have")} no source: find it in a document or the brief, or pass its working as computed.")
-            + (pending == 0 ? "" : $" {pending} reading{(pending == 1 ? "" : "s")} of text the {Piece} never set: look at {evidence} ({string.Join(", ", Strays.Where(s => s.Verdict is null).Select(s => s.Frame ?? "none saved"))}), then Verify.stray(n, 'misread' | 'real').")
+            + (pending == 0 ? "" : $" {pending} reading{(pending == 1 ? "" : "s")} of text the {Piece} never set: look at {evidence} ({string.Join(", ", Strays.Where(s => s.Verdict is null).Select(s => s.Frame ?? "none saved"))}), then Verify.stray('{Name}', n, 'misread' | 'real').")
             + (real == 0 ? "" : $" {real} confirmed fault{(real == 1 ? "" : "s")} in the {Piece}: fix and {Again} again.")
             + (Ignored.Length == 0 ? "" : $" {Ignored.Length} computed entr{(Ignored.Length == 1 ? "y was" : "ies were")} not used, as the working shows no arithmetic ({string.Join(", ", Ignored.Take(4).Select(k => $"'{Clip(k)}'"))}): a figure from a document is found on its page without one.")
             + FilmReadBack.UncheckedNote(counts["unchecked"] is int u ? u : 0, Evidence)
@@ -929,12 +958,39 @@ internal static class FilmReadBack
     {
         var asRead = MatchOnce(shown, read);
         var blocks = asRead.Strays.Select(u => u.Reading).Where(r => r.Text.Contains('\n')).ToHashSet();
-        if (blocks.Count == 0) return asRead;
+        if (blocks.Count == 0) return Joined(shown, asRead);
         var split = MatchOnce(shown, [.. read.SelectMany(r => blocks.Contains(r) ? Lines(r) : [r])]);
-        return split.Seen.Count(s => s is not null) > asRead.Seen.Count(s => s is not null) ? split : asRead;
+        return Joined(shown, split.Seen.Count(s => s is not null) > asRead.Seen.Count(s => s is not null) ? split : asRead);
 
         static IEnumerable<Reading> Lines(Reading r) =>
             r.Text.Split('\n').Select(l => l.Trim()).Where(l => Normal(l).Length > 0).Select(l => r with { Text = l });
+    }
+
+    /// <summary>
+    /// **A reading of several set texts run together on one line is each of them.** becool3 (2026-10-28) set its credits
+    /// as three texts, one under another, and the watcher read them as one string joined by spaces: all three were missed
+    /// and the string was a stray, and "HE LEFT THE MOVIES" was missed because the reading of both lines paired with the
+    /// second. Each set text on screen with the reading and found in it word for word, figures and all, is seen; the
+    /// reading stops being a stray when those texts account for nearly all of it.
+    /// </summary>
+    private static Outcome Joined(IReadOnlyList<Shown> shown, Outcome outcome)
+    {
+        var seen = outcome.Seen.ToArray();
+        var strays = outcome.Strays.ToList();
+        var normal = shown.Select(s => Normal(Canon(s.Text))).ToArray();
+        foreach (var r in outcome.Seen.OfType<Reading>().Concat(outcome.Strays.Select(u => u.Reading)).Distinct().ToArray())
+        {
+            var read = $" {Normal(Canon(r.Text))} ";
+            var parts = Enumerable.Range(0, shown.Count)
+                .Where(i => shown[i].From is not null && normal[i].Length > 0 && InTime(shown[i], r) && read.Contains($" {normal[i]} "))
+                .ToArray();
+            if (parts.Length < 2) continue;
+            foreach (var i in parts) seen[i] ??= r with { Text = shown[i].Text };
+            var words = read.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
+            if (parts.Sum(i => normal[i].Split(' ').Length) >= 0.8 * words)
+                strays.RemoveAll(u => u.Reading == r);
+        }
+        return new Outcome(seen, [.. strays]);
     }
 
     private static Outcome MatchOnce(IReadOnlyList<Shown> shown, IReadOnlyList<Reading> read)
@@ -1007,7 +1063,11 @@ internal static class FilmReadBack
         var best = new[] { 10d, 60d, 100d }.Where(k => times.Max() * k <= duration * 1.1 + Slack)
             .Select(k => (Scale: k, Score: Score(k))).OrderByDescending(c => c.Score.Seen).ThenBy(c => c.Score.Error)
             .FirstOrDefault();
-        return best.Scale > 0 && best.Score.Seen > asRead.Seen + Math.Max(1, shown.Count / 5) ? best.Scale : 1;
+        // A margin, so one coincidence does not stretch a reading already in seconds. But where the reading as given sees
+        // nothing at all, one line seen is enough: becool3's Hindi film (2026-10-28) was dated 0.02–0.1 s for texts at
+        // 2–10 s, "0:09" written 0.09, and with its Devanagari lines misread only BE COOL could line up at ×100.
+        var margin = asRead.Seen == 0 ? 0 : Math.Max(1, shown.Count / 5);
+        return best.Scale > 0 && best.Score.Seen > asRead.Seen + margin ? best.Scale : 1;
     }
 
     /// <summary>The best unused reading of <paramref name="text"/> on screen with <paramref name="shown"/>, or -1.</summary>

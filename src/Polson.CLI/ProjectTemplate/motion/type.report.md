@@ -23,8 +23,8 @@ ones, and ask for what is missing:
 | Who is watching, in words (what they already know) | |
 | The questions, numbered, in the audience's own words | |
 | Length (45 s by default; about 10 s a question, plus title and end card) | |
+| Narration (Enabled, or Disabled — see *Narration* below) | |
 | Anything explicitly ruled out | |
-| Sound (none, or what) | |
 
 **At most five questions.** Each needs a scene of eight to twelve seconds to be read; more makes a film no one
 finishes, and a 60-minute run. With more, ask the director which five.
@@ -187,6 +187,42 @@ The film is **title → one scene per question → end card**:
 **One scene per encoded part.** A 45-second film will not encode inside one script: encode each scene with
 `comp.saveVideo('artifacts/part1.mp4', { from, to })` in a script of its own, then `Motion.joinVideos`, as stage 4
 says. Plan the beats so every part boundary falls on a cut.
+
+### Narration
+
+**A voice when the brief asks for one (`Narration: Enabled`); silent when it says Disabled or says nothing.** A narrated report is read aloud to
+the viewer, and the screen still carries every figure. Speak each scene's lines with `Assets.speak`, one line a call,
+in the language of the film's words, and time the scene to the recording:
+
+```javascript
+const spoken = await Assets.speak('Revenue reached one hundred thirty point five billion dollars.', { voice: 'Charon', path: 'audio/q1-1.wav' });
+if (!spoken.success) error(spoken.remedy);
+const line = Motion.speech(spoken.text, { audio: spoken.path, start: 1.0 });
+if (line.unsaid.length) error('the recording says more than the line: ' + line.unsaid.join(' '));
+```
+
+- **Each question's scene is as long as its narration**, plus the holds: the figure is on screen before it is spoken
+  and stays after. About 140 words a minute, so a 45-second film is about 100 words: one or two short sentences a
+  question. The question is on screen, so the voice need not read it out. Never cut a line to fit a beat; if the
+  lines will not fit the length, lengthen the film and say so in Q1.
+- **Say the figure on screen, as it is on screen.** "$130.5B" is spoken as "one hundred thirty point five billion
+  dollars", not "about one hundred thirty billion". A voice that rounds differently, or names a figure the screen
+  does not show, makes a second claim, and `Verify.film` reads the screen, not the voice, so the second claim goes
+  unchecked.
+- **The voice says nothing the filing does not.** No forecast, no opinion, no "strong" or "worrying": the headline
+  sentence on screen, said in other words, and the page's own qualifications where the figure needs them. The source
+  line and the end card are not read aloud.
+- **The film must still work with the sound off.** Investors often watch muted in a feed: every figure and claim the
+  voice gives is also on screen, in fewer words.
+- **Encode the parts silent, and add the voice at the join**:
+  `Motion.joinVideos([...], 'artifacts/final_a.mp4', { audio })`, as stage 4 says. Lines in the same voice are
+  served from the cache for nothing, so give every line once, at the join.
+- **Record the lines in scripts of their own, a few at a time**, never in a script that also encodes: recording
+  counts against the script's time limit. Pass the lines to record in `ARGS`, and run the script again until every
+  line is cached.
+- With several audiences, **each film is voiced in the language of its words**, by a voice suited to its audience
+  (*More than one audience* below), and figures are spoken the way they are written for that audience: "1305億ドル"
+  is read in Japanese, not as a dollar figure in English.
 
 ### Visual style — produced, not plain
 

@@ -470,11 +470,21 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
             brief = (project / "brief.md").read_text(encoding="utf-8", errors="replace")
         except OSError:
             pass
+        # The brief as a document, with the renderer the Deliverables reader uses: raw HTML and images off, so what
+        # a visitor typed into it arrives as text. Imported here because `app` imports this module.
+        from . import app as app_mod
+        brief_html = app_mod.MARKDOWN.render(brief) if brief and app_mod.MARKDOWN is not None else ""
+        # The commission's deadline, for the Progress card's clock: what the project was given, as `project.json` has it.
+        try:
+            deadline = int(json.loads((project / "project.json").read_text(encoding="utf-8")).get("deadlineMinutes") or 0)
+        except (OSError, ValueError, TypeError):
+            deadline = 0
 
         # A driven run answers through its own director. An observed one only where the agent is in this
         # process (the ADK runtime); elsewhere the host owns the question and the page shows it read-only.
         answerable = run is not None and (not run.observed or observe_mod._ask_channel() is not None)
-        return page(request, "request.html", "requests", row=row, run=run, brief=brief, answerable=answerable,
+        return page(request, "request.html", "requests", row=row, run=run, brief=brief, brief_html=brief_html,
+                    answerable=answerable, deadline=deadline,
                     sayable=can_say(run),
                     card=row["card"],
                     learned=learned_from(project, run, row["events"]),

@@ -130,6 +130,9 @@ public sealed class SessionContext
     /// </summary>
     public ReadBackCheck? ReadBack { get; set; }
 
+    /// <summary>Every piece's latest check by its name, so <c>Verify.stray(piece, n, …)</c> settles film B after film C was checked.</summary>
+    public Dictionary<string, ReadBackCheck> ReadBacks { get; } = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>
     /// True while one or more tool calls are actively executing on this session.
     /// </summary>

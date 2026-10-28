@@ -24,7 +24,7 @@ funds, **when the brief states them**; how it is told (below); the length; narra
 | The company, as its documents name it | |
 | Told as — the company's own pitch, or a retelling of a past deck | |
 | Stage, raise and use of funds — each from the brief, from the deck, or not stated | |
-| Length (2 minutes by default) and narration (a voice, or none) | |
+| Length (2 minutes by default) and narration (Enabled, or Disabled) | |
 | Anything explicitly ruled out | |
 
 **Told as** decides the voice, and nothing else changes with it:
@@ -275,7 +275,7 @@ a cut.
 
 ### Narration
 
-**A voice, unless the brief says none.** A pitch is told; the screen carries the figures and the voice the argument.
+**A voice, unless the brief says none (`Narration: Disabled`).** A pitch is told; the screen carries the figures and the voice the argument.
 Speak each scene's lines with `Assets.speak`, one line a call, in the language of the film's words, and time the
 scene to the recording:
 

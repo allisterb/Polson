@@ -184,7 +184,7 @@ arrives on it and moves on with the voice. In the Paper2Video study (Zhu et al. 
 content being spoken raised a model's accuracy at locating it from 0.084 to 0.633: it is how a viewer, and the
 watcher, know where to look. One highlight at a time, behind the formula, never covering it.
 
-**Narration, unless the brief says none.** Speak each scene's lines with `Assets.speak` (`Charon`, *informative*, or a
+**Narration, unless the brief says none (`Narration: Disabled`).** Speak each scene's lines with `Assets.speak` (`Charon`, *informative*, or a
 voice that suits the viewer), one line a call, and time everything to the recording:
 
 ```javascript

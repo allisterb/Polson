@@ -2,6 +2,8 @@
 {% import "front/macros.html" as m %}
 {% block title %}{{ card.title }} · New request · Polson Studio{% endblock %}
 {% block crumb %}<span class="fr-crumb"><a class="fr-link" href="{{ base }}/workflows">Workflows</a> / {{ card.title }}</span>{% endblock %}
+{#- This page is a new request: the header's "New request" sat just above "Start in the studio". -#}
+{% block new_request %}{% endblock %}
 {% block body %}
 {%- set chosen_sizes = form.sizes if form.sizes is defined and form.sizes else [sizes[0].key] -%}
 {%- set chosen_formats = form.formats if form.formats is defined and form.formats else [formats[0].ext] -%}
@@ -46,7 +48,10 @@
             {%- set a = given[i] if i < given|length else {} -%}
             <div class="fr-audience" data-audience>
               <span class="fr-letter" aria-hidden="true">{{ 'ABCDEF'[i] }}</span>
-              <input name="aud_place" maxlength="60" placeholder="{{ example_places[i] }}" aria-label="Audience {{ 'ABCDEF'[i] }} place" value="{{ a.place or '' }}">
+              {#- Chosen from the studio's list of places (places.json): the page fills the list and checks the choice, and
+                  the server resolves it again (catalogue.resolve_place), so a typed name still works without the script. -#}
+              <input name="aud_place" maxlength="120" autocomplete="off" data-place
+                     placeholder="{{ example_places[i] }}" aria-label="Audience {{ 'ABCDEF'[i] }} place" value="{{ a.place or '' }}">
               <select name="aud_age" aria-label="Audience {{ 'ABCDEF'[i] }} age band">
                 <option value="">Any age</option>
                 {% for code, words in ages %}<option value="{{ code }}" {{ 'selected' if a.age == code }}>{{ words }}</option>{% endfor %}
@@ -57,6 +62,9 @@
             </div>
             {% endfor %}
           </div>
+          <div id="place-menu" class="fr-place-menu" role="listbox" aria-label="Places" data-place-menu
+               data-places-src="{{ base }}/static/places.json?v={{ front_version }}" hidden></div>
+          <p class="ps-ogrid-hint fr-place-why" data-place-why hidden></p>
           <div class="fr-panel-foot"><button type="button" class="ps-btn ps-btn-quiet ps-btn-sm" data-add-audience hidden>{{ m.icon('plus', 16) }}Add another audience</button></div>
         </section>
       </details>

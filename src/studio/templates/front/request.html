@@ -19,7 +19,7 @@
             <button class="ps-btn ps-btn-primary" type="submit" {% if active %}disabled title="The studio is making another request."{% endif %}>Start in the studio</button>
           </form>
         {% endif %}
-        {% if run %}<a class="ps-btn ps-btn-quiet ps-btn-sm" href="{{ base }}/runs/{{ run.id }}">Open the full record</a>{% endif %}
+        {% if run %}<a class="ps-btn ps-btn-quiet ps-btn-sm" href="{{ base }}/runs/{{ run.id }}">Developer view</a>{% endif %}
       </div>
     </div>
     <div class="ps-rbar-fields">
@@ -104,6 +104,9 @@
         <ol class="ps-run" data-timeline>
           {% if not run %}<li class="ps-run-step is-next"><span class="ps-run-mark"></span><span class="ps-run-name">Waiting to start</span><span class="ps-run-time"></span></li>{% endif %}
         </ol>
+        {#- How long it has been working, and how long it has left of its deadline (front.js counts it). -#}
+        {% if run %}<p class="fr-clock" data-clock data-deadline="{{ deadline or '' }}" hidden>
+          <span data-clock-elapsed></span><span class="fr-small" data-clock-left></span></p>{% endif %}
         <div class="ps-meter" data-budget hidden style="margin-top: var(--space-5)">
           <div class="ps-meter-head"><span class="ps-meter-label">Image requisitions</span><span class="ps-meter-value" data-budget-value></span></div>
           <div class="ps-meter-track" role="meter" aria-label="Image requisitions" aria-valuemin="0"><div class="ps-meter-fill" data-budget-fill style="width:0"></div></div>
@@ -121,7 +124,9 @@
         {% if brief %}
         <details class="fr-more" style="margin-top: var(--space-3)">
           <summary>The brief, as the studio received it</summary>
-          <div class="fr-brief-text">{{ brief }}</div>
+          {#- Rendered with raw HTML off (front.py), so the brief's own words can only ever be text. -#}
+          {% if brief_html %}<div class="fr-brief-text fr-brief-doc fr-prose">{{ brief_html|safe }}</div>
+          {% else %}<div class="fr-brief-text">{{ brief }}</div>{% endif %}
         </details>
         {% endif %}
       </section>

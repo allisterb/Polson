@@ -1024,9 +1024,18 @@ def final_renders(run: Run) -> list[dict[str, Any]]:
                       and (m := AUDIENCE_FINAL.fullmatch(Path(e.get("artifact") or "").stem))})
     if not letters:
         return [piece] if (piece := final_render(run)) else []
+    # **An `output` piece is the one audience left without a final, when exactly one is.** anthropic_s_1_cc named
+    # films B and C `final_b`, `final_c` and film A `output.mp4`, and the page showed a three-city run as two films.
+    # With two or more audiences missing, which of them it is would be a guess, so it is left out.
+    asked = {a.get("letter", "").lower() for a in front.read_request(Path(run.project.root)).get("audiences") or []
+             if isinstance(a, dict)} - {""}
+    stray = next(iter(missing)) if len(missing := asked - set(letters)) == 1 else None
+    if stray and final_render(run, only=lambda artifact: Path(artifact).stem == "output"):
+        letters = sorted([*letters, stray])
     pieces = []
     for letter in letters:
-        piece = final_render(run, only=lambda artifact, l=letter: Path(artifact).stem == f"final_{l}")
+        name = "output" if letter == stray else f"final_{letter}"
+        piece = final_render(run, only=lambda artifact, n=name: Path(artifact).stem == n)
         if piece:
             piece["what"] = f"the finished piece for audience {letter.upper()}"
             piece["audience"] = letter.upper()
