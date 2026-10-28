@@ -412,8 +412,25 @@ class WorkflowTypeTests(unittest.TestCase):
     def test_a_pitch_gets_twice_the_cap_and_its_audiences_scale_it_further(self):
         with mock.patch.object(intake, "_base_token_cap", return_value=2_000_000):
             self.assertEqual(intake.token_budget("motion", "A pitch.", "pitch"), 4_000_000)
-            self.assertIsNone(intake.token_budget("motion", "A report.", "report"), "only the pitch is scaled")
+            self.assertIsNone(intake.token_budget("motion", "A product ad.", "product"), "a product ad is not scaled")
             self.assertEqual(intake.token_budget("motion", "".join(f"Audience {c}: X\n" for c in "ABCD"), "pitch"), 8_000_000)
+
+    def test_a_report_and_its_kinds_get_twice_the_cap_and_their_audiences_scale_it_further(self):
+        """anthropic_s_1: three audiences of an S-1 spent 3M on the reading and one design board, and no film was made."""
+        three = "".join(f"Audience {c}: X\n" for c in "ABC")
+        with mock.patch.object(intake, "_base_token_cap", return_value=2_000_000):
+            self.assertEqual(intake.token_budget("motion", "A report.", "report"), 4_000_000)
+            for kind in ("report.s1", "report.10k"):
+                self.assertEqual(intake.token_budget("motion", three, kind), 6_000_000, kind)
+
+    def test_a_narrated_report_gets_twice_again_and_a_pitch_does_not(self):
+        """anthropic_s_1_narrated_2: a narrated three-audience S-1 had spent 4.5M of 6M at 38 minutes, no film encoded."""
+        three = "".join(f"Audience {c}: X\n" for c in "ABC") + "- Narration: Enabled\n"
+        with mock.patch.object(intake, "_base_token_cap", return_value=2_000_000):
+            self.assertEqual(intake.token_budget("motion", three, "report.s1"), 12_000_000)
+            self.assertEqual(intake.token_budget("motion", three.replace("Enabled", "Disabled"), "report.s1"), 6_000_000)
+            self.assertEqual(intake.token_budget("motion", "A pitch.\n- Narration: Enabled\n", "pitch"), 4_000_000,
+                             "a pitch's scale already counts its voice")
 
     def test_every_declined_type_says_why(self):
         """The entry is the record. A blank reason is the same as having forgotten."""
@@ -794,6 +811,13 @@ class TypeSelectionTests(unittest.TestCase):
     def test_without_the_keepalive_the_run_limit_is_the_request_timeout(self):
         """A run typed into ADK's own console lives inside one request, so it still fits in that hour: 38."""
         self.assertEqual(intake._max_deadline(intake.REQUEST_TIMEOUT_SECONDS), 38)
+
+    def test_the_host_ceiling_and_a_model_calls_timeout_are_separate_settings(self):
+        """anthropic_s_1_narrated: one variable raised to lift the ceiling let a hung model call wait 130 minutes."""
+        source = Path(intake.__file__).read_text(encoding="utf-8")
+        self.assertIn('os.environ.get("POLSON_HOST_TIMEOUT_SECONDS", "3600")', source)
+        self.assertNotIn('"POLSON_REQUEST_TIMEOUT_SECONDS"', source)
+        self.assertIn('"POLSON_REQUEST_TIMEOUT_SECONDS"', Path(studio.__file__).read_text(encoding="utf-8"))
 
     def test_with_the_keepalive_the_ceiling_is_what_it_holds_less_what_comes_after(self):
         """A commission is a background task the keepalive holds awake, so its limit is the keepalive's cap, and

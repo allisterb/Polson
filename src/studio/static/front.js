@@ -30,6 +30,118 @@
   if (form) {
     var pops = Array.prototype.slice.call(form.querySelectorAll('details.fr-pop'));
 
+    // The audience's place, chosen from the studio's list (places.json, Natural Earth). The server resolves it again
+    // (catalogue.resolve_place), so this is the person's help, not the rule: a unique city name is completed, an
+    // ambiguous or unknown one is said so at once instead of after sending.
+    //
+    // The suggestions are our own list, not the browser's datalist: that one is drawn by the browser over the field, so
+    // the words being typed were hidden by their own suggestions, and a page cannot move it. This one opens just
+    // below the field being typed in, and takes the arrow keys, Enter and Escape.
+    var placeMenu = form.querySelector('[data-place-menu]'), placeWhy = form.querySelector('[data-place-why]');
+    if (placeMenu) {
+      var placeKey = function (s) { return String(s || '').normalize('NFC').replace(/\s+/g, ' ').trim().toLowerCase(); };
+      var exact = {}, byName = {}, entries = [];
+      var MAX_SUGGESTIONS = 8, menuFor = null, active = -1;
+      var checkPlace = function (input) {
+        var text = input.value.trim(), why = '';
+        if (text && Object.keys(exact).length) {
+          var found = exact[placeKey(text)], named = byName[placeKey(text)] || [];
+          if (found) input.value = found;
+          else if (named.length === 1) input.value = named[0];
+          else why = named.length ? '“' + text + '” is ' + named.length + ' places: ' + named.slice(0, 4).join('; ') + '. Choose one.'
+            : '“' + text + '” is not a place the studio knows. Choose one from the list.';
+        }
+        input.setCustomValidity(why);
+        var problems = Array.prototype.map.call(form.querySelectorAll('[data-place]'), function (i) { return i.validationMessage; }).filter(Boolean);
+        if (placeWhy) { placeWhy.textContent = problems[0] || ''; placeWhy.hidden = !problems.length; }
+      };
+      fetch(placeMenu.getAttribute('data-places-src')).then(function (r) { return r.ok ? r.json() : null; }).then(function (data) {
+        if (!data) return;
+        data.places.forEach(function (p) {
+          var label = p[0], ascii = p[1], parts = label.split(', ');
+          exact[placeKey(label)] = label;
+          if (ascii) exact[placeKey([ascii].concat(parts.slice(1)).join(', '))] = label;
+          [parts[0], ascii].forEach(function (n) { if (n) (byName[placeKey(n)] = byName[placeKey(n)] || []).push(label); });
+          entries.push({ label: label, keys: [placeKey(label)].concat(ascii ? [placeKey(ascii)] : []), note: '' });
+        });
+        data.countries.forEach(function (c) {
+          exact[placeKey(c[0])] = c[0];
+          entries.push({ label: c[0], keys: [placeKey(c[0])], note: 'country' });
+        });
+        form.querySelectorAll('[data-place]').forEach(function (i) { if (i.value.trim()) checkPlace(i); });
+      }).catch(function () { /* the server still checks each place when the request is sent */ });
+
+      // Best first: names that begin with what was typed, then a word in them that does, then anywhere; within each,
+      // the list's own order, which is largest first.
+      var suggest = function (text) {
+        var k = placeKey(text), tiers = [[], [], []];
+        if (!k) return [];
+        for (var i = 0; i < entries.length; i++) {
+          var e = entries[i], tier = -1;
+          for (var j = 0; j < e.keys.length; j++) {
+            var at = e.keys[j].indexOf(k), t = at === 0 ? 0 : at > 0 && /[\s,(-]/.test(e.keys[j].charAt(at - 1)) ? 1 : at > 0 ? 2 : -1;
+            if (t >= 0 && (tier < 0 || t < tier)) tier = t;
+          }
+          if (tier >= 0 && tiers[tier].length < MAX_SUGGESTIONS) tiers[tier].push(e);
+          if (tiers[0].length >= MAX_SUGGESTIONS) break;
+        }
+        return tiers[0].concat(tiers[1], tiers[2]).slice(0, MAX_SUGGESTIONS);
+      };
+      var closeMenu = function () {
+        if (menuFor) menuFor.setAttribute('aria-expanded', 'false');
+        placeMenu.hidden = true; placeMenu.textContent = ''; menuFor = null; active = -1;
+      };
+      var mark = function (i) {
+        var items = placeMenu.querySelectorAll('[role=option]');
+        active = items.length ? (i + items.length) % items.length : -1;
+        items.forEach(function (o, n) { o.setAttribute('aria-selected', n === active ? 'true' : 'false'); });
+        if (active >= 0) { menuFor.setAttribute('aria-activedescendant', items[active].id); items[active].scrollIntoView({ block: 'nearest' }); }
+      };
+      var choose = function (input, label) {
+        input.value = label; closeMenu();
+        input.dispatchEvent(new Event('change', { bubbles: true }));    // checks it, and updates the summary
+      };
+      var openMenu = function (input) {
+        var found = suggest(input.value);
+        if (!found.length) { closeMenu(); return; }
+        placeMenu.textContent = '';
+        found.forEach(function (e, n) {
+          var o = document.createElement('div');
+          o.className = 'fr-place-option'; o.id = 'place-option-' + n; o.setAttribute('role', 'option');
+          o.appendChild(document.createTextNode(e.label));
+          if (e.note) { var s = document.createElement('span'); s.className = 'fr-small'; s.textContent = ' ' + e.note; o.appendChild(s); }
+          // mousedown, not click: a click would blur the field first and close the list before the choice landed.
+          o.addEventListener('mousedown', function (ev) { ev.preventDefault(); choose(input, e.label); });
+          placeMenu.appendChild(o);
+        });
+        // Just under the field: fixed to the window, so the panel the field sits in cannot clip it.
+        var box = input.getBoundingClientRect();
+        placeMenu.style.left = box.left + 'px'; placeMenu.style.top = (box.bottom + 4) + 'px';
+        placeMenu.style.width = Math.max(box.width, 280) + 'px';
+        placeMenu.hidden = false; menuFor = input; input.setAttribute('aria-expanded', 'true'); mark(-1);
+      };
+
+      form.querySelectorAll('[data-place]').forEach(function (input) {
+        input.setAttribute('role', 'combobox'); input.setAttribute('aria-autocomplete', 'list');
+        input.setAttribute('aria-controls', placeMenu.id); input.setAttribute('aria-expanded', 'false');
+        input.addEventListener('input', function () {
+          if (input.validationMessage) input.setCustomValidity('');
+          openMenu(input);
+        });
+        input.addEventListener('keydown', function (ev) {
+          if (menuFor !== input) { if (ev.key === 'ArrowDown') openMenu(input); return; }
+          if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') { ev.preventDefault(); mark(active + (ev.key === 'ArrowDown' ? 1 : -1)); }
+          else if (ev.key === 'Enter' && active >= 0) { ev.preventDefault(); choose(input, placeMenu.querySelectorAll('[role=option]')[active].firstChild.nodeValue); }
+          else if (ev.key === 'Escape') { ev.preventDefault(); closeMenu(); }
+        });
+        input.addEventListener('blur', function () { if (menuFor === input) closeMenu(); });
+        input.addEventListener('change', function () { checkPlace(input); });
+      });
+      // The list is placed against the window, so it closes rather than drifting when the page or the panel scrolls.
+      window.addEventListener('scroll', function (ev) { if (menuFor && ev.target !== placeMenu) closeMenu(); }, true);
+      window.addEventListener('resize', function () { if (menuFor) closeMenu(); });
+    }
+
     function summarise(pop) {
       var out = pop.querySelector('[data-summary]');
       if (!out) return;
@@ -738,7 +850,40 @@
   }
 
   var source = new EventSource(base + '/runs/' + encodeURIComponent(run) + '/events');
-  function on(type, fn) { source.addEventListener(type, function (m) { try { fn(JSON.parse(m.data)); } catch (err) { /* a malformed line is skipped, as the record reader does */ } }); }
+  // The newest moment the record has reached: where a finished run's clock stops when no run.end says so (a Claude Code
+  // run ends without one).
+  var lastTs = 0;
+  function on(type, fn) {
+    source.addEventListener(type, function (m) {
+      try {
+        var e = JSON.parse(m.data);
+        if (e && e.ts) lastTs = Math.max(lastTs, Date.parse(e.ts) || 0);
+        fn(e);
+      } catch (err) { /* a malformed line is skipped, as the record reader does */ }
+    });
+  }
+
+  // The Progress card's clock: time spent, and time left of the commission's deadline, each second while it works and
+  // fixed once it has ended.
+  var clockBox = page.querySelector('[data-clock]'), endedAt = 0;
+  function span(ms) {
+    var s = Math.max(0, Math.round(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60);
+    return (h ? h + ':' + String(m).padStart(2, '0') : String(m)) + ':' + String(s % 60).padStart(2, '0');
+  }
+  function tickClock() {
+    if (!clockBox || !started) return;
+    var over = finished || stoppedOnce || page.dataset.status === 'delivered' || page.dataset.status === 'stopped';
+    var end = endedAt || (over ? lastTs : 0), spent = (end || Date.now()) - started;
+    var minutes = Number(clockBox.dataset.deadline) || 0, left = minutes * 60000 - spent;
+    clockBox.hidden = false;
+    clockBox.querySelector('[data-clock-elapsed]').textContent = (end ? 'Took ' : 'Elapsed ') + span(spent);
+    clockBox.querySelector('[data-clock-left]').textContent = !minutes ? ''
+      : end ? 'of its ' + minutes + '-minute deadline'
+      : left >= 0 ? span(left) + ' left of ' + minutes + ' min'
+      : 'past its ' + minutes + '-minute deadline by ' + span(-left);
+    clockBox.classList.toggle('is-over', !end && left < 0);
+  }
+  setInterval(tickClock, 1000);
 
   on('run.start', function (e) { if (!started && e.ts) started = Date.parse(e.ts); });
   on('stage.begin', function (e) { if (!started && e.ts) started = Date.parse(e.ts); begin(e.stage || 'Working', e.ts); later(); });
@@ -767,6 +912,7 @@
   var failure = '';
   on('run.error', function (e) { failure = String(e.error || '').split('\n')[0]; });
   on('run.end', function (e) {
+    if (!endedAt && e.ts) endedAt = Date.parse(e.ts);
     var end = R.runEnd(e);
     deliver(end.ok ? 'delivered' : 'stopped');
     if (!end.ok) stopped(failure || String(end.text).split('\n')[0]);

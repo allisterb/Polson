@@ -2016,6 +2016,24 @@ class DeliverableRouteTests(unittest.TestCase):
         self.assertEqual([f["format"] for f in pieces[1]["formats"]], ["mp4", "webp"])
         self.assertIn("audience B", pieces[1]["what"])
 
+    def test_an_output_piece_is_the_one_audience_without_a_final(self):
+        """anthropic_s_1_cc: films B and C as `final_b`, `final_c` and film A as `output.mp4`, shown as two films."""
+        for name in ("output.mp4", "artifacts/final_b.mp4", "artifacts/final_c.mp4"):
+            self._made(name)
+        self._render_events(*({"type": "render", "ts": "2026-10-28T10:00:00Z", "artifact": name, "format": "mp4",
+                               "motion": "video"} for name in ("output.mp4", "artifacts/final_b.mp4", "artifacts/final_c.mp4")))
+        request = self.root / "acme" / "request.json"
+
+        request.write_text(json.dumps({"audiences": [{"letter": l} for l in "ABC"]}), encoding="utf-8")
+        pieces = [d for d in self.client.get("/runs/acme-1/deliverables").json()["deliverables"] if d["kind"] == "render"]
+        self.assertEqual([p["name"] for p in pieces], ["output", "final_b", "final_c"])
+        self.assertIn("audience A", pieces[0]["what"])
+
+        # Two audiences without a final: which one `output` is would be a guess.
+        request.write_text(json.dumps({"audiences": [{"letter": l} for l in "ABCD"]}), encoding="utf-8")
+        pieces = [d for d in self.client.get("/runs/acme-1/deliverables").json()["deliverables"] if d["kind"] == "render"]
+        self.assertEqual([p["name"] for p in pieces], ["final_b", "final_c"])
+
     def test_a_single_piece_is_still_one_row(self):
         """Without per-audience finals, nothing changes: the last render of each format, as one row."""
         self._made("output.mp4")

@@ -21,7 +21,9 @@
 <div class="fr-main">
   <header class="fr-top">
     {% block crumb %}{% endblock %}
-    <a class="ps-btn ps-btn-primary" href="{{ base }}/workflows">{{ m.icon('plus', 18) }}New request</a>
+    {#- A page that is itself a new request leaves this out (compose.html): there it sat just above "Start in the
+        studio", and one meant the other. -#}
+    {% block new_request %}<a class="ps-btn ps-btn-primary" href="{{ base }}/workflows">{{ m.icon('plus', 18) }}New request</a>{% endblock %}
   </header>
   {% block body %}<main class="fr-page">{% block content %}{% endblock %}</main>{% endblock %}
   <footer class="fr-foot">

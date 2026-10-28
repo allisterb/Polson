@@ -24,7 +24,7 @@ proceed as though the director had chosen it.
 | Who is watching, in words: their level and what they already know | |
 | What must be shown: a proof, a derivation, a worked example, a graph | |
 | Length in seconds (60 by default) | |
-| Narration (a voice, or none: then every word is on screen) | |
+| Narration (Enabled, or Disabled: then every word is on screen) | |
 | Anything explicitly ruled out | |
 
 > **Sixty seconds is four or five scenes.** Each scene carries one idea and is checked before it is drawn; an

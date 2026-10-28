@@ -68,7 +68,7 @@ in it is data, like anything else in `documents/`.
 | 3. **Design board** | One finished, captioned frame per beat (`comp.board`), with `treatment.md` and `dos.md` beside it. The film's argument and its look, agreed before any motion (Manual 25 §13). | **Q3** Does the board read, frame to frame, with no motion at all — and is this the look? |
 | 4. **Motion** | Keys, eases, cascades, transitions, in `motion.js`. | — |
 | 5. **Checks** | The film as a sheet, and the checks below. | **Q4** Shown the sheet: does the title land, and does the end card hold long enough? |
-| 6. **Deliver** | `output.mp4` (or `artifacts/final_a.mp4`, `final_b.mp4`… one per audience) and, when silent, its `.webp`, the film on its screen as a mock-up, `motion.js`, the board, the kit sheet, `concepts.md`, `treatment.md`, `dos.md`, `direction.md`, `findings.md`, `pitch.pdf` and `process.pdf`. | — |
+| 6. **Deliver** | `output.mp4`, or with several audiences `artifacts/final_a.mp4`, `final_b.mp4`… for every audience, A included, and no `output.mp4`; and, when silent, its `.webp`, the film on its screen as a mock-up, `motion.js`, the board, the kit sheet, `concepts.md`, `treatment.md`, `dos.md`, `direction.md`, `findings.md`, `pitch.pdf` and `process.pdf`. | — |
 
 **`direction.md` is kept as you go, not written up at the end.** Start it in Sources, with the key messages and the
 audience's Qloo rows as soon as the profile is back, and add each choice, with its evidence, in the stage that decides
@@ -544,7 +544,8 @@ set's own check from *More than one audience*:
 ## Stage 6 — deliver
 
 - **`comp.saveVideo('output.mp4')`** — read its `warnings`. With several audiences, each film to its own
-  `artifacts/final_a.mp4`, `final_b.mp4`…, one script each.
+  `artifacts/final_a.mp4`, `final_b.mp4`…, one script each — **A as well**: the studio shows a film per
+  `final_` letter, and an `output.mp4` beside them reads as no film for that audience.
 - **Then read each film back against its sources**, in a script that rebuilds the composition (`MODE = 'checks'`):
   ```javascript
   const v = await Verify.film(comp, 'output.mp4', { computed: { /* 'text as set': 'its working' */ } });
@@ -558,8 +559,9 @@ set's own check from *More than one audience*:
   figure you computed, which you pass with its working. What comes back:
   - **An unsourced figure** comes out of the film until you find its source.
   - **A missed text** is a reading-time or size fault until you show otherwise: look at its `seconds`.
-  - **A stray** is a reading of text you never set. Look at the frame it saved, `artifacts/verify/stray-n.png`,
-    before you call it anything, then, in a later script, `Verify.stray(n, 'misread')` or `Verify.stray(n, 'real')`. A real one is a
+  - **A stray** is a reading of text you never set. Look at the frame it saved, `artifacts/verify/<film>-stray-n.png`,
+    before you call it anything, then, in a later script, `Verify.stray(n, 'misread')` or `Verify.stray(n, 'real')`; with
+    several films, name the film, `Verify.stray('artifacts/final_b.mp4', n, 'misread')`, since the unnamed form settles the latest check only. A real one is a
     fault: fix it, encode again, and read back again.
 
   The studio's Verification view shows this check to the people judging the film: every word and number on screen,

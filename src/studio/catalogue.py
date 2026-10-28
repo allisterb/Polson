@@ -15,8 +15,12 @@ agent ignores, and the page must not promise more than that.
 
 from __future__ import annotations
 
+import functools
+import json
 import re
+import unicodedata
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from . import projects
 from .runs import StudioError
@@ -58,11 +62,54 @@ EYE_NOTE = "checked by eye, not read back"
 #: Eastern and an Asian audience, say); the run's time, tokens and Qloo budget grow with the count (`intake`).
 MAX_AUDIENCES = 6
 
-#: What the composer's place fields suggest, one region each, in the order the rows appear.
-EXAMPLE_PLACES = ("Tokyo", "Lagos", "Dubai", "Berlin", "São Paulo", "Mumbai")
+#: What the composer's place fields suggest, one region each, in the order the rows appear. Each is a name in `PLACES`.
+EXAMPLE_PLACES = ("Tokyo, Japan", "Lagos, Nigeria", "Dubai, United Arab Emirates", "Berlin, Germany", "São Paulo, Brazil",
+                  "Mumbai, India")
 
-#: A place name as a person types it: letters in any script, spaces and a little punctuation. `Taste` resolves it.
-PLACE = re.compile(r"^[^\W\d_][^\W_]*(?:[ .,'’()-]+[^\W_]+)*\.?$")
+#: The places an audience can be, as the picker offers them: "City, Country" (a region between where two share a name)
+#: and every country. Built by `tools/build_places.py` from Natural Earth's populated places (public domain; ledgered).
+#: **A place is chosen, not typed**: a typo or a bare "Lagos" became whatever Qloo's fuzzy match made of it, and the
+#: country decides the figures' conventions too.
+PLACES_FILE = Path(__file__).parent / "static" / "places.json"
+
+
+def _key(text: str) -> str:
+    """A place as compared: NFC, no invisible format characters, spaces collapsed, case folded."""
+    text = "".join(ch for ch in unicodedata.normalize("NFC", text or "") if unicodedata.category(ch) != "Cf")
+    return " ".join(text.split()).casefold()
+
+
+@functools.lru_cache(maxsize=1)
+def places() -> tuple[dict[str, str], dict[str, list[str]]]:
+    """Every place's exact name by its key (and by its unaccented spelling), and every place by its first part alone,
+    largest first: "lagos" → ["Lagos, Nigeria"]."""
+    data = json.loads(PLACES_FILE.read_text(encoding="utf-8"))
+    exact: dict[str, str] = {}
+    by_name: dict[str, list[str]] = {}
+    for label, ascii_name, _pop, _iso in data["places"]:
+        exact.setdefault(_key(label), label)
+        if ascii_name:
+            exact.setdefault(_key(", ".join([ascii_name, *label.split(", ")[1:]])), label)
+        for first in {label.split(", ")[0], ascii_name} - {""}:
+            by_name.setdefault(_key(first), []).append(label)
+    for country, _iso in data["countries"]:
+        exact.setdefault(_key(country), country)
+    return exact, by_name
+
+
+def resolve_place(text: str) -> str:
+    """The place `text` names, exactly as the list has it. A bare city name that is one place is that place ("Tokyo" →
+    "Tokyo, Japan"). Raises `StudioError` for a name in no row, or for one that is several places, naming them."""
+    exact, by_name = places()
+    if (found := exact.get(_key(text))) is not None:
+        return found
+    matches = by_name.get(_key(text), [])
+    if len(matches) == 1:
+        return matches[0]
+    if matches:
+        raise StudioError(f"{text!r} is {len(matches)} places: {'; '.join(matches[:4])}{'…' if len(matches) > 4 else ''}. "
+                          "Choose one from the list.")
+    raise StudioError(f"{text[:60]!r} is not a place the studio knows. Choose one from the list, such as Mumbai, India.")
 
 
 @dataclass(frozen=True)
@@ -193,6 +240,9 @@ FORMATS: dict[str, tuple[Format, ...]] = {
     "document": (Format(".svg", "Vector"), Format(".png", "Image"), Format(".pdf", "Print")),
 }
 
+#: Whether a film is spoken as well as set on screen. Disabled, every word is on screen and the film is silent.
+NARRATION = Extra("narration", "Narration", ("Enabled", "Disabled"), "Enabled")
+
 CARDS: tuple[Card, ...] = (
     # The workflow is built and measured around 15-second films; longer ones are more encode parts and more
     # clock, so 30 is the most the form offers. A director who wants longer says so in the brief.
@@ -225,9 +275,11 @@ CARDS: tuple[Card, ...] = (
          image="report-explainer.webp", alt="A shareholder letter's question answered on screen: where the capacity is built",
          extras=(Extra("viewer", "Who is watching", placeholder="Who they are, and what they already know", long=True),
                  Extra("questions", "Their questions",
-                       placeholder="One question a line, up to five. For a 10-K or an S-1, optional: its readers' are asked too",
+                       placeholder="One question a line, up to five. Optional for a Form 10-K or S-1: the studio already asks "
+                                   "the questions investors bring to those filings, and yours are answered first.",
                        long=True),
-                 Extra("duration", "Duration", ("45 seconds", "60 seconds"), "45 seconds")),
+                 Extra("duration", "Duration", ("45 seconds", "60 seconds"), "45 seconds"),
+                 NARRATION),
          style_label="Document", type_labels={"report": "Any report", "report.10k": "Form 10-K (annual report)",
                                               "report.s1": "Form S-1 (IPO prospectus)"},
          audiences=True, audiences_optional=True, types=("report", "report.10k", "report.s1"), needs=".pdf"),
@@ -246,7 +298,7 @@ CARDS: tuple[Card, ...] = (
                        long=True, rows=2),
                  Extra("use_of_funds", "Use of funds", placeholder="What the money is for, if the deck does not say", long=True),
                  Extra("duration", "Duration", ("90 seconds", "2 minutes", "3 minutes"), "2 minutes"),
-                 Extra("narration", "Narration", ("A voice", "None: every word on screen"), "A voice")),
+                 NARRATION),
          audiences=True, audiences_optional=True, types=("pitch",), needs=".pdf"),
     # A theorem or concept explained in a film: equations, graphs and narration, every formula and claim checked before
     # it is drawn and the film read back after. The Nebius entry's; the `math_explainer` workflow.
@@ -256,7 +308,7 @@ CARDS: tuple[Card, ...] = (
          extras=(Extra("topic", "Theorem or concept", placeholder="Named as a textbook would name it"),
                  Extra("viewer", "Who is watching", placeholder="Their level, and what they already know", long=True),
                  Extra("duration", "Duration", ("45 seconds", "60 seconds", "90 seconds"), "60 seconds"),
-                 Extra("narration", "Narration", ("A voice", "None: every word on screen"), "A voice"))),
+                 NARRATION)),
     Card("motion-graphic", "Motion graphic", "motion", "Animation · one action, keyed",
          (Route("animation", "One keyed action"),),
          image="motion-graphic.webp", alt="A jointed figure at a railing, one arm swept out toward a boat",
@@ -399,6 +451,9 @@ def parse_audiences(places: list[str], ages: list[str], languages: list[str] | N
     """(place, age band, language) from the form's parallel lists, blank rows dropped. Raises `StudioError`."""
     bands, tongues = {code for code, _ in AGE_BANDS}, {code for code, _ in LANGUAGES}
     languages = languages or []
+    # Too many is said first: it is the whole request's problem, and no single place's.
+    if (given := sum(1 for p in places if (p or "").strip())) > MAX_AUDIENCES:
+        raise StudioError(f"That is {given} audiences; a request takes up to {MAX_AUDIENCES}.")
     found = []
     for i, place in enumerate(places):
         place = " ".join((place or "").split())
@@ -408,8 +463,7 @@ def parse_audiences(places: list[str], ages: list[str], languages: list[str] | N
             if age or lang:
                 raise StudioError("Each audience needs a place, such as a city or a country.")
             continue
-        if len(place) > 60 or not PLACE.match(place):
-            raise StudioError(f"{place[:60]!r} does not read as a place name. Use a city or country, such as Mumbai.")
+        place = resolve_place(place)
         if age and age not in bands:
             raise StudioError("Choose an age band from the list.")
         if lang not in tongues:

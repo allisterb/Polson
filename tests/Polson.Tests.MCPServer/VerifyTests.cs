@@ -193,6 +193,45 @@ public class VerifyTests : TestsRuntime, IDisposable
         Assert.Empty(outcome.Strays);
     }
 
+    /// <summary>
+    /// becool3's Hindi film: every reading dated 0.02–0.1 s ("0:09" written 0.09) and its Devanagari lines misread, so
+    /// only BE COOL could line up once rescaled. As read it saw nothing, so that one line is enough to read it ×100.
+    /// </summary>
+    [Fact]
+    public void TestAReadingThatSeesNothingIsRescaledOnOneLine()
+    {
+        var shown = new[] { Shown("वह फ़िल्मों की दुनिया छोड़कर", 2, 6), Shown("BE COOL", 9.4, 15), Shown("2005 · निर्देशक: एफ़. गैरी ग्रे", 10.4, 15) };
+        FilmReadBack.Reading At(string text, double at) => new(text, at, at + 0.01);
+        var read = new[] { At("वह फ़िल्मों की दुनिया फोड़कर सिगरेट के धुएं में", 0.02), At("BE COOL", 0.09),
+            At("2005 : निर्माता एक्स ने इन इन एसोसिएशन प्रस्तुत", 0.1) };
+
+        Assert.Equal(100d, FilmReadBack.TimeScale(shown, read, 15));
+    }
+
+    /// <summary>
+    /// becool3: lines set one under another came back as one string joined by spaces. The credits were three texts missed
+    /// and a stray; "HE LEFT THE MOVIES" was missed because the reading of both lines paired with the second alone.
+    /// </summary>
+    [Fact]
+    public void TestSetTextsReadRunTogetherAreEachSeen()
+    {
+        var shown = new[] { Shown("HE LEFT THE MOVIES", 2, 6), Shown("FOR THE MUSIC BUSINESS", 2.25, 6), Shown("BE COOL", 9.4, 15),
+            Shown("2005 · DIREÇÃO: F. GARY GRAY", 10.4, 15), Shown("BASEADO NO ROMANCE DE ELMORE LEONARD", 10.4, 15),
+            Shown("Estudo não oficial — sem vínculo com o estúdio ou os distribuidores do filme.", 10.4, 15) };
+        var read = new[] { Read("HE LEFT THE MOVIES FOR THE MUSIC BUSINESS", 2.5), Read("BE COOL", 9.5),
+            Read("2005 - DIREÇÃO: F GARY GRAY BASEADO NO ROMANCE DE ELMORE LEONARD Estudo não oficial - sem vínculo com o estúdio ou os distribuidores do filme", 10) };
+
+        var outcome = FilmReadBack.Match(shown, read);
+
+        Assert.All(outcome.Seen, Assert.NotNull);
+        Assert.Empty(outcome.Strays);
+
+        // A text found in a reading that is mostly something else is seen, and the reading stays a stray to look at.
+        var mixed = FilmReadBack.Match(shown[..2], [Read("HE LEFT THE MOVIES FOR THE MUSIC BUSINESS AND THEN SOMETHING NEVER SET ON SCREEN", 2.5)]);
+        Assert.All(mixed.Seen, Assert.NotNull);
+        Assert.Single(mixed.Strays);
+    }
+
     [Fact]
     public void TestAReadingInSecondsIsNotStretchedToFitEvenWithAMiss()
     {
@@ -295,7 +334,7 @@ public class VerifyTests : TestsRuntime, IDisposable
         Assert.Equal(["different figure", "never set"], strays.Select(s => (string)s["kind"]!));
         Assert.All(strays, s => Assert.True(File.Exists(Path.Combine(root, (string)s["frame"]!)), $"no frame: {s["frameError"]}"));
         Assert.False((bool)result["passed"]!);
-        Assert.Contains("Verify.stray(n, 'misread' | 'real')", (string)result["summary"]!);
+        Assert.Contains("Verify.stray('output.mp4', n, 'misread' | 'real')", (string)result["summary"]!);
 
         Assert.Throws<InvalidOperationException>(() => verify.Stray(1, "misread"));   // not in the script that ran it
         var later = new VerifyToolkit(video, root, session, (type, _) => recorded.Add(type));
@@ -306,6 +345,56 @@ public class VerifyTests : TestsRuntime, IDisposable
         Assert.Equal(["film.verify", "check", "film.stray", "check", "film.stray", "check"], recorded);
         Assert.Throws<ArgumentException>(() => later.Stray(9, "misread"));
         Assert.Throws<ArgumentException>(() => later.Stray(1, "maybe"));
+    }
+
+    /// <summary>
+    /// becool3: films B then C checked in one session. C's <c>stray-1.png</c> overwrote B's, and B's strays could not be
+    /// settled once C was the latest check. Each film's frames carry its name, and a named stray is settled whichever
+    /// film was checked last.
+    /// </summary>
+    [Fact]
+    public async Task TestEachFilmKeepsItsOwnStraysAndTheyAreSettledByName()
+    {
+        if (!FFmpeg.Available || !SkiaSharp.SKFontManager.Default.GetFontFamilies().Contains("Arial"))
+        {
+            Info("Skipped: needs ffmpeg and Arial.");
+            return;
+        }
+        var motion = new MotionToolkit(root);
+        var comp = motion.Composition(new Hashtable { ["width"] = 320d, ["height"] = 180d, ["fps"] = 12d, ["duration"] = 3d });
+        comp.Fill(new Hashtable { ["color"] = "#ffffff" });
+        comp.Text(new Hashtable { ["text"] = "BE COOL", ["family"] = "Arial", ["size"] = 40d, ["origin"] = new[] { 160d, 90d } });
+        comp.SaveVideo("artifacts/final_b.mp4");
+        comp.SaveVideo("artifacts/final_c.mp4");
+
+        var watched = new JsonObject
+        {
+            ["items"] = new JsonArray(new JsonObject { ["text"] = "BE COOL", ["from"] = 0, ["to"] = 3 },
+                new JsonObject { ["text"] = "GHOST", ["from"] = 1, ["to"] = 2 }),
+        }.ToJsonString();
+        using var video = new VideoReader([new NemotronEndpoint(NemotronEndpoint.Nebius, "https://tf.example/v1", "k", NemotronEndpoint.NebiusModel)],
+            new DocumentBudget(5), root, http: new HttpClient(new Answer(watched)));
+        var session = new SessionContext();
+        var verify = new VerifyToolkit(video, root, session);
+        var b = await verify.Film(comp, "artifacts/final_b.mp4");
+        var c = await verify.Film(comp, "artifacts/final_c.mp4");
+
+        string Frame(Dictionary<string, object?> r) => (string)((object?[])r["strays"]!).Cast<Dictionary<string, object?>>().Single()["frame"]!;
+        Assert.Equal("artifacts/verify/final_b-stray-1.png", Frame(b));
+        Assert.Equal("artifacts/verify/final_c-stray-1.png", Frame(c));
+        Assert.True(File.Exists(Path.Combine(root, "artifacts", "verify", "final_b-stray-1.png")));
+        Assert.Throws<InvalidOperationException>(() => verify.Stray("final_b", 1, "misread"));   // not in the script that ran it
+
+        var later = new VerifyToolkit(video, root, session);
+        var settled = later.Stray("artifacts/final_b.mp4", 1, "misread", "the frame shows only BE COOL");
+        object? Verdict(Dictionary<string, object?> r) => ((object?[])r["strays"]!).Cast<Dictionary<string, object?>>().Single()["verdict"];
+        Assert.Equal("misread", Verdict(settled));
+        Assert.Equal("real", Verdict(later.Stray(1, "real")));             // the unnamed form still settles the latest check, C
+        Assert.Equal("misread", Verdict(later.Stray("final_b", 1, "misread")));   // and B's verdict was kept, not C's
+        var unknown = Assert.Throws<ArgumentException>(() => later.Stray("final_a", 1, "misread"));
+        Assert.Contains("'artifacts/final_b.mp4'", unknown.Message);
+        var beyond = Assert.Throws<ArgumentException>(() => later.Stray(2, "misread"));
+        Assert.Contains("Verify.stray('artifacts/final_b.mp4', n, 'misread')", beyond.Message);
     }
 
     /// <summary>A film of three lines and a source line, encoded at 320 × 180 for 3 s, and the reader's answer to it.</summary>

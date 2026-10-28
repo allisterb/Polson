@@ -142,8 +142,8 @@ class CatalogueTests(unittest.TestCase):
         text = c.brief_text(["map.png"])
         self.assertTrue(text.startswith("Lanterns on the water."))
         for line in ("## What to deliver", "Landscape 1920 × 1080 px; Story 1080 × 1920 px", "Formats: .mp4",
-                     "Duration: 30 seconds", "documents/: map.png", "Audience A: Tokyo, aged 45 to 54",
-                     "Audience B: Mumbai, aged 45 to 54", "One film per audience"):
+                     "Duration: 30 seconds", "documents/: map.png", "Audience A: Tokyo, Japan, aged 45 to 54",
+                     "Audience B: Mumbai, India, aged 45 to 54", "One film per audience"):
             self.assertIn(line, text)
 
     def test_a_product_ad_is_a_trailer_of_type_product(self):
@@ -194,6 +194,14 @@ class CatalogueTests(unittest.TestCase):
             self.assertIn(line, text)
         self.assertNotIn("per audience", text)
 
+    def test_a_report_explainer_asks_for_narration_and_passes_it_on(self):
+        """anthropic_s_1_cc's films were silent: the form never asked, and the report type said nothing of a voice."""
+        narration = next(e for e in catalogue.BY_SLUG["report-explainer"].extras if e.key == "narration")
+        self.assertEqual(narration.default, "Enabled")
+        c = catalogue.parse("report-explainer", "NVIDIA explained", "0", "", ["1920x1080"], "", [".mp4"],
+                            {"narration": "Disabled"}, "Explain the annual report.", [], [])
+        self.assertIn("- Narration: Disabled", c.brief_text([]))
+
     def test_a_report_explainers_long_fields_keep_one_question_a_line(self):
         c = catalogue.parse("report-explainer", "NVIDIA explained", "0", "", ["1920x1080"], "", [".mp4"],
                             {"viewer": "Retail investors\nwho know the products", "questions": "How big was revenue?\n\nWhere did it come from?\n"},
@@ -212,7 +220,7 @@ class CatalogueTests(unittest.TestCase):
         self.assertEqual((c.workflow, c.kind), ("motion", "pitch"))
         text = c.brief_text(["uber-2008.pdf"])
         for line in ("- Company: UberCab", "- Told as: A retelling of a past deck", "- Stage: As the deck says",
-                     "- The raise: $1.25M seed", "- Duration: 2 minutes", "- Narration: A voice",
+                     "- The raise: $1.25M seed", "- Duration: 2 minutes", "- Narration: Enabled",
                      "- Files supplied, in documents/: uber-2008.pdf"):
             self.assertIn(line, text)
         self.assertNotIn("Use of funds", text, "a field left blank is not asked for")
@@ -235,25 +243,42 @@ class CatalogueTests(unittest.TestCase):
 
     def test_audiences_are_places_with_an_optional_age_band(self):
         self.assertEqual(catalogue.parse_audiences(["  São   Paulo ", "Mexico City", ""], ["", "55_and_older", ""]),
-                         [("São Paulo", "", ""), ("Mexico City", "55_and_older", "")])
+                         [("São Paulo, Brazil", "", ""), ("Mexico City, Mexico", "55_and_older", "")])
         for places, ages, words in ((["", ""], ["30_to_34", ""], "needs a place"),
-                                    (["<script>"], [""], "place name"),
-                                    (list("ABCDEFG"), [""] * 7, "up to 6")):
+                                    (["<script>"], [""], "not a place the studio knows"),
+                                    (["Tokyo", "Lagos", "Paris", "Lima", "Cairo", "Oslo", "Perth"], [""] * 7, "up to 6")):
             with self.subTest(places=places), self.assertRaisesRegex(StudioError, words):
                 catalogue.parse_audiences(places, ages)
+
+    def test_a_place_is_one_from_the_list_however_it_was_typed(self):
+        """Chosen, not typed: a typo or a bare "Lagos" used to become whatever Qloo's fuzzy match made of it."""
+        resolve = catalogue.resolve_place
+        self.assertEqual(resolve("tokyo"), "Tokyo, Japan")                       # one place: completed
+        self.assertEqual(resolve("Sao Paulo, Brazil"), "São Paulo, Brazil")      # the unaccented spelling
+        self.assertEqual(resolve("  lagos,   NIGERIA "), "Lagos, Nigeria")
+        self.assertEqual(resolve("Japan"), "Japan")                             # a country is an audience too
+        self.assertEqual(resolve("Granada, Spain"), "Granada, Spain")           # the source's hidden mark is gone
+        with self.assertRaisesRegex(StudioError, r"'London' is 3 places: London, United Kingdom; London, Canada"):
+            resolve("London")
+        with self.assertRaisesRegex(StudioError, "not a place the studio knows"):
+            resolve("Mumbia")
+        self.assertIn(resolve("Springfield, Illinois, United States of America"),
+                      "Springfield, Illinois, United States of America")       # a shared name carries its region
+        for example in catalogue.EXAMPLE_PLACES:
+            self.assertEqual(resolve(example), example, "every placeholder is a place the list has")
 
     def test_an_audience_may_be_in_its_own_language_from_the_list(self):
         """English unsaid; another language named on the brief's line and in the record; one not offered refused."""
         two = catalogue.parse("poster", "Seoul", "0", "film", ["1200x1800"], "", [".png"], {}, "A poster.",
-                              places=["Seoul", "London"], ages=["25_to_29", ""], languages=["ko", ""])
-        self.assertEqual([("Seoul", "25_to_29", "ko"), ("London", "", "")], two.audiences)
+                              places=["Seoul", "London, United Kingdom"], ages=["25_to_29", ""], languages=["ko", ""])
+        self.assertEqual([("Seoul, South Korea", "25_to_29", "ko"), ("London, United Kingdom", "", "")], two.audiences)
         text = two.brief_text([])
-        self.assertIn("Audience A: Seoul, aged 25 to 29, in Korean", text)
-        self.assertIn("Audience B: London\n", text)
+        self.assertIn("Audience A: Seoul, South Korea, aged 25 to 29, in Korean", text)
+        self.assertIn("Audience B: London, United Kingdom\n", text)
         self.assertEqual(("ko", "Korean"), (two.record()["audiences"][0]["language"], two.record()["audiences"][0]["languageLabel"]))
         cairo = catalogue.parse("poster", "Cairo", "0", "film", ["1200x1800"], "", [".png"], {}, "A poster.",
                                 places=["Cairo"], ages=[""], languages=["ar"])
-        self.assertIn("Audience A: Cairo, in Arabic (its text checked by eye, not read back", cairo.brief_text([]))
+        self.assertIn("Audience A: Cairo, Egypt, in Arabic (its text checked by eye, not read back", cairo.brief_text([]))
         self.assertFalse(cairo.record()["audiences"][0]["readBack"])
         self.assertTrue(two.record()["audiences"][0]["readBack"])
         for bad in ("he", "fa", "Klingon"):
@@ -268,7 +293,7 @@ class CatalogueTests(unittest.TestCase):
         self.assertEqual([], none.audiences)
         two = catalogue.parse("report-explainer", "NVDA", "0", "", ["1920x1080"], "", [".mp4"], {}, "Explain the 10-K.",
                               places=["Mumbai", "Tokyo"], ages=["35_to_44", ""])
-        self.assertEqual([("Mumbai", "35_to_44", ""), ("Tokyo", "", "")], two.audiences)
+        self.assertEqual([("Mumbai, India", "35_to_44", ""), ("Tokyo, Japan", "", "")], two.audiences)
         text = two.brief_text([])
         self.assertIn("Audience A: Mumbai", text)
         self.assertIn("One film per audience", text)
@@ -451,6 +476,12 @@ class FrontRoutingTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertEqual(self.client.get(path).status_code, 200)
 
+    def test_a_compose_page_has_no_new_request_button_beside_its_start(self):
+        """It sat just above "Start in the studio", and one was clicked meaning the other."""
+        self.assertNotIn("New request</a>", self.client.get("/compose/film-trailer").text)
+        for path in ("/home", "/workflows", "/requests"):
+            self.assertIn("New request</a>", self.client.get(path).text, path)
+
     def test_the_stylesheets_and_script_are_served(self):
         for path in ("/static/polson.css", "/static/front.css", "/static/front.js", "/static/gallery/storyboard.webp"):
             self.assertEqual(self.client.get(path).status_code, 200, path)
@@ -523,7 +554,7 @@ class FrontRoutingTests(unittest.TestCase):
         self.assertEqual((handed["workflow"], handed["kind"]), ("poster", "film"))
         self.assertIn("Formats: .png, .pdf", handed["brief"])
         self.assertIn("Headline: Autumn at the Lantern", handed["brief"])
-        self.assertIn("Audience A: Lisbon, aged 55 and older", handed["brief"])
+        self.assertIn("Audience A: Lisbon, Portugal, aged 55 and older", handed["brief"])
         self.assertIn("documents/: menu notes.txt", handed["brief"])
 
         made = self.root / "autumn-menu-poster"
@@ -659,6 +690,21 @@ class FrontRoutingTests(unittest.TestCase):
         self.assertNotIn("data-say", page, "a record nobody is driving here has no one to speak to")
         with mock.patch.object(front, "can_say", return_value=True):
             self.assertIn("Say something to the studio", self.client.get("/requests/harbour").text)
+
+    def test_the_brief_is_shown_as_a_document_and_what_was_typed_into_it_stays_text(self):
+        p = project_dir(self.root, "harbour", workflow="drawing")
+        events(p, {"type": "run.start"})
+        (p / "brief.md").write_text("# Brief — harbour\n\n| Parameter | Value |\n| :-- | :-- |\n| Length | 15 s |\n\n"
+                                    "<script>alert(1)</script> **bold**\n", encoding="utf-8")
+        page = self.client.get("/requests/harbour").text
+        brief = page.split('fr-brief-doc')[1].split("</details>")[0]
+        self.assertIn("<h1>Brief — harbour</h1>", brief)
+        self.assertIn("<table>", brief)
+        self.assertIn("<strong>bold</strong>", brief)
+        self.assertNotIn("<script>", brief)
+        self.assertIn("&lt;script&gt;", brief)
+        self.assertIn(">Developer view</a>", page)
+        self.assertNotIn("Open the full record", page)
 
     def test_a_request_with_a_record_has_the_qloo_views_hidden_until_there_is_something_to_show(self):
         p = project_dir(self.root, "harbour", workflow="poster")
@@ -872,7 +918,7 @@ class CommissionedComposerTests(unittest.TestCase):
         self.assertNotIn("Let the studio choose", page)
 
     def test_a_startup_pitch_is_commissioned_as_a_pitch_trailer_with_its_deck(self):
-        data = self.trailer("startup-pitch", x_company="UberCab", aud_place=["Singapore", "London"])
+        data = self.trailer("startup-pitch", x_company="UberCab", aud_place=["Singapore", "London, United Kingdom"])
         reply = self.client.post("/requests", data=data, files=[("files", ("deck.pdf", b"%PDF-1.4", "application/pdf"))],
                                  follow_redirects=False)
         self.assertEqual(reply.status_code, 303, reply.text[:300])
