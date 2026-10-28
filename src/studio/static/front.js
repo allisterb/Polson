@@ -371,9 +371,38 @@
     var badge = document.querySelector('.ps-nav-badge'); if (badge) badge.remove();
   }
 
+  // Speaking to the studio while it works. Sent at once and taken at the agent's next step; the words appear in the Agent
+  // view as soon as they are recorded, which is the moment they are sent, not the moment they are read.
+  var say = page.querySelector('[data-say]');
+  if (say) {
+    var sayForm = say.querySelector('[data-say-form]'), sayStatus = say.querySelector('[data-say-status]');
+    var sayHint = sayStatus.textContent, sayButton = sayForm.querySelector('button');
+    sayForm.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var field = sayForm.querySelector('textarea'), text = field.value.trim();
+      if (!text) return;
+      sayButton.disabled = true; sayStatus.textContent = 'Sending…';
+      fetch(base + '/runs/' + encodeURIComponent(run) + '/say', { method: 'POST', body: new FormData(sayForm) })
+        .then(function (r) { return r.json().then(function (b) { if (!r.ok) throw new Error(b.detail || r.status); return b; }); })
+        .then(function () {
+          field.value = '';
+          var sent = 'Sent. The agent will see it at its next step, and it is in the Agent view now.';
+          sayStatus.textContent = sent;
+          // Back to the hint, unless the delivery has been reported meanwhile.
+          setTimeout(function () { if (sayStatus.textContent === sent) sayStatus.textContent = sayHint; }, 8000);
+        }, function (e) { sayStatus.textContent = 'Not sent: ' + e.message; })
+        .then(function () { sayButton.disabled = false; });
+    });
+    // Ctrl or Cmd + Enter sends, as in most composers; Enter alone is a new line.
+    sayForm.querySelector('textarea').addEventListener('keydown', function (ev) {
+      if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); sayForm.requestSubmit(); }
+    });
+  }
+
   var stoppedOnce = false;
   function deliver(status) {
     clearBadge();
+    if (say) say.hidden = true;     // nothing is listening once the run has ended
     // The record has two endings (the server's and the agent's) in either order; a stop is never undone by the other.
     if (status === 'stopped') stoppedOnce = true;
     if (stoppedOnce) status = 'stopped';
@@ -1017,6 +1046,12 @@
       if (!(e.text || e.message)) return;
       var opening = rows <= 1;
       row(opening ? 'meta' : 'you', opening ? 'Opening' : 'You', e.ts, e.text || e.message);
+    },
+    // The agent took what you said, at its next tool call (adk_agent.interject records it).
+    'message.delivered': function (e) {
+      row('meta', 'Delivered', e.ts, e.lines > 1 ? 'The agent has your ' + e.lines + ' messages.' : 'The agent has your message.');
+      var status = page.querySelector('[data-say-status]');
+      if (status) status.textContent = 'Delivered: the agent has it.';
     },
     'research.started': function (e) { row('tool', 'Researching', e.ts, R.detail('research.started', e)); doing('Researching: ' + (e.description || '')); },
     'research.completed': function (e) { row('tool', 'Research done', e.ts, e.description || ''); },

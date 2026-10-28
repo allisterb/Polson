@@ -120,6 +120,13 @@ label.ps-asset-upload { box-sizing: border-box; width: 148px; }
 .fr-docs a { color: var(--ink); text-decoration: none; font-weight: 500; }
 .fr-docs a:hover, .fr-docs a[aria-current] { color: var(--accent); }
 
+/* Speaking to the studio while it works. */
+.fr-say[hidden] { display: none; }
+.fr-say form { display: grid; gap: var(--space-2); margin-top: var(--space-2); }
+.fr-say textarea { width: 100%; box-sizing: border-box; resize: vertical; min-height: 56px; font: inherit; }
+.fr-say-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.fr-say-foot .fr-small { margin: 0; }
+
 /* The Deliverables tab: the finished work and what the studio wrote beside what it learned, the reader under both. */
 .fr-deliver { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(300px, 1fr); gap: var(--space-6); align-items: start;
   max-width: 1320px; margin: 0 auto; padding: var(--space-6) var(--space-6) var(--space-8); box-sizing: border-box; }
