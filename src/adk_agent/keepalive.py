@@ -15,8 +15,10 @@ and still scales to zero. Two details carry the weight, and both were found by m
 - **Renewal overlaps.** A hold is replaced before Cloud Run's 3600 s request limit, and the old one is closed only
   once the new one is up, so there is never a moment with no request and a throttled reopen to wait for.
 
-It reaches *this* instance only because the service runs one (`--max-instances=1`); with more, the held request
-could land on another. Unset `POLSON_SELF_URL` (a developer's machine) and it does nothing, said once in the log.
+It reaches *this* instance because the service runs one (`--max-instances=1`) — **usually**. Cloud Run starts a second
+anyway at times (2026-10-29, "Reason: AUTOSCALING", sixteen minutes into a run), and then the held request can land on
+the other: refused there, it asks again until it lands here (`SIBLING_SECONDS`), and keeps the session-affinity cookie of
+the one that did, so with affinity on (`--session-affinity`) its renewals stay here. Unset `POLSON_SELF_URL` (a developer's machine) and it does nothing, said once in the log.
 
 Measured with renewals: the probe held 177–188 million iterations per 10 s from its first window to its last. Closing
 an old hold from this side does **not** end it on the server (Cloud Run's front end does not pass the disconnect
@@ -74,6 +76,17 @@ RETRY_SECONDS = 15.0
 #: (409), and the sender stops: the traffic it would need no longer reaches it.
 INSTANCE = uuid.uuid4().hex
 INSTANCE_HEADER = "X-Polson-Keepalive-Instance"
+
+#: The refusing instance's revision (`K_REVISION`), sent back with the 409, because **a refusal from this same revision
+#: means something else**: a sibling instance, which Cloud Run starts despite `--max-instances 1` ("Reason: AUTOSCALING",
+#: 2026-10-29). There the traffic still reaches this instance, so the hold asks again every `SIBLING_SECONDS` until it
+#: lands here. Stopping, as for a newer revision, left that run with no CPU: it stalled mid-run.
+REVISION_HEADER = "X-Polson-Keepalive-Revision"
+SIBLING_SECONDS = 3.0
+
+#: Cloud Run's session-affinity cookie from the last hold that reached this instance, sent with every hold after, so a
+#: renewal stays here when the service has affinity on. A refusal clears it: it would pin the hold to the wrong one.
+_affinity = httpx.Cookies()
 
 #: The longest any one run is held, whatever it asks for. A run that hangs instead of ending must not keep an instance
 #: billed for good; past this it carries on unheld, and the log says so.
@@ -133,8 +146,8 @@ def mount(app: FastAPI) -> None:
     async def hold(request: Request) -> Response:
         sender = request.headers.get(INSTANCE_HEADER)
         if sender and sender != INSTANCE:
-            return PlainTextResponse("held for another instance; it does not receive this service's traffic\n",
-                                     status_code=409, headers={"Cache-Control": "no-store"})
+            return PlainTextResponse("held for another instance\n", status_code=409,
+                                     headers={"Cache-Control": "no-store", REVISION_HEADER: os.environ.get("K_REVISION", "")})
         return StreamingResponse(_hold_body(), media_type="text/plain",
                                  headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
 
@@ -168,15 +181,20 @@ def _ensure() -> None:
 
 async def _hold_once(make: Callable[[], httpx.AsyncClient], up: asyncio.Event) -> str | None:
     """One held request, from opening to its end. Sets `up` at the first byte; never raises.
-    Returns "elsewhere" when it reached another instance, which no hold from here can help."""
+    Returns "sibling" when it reached another instance of this revision, and "elsewhere" when it reached a newer
+    revision's, which no hold from here can help."""
     try:
         async with make() as web:
+            web.cookies.update(_affinity)
             async with web.stream("GET", SELF_URL + HOLD_PATH, headers=await _headers(web)) as answer:
                 if answer.status_code == 409:
-                    return "elsewhere"
+                    _affinity.clear()
+                    mine = os.environ.get("K_REVISION", "")
+                    return "sibling" if mine and answer.headers.get(REVISION_HEADER) == mine else "elsewhere"
                 if answer.status_code != 200:
                     _logger.error("keepalive: the held request was refused with %d", answer.status_code)
                     return None
+                _affinity.update(answer.cookies)
                 async for _ in answer.aiter_bytes():
                     up.set()
     except asyncio.CancelledError:
@@ -187,11 +205,13 @@ async def _hold_once(make: Callable[[], httpx.AsyncClient], up: asyncio.Event) -
 
 
 async def _hold_loop(client: Callable[[], httpx.AsyncClient] | None = None, retry: float | None = None,
-                     renew: float | None = None, opening: float | None = None) -> None:
+                     renew: float | None = None, opening: float | None = None, sibling: float | None = None) -> None:
     """Holds a request to this service open while any run works: a new one beside the old, then the old let go."""
     retry = RETRY_SECONDS if retry is None else retry
     renew = RENEW_SECONDS if renew is None else renew
     opening = OPEN_SECONDS if opening is None else opening
+    sibling = SIBLING_SECONDS if sibling is None else sibling
+    said_sibling = False
     make = client or (lambda: httpx.AsyncClient(timeout=httpx.Timeout(10.0, read=TICK_SECONDS * 3)))
     _logger.warning("keepalive: holding %s while %d run(s) work", SELF_URL + HOLD_PATH, active())
     current: asyncio.Task | None = None
@@ -203,6 +223,13 @@ async def _hold_loop(client: Callable[[], httpx.AsyncClient] | None = None, retr
             await asyncio.wait({nxt, waiting}, timeout=opening, return_when=asyncio.FIRST_COMPLETED)
             waiting.cancel()
             if not up.is_set():
+                if nxt.done() and nxt.result() == "sibling":
+                    if not said_sibling:
+                        said_sibling = True
+                        _logger.warning("keepalive: the hold reached another instance of this revision (Cloud Run "
+                                        "started a second); asking again until it reaches this one")
+                    await asyncio.sleep(sibling)
+                    continue
                 if nxt.done() and nxt.result() == "elsewhere":
                     _logger.warning("keepalive: the service's traffic now reaches another instance (a newer "
                                     "revision); this one can no longer be held, so it stops asking")

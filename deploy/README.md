@@ -114,13 +114,17 @@ leaves the keepalive quietly holding nothing, and a run nobody watches stops (`s
 ```powershell
 $URL = "https://$S-$N.$R.run.app"
 gcloud run deploy $S --source . --project $P --region $R `
-  --no-allow-unauthenticated --cpu 4 --memory 4Gi --max-instances 1 --timeout 3600 `
+  --no-allow-unauthenticated --cpu 4 --memory 4Gi --max-instances 1 --timeout 3600 --session-affinity `
   --set-secrets "POLSON_AGENT_PLATFORM_KEY=polson-agent-key:latest,POLSON_PARALLEL_KEY=polson-parallel-key:latest,POLSON_QLOO_KEY=polson-qloo-key:latest" `
   --set-env-vars "^;^POLSON_SELF_URL=$URL;POLSON_ARTIFACT_SERVICE_URI=gs://$B;POLSON_MIRROR_URI=gs://$B/studio;POLSON_ASK_SECONDS=300;POLSON_MAX_CREDIT_SECONDS=900;POLSON_BUDGET_TOKENS=3000000;POLSON_QLOO_BUDGET=360;POLSON_ASSETS_BUDGET=30;POLSON_RESEARCH_PROCESSOR=core;ADK_MAX_LLM_CALLS=500;POLSON_PEEK_STABLE_NAME=1;POLSON_ALLOW_ORIGINS=http://127.0.0.1:8080,http://localhost:8080"
 gcloud run services add-iam-policy-binding $S --project $P --region $R --member "serviceAccount:$SA" --role roles/run.invoker
 ```
 
-`^;^` makes `;` the separator, because `POLSON_ALLOW_ORIGINS` contains a comma. The invoker grant is what lets the
+`^;^` makes `;` the separator, because `POLSON_ALLOW_ORIGINS` contains a comma. `--session-affinity` keeps a
+browser on the instance running its run: Cloud Run sometimes starts a second instance despite `--max-instances 1`, and
+without affinity the run page's requests went to the new one, which knew nothing of the run.
+`POLSON_ALLOW_ORIGINS` is what lets a run start through `gcloud run services proxy`; without it ADK refuses the form with
+*origin not allowed*. The invoker grant is what lets the
 keepalive reach a private service.
 
 This deploy is **private**: only accounts with `roles/run.invoker` reach it, so it runs without basic auth and needs

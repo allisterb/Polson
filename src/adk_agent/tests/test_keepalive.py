@@ -233,6 +233,46 @@ class HoldLoopTests(KeepaliveTestCase):
         self.assertEqual(asked, [keepalive.INSTANCE], "one ask, carrying this instance's id, then it stops")
         self.assertTrue(any("another instance" in line for line in log.output))
 
+    async def test_a_hold_reaching_a_newer_revision_stops_the_asking(self):
+        async def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(409, headers={keepalive.REVISION_HEADER: "svc-00004"})
+
+        run = self.working(5)
+        try:
+            with mock.patch.object(keepalive, "SELF_URL", "https://self.invalid"), \
+                 mock.patch.dict(os.environ, {"POLSON_BASIC_AUTH": "", "K_SERVICE": "", "K_REVISION": "svc-00003"}):
+                await asyncio.wait_for(keepalive._hold_loop(self.client(handler), retry=0.01, sibling=0.01), 2)
+        finally:
+            run.cancel()
+        self.assertFalse(keepalive._held.is_set())
+
+    async def test_a_hold_reaching_a_sibling_asks_again_until_it_lands_here_and_keeps_its_cookie(self):
+        """2026-10-29: Cloud Run started a second instance of the same revision mid-run, the hold landed there, was
+        refused, and the loop stopped asking — the run lost its CPU. A sibling's refusal is now asked again, and the
+        affinity cookie of the hold that landed here is sent with the next, so a renewal stays here."""
+        cookies: list[str | None] = []
+        answers = iter(["sibling", "sibling", "here", "here"])
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            cookies.append(request.headers.get("cookie"))
+            if next(answers, "here") == "sibling":
+                return httpx.Response(409, headers={keepalive.REVISION_HEADER: "svc-00003"})
+            await asyncio.sleep(0.02)
+            return httpx.Response(200, content=b"held\n", headers={"set-cookie": "GAESA=pinned-here; path=/"})
+
+        keepalive._affinity.clear()
+        self.addCleanup(keepalive._affinity.clear)
+        self.working(0.3)
+        with mock.patch.object(keepalive, "SELF_URL", "https://self.invalid"), \
+             mock.patch.dict(os.environ, {"POLSON_BASIC_AUTH": "", "K_SERVICE": "", "K_REVISION": "svc-00003"}), \
+             self.assertLogs("polson.keepalive", "WARNING") as log:
+            await asyncio.wait_for(keepalive._hold_loop(self.client(handler), retry=0.01, sibling=0.01), 3)
+
+        self.assertGreaterEqual(len(cookies), 4, "asked again after each sibling's refusal, then held and renewed")
+        self.assertEqual(cookies[:3], [None, None, None], "no cookie until a hold has landed here")
+        self.assertIn("GAESA=pinned-here", cookies[3], "the next hold carries the affinity of the one that landed here")
+        self.assertTrue(any("another instance of this revision" in line for line in log.output))
+
 
 class HeldTests(KeepaliveTestCase):
 
@@ -309,6 +349,9 @@ class MountTests(unittest.TestCase):
 
         self.assertEqual(other.status_code, 409)
         self.assertEqual(own.status_code, 200)
+        with mock.patch.dict(os.environ, {"K_REVISION": "svc-00003"}):
+            refused = client.get("/keepalive/hold", headers={keepalive.INSTANCE_HEADER: "someone-else"})
+        self.assertEqual(refused.headers[keepalive.REVISION_HEADER], "svc-00003", "so the sender can tell a sibling")
 
     def test_the_probe_exists_only_when_asked_for(self):
         """A CPU burner is a measurement, never part of a deployment."""
