@@ -1784,6 +1784,12 @@ internal abstract class MotionLayer
     /// </summary>
     internal virtual bool IsVoid(double time) => false;
 
+    /// <summary>
+    /// The ink the layer lays down at its <paramref name="time"/>, as a path in its stack's units, for <c>boundsAt</c>; null for
+    /// a layer with no outline of its own (a fill, a gradient, a filter, a drawn layer) or one inverted to cover everything.
+    /// </summary>
+    internal virtual SKPath? Ink(double time) => null;
+
     /// <summary>Draws the layer's content at a time, at <paramref name="amount"/> opacity.</summary>
     protected abstract void Draw(SkiaCanvas surface, double time, double amount);
 
@@ -1887,6 +1893,15 @@ internal abstract class MotionLayer
             surface.SkCanvas.DrawPath(path, paint);
         }
 
+        internal override SKPath? Ink(double time)
+        {
+            if (invert) return null;
+            var p = origin.Evaluate(time);
+            var path = new SKPath();
+            path.AddCircle((float)p[0], (float)p[1], (float)Math.Abs(radius.Evaluate(time)[0]));
+            return path;
+        }
+
         public override XElement ToSif(SifWriter sif) => Element("circle", "0.2", sif,
             sif.Param("color", color), sif.Param("radius", radius),
             SifWriter.Param("feather", new XElement("real", new XAttribute("value", "0"))),
@@ -1959,6 +1974,14 @@ internal abstract class MotionLayer
                 path.Close();
             }
             surface.SkCanvas.DrawPath(path, paint);
+        }
+
+        internal override SKPath? Ink(double time)
+        {
+            if (invert) return null;
+            var path = new SKPath();
+            path.AddRect(Bounds(time));
+            return path;
         }
 
         /// <summary>The outline as SVG path data at a time: four sides, or four sides with Synfig's quadratic corners.</summary>
@@ -2135,6 +2158,15 @@ internal abstract class MotionLayer
             canvas.Restore();
         }
 
+        /// <summary>The picture's rectangle, transparent pixels and all.</summary>
+        internal override SKPath? Ink(double time)
+        {
+            var (a, b) = (tl.Evaluate(time), br.Evaluate(time));
+            var path = new SKPath();
+            path.AddRect(new SKRect((float)Math.Min(a[0], b[0]), (float)Math.Min(a[1], b[1]), (float)Math.Max(a[0], b[0]), (float)Math.Max(a[1], b[1])));
+            return path;
+        }
+
         public override XElement ToSif(SifWriter sif) => Element("import", "0.1", sif,
             sif.Param("tl", tl), sif.Param("br", br),
             SifWriter.Param("c", new XElement("integer", new XAttribute("value", interpolation))),
@@ -2293,6 +2325,8 @@ internal abstract class MotionLayer
             using var paint = Paint(Color.Evaluate(time), amount);
             surface.SkCanvas.DrawPath(path, paint);
         }
+
+        internal override SKPath? Ink(double time) => invert ? null : Path(time, out _);
 
         public override XElement ToSif(SifWriter sif) => Element("region", "0.1", sif, ShapeParams(sif));
 
@@ -2544,22 +2578,53 @@ internal abstract class MotionLayer
                     return;
                 }
 
-                // The visible part, in one piece where a looped outline's trim runs on round its seam. Each span is taken into a
-                // path of its own: SkiaSharp's GetSegment replaces its destination rather than appending to it, as Skia's does.
-                using var measure = new SKPathMeasure(path, false);
-                using var part = new SKPath();
-                for (var i = 0; i < spans.Length; i++)
-                {
-                    using var piece = new SKPath();
-                    measure.GetSegment((float)spans[i].A, (float)spans[i].B, piece, true);
-                    part.AddPath(piece, i > 0 && Loop ? SKPathAddMode.Extend : SKPathAddMode.Append);
-                }
+                using var part = Part(path, spans);
                 canvas.DrawPath(part, paint);
                 return;
             }
 
             using var shape = whole ? Tapered(states, w) : TaperedSpans(states, w, spans);
             canvas.DrawPath(shape, paint);
+        }
+
+        /// <summary>The stroke as filled geometry: what <see cref="Draw"/> paints, trim, caps and joins included.</summary>
+        internal override SKPath? Ink(double time)
+        {
+            using var path = Path(time, out var states);
+            if (states.Length == 0) return null;
+            var w = width.Evaluate(time)[0];
+            var (length, spans) = Trim(path, time);
+            if (spans.Length == 0) return null;
+            var whole = spans.Length == 1 && spans[0].A <= 1e-9 && spans[0].B >= length - 1e-9;
+            if (!states.All(s => Math.Abs(s.Width - states[0].Width) < 1e-9))
+                return whole ? Tapered(states, w) : TaperedSpans(states, w, spans);
+
+            using var paint = new SKPaint
+            {
+                Style = SKPaintStyle.Stroke,
+                StrokeWidth = (float)Math.Abs(w * states[0].Width),
+                StrokeCap = roundTips ? SKStrokeCap.Round : SKStrokeCap.Butt,
+                StrokeJoin = sharpCusps ? SKStrokeJoin.Miter : SKStrokeJoin.Round,
+            };
+            using var visible = whole ? new SKPath(path) : Part(path, spans);
+            return paint.GetFillPath(visible);
+        }
+
+        /// <summary>
+        /// The visible part, in one piece where a looped outline's trim runs on round its seam. Each span is taken into a
+        /// path of its own: SkiaSharp's GetSegment replaces its destination rather than appending to it, as Skia's does.
+        /// </summary>
+        private SKPath Part(SKPath path, (double A, double B)[] spans)
+        {
+            using var measure = new SKPathMeasure(path, false);
+            var part = new SKPath();
+            for (var i = 0; i < spans.Length; i++)
+            {
+                using var piece = new SKPath();
+                measure.GetSegment((float)spans[i].A, (float)spans[i].B, piece, true);
+                part.AddPath(piece, i > 0 && Loop ? SKPathAddMode.Extend : SKPathAddMode.Append);
+            }
+            return part;
         }
 
         /// <summary>
@@ -2778,8 +2843,15 @@ internal abstract class MotionLayer
             rotateX = o.Node("rotateX", MotionType.Angle, 0d);
             rotateY = o.Node("rotateY", MotionType.Angle, 0d);
             Is3D = o.Has("z") || o.Has("rotateX") || o.Has("rotateY");
-            keepSize = o.Bool("keepSize", false);
-            if (keepSize && !Is3D)
+            // true: as the camera sees it at time 0; a number: at that second, the moment the planes must line up.
+            keepSizeAt = !o.Has("keepSize") ? null : o.Raw("keepSize") switch
+            {
+                false => null,
+                true => 0d,
+                double or int or long or float when Convert.ToDouble(o.Raw("keepSize"), CultureInfo.InvariantCulture) is var s && double.IsFinite(s) && s >= 0 => s,
+                _ => throw new ArgumentException($"{o.Who}'s keepSize is true, or the second its planes must line up at: keepSize: 9.6."),
+            };
+            if (keepSizeAt is not null && !Is3D)
                 throw new ArgumentException($"{o.Who}'s keepSize holds a plane at depth to its size at z 0; give the group a z, or drop keepSize.");
             origin = o.Node("origin", MotionType.Vector, new[] { 0d, 0d });
             offset = o.Node("offset", MotionType.Vector, new[] { 0d, 0d });
@@ -2807,7 +2879,7 @@ internal abstract class MotionLayer
 
         private readonly MotionGroup children;
         private readonly MotionNode origin, offset, angle, skewAngle, scale, z, rotateX, rotateY;
-        private readonly bool keepSize;
+        private readonly double? keepSizeAt;
         private readonly MotionPin? pin;
 
         /// <summary>A plane the camera sees in perspective: given <c>z</c>, <c>rotateX</c> or <c>rotateY</c>.</summary>
@@ -2954,17 +3026,22 @@ internal abstract class MotionLayer
 
         /// <summary>
         /// The plane's world matrix: its own after its parent's. With <c>keepSize</c> it is also scaled about the camera's
-        /// target by <c>(distance − targetZ + z) / (distance − targetZ)</c>, all read at time 0, so at the film's start it looks
-        /// exactly as it would at z 0 — a poster split into planes at depths is unchanged until the camera moves, and then
-        /// each plane moves at its depth. Exact when the camera looks straight on at time 0; a plane inside another 3D plane
-        /// counts only its own z.
+        /// target by <c>(distance − targetZ + z) / (distance − targetZ)</c>, all read at one moment — time 0, or the second
+        /// <c>keepSize</c> names — so at that moment it looks exactly as it would at z 0: a poster split into planes at depths
+        /// is unchanged then, and each plane moves at its depth either side of it. Exact when the camera looks straight on
+        /// at that moment; a plane inside another 3D plane counts only its own z.
         /// </summary>
+        /// <remarks>
+        /// The moment matters when the target moves. becool4 keyed an off-centre opening target over concentric planes; read
+        /// at time 0, they were scaled about that point, and the record stayed eccentric through the resolve twelve seconds
+        /// later. Read at the resolve, they line up there, which is where the design needed it.
+        /// </remarks>
         private Mat4 World(MotionSpace parent, double time)
         {
             var world = parent.World * Local4(time);
-            if (!keepSize || children.Root?.CameraTargetAt(0) is not { } rest) return world;
+            if (keepSizeAt is not { } at || children.Root?.CameraTargetAt(at) is not { } rest) return world;
             var near = rest.Distance - rest.Z;
-            var k = (near + z.Evaluate(0)[0]) / near;
+            var k = (near + z.Evaluate(at)[0]) / near;
             return Mat4.Translate(rest.X, rest.Y, 0) * Mat4.Rows(k, 0, 0, 0, 0, k, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)
                 * Mat4.Translate(-rest.X, -rest.Y, 0) * world;
         }

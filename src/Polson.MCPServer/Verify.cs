@@ -16,6 +16,7 @@ using Polson.Animation;
 using Polson.Drawing.Skia;
 using Polson.Drawing.Svg;
 using Polson.ExtendedMind.DocumentProcessing;
+using Polson.ExtendedMind.ParallelSearch;
 using SkiaSharp;
 using Svg;
 
@@ -51,13 +52,15 @@ public sealed partial class VerifyToolkit
     /// <param name="projectRoot">Where the piece, the brief and the documents are; nothing outside it is read or written.</param>
     /// <param name="session">Holds the Qloo answers and research this session fetched, and the latest check for <see cref="Stray"/>.</param>
     /// <param name="record">Records <c>film.verify</c> / <c>image.verify</c> and their strays for the studio's Verification view.</param>
+    /// <param name="facts">Checks the <c>sources</c> option's stated facts on the web; null and they are recorded as unchecked.</param>
     public VerifyToolkit(VideoReader? video, string? projectRoot, SessionContext? session,
-        Action<string, IReadOnlyDictionary<string, object?>>? record = null)
+        Action<string, IReadOnlyDictionary<string, object?>>? record = null, FactChecker? facts = null)
     {
         this.video = video;
         this.projectRoot = projectRoot;
         this.session = session;
         this.record = record;
+        this.facts = facts;
     }
     #endregion
 
@@ -66,13 +69,14 @@ public sealed partial class VerifyToolkit
     /// The film checked against what it set and where that came from: <c>{ ok, passed, items, strays, counts, summary }</c>,
     /// or <c>{ ok: false, failureName, error, remedy }</c> when the watcher could not watch (<c>Pending</c>: run it again
     /// unchanged). <paramref name="options"/>: <c>{ computed?: { 'text as set': 'its working' } }</c> for figures the script
-    /// computed from sourced ones.
+    /// computed from sourced ones; <c>{ sources?: { 'text as set': { about, claim } } }</c> for a fact no document holds,
+    /// checked on the web.
     /// </summary>
     public async Task<Dictionary<string, object?>> Film(MotionComposition comp, string videoPath, object? options = null)
     {
         ArgumentNullException.ThrowIfNull(comp);
         if (string.IsNullOrWhiteSpace(videoPath)) throw new ArgumentException("Verify.film needs the encoded film: Verify.film(comp, 'output.mp4').");
-        var (computed, _, ignored, scale) = Options(options, "Verify.film", allowName: false);
+        var (computed, _, ignored, scale, stated) = Options(options, "Verify.film", allowName: false);
         if (video is null || !video.IsAvailable)
             return Failed("NotConfigured", "No reader is configured, so nothing can watch the film.", NoReader);
 
@@ -165,6 +169,7 @@ public sealed partial class VerifyToolkit
                 FilmReadBack.Unreadable(s.Reading.Text, Devanagari) ? "unreadable script" : s.Kind);
         }).ToList();
 
+        await Attest(items, stated, t => sources.Wholly(t, computed, scale));
         return Hold(new FilmCheck(videoPath, comp.Duration, items, strays, answer.Provenance?.Model, answer.Provenance?.Endpoint)
             { Hash = Hash(full), Ignored = ignored, UnreadableScripts = Scripts, TimeScale = timeScale, Watched = over is null ? null : watched, FilmBytes = over, Limit = limit });
     }
@@ -173,11 +178,11 @@ public sealed partial class VerifyToolkit
     /// A still checked the same way: every line of text <paramref name="source"/> drew (a canvas, its context, or a paper),
     /// where each came from, and whether a reader of the rendered image read it as set. The image read is the source's
     /// pixels now, saved as <c>artifacts/verify/&lt;name&gt;.png</c>; so check the piece as delivered, after everything is
-    /// drawn. <paramref name="options"/>: <c>{ computed?, name? }</c>, <c>name</c> defaulting to <c>'image'</c>.
+    /// drawn. <paramref name="options"/>: <c>{ computed?, sources?, name? }</c>, <c>name</c> defaulting to <c>'image'</c>.
     /// </summary>
     public async Task<Dictionary<string, object?>> Image(object source, object? options = null)
     {
-        var (computed, name, ignored, scale) = Options(options, "Verify.image", allowName: true);
+        var (computed, name, ignored, scale, stated) = Options(options, "Verify.image", allowName: true);
         var still = Still.Of(source);
         if (video is null || !video.IsAvailable)
             return Failed("NotConfigured", "No reader is configured, so nothing can read the image.", NoReader);
@@ -243,6 +248,7 @@ public sealed partial class VerifyToolkit
             return new ReadBackStray(i + 1, Raw(s.Reading.Text)!, null, error is null ? crop : imagePath, error, s.Near, kind);
         }).ToList();
 
+        await Attest(items, stated, t => sources.Wholly(t, computed, scale));
         return Hold(new ImageCheck(imagePath, still.Kind, still.Width, still.Height, items, strays, answer.Provenance?.Model, answer.Provenance?.Endpoint)
             { Hash = Hash(full), Ignored = ignored, UnreadableScripts = Scripts });
     }
@@ -526,14 +532,38 @@ public sealed partial class VerifyToolkit
     /// working does not (<c>'Period covered from FT methodology'</c>), which are set aside and named in the summary. A
     /// citation is not a computation, and a figure it labels is looked for in its source instead.
     /// </summary>
-    private static (Dictionary<string, string> Computed, string Name, string[] Ignored, HashSet<string> Scale) Options(object? options, string method, bool allowName)
+    private static (Dictionary<string, string> Computed, string Name, string[] Ignored, HashSet<string> Scale, Dictionary<string, (string About, string[] Claims)> Stated)
+        Options(object? options, string method, bool allowName)
     {
         var o = JsInterop.AsDict(options);
-        if (o is null) return ([], "image", [], []);
-        var allowed = allowName ? "{ computed, scale, name }" : "{ computed, scale }";
+        if (o is null) return ([], "image", [], [], []);
+        var allowed = allowName ? "{ computed, sources, scale, name }" : "{ computed, sources, scale }";
         foreach (var key in o.Keys)
-            if (key?.ToString() is not ("computed" or "name" or "scale") || (key.ToString() == "name" && !allowName))
+            if (key?.ToString() is not ("computed" or "sources" or "name" or "scale") || (key.ToString() == "name" && !allowName))
                 throw new ArgumentException($"{method}'s options are {allowed}; '{key}' is not one.");
+        var stated = new Dictionary<string, (string About, string[] Claims)>(StringComparer.Ordinal);
+        if (o.Contains("sources") && o["sources"] is not null)
+        {
+            var given = JsInterop.AsDict(o["sources"])
+                ?? throw new ArgumentException($"{method}'s sources map each text as set to the fact it states: {{ sources: {{ '{SourcesExample}' }} }}.");
+            foreach (var key in given.Keys.Cast<object>())
+            {
+                var fact = JsInterop.AsDict(given[key]);
+                var about = fact?.Contains("about") == true ? fact["about"]?.ToString()?.Trim() : null;
+                // One claim, or a list for a line that states several facts (a billing line: one claim per name).
+                string[] claims = fact?.Contains("claim") != true ? [] : fact["claim"] switch
+                {
+                    string s => [s.Trim()],
+                    System.Collections.IEnumerable list => [.. list.Cast<object?>().Select(c => c?.ToString()?.Trim() ?? "")],
+                    _ => [],
+                };
+                if (string.IsNullOrEmpty(about) || claims.Length == 0 || claims.Any(string.IsNullOrEmpty)
+                    || fact!.Keys.Cast<object>().Any(k => k.ToString() is not ("about" or "claim")))
+                    throw new ArgumentException($"{method}'s sources entry for '{key}' is {{ about, claim }}: what it is about, in English, "
+                        + $"and the fact as a full sentence, or a list of them for a line stating several — {{ sources: {{ '{SourcesExample}' }} }}.");
+                stated[key.ToString()!.Trim()] = (about, claims);
+            }
+        }
         HashSet<string> scale = o.Contains("scale") && o["scale"] is System.Collections.IEnumerable labels and not string
             ? [.. labels.Cast<object?>().Select(l => l?.ToString()?.Trim() ?? "").Where(l => l.Length > 0)]
             : o.Contains("scale") && o["scale"] is not null
@@ -547,7 +577,57 @@ public sealed partial class VerifyToolkit
             throw new ArgumentException($"{method}'s name is a file name for the read image, letters, digits, '-' and '_': 'final_a', not '{name}'.");
         var ignored = computed.Where(c => !Arithmetic().IsMatch(c.Value)).Select(c => c.Key).ToArray();
         foreach (var key in ignored) computed.Remove(key);
-        return (computed, name, ignored, scale);
+        return (computed, name, ignored, scale, stated);
+    }
+
+    private const string SourcesExample = "DIRECTED BY F. GARY GRAY': { about: 'Be Cool (2005 film)', claim: 'Be Cool (2005) was directed by F. Gary Gray.' }";
+
+    /// <summary>
+    /// Each text the lookup left as <c>own words</c> or <c>unsourced figure</c> that the <c>sources</c> option states a fact
+    /// for, checked on the web and recorded as <c>web</c>: the verdict and its sources in <c>detail</c>, the whole check in
+    /// <c>web</c>. A text sourced only by its figures keeps that source and has its words checked too, the verdict added to
+    /// its <c>detail</c>. A text the brief or a document holds word for word is not sent: the filing outranks the web.
+    /// </summary>
+    private async Task Attest(Dictionary<string, object?>[] items, Dictionary<string, (string About, string[] Claims)> stated, Func<string, bool> wholly)
+    {
+        if (stated.Count == 0) return;
+        foreach (var item in items)
+        {
+            var (text, kind) = ((string)item["text"]!, (string?)item["source"]);
+            if (!stated.TryGetValue(text.Trim(), out var fact)) continue;
+            // Own words are checked and become `web`. A line sourced only by its figures keeps that source, and its words
+            // are checked as well: becool5's "2005 · Directed by F. Gary Gray" was sourced by the brief's 2005 alone.
+            var own = kind is "own words" or "unsourced figure";
+            if (!own && (kind is not ("brief" or "document" or "research" or "computed") || wholly(text))) continue;
+            var checks = new List<FactCheck>();
+            foreach (var claim in fact.Claims)
+                checks.Add(facts is null
+                    ? FactCheck.Unchecked(fact.About, claim, "no ApiKeys:Parallel is configured")
+                    : await facts.Check(fact.About, claim));
+            // A line stating several facts is as good as its weakest: one wrong name in a billing line fails the line.
+            var weakest = checks.MinBy(c => Strength(c.Verdict) * 2 + (c.Probability ?? 1))!;
+            var detail = checks.Count == 1 ? weakest.Detail()
+                : $"{checks.Count} claims, the weakest {weakest.Detail()}" + (weakest.Verdict == FactCheck.Supported ? "" : $" ('{weakest.Claim}')");
+            (item["source"], item["detail"]) = own ? ("web", detail) : (kind, $"{item["detail"]}; web: {detail}");
+            item["web"] = new Dictionary<string, object?>
+            {
+                ["about"] = fact.About, ["claim"] = string.Join(" · ", fact.Claims), ["verdict"] = weakest.Verdict,
+                ["probability"] = weakest.Probability, ["error"] = weakest.Error,
+                ["checks"] = checks.Select(c => (object?)new Dictionary<string, object?>
+                    { ["claim"] = c.Claim, ["verdict"] = c.Verdict, ["probability"] = c.Probability }).ToArray(),
+                ["sources"] = checks.SelectMany(c => c.Sources).DistinctBy(s => s.Url).Select(s => (object?)new Dictionary<string, object?>
+                    { ["url"] = s.Url, ["title"] = s.Title, ["recognised"] = s.Recognised }).ToArray(),
+            };
+        }
+
+        // Lowest first: not supported, unsettled, not checked, supported.
+        static int Strength(string verdict) => verdict switch
+        {
+            FactCheck.NotSupported => 0,
+            FactCheck.Unsettled => 1,
+            FactCheck.Supported => 3,
+            _ => 2,
+        };
     }
 
     internal static string Megabytes(long bytes) => (bytes / (1024 * 1024.0)).ToString("0.#", CultureInfo.InvariantCulture);
@@ -637,6 +717,7 @@ public sealed partial class VerifyToolkit
     private readonly string? projectRoot;
     private readonly SessionContext? session;
     private readonly Action<string, IReadOnlyDictionary<string, object?>>? record;
+    private readonly FactChecker? facts;
     private ReadBackCheck? last;
 
     /// <summary>What to configure when there is no reader.</summary>
@@ -798,13 +879,23 @@ public abstract class ReadBackCheck(string name, Dictionary<string, object?>[] i
         var bySource = Items.GroupBy(i => (string)i["source"]!).OrderByDescending(g => g.Count()).Select(g => $"{g.Count()} {g.Key}");
         var missed = Items.Where(i => (string?)i["status"] == "missed").ToArray();
         var evidence = pending == 1 ? $"its {Evidence}" : $"their {Evidence}s";
+        var web = Items.Select(i => (Text: (string)i["text"]!, Web: i.GetValueOrDefault("web") as Dictionary<string, object?>))
+            .Where(w => w.Web is not null).Select(w => (w.Text, Verdict: w.Web!["verdict"] as string, Error: w.Web["error"] as string)).ToArray();
+        var unsupported = web.Where(w => w.Verdict == FactCheck.NotSupported).ToArray();
+        var unsettled = web.Where(w => w.Verdict == FactCheck.Unsettled).ToArray();
+        var notChecked = web.Where(w => w.Verdict is FactCheck.NotChecked or FactCheck.Failed or FactCheck.Refused).ToArray();
+        string Texts(IEnumerable<(string Text, string? Verdict, string? Error)> ws) => string.Join(", ", ws.Take(4).Select(w => $"'{Clip(w.Text)}'"));
+        string Facts(int n, string what) => $" {n} stated fact{(n == 1 ? "" : "s")} {what}";
         var summary = $"{Items.Length} texts {Where}: {counts["seen"]} seen by the reader"
             + (missed.Length == 0 ? "" : $", {missed.Length} missed ({string.Join("; ", missed.Take(4).Select(m => $"\"{Clip((string)m["text"]!)}\" {MissedNote(m)}"))})")
             + $". Sources: {string.Join(", ", bySource)}."
-            + (unsourced == 0 ? "" : $" {unsourced} figure{(unsourced == 1 ? " has" : "s have")} no source: find it in a document or the brief, or pass its working as computed.")
+            + (unsourced == 0 ? "" : $" {unsourced} figure{(unsourced == 1 ? " has" : "s have")} no source: find it in a document or the brief, pass its working as computed, or, for a fact rather than arithmetic, state it in sources.")
+            + (unsupported.Length == 0 ? "" : Facts(unsupported.Length, $"not supported by the sources the web check read ({Texts(unsupported)}): correct it, or find it in a document; a fact nothing supports comes off."))
+            + (unsettled.Length == 0 ? "" : Facts(unsettled.Length, $"the sources leave unsettled ({Texts(unsettled)}): state it as they do if you can; otherwise the director sees it marked unsettled."))
+            + (notChecked.Length == 0 ? "" : Facts(notChecked.Length, $"not checked on the web ({notChecked[0].Error ?? "no decision"}): recorded as unchecked."))
             + (pending == 0 ? "" : $" {pending} reading{(pending == 1 ? "" : "s")} of text the {Piece} never set: look at {evidence} ({string.Join(", ", Strays.Where(s => s.Verdict is null).Select(s => s.Frame ?? "none saved"))}), then Verify.stray('{Name}', n, 'misread' | 'real').")
             + (real == 0 ? "" : $" {real} confirmed fault{(real == 1 ? "" : "s")} in the {Piece}: fix and {Again} again.")
-            + (Ignored.Length == 0 ? "" : $" {Ignored.Length} computed entr{(Ignored.Length == 1 ? "y was" : "ies were")} not used, as the working shows no arithmetic ({string.Join(", ", Ignored.Take(4).Select(k => $"'{Clip(k)}'"))}): a figure from a document is found on its page without one.")
+            + (Ignored.Length == 0 ? "" : $" {Ignored.Length} computed entr{(Ignored.Length == 1 ? "y was" : "ies were")} not used, as the working shows no arithmetic ({string.Join(", ", Ignored.Take(4).Select(k => $"'{Clip(k)}'"))}): a figure from a document is found on its page without one, and a fact no document holds goes in sources.")
             + FilmReadBack.UncheckedNote(counts["unchecked"] is int u ? u : 0, Evidence, UnreadableScripts)
             + (Inconclusive(counts) ? $" The reader saw {counts["seen"]} of the {(int)counts["seen"]! + (int)counts["missed"]!} texts it "
                 + $"could check, under half, so this read-back cannot vouch for the {Piece}: hold texts longer or set them larger and "
@@ -815,7 +906,7 @@ public abstract class ReadBackCheck(string name, Dictionary<string, object?>[] i
             ["ok"] = true,
             // The claim is that every text "was read as set": a reader that saw under half of them has not shown that.
             // nvdatenk1 passed with 0 of 92 seen, because coverage was never part of the verdict.
-            ["passed"] = unsourced == 0 && pending == 0 && real == 0 && !Inconclusive(counts),
+            ["passed"] = unsourced == 0 && unsupported.Length == 0 && pending == 0 && real == 0 && !Inconclusive(counts),
             [NameKey] = Name,
             ["items"] = Items.Cast<object?>().ToArray(),
             ["strays"] = Strays.Select(s => (object?)s.Dict()).ToArray(),
@@ -1466,6 +1557,19 @@ internal sealed class FilmSources
         if (missing.Length > 0) return ("unsourced figure", $"no source for {string.Join(", ", missing)}");
         var kind = new[] { "computed", "document", "research", "brief" }.First(k => found.Any(x => x.Kind == k));
         return (kind, string.Join("; ", found.Select(x => x.Where).Distinct()));
+    }
+
+    /// <summary>
+    /// Whether the text itself is found, not only its figures: declared a scale, a computed key, in the brief, a Qloo
+    /// title, or on a document's page or in research word for word. A line sourced by its figures alone (the year in
+    /// <c>2005 · Directed by F. Gary Gray</c>) still makes a claim in its words.
+    /// </summary>
+    internal bool Wholly(string text, IReadOnlyDictionary<string, string> computed, IReadOnlySet<string>? scale)
+    {
+        if (scale?.Contains(text.Trim()) == true || computed.ContainsKey(text) || computed.ContainsKey(text.Trim())) return true;
+        var n = Normal(text);
+        return n.Length > 0 && (brief.Contains(n, StringComparison.Ordinal) || qloo.ContainsKey(n)
+            || n.Length >= 4 && (pages.Any(p => p.Text.Contains(n, StringComparison.Ordinal)) || research.Any(r => r.Text.Contains(n, StringComparison.Ordinal))));
     }
     #endregion
 

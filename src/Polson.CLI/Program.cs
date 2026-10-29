@@ -440,6 +440,7 @@ internal class Program : Runtime
         if (string.IsNullOrWhiteSpace(apiKey))
         {
             DrawingMcpTools.ResearchClient = null;
+            JsDrawingEngine.Facts = null;
             Warn("Research disabled: no ApiKeys:Parallel in {0}. Agents will be told that figures "
                + "cannot be sourced, and must say so rather than inventing them.",
                 Path.Combine(AssemblyLocation, "appsettings.json"));
@@ -451,6 +452,8 @@ internal class Program : Runtime
 
         DrawingMcpTools.ResearchClient = new ParallelClient(apiKey);
         DrawingMcpTools.ResearchProcessor = processor;
+        // The same key checks the facts a read-back states (Verify's `sources`): about a second and a tenth of a cent each.
+        JsDrawingEngine.Facts = new FactChecker(DrawingMcpTools.ResearchClient);
         SessionContext.ResearchBudget = budget;
 
         // Beside the asset and document caches, and inside the project for the same reason: the run

@@ -542,6 +542,16 @@ internal sealed class MotionTextLayer : MotionLayer
         return letters;
     }
 
+    /// <summary>Every visible letter's box, so a group's <c>boundsAt</c> counts its type with its shapes.</summary>
+    internal override SKPath? Ink(double time)
+    {
+        var letters = Letters(time).Where(l => l.Ink.Width > 0 && l.Ink.Height > 0).ToList();
+        if (letters.Count == 0) return null;
+        var path = new SKPath();
+        foreach (var l in letters) path.AddRect(l.Ink);
+        return path;
+    }
+
     /// <summary>Every glyph's accumulated animator state at a time — EffectCraft's <c>char_transforms</c>.</summary>
     private GlyphState[] Animate(double time, double em, TextShape shape)
     {

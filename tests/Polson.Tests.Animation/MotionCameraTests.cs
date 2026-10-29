@@ -250,6 +250,76 @@ public class MotionCameraTests(ITestOutputHelper output) : TestsRuntime
         Assert.Contains("give the group a z", e.Message);
     }
 
+    /// <summary>
+    /// becool4 panned the target from off-centre onto concentric planes; <c>keepSize: true</c> scaled them about the opening
+    /// target, so they stayed eccentric through the resolve. <c>keepSize: &lt;second&gt;</c> reads the camera at that second, and
+    /// the plane then looks exactly as it would at z 0.
+    /// </summary>
+    [Fact]
+    public void KeepSizeCanLineAPlaneUpAtANamedSecond()
+    {
+        var motion = new MotionToolkit();
+        MotionComposition Panned(object? keep, double z)
+        {
+            var comp = Scene(motion);
+            comp.Camera(Opts(("target", motion.Nodes.Linear("vector", new[] { 40d, 30d }, new[] { W / 2 - 40, H / 2 - 30 })),
+                ("distance", motion.Nodes.Linear("real", -Standard / 4, Standard))));
+            var plane = comp.Group(keep is null ? Opts(("z", z)) : Opts(("z", z), ("keepSize", keep)));
+            plane.Rectangle(Opts(("point1", new[] { W / 2 - 40, H / 2 - 30 }), ("point2", new[] { W / 2 + 40, H / 2 + 30 }), ("color", "#1d3557")));
+            return comp;
+        }
+
+        using var flat = Panned(null, 0).Render(1);
+        using var atOne = Panned(1d, 300).Render(1);
+        using var atStart = Panned(true, 300).Render(1);
+        Assert.Equal(0, Differing(flat.SkBitmap, atOne.SkBitmap, 2));
+        Assert.True(Differing(flat.SkBitmap, atStart.SkBitmap, 24) > 0.01, "read at time 0, the plane should not line up after the pan");
+
+        foreach (var bad in new object[] { -1d, "soon" })
+        {
+            var e = Assert.Throws<ArgumentException>(() => Panned(bad, 300));
+            Assert.Contains("keepSize: 9.6", e.Message);
+        }
+    }
+
+    /// <summary>
+    /// <c>boundsAt</c> on a stack: a shape's ink box by its desc, in the stack's units or, through groups and the camera, the
+    /// frame's — the same box the render's ink has. becool5 found where its stylus landed with three probe renders.
+    /// </summary>
+    [Fact]
+    public void BoundsAtFindsAShapeThroughGroupsAndTheCamera()
+    {
+        var motion = new MotionToolkit();
+        var comp = Scene(motion);
+        comp.Camera(Opts(("distance", motion.Nodes.Linear("real", -Standard / 4, Standard))));
+        var plane = comp.Group(Opts(("z", 200d), ("keepSize", 1d), ("offset", new[] { 10d, -6d }), ("desc", "plane")));
+        plane.Rectangle(Opts(("point1", new[] { 60d, 40d }), ("point2", new[] { 110d, 80d }), ("color", "#1d3557"), ("desc", "card")));
+        plane.Outline(Opts(("points", new object[] { new[] { 130d, 100d }, new[] { 180d, 100d } }), ("width", 8d), ("color", "#1d3557"),
+            ("desc", "stroke")));
+        comp.Circle(Opts(("origin", new[] { 30d, 30d }), ("radius", 10d), ("color", "#e63946"), ("amount", 0d), ("desc", "hidden")));
+
+        // In the group's own units: the rectangle as given; the stroke widened by half its width, and its round caps.
+        var card = Box(plane.BoundsAt(0, Opts(("desc", "card"))));
+        Assert.Equal(new SKRect(60, 40, 110, 80), card);
+        var stroke = Box(plane.BoundsAt(0, Opts(("desc", "stroke"))));
+        Assert.Equal(new SKRect(126, 96, 184, 104), stroke);
+
+        // On the frame at 1 s, against the render's own ink.
+        using var frame = comp.Render(1);
+        var drawn = Ink(frame.SkBitmap);
+        var whole = Box(comp.BoundsAt(1, Opts(("desc", "plane"), ("frame", true))));
+        output.WriteLine($"drawn {drawn}, boundsAt {whole}");
+        Assert.True(Math.Abs(drawn.Left - whole.Left) < 1.5 && Math.Abs(drawn.Top - whole.Top) < 1.5
+            && Math.Abs(drawn.Right - whole.Right) < 1.5 && Math.Abs(drawn.Bottom - whole.Bottom) < 1.5, $"drawn {drawn}, boundsAt {whole}");
+
+        Assert.Null(comp.BoundsAt(0, Opts(("desc", "hidden"))));                                   // amount 0 shows nothing
+        Assert.Contains("no layer or group here has desc 'stylus'",
+            Assert.Throws<ArgumentException>(() => comp.BoundsAt(0, Opts(("desc", "stylus")))).Message);
+
+        static SKRect Box(Dictionary<string, object?>? b) => b is null ? SKRect.Empty
+            : SKRect.Create((float)(double)b["x"]!, (float)(double)b["y"]!, (float)(double)b["width"]!, (float)(double)b["height"]!);
+    }
+
     /// <summary>A kept-size plane goes to <c>.sif</c> through the same warp bake, and Synfig draws it the same.</summary>
     [Fact]
     public void SynfigDrawsAKeptSizePlaneTheSame()
