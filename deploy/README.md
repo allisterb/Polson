@@ -153,7 +153,7 @@ $URL = "https://$S-$N.$R.run.app"
 gcloud run deploy $S --source . --project $P --region $R `
   --no-allow-unauthenticated --cpu 4 --memory 4Gi --max-instances 1 --timeout 3600 --session-affinity `
   --set-secrets "POLSON_AGENT_PLATFORM_KEY=polson-agent-key:latest,POLSON_PARALLEL_KEY=polson-parallel-key:latest,POLSON_QLOO_KEY=polson-qloo-key:latest" `
-  --set-env-vars "^;^POLSON_SELF_URL=$URL;POLSON_ARTIFACT_SERVICE_URI=gs://$B;POLSON_MIRROR_URI=gs://$B/studio;POLSON_ASK_SECONDS=300;POLSON_MAX_CREDIT_SECONDS=900;POLSON_BUDGET_TOKENS=3000000;POLSON_QLOO_BUDGET=360;POLSON_ASSETS_BUDGET=30;POLSON_RESEARCH_PROCESSOR=core;ADK_MAX_LLM_CALLS=500;POLSON_PEEK_STABLE_NAME=1;POLSON_ALLOW_ORIGINS=http://127.0.0.1:8080,http://localhost:8080"
+  --set-env-vars "^;^POLSON_SELF_URL=$URL;POLSON_ARTIFACT_SERVICE_URI=gs://$B;POLSON_MIRROR_URI=gs://$B/studio;POLSON_ASK_SECONDS=300;POLSON_MAX_CREDIT_SECONDS=900;POLSON_BUDGET_TOKENS=4500000;POLSON_QLOO_BUDGET=360;POLSON_ASSETS_BUDGET=30;POLSON_RESEARCH_PROCESSOR=core;ADK_MAX_LLM_CALLS=500;POLSON_PEEK_STABLE_NAME=1;POLSON_ALLOW_ORIGINS=http://127.0.0.1:8080,http://localhost:8080"
 gcloud run services add-iam-policy-binding $S --project $P --region $R --member "serviceAccount:$SA" --role roles/run.invoker
 ```
 
@@ -273,7 +273,9 @@ Worth setting deliberately rather than leaving at defaults:
 
 - **`POLSON_ASSETS_BUDGET`**: image generations. The default of 120 is **per server run**, which here means per
   container, shared by every project until the instance recycles.
-- **`POLSON_BUDGET_TOKENS`**: the spend ceiling per run, in **billable** tokens (cached input at a tenth). The intake
+- **`POLSON_BUDGET_TOKENS`**: the spend ceiling per run, in **billable** tokens (cached input at a tenth). 4.5M
+  since 2026-10-29: at 3M a one-audience trailer (Intolerable Cruelty) had spent 2.58M by its encoded film, and a
+  three-audience one (barbershop) ran out at its boards with each turn resending 509k tokens. The intake
   scales it for workflows that need more (`TOKEN_SCALE` in `src/adk_agent/intake.py`): a pitch, a report and a maths
   explainer get twice the base, a narrated report four times.
 - **`POLSON_BUDGET_RAW_TOKENS`**: the runaway guard, in raw input. **Leave it unset.** It is then 8 × each run's own
@@ -377,6 +379,16 @@ gcloud run services update $S --project $P --region $R --update-env-vars "POLSON
 
 Remove the marker afterwards with `--remove-env-vars POLSON_STOPPED_AT`. The drained instance can stay up to the
 request timeout (3600 s) if its keepalive hold was open when the revision changed; it costs, but runs nothing new.
+
+**Deleting a request** has no button. A request is two folders in the bucket, the mirror the studio lists and ADK's
+artifact versions, and both go:
+
+```powershell
+gcloud storage rm -r "gs://$B/studio/<name>/" "gs://$B/<name>/"
+```
+
+An instance that is up keeps its own copy on its disk, restored from the mirror when it started, and goes on listing
+the request until it is replaced: force a new revision as above. Nothing brings a deleted request back.
 
 A failed revision never takes traffic, so a broken deploy leaves the previous one serving. To go back to an earlier
 one:
