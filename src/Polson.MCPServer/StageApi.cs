@@ -168,7 +168,8 @@ public sealed class StageApi
             var p = JsInterop.AsDict(item) ?? throw new ArgumentException("Each of Stage.book's pages is an object: { title, image, caption, text, file }.");
             foreach (var key in p.Keys.Cast<object>().Select(k => k.ToString()!))
                 if (key is not ("title" or "image" or "caption" or "text" or "file"))
-                    throw new ArgumentException($"Stage.book: a page takes title, image, caption, text and file, not '{key}'.");
+                    throw new ArgumentException($"Stage.book: a page takes title, image, caption, text and file, not '{key}'. "
+                        + "A still is image: 'artifacts/03_concepts_a.png'; file is a text or Markdown file such as 'concepts.md'.");
             byte[]? image = null;
             if (p["image"]?.ToString() is { Length: > 0 } imagePath)
             {
@@ -188,7 +189,7 @@ public sealed class StageApi
             {
                 var full = ProjectPath.Resolve(projectRoot, filePart, "file", "Read");
                 if (!File.Exists(full)) throw new ArgumentException($"Stage.book: '{filePart}' is not in the project.");
-                text = (text is null ? "" : text + "\n\n") + File.ReadAllText(full);
+                text = (text is null ? "" : text + "\n\n") + BookText(full, filePart);
                 // A test run's findings are its report to the studio about the studio: friction, gaps, defects. A client's
                 // book that carries them hands over the workshop's notes with the work (nightshift1: 17 of 46 pages).
                 if (Path.GetFileName(full).Equals("findings.md", StringComparison.OrdinalIgnoreCase))
@@ -1067,5 +1068,30 @@ public sealed class StageApi
         var cleaned = sb.ToString().Trim();
         return cleaned.Length <= maxLength ? cleaned : cleaned[..maxLength].TrimEnd() + "…";
     }
+
+    /// <summary>A book page's <c>file</c>, which must be text: a still passed here is refused, naming <c>image</c>.</summary>
+    /// <remarks>
+    /// smoke2 passed ten PNGs as <c>file</c> after <c>path</c> was refused, and each was read as text and typeset: one
+    /// 34 KB still made 8 pages and 11.6 MB, and the ten ran past the host's 60 s tool limit three times, so the run
+    /// delivered no book.
+    /// </remarks>
+    private static string BookText(string full, string given)
+    {
+        if (StillFile.IsMatch(full))
+            throw new ArgumentException($"Stage.book: '{given}' is a picture. Show it with image: '{given}'; file is a text or Markdown file such as 'concepts.md'.");
+        var bytes = File.ReadAllBytes(full);
+        if (!MediaFile.IsMatch(full) && Array.IndexOf(bytes, (byte)0) < 0)
+        {
+            try { return new UTF8Encoding(false, true).GetString(bytes).TrimStart('﻿'); }
+            catch (DecoderFallbackException) { }
+        }
+        throw new ArgumentException($"Stage.book: '{given}' is not a text file. file takes text or Markdown such as 'concepts.md', "
+            + "and a still goes in image as a .png, .jpg or .webp.");
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex StillFile =
+        new(@"\.(png|jpe?g|webp)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    private static readonly System.Text.RegularExpressions.Regex MediaFile =
+        new(@"\.(gif|bmp|svg|pdf|mp4|webm|mov|wav|mp3)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
     #endregion
 }

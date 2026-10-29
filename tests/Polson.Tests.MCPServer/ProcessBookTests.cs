@@ -172,4 +172,31 @@ public class ProcessBookTests : TestsRuntime, IDisposable
         Assert.Contains(words, result.Error);
         Assert.False(File.Exists(Path.Combine(root, "process.pdf")));
     }
+
+    /// <summary>
+    /// smoke2 passed its stills as <c>path</c>, was refused, and passed them as <c>file</c>: each PNG was typeset as text, and
+    /// the book ran past the host's 60 s tool limit three times. A still as <c>file</c> is refused naming <c>image</c>, as
+    /// is anything that is not text, and the refusal of <c>path</c> says where a still goes.
+    /// </summary>
+    [Fact]
+    public void TestAStillOrAnyBinaryPassedAsFileIsRefusedNamingImage()
+    {
+        File.WriteAllBytes(Path.Combine(root, "notes.dat"), [0x23, 0x20, 0x00, 0xFF, 0x41]);
+        File.WriteAllBytes(Path.Combine(root, "latin1.txt"), [0x63, 0x61, 0x66, 0xE9]);
+        File.WriteAllBytes(Path.Combine(root, "bom.md"), [0xEF, 0xBB, 0xBF, .. "# Heading\nBody."u8]);
+
+        var still = Run("Stage.book('a.pdf', { title: 'H', pages: [{ title: 'Field', file: 'artifacts/frame.png' }] });");
+        var binary = Run("Stage.book('b.pdf', { title: 'H', pages: [{ title: 'Notes', file: 'notes.dat' }] });");
+        var latin = Run("Stage.book('c.pdf', { title: 'H', pages: [{ title: 'Notes', file: 'latin1.txt' }] });");
+        var path = Run("Stage.book('d.pdf', { title: 'H', pages: [{ path: 'artifacts/frame.png' }] });");
+        var text = Run("log('pages ' + Stage.book('e.pdf', { title: 'H', cover: false, pages: [{ title: 'Notes', file: 'bom.md' }] }).pages);");
+
+        Assert.Contains("'artifacts/frame.png' is a picture. Show it with image: 'artifacts/frame.png'", still.Error);
+        Assert.Contains("'notes.dat' is not a text file", binary.Error);
+        Assert.Contains("'latin1.txt' is not a text file", latin.Error);
+        Assert.Contains("A still is image:", path.Error);
+        Assert.True(text.Success, text.Error);
+        Assert.Contains(text.Logs, l => l.Contains("pages 1"));
+        Assert.False(File.Exists(Path.Combine(root, "a.pdf")));
+    }
 }
