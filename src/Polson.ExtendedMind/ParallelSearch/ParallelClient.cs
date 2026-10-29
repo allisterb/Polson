@@ -129,6 +129,15 @@ public sealed class ParallelClient : Runtime, IDisposable
 
     /// <summary>Cap on the body kept in <see cref="ParallelResponse.RawBody"/> after a failure.</summary>
     public const int MaxRetainedBodyChars = 4000;
+
+    /// <summary>The documented cap on one rendered decision question.</summary>
+    public const int MaxDecisionChars = 5000;
+
+    /// <summary>The name <see cref="Decide"/> gives its one question, and the answer's key.</summary>
+    public const string DecisionQuestion = "claim";
+
+    /// <summary>A decision answered in under a second in every probe; this only catches a stall.</summary>
+    public static readonly TimeSpan DecisionTimeout = TimeSpan.FromSeconds(30);
     #endregion
 
     #region Methods
@@ -360,6 +369,31 @@ public sealed class ParallelClient : Runtime, IDisposable
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Asks whether one statement is true: Parallel's Decisions API, which retrieves evidence and answers with a
+    /// probability (<see cref="DecisionAnswer.Noul"/>) and the citations it read. About a second, priced per request.
+    /// </summary>
+    /// <param name="about">
+    /// What the statement is about, in English: <c>"Be Cool (2005 film)"</c>. Not optional in practice: without it, a
+    /// false claim in Hindi scored 0.55 and the citations wandered to court records (probe, 2026-10-28).
+    /// </param>
+    /// <param name="statement">The claim as a full sentence, answered as the question <c>"claim"</c>.</param>
+    public async Task<ParallelDecisionResponse> Decide(string about, string statement, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(about) || string.IsNullOrWhiteSpace(statement))
+            return Refuse<ParallelDecisionResponse>("A decision needs what the statement is about and the statement.");
+        var question = $"Is this statement true? {statement.Trim()}";
+        if (question.Length + about.Length > MaxDecisionChars)
+            return Refuse<ParallelDecisionResponse>($"A decision's question is at most {MaxDecisionChars} characters; this one is {question.Length + about.Length}.");
+
+        var body = new DecisionRequestWire
+        {
+            State = new Dictionary<string, string> { ["subject"] = about.Trim() },
+            Questions = new Dictionary<string, DecisionQuestionWire> { [DecisionQuestion] = new() { Instructions = question } },
+        };
+        return await Send<ParallelDecisionResponse>(HttpMethod.Post, "/v1/decisions", body, DecisionTimeout, cancellationToken);
     }
 
     public void Dispose()
@@ -745,6 +779,20 @@ public sealed class ParallelClient : Runtime, IDisposable
         [JsonPropertyName("enable_events")] public bool? EnableEvents { get; init; }
 
         [JsonPropertyName("previous_interaction_id")] public string? PreviousInteractionId { get; init; }
+    }
+
+    private sealed record DecisionRequestWire
+    {
+        [JsonPropertyName("state")] public required IReadOnlyDictionary<string, string> State { get; init; }
+
+        [JsonPropertyName("questions")] public required IReadOnlyDictionary<string, DecisionQuestionWire> Questions { get; init; }
+    }
+
+    private sealed record DecisionQuestionWire
+    {
+        [JsonPropertyName("type")] public string Type { get; init; } = "noul";
+
+        [JsonPropertyName("instructions")] public required string Instructions { get; init; }
     }
 
     private sealed record TaskSpecWire

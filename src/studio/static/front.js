@@ -1412,7 +1412,24 @@
 
   // ── Verification: what the film shows, where each came from, and whether a watcher read it ──
   var SOURCE = { brief: 'Brief', document: 'Document', computed: 'Computed', qloo: 'Qloo', research: 'Research',
-                 scale: 'Scale', citation: 'Citation', 'own words': 'Own words', 'unsourced figure': 'No source' };
+                 web: 'Web', scale: 'Scale', citation: 'Citation', 'own words': 'Own words', 'unsourced figure': 'No source' };
+  // A fact the agent stated, checked on the web: flagged like an unsourced figure when the sources do not support it.
+  function flagged(it) { return it.source === 'unsourced figure' || (it.web && it.web.verdict === 'not supported'); }
+  // The source cell: its kind, its detail, and for a web check the recognised pages it read, as links. The URLs are the
+  // service's, so only http(s) ones the engine marked recognised are linked.
+  function sourceCell(it) {
+    var src = el('td'); src.appendChild(el('span', 'fr-vkey vt-src-' + srcKey(it.source), SOURCE[it.source] || it.source));
+    if (it.detail) src.appendChild(el('span', 'fr-small', ' ' + it.detail));
+    if (it.web) {
+      src.appendChild(el('span', 'fr-small fr-vclaim', 'Checked: “' + it.web.claim + '”'));
+      (it.web.sources || []).filter(function (s) { return s.recognised && /^https?:\/\//i.test(s.url || ''); }).slice(0, 3).forEach(function (s) {
+        var a = el('a', 'fr-small fr-vlink', s.title || s.url);
+        a.href = s.url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+        src.appendChild(a);
+      });
+    }
+    return src;
+  }
   // A source line (desc 'source…') is a footnote: where the figures came from, not a claim, so not graded.
   var CITATION = 'a citation: not graded, as footnote-sized type is misread';
   function srcKey(s) { return String(s || 'own words').replace(/\s+/g, '-'); }
@@ -1500,11 +1517,15 @@
     var seen = items.filter(function (i) { return i.status === 'seen'; }).length;
     var unchecked = items.filter(function (i) { return i.status === 'unchecked'; }).length;
     var unsourced = items.filter(function (i) { return i.source === 'unsourced figure'; }).length;
+    var stated = items.filter(function (i) { return i.web; });
+    var unsupported = stated.filter(function (i) { return i.web.verdict === 'not supported'; }).length;
     var real = (check.strays || []).filter(function (s) { return s.verdict === 'real'; }).length;
     return items.length + ' texts ' + what + ' · ' + seen + ' read back as set by an independent ' + (check.video ? 'watcher' : 'reader')
       + (check.model ? ' (' + check.model + ')' : '')
       + (unchecked ? ' · ' + unchecked + ' in Arabic, which the reader cannot check' : '')
       + ' · ' + (unsourced ? unsourced + ' figure' + (unsourced === 1 ? '' : 's') + ' with no source' : 'every figure sourced')
+      + (stated.length ? ' · ' + stated.length + ' stated fact' + (stated.length === 1 ? '' : 's') + ' checked on the web'
+        + (unsupported ? ', ' + unsupported + ' not supported' : '') : '')
       + (real ? ' · ' + real + ' fault' + (real === 1 ? '' : 's') + ' found' : '')
       + (check.pending ? ' · ' + check.pending + ' reading' + (check.pending === 1 ? '' : 's') + ' still to be looked at' : '');
   }
@@ -1626,12 +1647,10 @@
       ['Text on screen', 'Seconds', 'Source', 'Read back'].forEach(function (h) { head.appendChild(el('th', '', h)); });
       table.appendChild(head);
       items.forEach(function (it) {
-        var tr = el('tr', it.source === 'unsourced figure' ? 'is-flag' : '');
+        var tr = el('tr', flagged(it) ? 'is-flag' : '');
         tr.appendChild(el('td', 'fr-vtext', it.text.replace(/\n/g, ' / ')));
         tr.appendChild(el('td', 'fr-spec', it.from == null ? 'never shown' : it.from.toFixed(1) + '–' + it.to.toFixed(1)));
-        var src = el('td'); src.appendChild(el('span', 'fr-vkey vt-src-' + srcKey(it.source), SOURCE[it.source] || it.source));
-        if (it.detail) src.appendChild(el('span', 'fr-small', ' ' + it.detail));
-        tr.appendChild(src);
+        tr.appendChild(sourceCell(it));
         tr.appendChild(el('td', '', it.status === 'seen' ? (it.readAs && it.readAs.replace(/\s+/g, ' ') !== it.text.replace(/\s+/g, ' ') ? '✓ as “' + it.readAs + '”' : '✓ as set')
           : it.status === 'missed' ? 'not read (' + (it.seconds || 0).toFixed(1) + ' s on screen)'
           : it.status === 'unchecked' ? 'not checked: Arabic, checked by eye'
@@ -1672,12 +1691,10 @@
       ['Text on the image', 'Size', 'Source', 'Read back'].forEach(function (h) { head.appendChild(el('th', '', h)); });
       table.appendChild(head);
       items.forEach(function (it) {
-        var tr = el('tr', it.source === 'unsourced figure' ? 'is-flag' : '');
+        var tr = el('tr', flagged(it) ? 'is-flag' : '');
         tr.appendChild(el('td', 'fr-vtext', it.text + (it.count > 1 ? ' (×' + it.count + ')' : '')));
         tr.appendChild(el('td', 'fr-spec', it.size != null ? it.size + ' px' : '—'));
-        var src = el('td'); src.appendChild(el('span', 'fr-vkey vt-src-' + srcKey(it.source), SOURCE[it.source] || it.source));
-        if (it.detail) src.appendChild(el('span', 'fr-small', ' ' + it.detail));
-        tr.appendChild(src);
+        tr.appendChild(sourceCell(it));
         tr.appendChild(el('td', '', it.status === 'seen' ? (it.readAs && it.readAs.replace(/\s+/g, ' ') !== it.text.replace(/\s+/g, ' ') ? '✓ as “' + it.readAs + '”' : '✓ as set')
           : it.status === 'missed' ? 'not read' + (it.closest ? ' (closest: “' + it.closest + '”)' : '')
           : it.status === 'unchecked' ? 'not checked: Arabic, checked by eye' : 'off the canvas'));

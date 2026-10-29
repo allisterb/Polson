@@ -597,7 +597,8 @@ is Synfig's, and the craft follows from it:
   the shape it fills and `blend: 'onto'`, and a sheen is its two points keyed across the shape.
 - **Move the camera through the poster, not the poster past the camera: `comp.camera()`, layers at depths.** Give a
   poster's layers `z` — the backdrop far, the object nearer, the type at 0 — and a camera move turns a flat design into
-  a space. `keepSize: true` on each plane keeps the poster looking exactly as designed until the camera moves. Choose
+  a space. `keepSize: true` on each plane keeps the poster looking exactly as designed until the camera moves; when
+  the move ends on the design rather than starting from it, `keepSize: <second>` makes it exact at that second. Choose
   the move for what it says. A **push-in** (`distance` keyed down) closes on something and raises the
   stakes: near layers grow faster than far ones, which is what makes it read as moving rather than enlarging. A
   **zoom** (`zoom` keyed) magnifies everything alike and reads as a looking-glass, flat and observed; use it when the

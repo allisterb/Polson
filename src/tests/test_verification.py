@@ -60,6 +60,13 @@ class DocumentTests(unittest.TestCase):
         self.assertIn("| प्यार एक अनुबंध है। | 2.1–4.8 s | own words | प्यार एक अनूभू है। | seen (read differently) |", doc)
         self.assertIn("| असहनीय क्रूरता | 7.7–10.7 s | own words |  | seen |", doc)
 
+    def test_a_fact_checked_on_the_web_shows_its_verdict_and_sources(self):
+        doc = verification.document([film("artifacts/final_a.mp4", "43:20", [
+            {"text": "DIRECTED BY F. GARY GRAY", "from": 12.0, "to": 15.0, "source": "web", "status": "seen",
+             "detail": "supported (0.999): imdb.com, en.wikipedia.org",
+             "web": {"claim": "Be Cool (2005) was directed by F. Gary Gray.", "verdict": "supported"}}])])
+        self.assertIn("| DIRECTED BY F. GARY GRAY | 12.0–15.0 s | web: supported (0.999): imdb.com, en.wikipedia.org |", doc)
+
     def test_a_stray_shows_what_was_read_how_it_was_ruled_and_whether_a_reason_was_given(self):
         stray = {"n": 1, "read": "INTOLERABLE CRUELTY\nएंटी-सेमिटिक अबाधन", "at": 11, "frame": "artifacts/verify/stray-1.png",
                  "kind": "never set", "verdict": None}

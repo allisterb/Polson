@@ -138,7 +138,9 @@ def _read_backs(reads: list[dict[str, Any]], events: list[dict[str, Any]]) -> li
                     result = "seen (read differently)"
                 when = (f"{it['from']:.1f}–{it['to']:.1f} s" if isinstance(it.get("from"), (int, float))
                         and isinstance(it.get("to"), (int, float)) else "")
-                lines.append(f"| {_cell(it.get('text'))} | {when} | {_cell(it.get('source'))} | "
+                # A fact checked on the web carries its verdict in `detail`: "supported (0.999): imdb.com, …".
+                source = (f"web: {it['detail']}" if it.get("source") == "web" and it.get("detail") else it.get("source"))
+                lines.append(f"| {_cell(it.get('text'))} | {when} | {_cell(source)} | "
                              f"{_cell(read) if differs else ''} | {result} |")
             lines.append("")
         strays = latest.get("strays") or []

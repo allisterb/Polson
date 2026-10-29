@@ -775,6 +775,118 @@ public class VerifyTests : TestsRuntime, IDisposable
         Assert.Throws<ArgumentException>(() => verify.Image(canvas, new Dictionary<string, object?> { ["name"] = "../x" }).GetAwaiter().GetResult());
         Assert.Throws<ArgumentException>(() => verify.Image("artifacts/final.png").GetAwaiter().GetResult());
     }
+
+    /// <summary>
+    /// becool3's credits had no document behind them, and `computed` refused them as no arithmetic, so they fell to own words.
+    /// A fact stated in `sources` is checked on the web instead: supported, unsettled, or not supported, which fails the
+    /// check. A text the brief holds keeps the brief as its source, and is not sent.
+    /// </summary>
+    [Fact]
+    public async Task TestAStatedFactIsCheckedOnTheWebAndOnlyWhereNothingElseSourcesIt()
+    {
+        var canvas = new global::Polson.Drawing.Skia.SkiaCanvas(600, 260);
+        var ctx = canvas.GetContext();
+        ctx.FillStyle = "#ffffff";
+        ctx.FillRect(0, 0, 600, 260);
+        ctx.FillStyle = "#111111";
+        ctx.Font = "24px Arial";
+        string[] lines = ["BE COOL", "2005 · DIRECTED BY F. GARY GRAY", "DIRECTED BY BARRY SONNENFELD", "RUNS 118 MINUTES"];
+        for (var i = 0; i < lines.Length; i++) ctx.FillText(lines[i], 20, 50 + 55 * i);
+        var read = new JsonObject { ["items"] = new JsonArray([.. lines.Select(l => (JsonNode)new JsonObject { ["text"] = l })]) }.ToJsonString();
+        using var reader = new VideoReader([new NemotronEndpoint(NemotronEndpoint.Nebius, "https://tf.example/v1", "k", NemotronEndpoint.NebiusModel)],
+            new DocumentBudget(5), root, http: new HttpClient(new Answer(read)));
+        var web = new Decisions(claim => claim.Contains("Sonnenfeld") ? 0.017 : claim.Contains("118") ? 0.456 : 0.999);
+        using var parallel = new global::Polson.ExtendedMind.ParallelSearch.ParallelClient("k", new HttpClient(web));
+        var facts = new global::Polson.ExtendedMind.ParallelSearch.FactChecker(parallel);
+        Dictionary<string, object?> Fact(string claim) => new() { ["about"] = "Be Cool (2005 film)", ["claim"] = claim };
+        var options = new Dictionary<string, object?>
+        {
+            ["sources"] = new Dictionary<string, object?>
+            {
+                ["BE COOL"] = Fact("Be Cool is a 2005 film."),
+                ["2005 · DIRECTED BY F. GARY GRAY"] = Fact("Be Cool (2005) was directed by F. Gary Gray."),
+                ["DIRECTED BY BARRY SONNENFELD"] = Fact("Be Cool (2005) was directed by Barry Sonnenfeld."),
+                ["RUNS 118 MINUTES"] = Fact("Be Cool (2005) runs 118 minutes."),
+            },
+        };
+
+        var result = await new VerifyToolkit(reader, root, null, facts: facts).Image(canvas, options);
+
+        Assert.True((bool)result["ok"]!, result.GetValueOrDefault("error") as string);
+        var items = ((object?[])result["items"]!).Cast<Dictionary<string, object?>>().ToDictionary(i => (string)i["text"]!);
+        Assert.Equal("brief", items["BE COOL"]["source"]);                                    // the brief outranks the web
+        Assert.Equal(3, web.Claims.Count);
+        Assert.DoesNotContain(web.Claims, c => c.Contains("is a 2005 film"));
+        Assert.Equal(["web", "web", "web"], lines[1..].Select(l => (string)items[l]["source"]!));
+        Assert.Equal(["supported", "not supported", "unsettled"], lines[1..].Select(l => (string)((Dictionary<string, object?>)items[l]["web"]!)["verdict"]!));
+        Assert.StartsWith("supported (0.999)", (string)items[lines[1]]["detail"]!);
+        Assert.False((bool)result["passed"]!);
+        var summary = (string)result["summary"]!;
+        Assert.Contains("1 stated fact not supported by the sources the web check read ('DIRECTED BY BARRY SONNENFELD')", summary);
+        Assert.Contains("1 stated fact the sources leave unsettled ('RUNS 118 MINUTES')", summary);
+        Assert.DoesNotContain("no source", summary);                                           // 2005 is sourced by the stated fact
+
+        // With nothing to check them, they are recorded as unchecked, and that alone does not fail the check.
+        var bare = await new VerifyToolkit(reader, root, null).Image(canvas, new Dictionary<string, object?>
+        {
+            ["sources"] = new Dictionary<string, object?> { ["2005 · DIRECTED BY F. GARY GRAY"] = Fact("Be Cool (2005) was directed by F. Gary Gray.") },
+        });
+        Assert.Contains("1 stated fact not checked on the web (no ApiKeys:Parallel is configured)", (string)bare["summary"]!);
+
+        var malformed = await Assert.ThrowsAsync<ArgumentException>(() => new VerifyToolkit(reader, root, null).Image(canvas,
+            new Dictionary<string, object?> { ["sources"] = new Dictionary<string, object?> { ["BE COOL"] = "a 2005 film" } }));
+        Assert.Contains("{ about, claim }", malformed.Message);
+    }
+
+    /// <summary>A billing line names several people: each is its own claim, and one wrong name fails the line.</summary>
+    [Fact]
+    public async Task TestABillingLineIsCheckedNameByNameAndFailsOnItsWeakest()
+    {
+        var canvas = new global::Polson.Drawing.Skia.SkiaCanvas(800, 120);
+        var ctx = canvas.GetContext();
+        ctx.FillStyle = "#ffffff";
+        ctx.FillRect(0, 0, 800, 120);
+        ctx.FillStyle = "#111111";
+        ctx.Font = "24px Arial";
+        const string billing = "JOHN TRAVOLTA · UMA THURMAN · RENE RUSSO";
+        const string director = "2005 · DIRECTED BY F. GARY GRAY";
+        ctx.FillText(billing, 20, 50);
+        ctx.FillText(director, 20, 100);
+        // becool5: the year is in the brief, which sourced the whole line by its figure and left the name unchecked.
+        File.WriteAllText(Path.Combine(root, "brief.md"), "# Brief\n<!-- BRIEF-BEGIN -->\nA trailer for Be Cool (2005).\n<!-- BRIEF-END -->\n");
+        var read = new JsonObject { ["items"] = new JsonArray(new JsonObject { ["text"] = billing }, new JsonObject { ["text"] = director }) }.ToJsonString();
+        using var reader = new VideoReader([new NemotronEndpoint(NemotronEndpoint.Nebius, "https://tf.example/v1", "k", NemotronEndpoint.NebiusModel)],
+            new DocumentBudget(5), root, http: new HttpClient(new Answer(read)));
+        var web = new Decisions(claim => claim.Contains("Russo") ? 0.02 : 0.999);
+        using var parallel = new global::Polson.ExtendedMind.ParallelSearch.ParallelClient("k", new HttpClient(web));
+        var facts = new global::Polson.ExtendedMind.ParallelSearch.FactChecker(parallel);
+
+        var result = await new VerifyToolkit(reader, root, null, facts: facts).Image(canvas, new Dictionary<string, object?>
+        {
+            ["sources"] = new Dictionary<string, object?>
+            {
+                [billing] = new Dictionary<string, object?>
+                {
+                    ["about"] = "Be Cool (2005 film)",
+                    ["claim"] = new object[] { "John Travolta stars in Be Cool (2005).", "Uma Thurman stars in Be Cool (2005).", "Rene Russo stars in Be Cool (2005)." },
+                },
+                [director] = new Dictionary<string, object?> { ["about"] = "Be Cool (2005 film)", ["claim"] = "Be Cool (2005) was directed by F. Gary Gray." },
+            },
+        });
+
+        Assert.Equal(4, web.Claims.Count);
+        var items = ((object?[])result["items"]!).Cast<Dictionary<string, object?>>().ToDictionary(i => (string)i["text"]!);
+        Assert.Equal("brief", items[director]["source"]);                                     // the year keeps its source
+        Assert.Equal("brief.md; web: supported (0.999): en.wikipedia.org", items[director]["detail"]);   // and the name is checked
+        Assert.Equal("supported", ((Dictionary<string, object?>)items[director]["web"]!)["verdict"]);
+        var item = items[billing];
+        var check = (Dictionary<string, object?>)item["web"]!;
+        Assert.Equal("not supported", check["verdict"]);
+        Assert.Equal(3, ((object?[])check["checks"]!).Length);
+        Assert.StartsWith("3 claims, the weakest not supported (0.020)", (string)item["detail"]!);
+        Assert.Contains("Rene Russo", (string)item["detail"]!);
+        Assert.False((bool)result["passed"]!);
+    }
     #endregion
 
     #region Types
@@ -1042,6 +1154,29 @@ public class VerifyTests : TestsRuntime, IDisposable
                 {
                     ["choices"] = new JsonArray(new JsonObject { ["message"] = new JsonObject { ["content"] = content }, ["finish_reason"] = "stop" }),
                     ["usage"] = new JsonObject { ["total_tokens"] = 100 },
+                }.ToJsonString()),
+            };
+        }
+    }
+
+    /// <summary>Parallel's Decisions API: each claim answered with the probability <c>score</c> gives it, citing Wikipedia.</summary>
+    private sealed class Decisions(Func<string, double> score) : HttpMessageHandler
+    {
+        public List<string> Claims { get; } = [];
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            var body = JsonNode.Parse(await request.Content!.ReadAsStringAsync(ct))!;
+            var claim = (string)body["questions"]!["claim"]!["instructions"]!;
+            Claims.Add(claim);
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(new JsonObject
+                {
+                    ["answers"] = new JsonObject { ["claim"] = new JsonObject { ["type"] = "noul", ["noul"] = score(claim) } },
+                    ["citations"] = new JsonArray(new JsonObject { ["url"] = "https://en.wikipedia.org/wiki/Be_Cool", ["excerpts"] = new JsonArray() }),
+                    ["usage"] = new JsonObject { ["input_tokens"] = 4000, ["output_tokens"] = 0 },
+                    ["decision_id"] = "d",
                 }.ToJsonString()),
             };
         }

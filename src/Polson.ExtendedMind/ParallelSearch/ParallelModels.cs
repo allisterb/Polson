@@ -382,6 +382,57 @@ public sealed record ParallelExtractResponse : ParallelResponse
     [JsonPropertyName("errors")]
     public IReadOnlyList<ExtractFailure> Errors { get; init; } = [];
 }
+
+/// <summary>Outcome of one Decisions call: an answer per question, and the evidence the whole call read.</summary>
+public sealed record ParallelDecisionResponse : ParallelResponse
+{
+    [JsonPropertyName("decision_id")]
+    public string DecisionId { get; init; } = string.Empty;
+
+    /// <summary>Keyed by the question names sent.</summary>
+    [JsonPropertyName("answers")]
+    public IReadOnlyDictionary<string, DecisionAnswer> Answers { get; init; } = new Dictionary<string, DecisionAnswer>();
+
+    /// <summary>For the whole call, not per answer: one question per call keeps them attributable.</summary>
+    [JsonPropertyName("citations")]
+    public IReadOnlyList<DecisionCitation> Citations { get; init; } = [];
+
+    /// <summary>An object here, where Search and Extract report a list.</summary>
+    [JsonPropertyName("usage")]
+    public new DecisionUsage? Usage { get; init; }
+}
+
+/// <summary>One answer. <c>type</c> is <c>noul</c> for a true-or-false question, or <c>refusal</c> with no value.</summary>
+public sealed record DecisionAnswer
+{
+    [JsonPropertyName("type")]
+    public string Type { get; init; } = string.Empty;
+
+    /// <summary>The estimated probability that the statement is true.</summary>
+    [JsonPropertyName("noul")]
+    public double? Noul { get; init; }
+}
+
+public sealed record DecisionCitation
+{
+    [JsonPropertyName("url")]
+    public string Url { get; init; } = string.Empty;
+
+    [JsonPropertyName("title")]
+    public string? Title { get; init; }
+
+    [JsonPropertyName("excerpts")]
+    public IReadOnlyList<string>? Excerpts { get; init; }
+}
+
+public sealed record DecisionUsage
+{
+    [JsonPropertyName("input_tokens")]
+    public long InputTokens { get; init; }
+
+    [JsonPropertyName("output_tokens")]
+    public long OutputTokens { get; init; }
+}
 #endregion
 
 #region Citation formatting

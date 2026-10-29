@@ -203,7 +203,10 @@ for the drawn layers (`comp.posterizeTime({ fps: 12 })`).
 **A camera move gives a poster depth.** Set the poster's layers at depths — groups with `z` and `keepSize: true`,
 backdrop far, type at 0 — add `comp.camera()`, and key one move (a push-in, a pan) as a beat of its own, eased in and
 out. `keepSize` holds each plane at its flat size at the start, so the poster's composition is exactly as designed
-until the camera moves (trailer4 pre-scaled every plane by hand to get this). `comp.warp` pins a layer to four corners, and
+until the camera moves (trailer4 pre-scaled every plane by hand to get this). When the camera's `target` moves, give
+`keepSize` the second the composition must be whole instead (`keepSize: 9.6`, the resolve), or the planes line up only
+where the camera first looked. To put one thing on another under the camera, ask where it lands rather than rendering
+to find out: `comp.boundsAt(t, { desc: 'groove', frame: true })` is a named shape's box in the frame's pixels. `comp.warp` pins a layer to four corners, and
 `comp.shadow` lifts one off its ground. Keep every plane in front of the camera, and keep them from changing places in
 depth: the film's `.sif` export refuses both. `Motion.pathPoints(d)` gives the same points as values when one of
 them should move, and `Motion.fitPoints(points, { closed: true })` turns a shape you only have as points into a few
@@ -290,7 +293,13 @@ A film this short can be planned in full before any key is set. Write the beats 
   that adds to it, the **title**, and an **end card** — but the brief decides.
 - **The end card carries only the film's own credits.** For a film that does not exist: no real festival
   laurel, award, review quote or rating. Those are claims made by real institutions, and on screen they read
-  as facts.
+  as facts. **For a real film, the end card bills it as a film is billed**: the leads in billing order (three to six
+  names), then the director, and the source a story is based on, as plain text and never a likeness. Take the
+  billing from the poster when `documents/` has one; otherwise from what you know of the film. Its credits are facts,
+  so state them in the read-back's `sources`, a billing line as one claim per name (`claim: ['John Travolta stars in Be
+  Cool (2005).', …]`): one wrong name fails the line. The check confirms each person is in the film, not where they are
+  billed, so say in `direction.md` where the order came from. Names stay in the film's own spelling, in every
+  language; a label beside them (*directed by*) is translated.
 - **Motion arrives and then holds.** Text is read after it stops moving: give a line at least as long
   still as its arrival took, and the title longer.
 - **Cut or move, not both at once**, unless the cut is the point.
@@ -550,7 +559,11 @@ set's own check from *More than one audience*:
   `final_` letter, and an `output.mp4` beside them reads as no film for that audience.
 - **Then read each film back against its sources**, in a script that rebuilds the composition (`MODE = 'checks'`):
   ```javascript
-  const v = await Verify.film(comp, 'output.mp4', { computed: { /* 'text as set': 'its working' */ } });
+  const v = await Verify.film(comp, 'output.mp4', {
+    computed: { /* 'text as set': 'its working' */ },
+    // A fact no document holds, such as a real film's credits: what it is about, and the fact as a sentence.
+    sources: { '2005 · DIRECTED BY F. GARY GRAY': { about: 'Be Cool (2005 film)', claim: 'Be Cool (2005) was directed by F. Gary Gray.' } },
+  });
   if (!v.ok) exit(v.remedy);          // 'Pending': the watcher is still reading — run the same script again
   log(v.summary);
   ```
@@ -558,8 +571,12 @@ set's own check from *More than one audience*:
   `Stage.check` refuses the name.
   A separate model watches the encoded film. Its transcription is held against every text the composition sets
   (`comp.texts()`), and each text's source is looked up: the brief, a document's page, a Qloo title, research, or a
-  figure you computed, which you pass with its working. What comes back:
+  figure you computed, which you pass with its working. A fact that is not arithmetic, such as a credit, goes in
+  `sources` and is checked on the web; your own lines and translations of the brief's are not facts, so leave them
+  out. What comes back:
   - **An unsourced figure** comes out of the film until you find its source.
+  - **A stated fact `not supported`** is wrong or found nowhere: correct it or take it off. One the sources leave
+    `unsettled` is stated as they state it, or the director sees it marked so.
   - **A missed text** is a reading-time or size fault until you show otherwise: look at its `seconds`.
   - **A stray** is a reading of text you never set. Look at the frame it saved, `artifacts/verify/<film>-stray-n.png`,
     before you call it anything, then, in a later script, `Verify.stray(n, 'misread')` or `Verify.stray(n, 'real')`; with

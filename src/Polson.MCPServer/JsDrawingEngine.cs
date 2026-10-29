@@ -80,10 +80,16 @@ public partial class JsDrawingEngine : Runtime
     public static DocumentProcessor? Documents { get; set; }
 
     /// <summary>
-    /// Watching a clip, configured once at startup from the Nemotron endpoints. Registered on the same terms
-    /// as <see cref="Documents"/>: unconfigured, it refuses with a remedy rather than being absent.
+    /// Watching a clip, configured once at startup: Gemini, or Nemotron when <c>Verify:Reader</c> names it. Registered on
+    /// the same terms as <see cref="Documents"/>: unconfigured, it refuses with a remedy rather than being absent.
     /// </summary>
     public static VideoReader? Video { get; set; }
+
+    /// <summary>
+    /// Checks the facts a read-back's <c>sources</c> option states, on the web, configured with Parallel at startup. Null and
+    /// they are recorded as unchecked.
+    /// </summary>
+    public static FactChecker? Facts { get; set; }
 
     /// <summary>
     /// Reference-photograph surface, configured once at startup. Null means the same thing it means
@@ -510,7 +516,7 @@ public partial class JsDrawingEngine : Runtime
             // A finished film against what it set and where that came from; its verdicts are recorded for the studio.
             var verifyEvents = Events;
             engine.SetValue("Verify", new VerifyToolkit(Video, ProjectRoot, session,
-                (type, fields) => verifyEvents?.Append(type, session?.Stage, executionId, fields)));
+                (type, fields) => verifyEvents?.Append(type, session?.Stage, executionId, fields), Facts));
 
             // Sourced research, read-only. Commissioning is the Research MCP tool's job because a run
             // takes far longer than ScriptTimeoutSeconds allows; by the time a script sees a task the

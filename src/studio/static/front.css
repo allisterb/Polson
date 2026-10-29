@@ -454,6 +454,8 @@ fieldset.fr-choice legend { padding: 0; margin-bottom: var(--space-1); }
 .vt-src-computed { --vt: var(--attention); }
 .vt-src-qloo { --vt: #7a4fd1; }
 .vt-src-research { --vt: var(--done); }
+.vt-src-web { --vt: #2f8f9d; }
+.fr-vclaim, .fr-vlink { display: block; overflow-wrap: anywhere; }
 .vt-src-scale { --vt: var(--line-control); }
 .vt-src-citation { --vt: var(--line-control); }
 .vt-src-own-words { --vt: var(--ink-muted); }
