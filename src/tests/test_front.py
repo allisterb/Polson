@@ -983,6 +983,19 @@ class CommissionedComposerTests(unittest.TestCase):
         self.assertIn('value="report" checked', page)
         self.assertNotIn("Let the studio choose", page)
 
+    def test_a_card_with_its_subject_asked_elsewhere_starts_with_a_brief(self):
+        """A starting brief, to keep or rewrite, only where the subject is a field or the attached document: elsewhere
+        the brief is the only place the subject is, and a prefilled one would be made about nothing."""
+        for card in catalogue.CARDS:
+            with self.subTest(card=card.slug):
+                about = any(x.subject for x in card.extras) or bool(card.needs)
+                self.assertEqual(bool(card.brief), about)
+        pitch = self.client.get("/compose/startup-pitch").text
+        self.assertIn(">Create a motion graphic startup pitch with as much information as possible for potential investors.</textarea>",
+                      pitch)
+        self.assertIn('placeholder="Say what it is for, who will see it, and what it must not be."></textarea>',
+                      self.client.get("/compose/painting").text)
+
     def test_the_report_cards_document_kind_is_chosen_in_the_form_not_the_header(self):
         """It is what the request is about, not a setting every workflow has: a pill row above the brief."""
         page = self.client.get("/compose/report-explainer").text

@@ -320,6 +320,59 @@ class CreditTests(unittest.TestCase):
                 studio._invocation_started.pop(key, None)
 
 
+class ModelCreditTests(unittest.TestCase):
+    """That the model's failed attempts are not billed as the agent's work: a Trello pitch (2026-10-29) lost 25–30 of
+    its 90 minutes to nine 504s and ran out of time with both films made."""
+
+    def setUp(self) -> None:
+        import studio
+
+        studio._credited.pop("inv1", None)
+        studio._model_credited.pop("inv1", None)
+        studio._invocation_started["inv1"] = 1000.0
+        studio._role_clock[("inv1", "polson")] = studio._RoleClock(1000.0, set())
+
+    def tearDown(self) -> None:
+        import studio
+
+        studio._invocation_started.pop("inv1", None)
+        studio._role_clock.pop(("inv1", "polson"), None)
+        studio._credited.pop("inv1", None)
+        studio._model_credited.pop("inv1", None)
+
+    def test_a_failed_attempt_is_given_back_to_both_clocks(self):
+        import studio
+
+        self.assertTrue(studio.credit_model_wait("inv1", "polson", 184.8))
+        self.assertEqual(studio._invocation_started["inv1"], 1184.8)
+        self.assertEqual(studio._role_clock[("inv1", "polson")].started, 1184.8)
+
+    def test_it_has_its_own_allowance_apart_from_the_directors(self):
+        """A slow model must not spend the director's waiting, nor a long question the model's."""
+        import studio
+
+        studio._credited["inv1"] = studio.MAX_CREDIT_SECONDS
+        self.assertTrue(studio.credit_model_wait("inv1", "polson", 180.0))
+        self.assertEqual(studio._credited["inv1"], studio.MAX_CREDIT_SECONDS)
+        self.assertEqual(studio._model_credited["inv1"], 180.0)
+
+    def test_it_runs_out_so_a_model_that_never_answers_still_halts(self):
+        import studio
+
+        studio._model_credited["inv1"] = studio.MAX_MODEL_CREDIT_SECONDS - 30.0
+        self.assertTrue(studio.credit_model_wait("inv1", "polson", 180.0))
+        self.assertEqual(studio._invocation_started["inv1"], 1030.0, "30 credited, the rest charged")
+        self.assertFalse(studio.credit_model_wait("inv1", "polson", 180.0))
+
+    def test_the_retry_watch_is_wired_to_it(self):
+        import studio
+        import transcript
+
+        self.assertIsNotNone(transcript._on_wait)
+        transcript._on_wait("inv1", "polson", 60.0)
+        self.assertEqual(studio._model_credited["inv1"], 60.0)
+
+
 class AskWiringTests(unittest.TestCase):
     """That the tool reaches the agent, and only the one that should have it."""
 
@@ -350,6 +403,27 @@ class AskWiringTests(unittest.TestCase):
         for sub in getattr(agent, "sub_agents", None) or []:
             self.assertNotIn("ask_director", [getattr(t, "name", "") for t in sub.tools],
                              f"{sub.name} should transfer to the facilitator rather than ask")
+
+    def test_no_tool_writes_the_artifact_list_into_the_instruction(self):
+        """`LoadArtifactsTool` put every artifact name into the system instruction on every turn, so each file the agent
+        wrote rewrote the head of the request and the conversation after it went uncached (Trello, 2026-10-29). `peek`
+        attaches the picture itself, and the tool had not been called in any run since."""
+        import json as _json
+
+        root = Path(tempfile.mkdtemp(prefix="polson-noload-")) / "acme"
+        try:
+            (root / "events").mkdir(parents=True)
+            (root / "project.json").write_text(_json.dumps({"id": "acme", "workflow": "logo"}), encoding="utf-8")
+            (root / "GEMINI.md").write_text("# instructions", encoding="utf-8")
+
+            import studio
+            agent = studio.build(root)
+            tools = [*agent.tools, *(t for sub in getattr(agent, "sub_agents", None) or [] for t in sub.tools)]
+        finally:
+            shutil.rmtree(root.parent, ignore_errors=True)
+
+        self.assertNotIn("load_artifacts", [getattr(t, "name", "") for t in tools])
+        self.assertIn("peek", [getattr(t, "name", "") for t in agent.tools])
 
     def test_an_autonomous_project_has_no_one_to_ask(self):
         """`create-project --auto`: no tool, and no instruction saying a director is watching."""

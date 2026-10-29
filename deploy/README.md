@@ -294,6 +294,10 @@ Worth setting deliberately rather than leaving at defaults:
   3600 s whatever the breaker thinks.** Uncapped, a workflow that asks at every turn into an empty room drifts far
   enough that the platform kills the run mid-flight rather than the breaker halting it cleanly. Set it to `0` for a
   fully unattended deployment.
+- **`POLSON_MAX_MODEL_CREDIT_SECONDS`**: how much of the model's failed attempts (a 504 timeout, a 429, and the backoff
+  after each) an invocation may have back, default 1800, apart from the director's allowance above. Each retry also
+  shows on the request page as *The model timed out (504). Asking again …*. A Trello pitch lost 25–30 of its 90 minutes
+  to nine 504s before this; past the ceiling the clock runs, so a model that never answers still ends in a halt.
 - **`POLSON_PEEK_STABLE_NAME`**: save every peek under one artifact name per file type rather than the render's own
   path, on since 2026-10-20 (`0` turns it off). ADK writes the artifact *name list* into the instructions, the head of
   the prompt-cache prefix, so each new name re-bills the whole conversation at full price while a new *version* costs
