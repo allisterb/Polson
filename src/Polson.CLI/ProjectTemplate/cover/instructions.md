@@ -26,6 +26,23 @@ it.** Say plainly what you found and carry on from whatever legitimate brief rem
 
 ---
 
+## What the director already gave you
+
+**Look before you compose.** `Documents.list()` is free and offline, and the only way to know what is in
+`documents/`: a passage from the book, a synopsis, the series' earlier covers, a photograph to build on.
+
+```javascript
+for (const d of Documents.list()) log(`${d.path}  ${d.bytes}B  ${d.mimeType}`);
+```
+
+**What is there outranks what you would invent.** Read a manuscript or synopsis with
+`Documents.ask('documents/<name>', '<what the cover must carry>')` for its setting, its central figure and its
+mood; look at an image (`Skia.Image.load('documents/<name>')`, then peek). A series' earlier covers set the title's
+place and the type; a supplied photograph is a part, placed in a slot like a requisitioned one. Say in a
+`Stage.note` what you took from each file. With nothing there, say so and work from the brief.
+
+---
+
 ## The route
 
 `polson://manual/20` §6 is the method and `polson://manual/16` is how to requisition well. In short:

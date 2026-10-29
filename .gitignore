@@ -452,6 +452,7 @@ src/adk_agent/artifact_versions/
 # assessments,
 docs/internal/
 docs/devpost/Polson Graphics Studio*
+!docs/devpost/Polson Graphics Studio.md
 docs/devpost/q*
 # Downloaded assets, fetched by tools/bootstrap.py at pinned URLs and verified by SHA-256 rather than
 # committed: MediaPipe's landmarker weights into models/ (Apache 2.0, per each model's card), the vision venv,
