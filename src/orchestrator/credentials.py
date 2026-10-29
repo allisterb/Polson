@@ -23,6 +23,7 @@ first run rather than at setup, so the messages below name the path.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 #: Repository root, from `src/orchestrator/credentials.py` — two levels up, not three.
@@ -32,8 +33,12 @@ from pathlib import Path
 #: that simply has no `bin/cli`, so the CLI reads as *not built* and every test that needs it skips.
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-CLI_DIR = REPO_ROOT / "bin" / "cli"
-CLI_DLL = CLI_DIR / "Polson.CLI.dll"
+#: The engine, where `POLSON_CLI_DLL` puts it, else the checkout's build. The container sets it: there this package is
+#: `/app/orchestrator`, two levels up is `/`, and every studio deploy looked for `/bin/cli` — so `techniques --json`
+#: failed and the composer's "Graphic design" field was missing on every one. The settings file is the one beside the
+#: engine either way, so the two halves still read one file.
+CLI_DLL = Path(os.environ.get("POLSON_CLI_DLL", "").strip() or REPO_ROOT / "bin" / "cli" / "Polson.CLI.dll")
+CLI_DIR = CLI_DLL.parent
 CLI_SETTINGS = CLI_DIR / "appsettings.json"
 
 #: The template to copy, for the message that tells someone to copy it.

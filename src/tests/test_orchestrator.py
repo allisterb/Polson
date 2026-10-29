@@ -500,3 +500,30 @@ class ConfigTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CliLocationTests(unittest.TestCase):
+    """Where the studio finds the engine: `POLSON_CLI_DLL`, which the container sets, else the checkout's build."""
+
+    def load(self, value: str | None):
+        import importlib
+        from unittest import mock
+        from orchestrator import credentials
+        env = {k: v for k, v in os.environ.items() if k != "POLSON_CLI_DLL"}
+        if value is not None:
+            env["POLSON_CLI_DLL"] = value
+        with mock.patch.dict(os.environ, env, clear=True):
+            module = importlib.reload(credentials)
+        self.addCleanup(importlib.reload, credentials)
+        return module
+
+    def test_the_container_s_engine_and_its_settings_are_found_where_it_says(self):
+        """In the image this package is /app/orchestrator, two levels up is /, and techniques --json found no CLI."""
+        dll = Path(tempfile.gettempdir()) / "app" / "bin" / "cli" / "Polson.CLI.dll"
+        module = self.load(str(dll))
+        self.assertEqual(module.CLI_DLL, dll)
+        self.assertEqual(module.CLI_SETTINGS, dll.parent / "appsettings.json")
+
+    def test_without_it_the_checkout_s_build_is_used(self):
+        module = self.load(None)
+        self.assertEqual(module.CLI_DLL, module.REPO_ROOT / "bin" / "cli" / "Polson.CLI.dll")
