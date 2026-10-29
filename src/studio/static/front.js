@@ -477,6 +477,21 @@
     questions.parentNode.insertBefore(note, questions);
   }
 
+  // Says the model is slow to answer and the studio is asking again. Until the next turn there is nothing else to show,
+  // and a page that only stops moving reads as a crash: a Trello turn waited 10.6 minutes through two 504s (2026-10-29).
+  function waiting(e) {
+    if (finished) return;
+    var note = page.querySelector('[data-waiting]');
+    if (!note) {
+      note = el('p', 'fr-notice', '');
+      note.setAttribute('data-waiting', '');
+      note.setAttribute('role', 'status');
+      questions.parentNode.insertBefore(note, questions);
+    }
+    note.textContent = window.PolsonRecord.detail('model.wait', e);
+  }
+  function answered() { var note = page.querySelector('[data-waiting]'); if (note) note.remove(); }
+
   // The sidebar count is drawn when the page loads; one run at a time means this page's questions are all of it.
   function clearBadge() {
     if (questions.children.length) return;
@@ -899,6 +914,9 @@
     later();
   });
   on('budget', budget);
+  on('model.wait', waiting);
+  // Any sign of the next turn, or the run's end, means the wait is over.
+  ['usage', 'thinking', 'text', 'tool.call', 'run.end'].forEach(function (kind) { on(kind, answered); });
   on('question.open', ask);
   on('question.closed', function (e) {
     var card = document.getElementById('q-' + e.id); if (card) card.remove();

@@ -25,6 +25,7 @@ moves control rather than forking it, so one agent runs at a time and nothing ra
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -38,7 +39,6 @@ from google.adk.agents.llm_agent import Agent
 from google.adk.apps import App
 from google.adk.tools import FunctionTool
 from google.adk.tools.agent_tool import AgentTool
-from google.adk.tools.load_artifacts_tool import LoadArtifactsTool
 from google.adk.tools.mcp_tool import McpToolset
 
 import ask
@@ -375,10 +375,11 @@ def _make_peek(project: Path):
         # The artifact name keeps the path so successive renders of *different* stages stay
         # distinct, while re-renders of the same stage become versions of one artifact.
         #
-        # **Unless the stable name is switched on, because that distinctness is expensive.** ADK's
-        # `LoadArtifactsTool` writes `json.dumps(list_artifacts())` into the *instructions*, which is
-        # the head of the prompt-cache prefix — so every new artifact **name** rewrites the prefix and
-        # the whole conversation is re-billed at full price. Measured on two live drawing runs: 25 of
+        # **Unless the stable name is switched on, because that distinctness was expensive.** ADK's
+        # `LoadArtifactsTool` wrote `json.dumps(list_artifacts())` into the *instructions*, which is
+        # the head of the prompt-cache prefix — so every new artifact **name** rewrote the prefix and
+        # the whole conversation was re-billed at full price. The tool is gone now (see `looking` in
+        # `build`), which ends that for every name; the stable name is kept as the ADK console's view. Measured on two live drawing runs: 25 of
         # 95 turns missed cache and cost 1,501,528 tokens, 62% of the run's entire budget, and 13 of
         # 16 misses on the earlier run land exactly on a new name appearing.
         #
@@ -386,7 +387,7 @@ def _make_peek(project: Path):
         # file type keeps the cache warm. Nothing is lost that mattered: the disk keeps the real
         # names — `artifacts/001_ground.webp` is still there for `Skia.Image.load` and `bitmap.diff`,
         # which is the comparison path Manual 15 prescribes — and peeking an *older* file re-reads it
-        # from disk and saves it as the newest version, so `load_artifacts` still brings it into view.
+        # from disk and attaches it again.
         source = artifact_path.replace("\\", "/").lstrip("./")
         filename = f"peek{candidate.suffix.lower()}" if PEEK_STABLE_NAME else source
         version = await tool_context.save_artifact(
@@ -870,6 +871,10 @@ def _show_retries() -> None:
 
 
 _show_retries()
+# And into the run's own record, where the page shows the director why the run has gone quiet (`model.wait`), and the
+# failed attempts are given back to the clock (`credit_model_wait`).
+transcript.watch_retries(RETRY_ATTEMPTS, on_wait=lambda invocation, agent, seconds:
+                         credit_model_wait(invocation, agent, seconds))
 
 
 #: The first segment of a name that is the JavaScript SDK's, not a tool: `Stage.begin`, `Snap(...)`.
@@ -1043,6 +1048,34 @@ _role_clock: dict[tuple[str, str], _RoleClock] = {}
 _invocation_started: dict[str, float] = {}
 _tripped: set[str] = set()
 
+#: Each invocation's request head as its current model call was sent, for the turn log: see `request_head`.
+_turn_head: dict[str, str] = {}
+
+
+def request_head(llm_request) -> str:
+    """Short fingerprints of what heads every request, `<system instruction>/<tools>`, eight hex digits each.
+
+    **A prompt cache matches from the first byte**, so one changed byte in the instruction or a tool declaration misses
+    everything after it. On the Trello pitch (2026-10-29) 24 turns went uncached and some cached only ~8k tokens, about
+    the size of the tool declarations, which reads as the instruction changing; nothing on record could say whether it
+    had. With this on every turn line, a miss under an unchanged head is Gemini's, and one under a new head is ours.
+    Serialised in order and not sorted, because the order is part of what the model is sent.
+    """
+    def short(value: str) -> str:
+        return hashlib.sha256(value.encode("utf-8", "replace")).hexdigest()[:8]
+
+    try:
+        config = getattr(llm_request, "config", None)
+        instruction = getattr(config, "system_instruction", None)
+        tools = getattr(config, "tools", None) or []
+        said = instruction.model_dump_json(exclude_none=True) if hasattr(instruction, "model_dump_json") else str(instruction or "")
+        declared = json.dumps([t.model_dump(mode="json", exclude_none=True) if hasattr(t, "model_dump") else repr(t)
+                               for t in tools], ensure_ascii=False)
+        return f"{short(said)}/{short(declared)}"
+    except Exception:                                           # noqa: BLE001 - a log field never fails a turn
+        return "?"
+
+
 #: Seconds of director-waiting already credited back, per invocation. See `credit_wait`.
 _credited: dict[str, float] = {}
 
@@ -1054,6 +1087,18 @@ try:
     MAX_CREDIT_SECONDS = max(0.0, float(os.environ.get("POLSON_MAX_CREDIT_SECONDS", "300")))
 except ValueError:
     MAX_CREDIT_SECONDS = 300.0
+
+#: Seconds of model retries already credited back, per invocation. See `credit_model_wait`.
+_model_credited: dict[str, float] = {}
+
+#: How much of the model's failed attempts an invocation may have back: its own allowance, apart from the director's,
+#: because the two have nothing to do with each other and one should not spend the other. Thirty minutes covers the
+#: worst run measured, a Trello pitch that lost 25–30 of its 90 to nine 504s; past it the clock runs, so a model that
+#: never answers still ends in a clean halt. `POLSON_MAX_MODEL_CREDIT_SECONDS`; zero disables it.
+try:
+    MAX_MODEL_CREDIT_SECONDS = max(0.0, float(os.environ.get("POLSON_MAX_MODEL_CREDIT_SECONDS", "1800")))
+except ValueError:
+    MAX_MODEL_CREDIT_SECONDS = 1800.0
 
 # --------------------------------------------------------------------------------------------
 # The token budget.
@@ -1176,16 +1221,35 @@ def credit_wait(invocation: str | None, agent_name: str | None, seconds: float) 
     an agent that keeps asking into an empty room pays for it, which is the right incentive: the
     tool is for the few decisions that shape everything after them, not for every turn.
     """
+    return _credit(invocation, agent_name, seconds, _credited, MAX_CREDIT_SECONDS, "waiting")
+
+
+def credit_model_wait(invocation: str | None, agent_name: str | None, seconds: float) -> bool:
+    """Gives back time a model call spent failing: an attempt that timed out or was refused, and the backoff after it.
+
+    **The agent cannot make the model answer, so it should not pay for the model not answering.** A Trello pitch
+    (2026-10-29) lost 25–30 minutes of its 90 to nine 504 `DEADLINE_EXCEEDED` answers, each a full 180 s attempt, and
+    ran out of time with both films made and nothing written up. Called by the transcript's retry watch as each retry
+    is logged, with the failed attempt's length; the attempt that answers is charged as any turn is. Its own ledger and
+    ceiling, `MAX_MODEL_CREDIT_SECONDS`, and the same anchors as `credit_wait`, with the same `Stage.elapsedMinutes`
+    limitation.
+    """
+    return _credit(invocation, agent_name, seconds, _model_credited, MAX_MODEL_CREDIT_SECONDS, "model retries")
+
+
+def _credit(invocation: str | None, agent_name: str | None, seconds: float, ledger: dict[str, float], ceiling: float,
+            what: str) -> bool:
+    """Moves the breaker's and the role's anchors on by `seconds`, up to `ceiling` in total per invocation."""
     if not invocation or seconds <= 0:
         return False
 
     # Clamped rather than refused: a wait that straddles the ceiling is credited up to it. Refusing
     # the whole wait would make one long question cost more than two short ones summing to the same.
-    already = _credited.get(invocation, 0.0)
-    seconds = min(seconds, max(0.0, MAX_CREDIT_SECONDS - already))
+    already = ledger.get(invocation, 0.0)
+    seconds = min(seconds, max(0.0, ceiling - already))
     if seconds <= 0:
-        _TURN_LOG.warning("polson budget: %s has spent its %.0fs of free waiting; the clock runs",
-                          invocation, MAX_CREDIT_SECONDS)
+        _TURN_LOG.warning("polson budget: %s has spent its %.0fs of free %s; the clock runs",
+                          invocation, ceiling, what)
         return False
 
     credited = False
@@ -1200,9 +1264,9 @@ def credit_wait(invocation: str | None, agent_name: str | None, seconds: float) 
     if credited:
         # Counted only when it was actually applied, so an invocation with no clock yet — a tool
         # called before the first model call — does not silently burn its allowance on nothing.
-        _credited[invocation] = already + seconds
-        _TURN_LOG.warning("polson budget: %.0fs of waiting credited back to %s (%.0fs of %.0fs used)",
-                          seconds, invocation, _credited[invocation], MAX_CREDIT_SECONDS)
+        ledger[invocation] = already + seconds
+        _TURN_LOG.warning("polson budget: %.0fs of %s credited back to %s (%.0fs of %.0fs used)",
+                          seconds, what, invocation, ledger[invocation], ceiling)
     return credited
 
 
@@ -1455,6 +1519,7 @@ def _prune_role_clocks(now: float) -> None:
             _invocation_cached.pop(invocation, None)
             _token_warned.pop(invocation, None)
             _credited.pop(invocation, None)
+            _model_credited.pop(invocation, None)
 
 
 def _trip_breaker(callback_context, elapsed: float, cap: float, limit: str = "time"):
@@ -1551,6 +1616,7 @@ def _make_before_model(budget: _RoleBudget | None, cap: float | None = None,
                 return _trip_breaker(callback_context, raw, raw_cap, "raw")
 
         _turn_started[invocation] = now
+        _turn_head[invocation] = request_head(llm_request)
         _prune_role_clocks(now)
 
         # Told once per threshold per invocation, on `contents` rather than the system instruction —
@@ -1675,7 +1741,7 @@ def _after_model(callback_context, llm_response):
     # counts print as 0 rather than being dropped, so a parser can split on the same fields every
     # turn — except in= and out=, where "?" says the model reported nothing and 0 would be a claim.
     _TURN_LOG.warning(
-        "turn %s/%s %.1fs in=%s cached=%s out=%s think=%s tooluse=%s",
+        "turn %s/%s %.1fs in=%s cached=%s out=%s think=%s tooluse=%s head=%s",
         callback_context.agent_name,
         callback_context.invocation_id,
         elapsed,
@@ -1684,6 +1750,7 @@ def _after_model(callback_context, llm_response):
         output_tokens if output_tokens is not None else "?",
         thought_tokens if thought_tokens is not None else 0,
         tool_tokens if tool_tokens is not None else 0,
+        _turn_head.pop(callback_context.invocation_id, "?"),
     )
     return None
 
@@ -1958,10 +2025,16 @@ def build(
     # Perception. Every agent gets these: a role that cannot see its own work is the failure
     # this pair exists to prevent, and it fails silently.
     # Split so the advisor can be given the looking half without the writing half.
+    #
+    # **No `LoadArtifactsTool`.** It writes every artifact name into the *system instruction* on every turn, and
+    # `write_script`/`edit_script` save each file the agent writes under its own name, so each new file rewrote the
+    # head of the request and the conversation after it went uncached. On the Trello pitch (2026-10-29) about 13 new
+    # names against 13 turns with nothing cached; a local rerun with the head fingerprinted (`head=` in the turn log)
+    # changed head on `mindmap.md`, the first peek and `concepts_sf.md`, each a miss. And it had no use left: `peek`
+    # attaches the picture itself (`_make_attach_peeks`), and no run since has called `load_artifacts`.
     looking = [
         FunctionTool(_make_peek(project)),
         FunctionTool(_make_read_file(project)),
-        LoadArtifactsTool(),
     ]
     perception = [
         *looking,
@@ -2130,4 +2203,45 @@ def build_app(project_dir: str | Path, *, name: str | None = None, **kwargs) -> 
                 advisor_tool=ADVISOR_NAME if roles_in(project) else None,
             )
         ],
+        context_cache_config=context_cache_config(),
     )
+
+
+#: Explicit context caching, off unless `POLSON_CONTEXT_CACHE=1`: an experiment until a run has been measured with it.
+CONTEXT_CACHE_ENV = "POLSON_CONTEXT_CACHE"
+
+
+def context_cache_config():
+    """ADK's explicit Gemini cache for the instructions, tools and conversation so far, or None when it is off.
+
+    **Gemini's implicit cache missed with nothing changed.** On the Trello pitch (2026-10-29), 53% of 9.04M billable
+    tokens went on 24 turns it did not serve: eight in a row at 19:45–19:51 with no wait, no new artifact name and the
+    instruction fixed, and more after each run of 504s. An explicit cache lasts its TTL whatever the wait, and ADK sends
+    every call against it while the prefix's fingerprint (instruction, tools, the cached turns) still matches.
+
+    **It needs application-default credentials, not the express key.** Vertex's `cachedContents` refuses API keys
+    (probed 2026-10-29: 404 on the express endpoint, 401 *API keys are not supported by this API* under
+    `projects/…/locations/global` and `us-central1`), so with the key ADK logs the failure on every turn and runs
+    uncached. It wants the model client built on a principal: the runtime account on Cloud Run, or
+    `gcloud auth application-default login` locally.
+
+    What it costs to write one is not yet measured: ADK rewrites the whole conversation into a new cache when the TTL
+    or `cache_intervals` runs out, so few rebuilds and a long life are the settings. `POLSON_CONTEXT_CACHE_TTL` (3600 s),
+    `POLSON_CONTEXT_CACHE_INTERVALS` (25 uses, at most 100) and `POLSON_CONTEXT_CACHE_MIN_TOKENS` (32768) tune it.
+    """
+    if os.environ.get(CONTEXT_CACHE_ENV, "").strip() != "1":
+        return None
+    from google.adk.agents.context_cache_config import ContextCacheConfig  # noqa: PLC0415 - only when asked for
+
+    def number(name: str, default: int, low: int, high: int) -> int:
+        try:
+            return min(high, max(low, int(os.environ.get(name, "").strip() or default)))
+        except ValueError:
+            return default
+
+    config = ContextCacheConfig(ttl_seconds=number("POLSON_CONTEXT_CACHE_TTL", 3600, 60, 86400),
+                                cache_intervals=number("POLSON_CONTEXT_CACHE_INTERVALS", 25, 1, 100),
+                                min_tokens=number("POLSON_CONTEXT_CACHE_MIN_TOKENS", 32768, 0, 10_000_000))
+    _TURN_LOG.warning("context cache: explicit, ttl %ss, %s uses, from %s tokens",
+                      config.ttl_seconds, config.cache_intervals, config.min_tokens)
+    return config

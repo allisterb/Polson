@@ -222,6 +222,16 @@
       return parts.join(' — ');
     }
     if (kind === 'stream.lag' || kind === 'stream.truncated') return e.dropped + ' not shown';
+    // The model did not answer and the call is being made again: minutes of nothing that are not the run's doing.
+    // In plain words for a director, the status code kept: 504 and a client timeout are the model being too slow.
+    if (kind === 'model.wait') {
+      var cause = String(e.cause || ''), code = (cause.match(/\b[45]\d\d\b/) || [''])[0];
+      var what = /504|DEADLINE|Timeout/i.test(cause) ? 'timed out' : /429|RESOURCE_EXHAUSTED/i.test(cause) ? 'is busy'
+        : /503|UNAVAILABLE/i.test(cause) ? 'is unavailable' : 'did not answer';
+      var tries = e.attempts ? ' (attempt ' + (e.attempt + 1) + ' of ' + e.attempts + ')' : '';
+      return 'The model ' + what + (code ? ' (' + code + ')' : '') + '. Asking again'
+        + (e.seconds ? ' in ' + Math.round(e.seconds) + ' s' : '') + tries + '; the run carries on as soon as it answers.';
+    }
     // A check is the one row that can be wrong, so its verdict leads, and an accepted failure carries its reason.
     if (kind === 'check') {
       var verdict = (e.passed ? 'pass' : e.accepted ? 'failed, kept' : 'FAILED') + (e.judged ? ' (judged by eye)' : '');

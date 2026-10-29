@@ -31,11 +31,14 @@ second dialect for one reader to reconcile, so this writes the same events with 
 from __future__ import annotations
 
 import logging
+import re
 import sys
+import time
 import uuid as _uuid
 from collections import OrderedDict, deque
+from contextvars import ContextVar
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 _logger = logging.getLogger("polson.transcript")
 
@@ -121,6 +124,57 @@ def note_artifact(invocation: str, *, name: str, version: int, source: str) -> N
             _artifacts.popitem(last=False)
     except Exception as exc:                                    # pragma: no cover - defensive
         _logger.debug("polson transcript: artifact version not recorded (%s)", exc)
+
+
+#: Who to tell when the model call in flight is retried: set by the plugin as each turn starts, and read in the
+#: same task by the log handler below, which is the only place a retry is visible.
+_turn: ContextVar[Callable[[str], None] | None] = ContextVar("polson_turn", default=None)
+
+#: Attempts per model call, original included, as `studio.RETRY_ATTEMPTS` sets them; given by `watch_retries`.
+_attempts = 0
+
+#: Told each failed attempt's length, with its backoff, as `(invocation, agent, seconds)`: `studio.credit_model_wait`.
+_on_wait: Callable[[str | None, str | None, float], Any] | None = None
+
+#: What genai's retry line says: `Retrying … in 8.76 seconds as it raised ServerError: 504 DEADLINE_EXCEEDED. {…}`.
+_RETRY = re.compile(r"in (?P<seconds>[\d.]+) seconds as it raised (?P<cause>[^{]*)")
+
+
+def retry_fields(message: str) -> dict[str, Any]:
+    """The wait and its cause from one retry line, the JSON body left out: `{seconds, cause}`, either may be None."""
+    m = _RETRY.search(message or "")
+    if not m:
+        return {"seconds": None, "cause": None}
+    return {"seconds": round(float(m["seconds"]), 1), "cause": m["cause"].strip().rstrip(".")[:160] or None}
+
+
+class _RetryNotice(logging.Handler):
+    """Passes each of genai's retry lines to the turn in flight, so the run's record says why it has gone quiet.
+
+    **The director saw a run stop moving and nothing say why.** On 2026-10-29 a Trello pitch turn waited 10.6 minutes
+    through two 504 `DEADLINE_EXCEEDED` answers before Gemini replied; the retries were in the container's log and the
+    page showed the last thing the agent did. genai retries inside one call, below every ADK callback, and logs each
+    retry before it sleeps; this is the one place the wait can be seen while it is happening.
+    """
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            message = record.getMessage()
+            if message.startswith("Retrying") and (tell := _turn.get()) is not None:
+                tell(message)
+        except Exception:                                       # pragma: no cover - a recorder never fails the call
+            pass
+
+
+def watch_retries(attempts: int, on_wait: Callable[[str | None, str | None, float], Any] | None = None) -> None:
+    """Hands genai's retries to the record, once per process. `attempts` is the call's, the original included;
+    `on_wait`, if given, is told how long each failed attempt and its backoff took, to give that time back."""
+    global _attempts, _on_wait
+    _attempts, _on_wait = attempts, on_wait
+    log = logging.getLogger("google_genai._api_client")
+    if not any(isinstance(h, _RetryNotice) for h in log.handlers):
+        log.addHandler(_RetryNotice())
+    log.setLevel(min(log.level or logging.INFO, logging.INFO))      # genai logs its retries at INFO
 
 
 def _take_artifacts(invocation: str) -> list[dict[str, Any]]:
@@ -241,6 +295,39 @@ def make_plugin(project_dir: str | Path):
                                          text=text, truncated=truncated or None)
             except Exception as exc:
                 _logger.debug("polson transcript: user message not recorded (%s)", exc)
+            return None
+
+        async def before_model_callback(self, *, callback_context, llm_request):
+            """A model call starting: arms `_RetryNotice` to write a `model.wait` for each retry it makes.
+
+            Set in this task's context, which the call that follows runs in, so a retry is written to this project's
+            record and no other. Counted per call, so `attempt` is the one that failed: 1 is the original request.
+
+            Each failed attempt is also timed, from the start of the call or the end of the last backoff to its retry
+            line, and given back with the backoff that follows (`_on_wait`): the attempt that answers is not.
+            """
+            try:
+                invocation = getattr(callback_context, "invocation_id", None) or None
+                agent = getattr(callback_context, "agent_name", None)
+                failed, mark = 0, time.monotonic()
+
+                def tell(message: str) -> None:
+                    nonlocal failed, mark
+                    failed += 1
+                    fields = retry_fields(message)
+                    self.agent.append("model.wait", at=timestamp(), uuid=_id(), invocation=invocation, agent=agent,
+                                      attempt=failed, attempts=_attempts or None, **fields)
+                    now, backoff = time.monotonic(), fields["seconds"] or 0.0
+                    if _on_wait is not None:
+                        try:
+                            _on_wait(invocation, agent, now - mark + backoff)
+                        except Exception as exc:                # pragma: no cover - a recorder never fails the call
+                            _logger.debug("polson transcript: model wait not credited (%s)", exc)
+                    mark = now + backoff
+
+                _turn.set(tell)
+            except Exception as exc:
+                _logger.debug("polson transcript: retry watch not armed (%s)", exc)
             return None
 
         async def after_model_callback(self, *, callback_context, llm_response):

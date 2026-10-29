@@ -13,6 +13,7 @@ that the event is missing but that it arrives one line too late.
 from __future__ import annotations
 
 import json
+import logging
 import shutil
 import sys
 import tempfile
@@ -190,6 +191,80 @@ class BudgetWarningTests(unittest.TestCase):
 
         self.assertEqual([], self.written())
         self.assertIn("inv-2", transcript_mod._budget)
+
+
+class ModelWaitTests(unittest.TestCase):
+    """That a director is told the model has not answered and is being asked again.
+
+    genai retries inside one model call, below every ADK callback, and logs each retry before it sleeps. On 2026-10-29
+    a Trello pitch turn waited 10.6 minutes through two 504s with the page showing the agent's last action, and the
+    retries only in the container's log. The log line is turned into a `model.wait` in the run's own record.
+    """
+
+    LINE = ("Retrying google.genai._api_client.BaseApiClient._async_request_once in 8.76 seconds as it raised "
+            "ServerError: 504 DEADLINE_EXCEEDED. {'error': {'code': 504, 'message': 'Deadline expired before operation "
+            "could complete.', 'status': 'DEADLINE_EXCEEDED'}}.")
+
+    def setUp(self) -> None:
+        self.root = Path(tempfile.mkdtemp(prefix="polson-transcript-"))
+        self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
+        # What `studio` installed is put back afterwards, so a later test still finds its credit wired.
+        self.addCleanup(transcript_mod.watch_retries, transcript_mod._attempts, transcript_mod._on_wait)
+        self.credited: list[tuple] = []
+        transcript_mod.watch_retries(8, on_wait=lambda *args: self.credited.append(args))
+        self.plugin = transcript_mod.make_plugin(self.root)
+        if self.plugin is None:
+            self.skipTest("google.adk or orchestrator.events is not importable here")
+
+    def waits(self) -> list[dict]:
+        return [e for e in events(self.root, "agent.jsonl") if e["type"] == "model.wait"]
+
+    async def call(self, *lines: str) -> None:
+        """One model call as ADK and genai make it: the callback, then genai's retry lines, in one task."""
+        await self.plugin.before_model_callback(callback_context=context(), llm_request=None)
+        for line in lines:
+            logging.getLogger("google_genai._api_client").info(line)
+
+    def test_each_retry_is_written_with_its_wait_and_cause(self):
+        run(self.call(self.LINE, self.LINE.replace("8.76", "17.2")))
+
+        waits = self.waits()
+        self.assertEqual([1, 2], [w["attempt"] for w in waits])
+        self.assertEqual((8.8, "ServerError: 504 DEADLINE_EXCEEDED", 8, "inv-1"),
+                         (waits[0]["seconds"], waits[0]["cause"], waits[0]["attempts"], waits[0]["invocation"]))
+        self.assertEqual(17.2, waits[1]["seconds"])
+
+    def test_each_failed_attempt_is_given_back_with_its_backoff(self):
+        """The attempt's own length plus the sleep after it; the next attempt is timed from the sleep's end."""
+        run(self.call(self.LINE, self.LINE.replace("8.76", "17.2")))
+
+        self.assertEqual([("inv-1", None)] * 2, [c[:2] for c in self.credited])
+        first, second = (c[2] for c in self.credited)
+        self.assertAlmostEqual(8.8, first, delta=0.5)
+        # Logged at once, before the first backoff has passed: no time of its own, less the 8.8 s not yet slept.
+        self.assertAlmostEqual(17.2 - 8.8, second, delta=0.5)
+
+    def test_the_count_starts_again_with_each_call(self):
+        run(self.call(self.LINE))
+        run(self.call(self.LINE))
+
+        self.assertEqual([1, 1], [w["attempt"] for w in self.waits()])
+
+    def test_a_retry_outside_a_watched_call_is_not_written(self):
+        """Another task, with no call armed: another project's run, or none."""
+        logging.getLogger("google_genai._api_client").info(self.LINE)
+
+        self.assertEqual([], self.waits())
+
+    def test_genai_lines_that_are_not_retries_are_ignored(self):
+        run(self.call("Sending request to the model"))
+
+        self.assertEqual([], self.waits())
+
+    def test_a_line_in_another_shape_still_says_the_model_is_being_asked_again(self):
+        self.assertEqual({"seconds": None, "cause": None}, transcript_mod.retry_fields("Retrying soon"))
+        self.assertEqual({"seconds": 4.6, "cause": "ReadTimeout"},
+                         transcript_mod.retry_fields("Retrying f in 4.56 seconds as it raised ReadTimeout."))
 
 
 class RunEndTests(unittest.TestCase):

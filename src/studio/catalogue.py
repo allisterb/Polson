@@ -209,6 +209,10 @@ class Card:
     #: The type is chosen in the form, above the brief, rather than in the header: it is what the request is about (the
     #: report's kind), not a setting every workflow has.
     type_in_form: bool = False
+    #: The brief the form starts with, for the director to keep or rewrite. Only on a card whose subject is asked
+    #: elsewhere (a `subject` field, or the document it `needs`): there a general brief is still about something. On
+    #: the others the brief is the only place the subject is, and a prefilled one would be made as typed, about nothing.
+    brief: str = ""
 
     @property
     def multi_route(self) -> bool:
@@ -278,7 +282,9 @@ CARDS: tuple[Card, ...] = (
          (Route("motion", "Motion graphics trailer"),),
          image="film-trailer.webp", alt="A trailer's end card: a cracked vinyl record beside the title",
          extras=(FILM, Extra("duration", "Duration", ("15 seconds", "30 seconds"), "15 seconds")),
-         audiences=True, types=()),
+         audiences=True, types=(),
+         brief="A motion trailer for the film that makes each audience want to see it: true to the film's tone and "
+               "story, with its real credits on the end card."),
     # Dynamic creative: one product, an ad per audience, each from that audience's buyers (Qloo). The motion
     # workflow's `product` type; its evidence method is `docs/internal/product-ad-probe.md`.
     Card("product-ad", "Product ad", "video", "Video · 15 seconds, one ad per audience",
@@ -290,7 +296,9 @@ CARDS: tuple[Card, ...] = (
                  Extra("claim", "Claim", placeholder="The one claim, worded as it may appear", long=True, rows=2),
                  Extra("cta", "Call to action", placeholder="What the viewer should do next", long=True, rows=2),
                  Extra("duration", "Duration", ("15 seconds", "30 seconds"), "15 seconds")),
-         audiences=True, types=("product",)),
+         audiences=True, types=("product",),
+         brief="A motion ad for the product that makes each audience want to try it, built on its one claim and "
+               "ending on the call to action."),
     # An audience's questions answered from a long document the director attaches — an annual report, a 10-K. The
     # motion workflow's `report` type: Nemotron reads the PDF as page text through `Documents.ask`, and every figure
     # on screen is one the engine found on its page. Audiences are optional: with places, a film for each, paced from
@@ -311,7 +319,9 @@ CARDS: tuple[Card, ...] = (
          style_label="Document", type_labels={"report": "Any report", "report.10k": "Form 10-K (annual report)",
                                               "report.s1": "Form S-1 (IPO prospectus)"},
          audiences=True, audiences_optional=True, types=("report", "report.10k", "report.s1"), needs=".pdf",
-         type_in_form=True),
+         type_in_form=True,
+         brief="A motion graphic explainer that answers the viewer's questions from the attached filing, clearly "
+               "enough to follow without reading it, every figure taken from the document."),
     # A startup's case told to investors from its own pitch deck, and a financial model or metrics where it has them. The
     # motion workflow's `pitch` type: the documents read and checked as a report's are, every projection drawn and
     # labelled as one, the ask as stated. With places, a film per investor audience in its conventions; without, one.
@@ -328,7 +338,8 @@ CARDS: tuple[Card, ...] = (
                  Extra("use_of_funds", "Use of funds", placeholder="What the money is for, if the deck does not say", long=True),
                  Extra("duration", "Duration", ("90 seconds", "2 minutes", "3 minutes"), "2 minutes"),
                  NARRATION),
-         audiences=True, audiences_optional=True, types=("pitch",), needs=".pdf"),
+         audiences=True, audiences_optional=True, types=("pitch",), needs=".pdf",
+         brief="Create a motion graphic startup pitch with as much information as possible for potential investors."),
     # A theorem or concept explained in a film: equations, graphs and narration, every formula and claim checked before
     # it is drawn and the film read back after. The Nebius entry's; the `math_explainer` workflow.
     Card("maths-explainer", "Math concept explainer", "video", "Video · a theorem or concept, every step checked",
@@ -337,7 +348,9 @@ CARDS: tuple[Card, ...] = (
          extras=(Extra("topic", "Theorem or concept", placeholder="Named as a textbook would name it", subject=True),
                  Extra("viewer", "Who is watching", placeholder="Their level, and what they already know", long=True),
                  Extra("duration", "Duration", ("45 seconds", "60 seconds", "90 seconds"), "60 seconds"),
-                 NARRATION)),
+                 NARRATION),
+         brief="A motion graphic explanation of the theorem or concept for the viewer: the idea built step by step, "
+               "with a worked example, every formula and claim checked."),
     Card("motion-graphic", "Motion graphic", "motion", "Animation · one action, keyed",
          (Route("animation", "One keyed action"),),
          image="motion-graphic.webp", alt="A jointed figure at a railing, one arm swept out toward a boat",
@@ -360,23 +373,30 @@ CARDS: tuple[Card, ...] = (
          (Route("poster", "Taste-grounded poster"),),
          image="film-poster.webp", alt="A Be Cool one-sheet: a gold record label behind crosshairs over a black vinyl",
          extras=(FILM, Extra("headline", "Headline", placeholder="The words that must appear", long=True, rows=2)),
-         audiences=True, types=("film",)),
+         audiences=True, types=("film",),
+         brief="A one-sheet poster for the film for each audience: true to its tone, with the title and its real "
+               "billing."),
     Card("product-poster", "Product poster", "image", "Image · one print ad per audience",
          (Route("poster", "Taste-grounded print ad"),),
          extras=(Extra("product", "Product", placeholder="Its name, and what it is", long=True, rows=2, subject=True),
                  Extra("comparables", "Comparable brands", placeholder="Two or three real brands like it", long=True, rows=2),
                  Extra("claim", "Claim", placeholder="The one claim, worded as it may appear", long=True, rows=2),
                  Extra("cta", "Call to action", placeholder="What the viewer should do next", long=True, rows=2)),
-         audiences=True, types=("product",)),
+         audiences=True, types=("product",),
+         brief="A print ad for the product for each audience, built on its one claim and ending on the call to "
+               "action."),
     Card("book-cover", "Book cover", "image", "Image · one composed cover",
          (Route("cover", "Composed cover"),),
          extras=(Extra("book_title", "Book title", placeholder="As it should appear", subject=True),
-                 Extra("author", "Author", placeholder="As it should appear"))),
+                 Extra("author", "Author", placeholder="As it should appear")),
+         brief="A cover for the book that tells a reader its genre and mood at thumbnail size, with the title and "
+               "author clear."),
     Card("logo", "Logo and identity", "image", "Image · a mark and its sheet",
          (Route("logo", "Mark and brand sheet"),),
          image="logo.webp", alt="A brand presentation sheet for a P mark",
          type_labels={"antique": "Antique", "geometric": "Geometric", "modern": "Modern"},
-         extras=(Extra("name", "Name", placeholder="The name the mark is for", subject=True),)),
+         extras=(Extra("name", "Name", placeholder="The name the mark is for", subject=True),),
+         brief="A logo mark and brand sheet for the name: simple, distinctive, and legible from a favicon to a sign."),
     Card("infographic", "Infographic", "document", "Document · checked figures",
          (Route("vector_infographic", "Vector", "Delivered as SVG, every figure checked"),
           Route("infographic", "Raster", "Delivered as an image")),
