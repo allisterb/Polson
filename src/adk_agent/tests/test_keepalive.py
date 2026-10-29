@@ -20,6 +20,7 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import api_gate  # noqa: E402
 import keepalive  # noqa: E402
 
 
@@ -270,7 +271,19 @@ class HeaderTests(KeepaliveTestCase):
     async def test_off_cloud_run_and_without_a_password_it_sends_neither(self):
         with mock.patch.dict(os.environ, {"POLSON_BASIC_AUTH": "", "K_SERVICE": ""}):
             async with httpx.AsyncClient() as web:
-                self.assertEqual(await keepalive._headers(web), {keepalive.INSTANCE_HEADER: keepalive.INSTANCE})
+                self.assertEqual(await keepalive._headers(web),
+                                 {keepalive.INSTANCE_HEADER: keepalive.INSTANCE, **api_gate.internal()})
+
+    async def test_the_hold_carries_the_gate_token_so_an_open_service_still_answers_it(self):
+        with mock.patch.dict(os.environ, {"POLSON_BASIC_AUTH": "", "K_SERVICE": ""}):
+            async with httpx.AsyncClient() as web:
+                headers = await keepalive._headers(web)
+        app = FastAPI()
+        keepalive.mount(app)
+        app.add_middleware(api_gate.ApiGate)
+        client = TestClient(app)    # no run is working, so the hold answers one line and ends
+        self.assertEqual(client.get(keepalive.HOLD_PATH).status_code, 404)
+        self.assertEqual(client.get(keepalive.HOLD_PATH, headers=headers).text, "held\n")
 
 
 class MountTests(unittest.TestCase):

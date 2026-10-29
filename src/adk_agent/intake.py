@@ -40,6 +40,7 @@ import httpx
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 
+import api_gate
 import keepalive
 from newproject import DOCUMENT_SUFFIXES, PROJECTS_DIR, VALID_APP_NAME, GenerateError, create
 
@@ -933,7 +934,8 @@ async def launch(app: FastAPI, name: str, message: str = OPENING) -> None:
     when this is deployed behind a proxy. It is how the tests drive it too.
     """
     transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://intake", timeout=None) as web:
+    async with httpx.AsyncClient(transport=transport, base_url="http://intake", timeout=None,
+                                 headers=api_gate.internal()) as web:
         made = await web.post(f"/apps/{name}/users/{USER}/sessions", json={})
         made.raise_for_status()
         session = made.json()["id"]
