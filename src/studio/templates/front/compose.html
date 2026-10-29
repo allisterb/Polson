@@ -187,7 +187,7 @@
         </section>
       </details>
 
-      {% for x in card.extras if not x.under_brief %}
+      {% for x in card.extras if not x.under_brief and not x.subject %}
         {% if x.options %}
         <details class="fr-pop">
           <summary class="ps-field"><span class="ps-field-label">{{ x.label }}</span><span class="ps-field-value" data-summary>{{ extras_in.get(x.key) or x.default }}</span>{{ m.icon('chevron-down', 18) }}</summary>
@@ -245,6 +245,21 @@
       </div>
     </section>
     <div class="fr-compose-main">
+    {#- What the request is about, first and required: the company, the film, the product. -#}
+    {% for x in card.extras if x.subject %}
+    <section class="ps-brief">
+      <label class="ps-label" for="x_{{ x.key }}">{{ x.label }}<span class="ps-req" aria-hidden="true"> *</span></label>
+      <div class="ps-brief-box">
+        {% if x.long %}
+        <textarea id="x_{{ x.key }}" name="x_{{ x.key }}" rows="{{ x.rows }}" maxlength="2000" required
+                  placeholder="{{ x.placeholder }}">{{ extras_in.get(x.key, '') }}</textarea>
+        {% else %}
+        <input class="fr-brief-line" id="x_{{ x.key }}" name="x_{{ x.key }}" maxlength="200" required
+               placeholder="{{ x.placeholder }}" value="{{ extras_in.get(x.key, '') }}">
+        {% endif %}
+      </div>
+    </section>
+    {% endfor %}
     <section class="ps-brief">
       <label class="ps-label" for="brief">Brief<span class="ps-req" aria-hidden="true"> *</span></label>
       <p class="ps-hint">What is it for, who will see it, and what must it not be? The studio asks when something is unclear.</p>

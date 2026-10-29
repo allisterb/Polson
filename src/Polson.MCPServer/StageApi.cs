@@ -690,7 +690,7 @@ public sealed class StageApi
             {
                 if (targets.Length == 0) throw new ArgumentException($"Stage.borders: '{text}' is measured on images; pass the frames or the final to measure.");
                 values = [.. measured.Select(t => t.Look.Measure(metric) ?? throw new ArgumentException(
-                    $"Stage.borders: '{metric}' is not a measure. Use lightness, chroma, colourful, warmth, symmetry, 'offPalette #rrggbb #rrggbb …', 'hue <sector>' ({string.Join(", ", Polson.ExtendedMind.Taste.TasteVisual.SectorNames)}), 'colour #rrggbb' or fonts, each optionally 'on first' or 'on last'."))];
+                    $"Stage.borders: '{metric}' is not a measure. Use lightness, chroma, colourful, warmth, balance, symmetry, 'offPalette #rrggbb #rrggbb …', 'hue <sector>' ({string.Join(", ", Polson.ExtendedMind.Taste.TasteVisual.SectorNames)}), 'colour #rrggbb' or fonts, each optionally 'on first' or 'on last'."))];
             }
             var worst = values.Select((v, i) => (v, i)).OrderBy(p => Holds(p.v) ? 1 : 0).First();
             lines.Add(new Dictionary<string, object?>
@@ -733,12 +733,13 @@ public sealed class StageApi
         private readonly List<(double L, double A, double B, double C, double H)> pixels = [];
         private Polson.ExtendedMind.Taste.TasteColourReading reading = null!;
         private Lazy<double> symmetry = null!;
+        private Lazy<double> balance = null!;
 
         public static BorderLook Of(byte[] bytes)
         {
             var fetched = Polson.ExtendedMind.Taste.QlooImageSource.Decode(bytes, "the script");
             if (!fetched.Success) throw new ArgumentException($"Stage.borders: {fetched.Error}");
-            var look = new BorderLook { reading = fetched.Colour!, symmetry = new(() => Symmetry(bytes)) };
+            var look = new BorderLook { reading = fetched.Colour!, symmetry = new(() => Symmetry(bytes)), balance = new(() => Balance(bytes)) };
             using var bitmap = SkiaSharp.SKBitmap.Decode(bytes);
             var step = Math.Max(1, Math.Max(bitmap.Width, bitmap.Height) / 200);
             for (var y = 0; y < bitmap.Height; y += step)
@@ -779,6 +780,7 @@ public sealed class StageApi
             return metric switch
             {
                 "symmetry" => symmetry.Value,
+                "balance" => balance.Value,
                 "lightness" => reading.Lightness,
                 "chroma" => reading.Chroma,
                 "colourful" or "colorful" => 1 - reading.Neutral,
@@ -841,6 +843,38 @@ public sealed class StageApi
                     if (Math.Max(Math.Max(Math.Abs(a.Red - b.Red), Math.Abs(a.Green - b.Green)), Math.Max(Math.Abs(a.Blue - b.Blue), Math.Abs(a.Alpha - b.Alpha))) <= 8) even++;
                 }
             return even / (double)(w * h);
+        }
+
+        /// <summary>
+        /// Manual 25 §14a's balance as a lever: where the frame's visual weight — each pixel's Oklab distance from the
+        /// ground, the commonest colour — balances across its width, as <c>1 − 2·|centre − ½|</c>. 1 balances on the middle;
+        /// 0.9 balances 5% of the width off it. Unlike <see cref="Symmetry"/>, a card need not mirror itself to pass:
+        /// cruelty2's centred billing over scraps strewn unevenly along its foot measured 0.8765 as symmetry, and is balanced.
+        /// </summary>
+        private static double Balance(byte[] bytes)
+        {
+            using var source = SkiaSharp.SKBitmap.Decode(bytes);
+            var (w, h) = (320, Math.Max(1, (int)Math.Round(320.0 * source.Height / source.Width)));
+            using var small = source.Resize(new SkiaSharp.SKImageInfo(w, h), new SkiaSharp.SKSamplingOptions(SkiaSharp.SKFilterMode.Linear));
+            var colours = new SkiaSharp.SKColor[w * h];
+            for (var y = 0; y < h; y++)
+                for (var x = 0; x < w; x++) colours[y * w + x] = small.GetPixel(x, y);
+
+            // The ground: the commonest colour, to a sixteenth of each channel, averaged within its bucket.
+            static int Bucket(SkiaSharp.SKColor c) => (c.Red >> 4) << 8 | (c.Green >> 4) << 4 | c.Blue >> 4;
+            var common = colours.GroupBy(Bucket).MaxBy(g => g.Count())!;
+            var ground = Oklab((int)common.Average(c => c.Red) << 16 | (int)common.Average(c => c.Green) << 8 | (int)common.Average(c => c.Blue));
+
+            double weight = 0, moment = 0;
+            for (var i = 0; i < colours.Length; i++)
+            {
+                var c = colours[i];
+                var p = Oklab(c.Red << 16 | c.Green << 8 | c.Blue);
+                var d = Math.Sqrt((p.L - ground.L) * (p.L - ground.L) + (p.A - ground.A) * (p.A - ground.A) + (p.B - ground.B) * (p.B - ground.B)) * c.Alpha / 255.0;
+                weight += d;
+                moment += d * ((i % w + 0.5) / w);
+            }
+            return weight == 0 ? 1 : 1 - 2 * Math.Abs(moment / weight - 0.5);
         }
     }
 

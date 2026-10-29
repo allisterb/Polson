@@ -178,10 +178,13 @@ class Extra:
     #: Drawn under the brief, with what the request is about (the company, its stage), rather than in the bar with how
     #: the piece is made (its duration, narration). A long field always is.
     about: bool = False
+    #: What the request is about — the company, the film, the product: required, and drawn first, above the brief, so the
+    #: brief is left for what it is for. Optional and below the brief, it was typed twice or not at all.
+    subject: bool = False
 
     @property
     def under_brief(self) -> bool:
-        return self.long or self.about
+        return (self.long or self.about) and not self.subject
 
 
 @dataclass(frozen=True)
@@ -263,13 +266,18 @@ FORMATS: dict[str, tuple[Format, ...]] = {
 #: Whether a film is spoken as well as set on screen. Disabled, every word is on screen and the film is silent.
 NARRATION = Extra("narration", "Narration", ("Enabled", "Disabled"), "Enabled")
 
+#: Which film a film poster or trailer is for. A real film by title and year, which the run resolves with Qloo and
+#: researches before it designs; or a new film's title, with its logline and comparables in the brief.
+FILM = Extra("film", "Film", placeholder="A real film's title and year, e.g. Be Cool (2005), or a new film's title",
+             subject=True)
+
 CARDS: tuple[Card, ...] = (
     # The workflow is built and measured around 15-second films; longer ones are more encode parts and more
     # clock, so 30 is the most the form offers. A director who wants longer says so in the brief.
     Card("film-trailer", "Film trailer", "video", "Video · 15 seconds, one film per audience",
          (Route("motion", "Motion graphics trailer"),),
          image="film-trailer.webp", alt="A trailer's end card: a cracked vinyl record beside the title",
-         extras=(Extra("duration", "Duration", ("15 seconds", "30 seconds"), "15 seconds"),),
+         extras=(FILM, Extra("duration", "Duration", ("15 seconds", "30 seconds"), "15 seconds")),
          audiences=True, types=()),
     # Dynamic creative: one product, an ad per audience, each from that audience's buyers (Qloo). The motion
     # workflow's `product` type; its evidence method is `docs/internal/product-ad-probe.md`.
@@ -277,7 +285,7 @@ CARDS: tuple[Card, ...] = (
          (Route("motion", "Motion graphics ad"),),
          image="product-ad.webp", alt="A matte black can of cold brew coffee beside its name and call to action",
          # What the director types goes under the brief, where there is room to write it; the bar keeps the choices.
-         extras=(Extra("product", "Product", placeholder="Its name, and what it is", long=True, rows=2),
+         extras=(Extra("product", "Product", placeholder="Its name, and what it is", long=True, rows=2, subject=True),
                  Extra("comparables", "Comparable brands", placeholder="Two or three real brands like it", long=True, rows=2),
                  Extra("claim", "Claim", placeholder="The one claim, worded as it may appear", long=True, rows=2),
                  Extra("cta", "Call to action", placeholder="What the viewer should do next", long=True, rows=2),
@@ -309,7 +317,7 @@ CARDS: tuple[Card, ...] = (
     Card("startup-pitch", "Startup pitch", "video", "Video · 2 minutes from the deck, one film per investor audience",
          (Route("motion", "Motion graphics pitch"),),
          image="startup-pitch.webp", alt="The ask from a retold startup pitch deck",
-         extras=(Extra("company", "Company", placeholder="Its name, as the deck gives it", about=True),
+         extras=(Extra("company", "Company", placeholder="Its name, as the deck gives it", subject=True),
                  Extra("told_as", "Told as", ("The company's own pitch", "A retelling of a past deck"),
                        "The company's own pitch", about=True),
                  Extra("stage", "Stage", ("As the deck says", "Pre-seed", "Seed", "Series A", "Series B or later"),
@@ -325,7 +333,7 @@ CARDS: tuple[Card, ...] = (
     Card("maths-explainer", "Maths explainer", "video", "Video · a theorem or concept, every step checked",
          (Route("math_explainer", "Maths explainer"),),
          image="maths-explainer.webp", alt="The area under y = x² from 0 to 2 worked out as 8/3",
-         extras=(Extra("topic", "Theorem or concept", placeholder="Named as a textbook would name it"),
+         extras=(Extra("topic", "Theorem or concept", placeholder="Named as a textbook would name it", subject=True),
                  Extra("viewer", "Who is watching", placeholder="Their level, and what they already know", long=True),
                  Extra("duration", "Duration", ("45 seconds", "60 seconds", "90 seconds"), "60 seconds"),
                  NARRATION)),
@@ -344,21 +352,30 @@ CARDS: tuple[Card, ...] = (
          (Route("comic", "Comic page"), Route("comic_studio", "Comic with a studio of agents", "Several agents, one page")),
          image="comic.webp", alt="An inked gull riding a bicycle on a boardwalk",
          style_label="How to work", type_labels={"review": "Work with me", "seed": "Surprise me"}),
-    Card("poster", "Poster", "image", "Image · grounded in audience taste",
+    # The `poster` workflow's two types as two cards, as the video cards split `motion`: one card with a "Kind" inside hid
+    # the film poster behind a choice a visitor had to open the card to see. `poster` was the one card before 2026-10-29;
+    # a request recorded under it is placed by its type (`card_for`).
+    Card("film-poster", "Film poster", "image", "Image · one poster per audience",
          (Route("poster", "Taste-grounded poster"),),
-         image="poster.webp", alt="A neo-brutalist poster on the history of the web",
-         style_label="Kind", type_labels={"film": "Film poster", "product": "Product ad"},
-         extras=(Extra("headline", "Headline", placeholder="The words that must appear", long=True, rows=2),),
-         audiences=True),
+         image="film-poster.webp", alt="A Be Cool one-sheet: a gold record label behind crosshairs over a black vinyl",
+         extras=(FILM, Extra("headline", "Headline", placeholder="The words that must appear", long=True, rows=2)),
+         audiences=True, types=("film",)),
+    Card("product-poster", "Product poster", "image", "Image · one print ad per audience",
+         (Route("poster", "Taste-grounded print ad"),),
+         extras=(Extra("product", "Product", placeholder="Its name, and what it is", long=True, rows=2, subject=True),
+                 Extra("comparables", "Comparable brands", placeholder="Two or three real brands like it", long=True, rows=2),
+                 Extra("claim", "Claim", placeholder="The one claim, worded as it may appear", long=True, rows=2),
+                 Extra("cta", "Call to action", placeholder="What the viewer should do next", long=True, rows=2)),
+         audiences=True, types=("product",)),
     Card("book-cover", "Book cover", "image", "Image · one composed cover",
          (Route("cover", "Composed cover"),),
-         extras=(Extra("book_title", "Book title", placeholder="As it should appear"),
+         extras=(Extra("book_title", "Book title", placeholder="As it should appear", subject=True),
                  Extra("author", "Author", placeholder="As it should appear"))),
     Card("logo", "Logo and identity", "image", "Image · a mark and its sheet",
          (Route("logo", "Mark and brand sheet"),),
          image="logo.webp", alt="A brand presentation sheet for a P mark",
          type_labels={"antique": "Antique", "geometric": "Geometric", "modern": "Modern"},
-         extras=(Extra("name", "Name", placeholder="The name the mark is for"),)),
+         extras=(Extra("name", "Name", placeholder="The name the mark is for", subject=True),)),
     Card("infographic", "Infographic", "document", "Document · checked figures",
          (Route("vector_infographic", "Vector", "Delivered as SVG, every figure checked"),
           Route("infographic", "Raster", "Delivered as an image")),
@@ -375,6 +392,10 @@ CARDS: tuple[Card, ...] = (
 )
 
 BY_SLUG: dict[str, Card] = {c.slug: c for c in CARDS}
+
+#: Cards by a former slug, for a link made before the change. A *request* recorded under one is placed by its workflow
+#: and type instead (`card_for`), since `poster` covered both of the cards that replaced it.
+RENAMED: dict[str, str] = {"poster": "film-poster"}
 
 def card_for(workflow: str, type_: str = "") -> Card | None:
     """
@@ -548,6 +569,8 @@ def parse(card_slug: str, title: str, route: str, kind: str, sizes: list[str], c
             raise StudioError(f"Choose a {extra.label.lower()} from the list.")
         if len(value) > limit:
             raise StudioError(f"{extra.label} is {len(value)} characters; keep it under {limit}.")
+        if extra.subject and not value:
+            raise StudioError(f"Give the {extra.label.lower()}: {extra.placeholder[:1].lower()}{extra.placeholder[1:]}.")
         if value:
             pairs.append((extra.label, value))
 

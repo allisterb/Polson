@@ -410,6 +410,8 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
 
     @app.get("/compose/{slug}", response_class=HTMLResponse)
     async def compose(request: Request, slug: str) -> Any:
+        if slug in catalogue.RENAMED:
+            return RedirectResponse(f"{base(request)}/compose/{catalogue.RENAMED[slug]}", status_code=301)
         card = catalogue.BY_SLUG.get(slug)
         if card is None:
             raise HTTPException(status_code=404, detail=f"no such workflow: {slug}")
