@@ -26,6 +26,23 @@ refuse and report, not one you should guess around.
 
 ---
 
+## What the director already gave you
+
+**Look before you sketch.** `Documents.list()` is free and offline, and the only way to know what is in
+`documents/`: a brand guide, an existing mark to evolve, a sketch, a competitor's logo to stay clear of.
+
+```javascript
+for (const d of Documents.list()) log(`${d.path}  ${d.bytes}B  ${d.mimeType}`);
+```
+
+**Treat what is there as the director's first word on the mark**, ahead of anything you would invent. Look at an
+image (`Skia.Image.load('documents/<name>')`, then peek); read a written guide with
+`Documents.ask('documents/<name>', '<what you need to know>')`. A mark to evolve is evolved, not replaced; a mark to
+avoid is measured against yours before you deliver. Say in a `Stage.note` what you took from each file. With nothing
+there, say so and work from the brief.
+
+---
+
 {{RECALL}}
 
 {{TYPE}}

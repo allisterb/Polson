@@ -115,6 +115,11 @@ WORKFLOWS: dict[str, tuple[str, ...]] = {
     # before it is drawn (`Equation`, `Verify.derivation`, `Verify.claim`, whose code Nemotron writes) and the film read
     # back after. Untyped. Documents are optional material (lecture notes, a textbook page), never the subject.
     "math_explainer": (),
+    # **Engine-only image workflows, offered from 2026-10-29** once each template read `documents/` (a brand guide or
+    # a mark to evolve; a synopsis or the series' covers). Their deadlines are the CLI's craft defaults, 15 and 25.
+    # A cover requisitions its parts (`Assets`), within the host's `POLSON_ASSETS_BUDGET`.
+    "logo": ("antique", "geometric", "modern"),
+    "cover": (),
 }
 
 #: Workflows whose lone type is **not** what an empty type means. The form selects a workflow's only type for
@@ -246,6 +251,10 @@ DEADLINES: dict[str, int] = {
     # trailer's fifteen seconds. The CLI's craft default agrees (`ProjectGenerator.WorkflowDeadlines`).
     "motion.pitch": 90,
     "math_explainer": 60,
+    # The CLI's craft defaults (`ProjectGenerator.WorkflowDeadlines`): a mark and its sheet, one composed cover. Logo 20, not
+    # 15: emberroast1 (2026-10-29) finished at 13 of 15 with a thin brand sheet and no findings.md.
+    "logo": 20,
+    "cover": 25,
 }
 
 #: Minutes added to a commission's deadline for each audience past the second (`Audience C:` onward).
@@ -534,6 +543,25 @@ STARTERS: tuple[dict[str, str], ...] = (
         "brief": "Inside a car at night: the driver lit from below by the dash, headlights raking "
                  "across as another vehicle passes. Everything beyond the glass is suggestion "
                  "rather than detail. Start with where the light falls and I will steer the mood.",
+    },
+    # **The engine-only image pair.** Invented subjects, so no real company's mark or real book's cover is imitated.
+    {
+        "label": "Logo: a small-batch roastery",
+        "name": "emberroast",
+        "workflow": "logo",
+        "kind": "geometric",
+        "brief": "A logo mark and brand sheet for Ember & Ash Coffee Roasters, a small-batch roastery in a former "
+                 "foundry. Warm and crafted, never rustic cliché: no coffee beans, no steam swirls. It has to read "
+                 "on a bag stamp, a cup sleeve and a favicon.",
+    },
+    {
+        "label": "Book cover: a coastal mystery",
+        "name": "saltwatch",
+        "workflow": "cover",
+        "kind": "",
+        "brief": "A cover for The Salt Watch, a mystery novel by Mara Quill: a lighthouse keeper on a northern island "
+                 "finds the logbook's last week torn out. Cold and quiet rather than lurid; the title and author "
+                 "must read at thumbnail size.",
     },
 )
 

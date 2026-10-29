@@ -652,7 +652,9 @@ internal static class ProjectGenerator
     /// </remarks>
     static readonly Dictionary<string, int> WorkflowDeadlines = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["logo"] = 15,
+        // Twenty, not fifteen: emberroast1 (2026-10-29, ADK) finished at 13 of 15 with its brand sheet half empty and no
+        // findings.md written. A mark and its whole sheet need the extra five.
+        ["logo"] = 20,
         // Ten because the clock is the point rather than a constraint on it: `storyboard_quick`
         // exists to make the choice between arranging and constructing cost something, and a budget
         // long enough to construct four panels would remove the choice. Manual 20 §6 is the route.
