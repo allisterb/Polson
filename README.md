@@ -233,7 +233,7 @@ inside the SDK import. (Equivalent directly, from `src/`: `python -m orchestrato
 
 ### Mode 3 — Graphics Studio: Polson hosts the agent, with its own interface
 
-Polson runs the agent on Google ADK and serves the whole studio — the commission form, the run pages and ADK's own console. This is the mode a visitor can be handed, and the one [`DEPLOY.md`](DEPLOY.md) deploys.
+Polson runs the agent on Google ADK and serves the whole studio — the commission form, the run pages and ADK's own console. This is the mode a visitor can be handed, and the one [`deploy/README.md`](deploy/README.md) deploys.
 
 ```bash
 python-adk/Scripts/python.exe -m uvicorn main:app --host 127.0.0.1 --port 8000 --app-dir src/adk_agent
@@ -308,7 +308,7 @@ The report is the machine-checkable half — script paths, durations, artifact p
 
 ## Deploying it
 
-**Mode 3 is the one that deploys**, because it is the only one that hosts the agent *and* serves a page — the other two need either your own agent host or your own terminal. It runs as one container: the ADK runtime, the .NET engine, the SDK docs and the web interface. See [`DEPLOY.md`](DEPLOY.md) for the Cloud Run path, and [`src/adk_agent/README.md`](src/adk_agent/README.md) for what the image contains and why.
+**Mode 3 is the one that deploys**, because it is the only one that hosts the agent *and* serves a page — the other two need either your own agent host or your own terminal. It runs as one container: the ADK runtime, the .NET engine, the SDK docs and the web interface. See [`deploy/README.md`](deploy/README.md) for the Cloud Run path, and [`src/adk_agent/README.md`](src/adk_agent/README.md) for what the image contains and why.
 
 ## Licence
 
