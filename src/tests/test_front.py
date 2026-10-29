@@ -534,6 +534,15 @@ class FrontRoutingTests(unittest.TestCase):
         for path in ("/home", "/workflows", "/requests"):
             self.assertIn("New request</a>", self.client.get(path).text, path)
 
+    def test_the_home_page_shows_the_entries_workflows_in_two_rows(self):
+        """Six cards, in `catalogue.HOME`'s order, and no others."""
+        self.assertTrue(all(slug in catalogue.BY_SLUG for slug in catalogue.HOME))
+        page = self.client.get("/home").text
+        shown = [s for s in catalogue.HOME if f'/compose/{s}"' in page]
+        if len(shown) == len(catalogue.HOME):          # the gallery is not committed; a checkout without it shows fewer
+            self.assertEqual(sorted(shown, key=page.index), list(catalogue.HOME))
+        self.assertNotIn('/compose/storyboard"', page)
+
     def test_the_stylesheets_and_script_are_served(self):
         for path in ("/static/polson.css", "/static/front.css", "/static/front.js", "/static/gallery/storyboard.webp"):
             self.assertEqual(self.client.get(path).status_code, 200, path)
@@ -974,6 +983,14 @@ class CommissionedComposerTests(unittest.TestCase):
         self.assertIn("Form 10-K (annual report)", page)
         self.assertIn('value="report" checked', page)
         self.assertNotIn("Let the studio choose", page)
+
+    def test_the_report_cards_document_kind_is_chosen_in_the_form_not_the_header(self):
+        """It is what the request is about, not a setting every workflow has: a pill row above the brief."""
+        page = self.client.get("/compose/report-explainer").text
+        bar, body = page.split('class="ps-rbar', 1)[1].split("fr-compose-body", 1)
+        self.assertNotIn('name="kind"', bar)
+        self.assertLess(body.index('<legend class="ps-label">Document</legend>'), body.index('id="brief"'))
+        self.assertEqual(body.count('name="kind"'), 3)
 
     def test_a_startup_pitch_is_commissioned_as_a_pitch_trailer_with_its_deck(self):
         data = self.trailer("startup-pitch", x_company="UberCab", aud_place=["Singapore", "London, United Kingdom"])
