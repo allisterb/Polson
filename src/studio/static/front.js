@@ -1508,8 +1508,9 @@
     return svg;
   }
 
-  // What an Arabic line's status says: the reader misreads Arabic, so its line is checked by eye, not read back.
-  var UNCHECKED = 'not checked: the reader cannot be trusted to read Arabic, so the studio checked it by eye';
+  // What an unchecked line's status says: Nemotron misreads Arabic and Hindi, so with it reading, such a line is checked by
+  // eye, not read back. Gemini leaves no line unchecked.
+  var UNCHECKED = 'not checked: the reader cannot be trusted to read Arabic or Hindi, so the studio checked it by eye';
 
   // The summary line and the legend, shared by a film's card and a still's.
   function verifySummary(check, what) {
@@ -1522,7 +1523,7 @@
     var real = (check.strays || []).filter(function (s) { return s.verdict === 'real'; }).length;
     return items.length + ' texts ' + what + ' · ' + seen + ' read back as set by an independent ' + (check.video ? 'watcher' : 'reader')
       + (check.model ? ' (' + check.model + ')' : '')
-      + (unchecked ? ' · ' + unchecked + ' in Arabic, which the reader cannot check' : '')
+      + (unchecked ? ' · ' + unchecked + ' in Arabic or Hindi, which this reader cannot check' : '')
       + ' · ' + (unsourced ? unsourced + ' figure' + (unsourced === 1 ? '' : 's') + ' with no source' : 'every figure sourced')
       + (stated.length ? ' · ' + stated.length + ' stated fact' + (stated.length === 1 ? '' : 's') + ' checked on the web'
         + (unsupported ? ', ' + unsupported + ' not supported' : '') : '')
@@ -1653,7 +1654,7 @@
         tr.appendChild(sourceCell(it));
         tr.appendChild(el('td', '', it.status === 'seen' ? (it.readAs && it.readAs.replace(/\s+/g, ' ') !== it.text.replace(/\s+/g, ' ') ? '✓ as “' + it.readAs + '”' : '✓ as set')
           : it.status === 'missed' ? 'not read (' + (it.seconds || 0).toFixed(1) + ' s on screen)'
-          : it.status === 'unchecked' ? 'not checked: Arabic, checked by eye'
+          : it.status === 'unchecked' ? 'not checked: checked by eye'
           : it.status === 'citation' ? CITATION : '—'));
         table.appendChild(tr);
       });
@@ -1668,7 +1669,7 @@
           var cap = el('figcaption', 'fr-small');
           cap.textContent = 'Read “' + s.read + '” at ' + s.at + ' s' + (s.near ? '; the film set “' + s.near + '”' : '') + '. '
             + (s.verdict === 'real' ? 'A fault in the film.' : s.kind === 'unreadable script'
-              ? 'Arabic, which the watcher cannot read reliably: the studio looked at the frame and it shows the line as set.'
+              ? 'A script this watcher cannot read reliably: the studio looked at the frame and it shows the line as set.'
               : 'The frame shows what the film set: the watcher misread it.') + (s.note ? ' ' + s.note : '');
           row.appendChild(cap);
           list.appendChild(row);
@@ -1697,7 +1698,7 @@
         tr.appendChild(sourceCell(it));
         tr.appendChild(el('td', '', it.status === 'seen' ? (it.readAs && it.readAs.replace(/\s+/g, ' ') !== it.text.replace(/\s+/g, ' ') ? '✓ as “' + it.readAs + '”' : '✓ as set')
           : it.status === 'missed' ? 'not read' + (it.closest ? ' (closest: “' + it.closest + '”)' : '')
-          : it.status === 'unchecked' ? 'not checked: Arabic, checked by eye' : 'off the canvas'));
+          : it.status === 'unchecked' ? 'not checked: checked by eye' : 'off the canvas'));
         table.appendChild(tr);
       });
       card.appendChild(table);
