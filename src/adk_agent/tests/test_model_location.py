@@ -34,13 +34,13 @@ class ModelLocationTests(unittest.TestCase):
             self.assertEqual(studio.model_for("gemini-3.8-flash"), "gemini-3.8-flash")
 
     def test_a_location_roots_every_call_there_and_keeps_the_key_and_the_name(self):
-        env = {**KEY, studio.MODEL_LOCATION_ENV: "global", studio.MODEL_PROJECT_ENV: "polson"}
+        env = {**KEY, studio.MODEL_LOCATION_ENV: "global", studio.MODEL_PROJECT_ENV: "example-project"}
         with mock.patch.dict(os.environ, env):
             model = studio.model_for("gemini-4-argon")
         self.assertEqual(model.model, "gemini-4-argon", "the name everything else reads stays the model's own")
         api = model.api_client._api_client
         self.assertEqual(api._http_options.base_url,
-                         "https://aiplatform.googleapis.com/v1beta1/projects/polson/locations/global/")
+                         "https://aiplatform.googleapis.com/v1beta1/projects/example-project/locations/global/")
         self.assertEqual(api.api_key, KEY["GOOGLE_API_KEY"])
 
     def test_a_location_without_its_project_or_a_key_is_refused_with_what_to_set(self):
@@ -48,7 +48,7 @@ class ModelLocationTests(unittest.TestCase):
             os.environ.pop(studio.MODEL_PROJECT_ENV, None)
             with self.assertRaisesRegex(studio.ConfigError, studio.MODEL_PROJECT_ENV):
                 studio.model_for("gemini-4-argon")
-        with mock.patch.dict(os.environ, {studio.MODEL_LOCATION_ENV: "global", studio.MODEL_PROJECT_ENV: "polson"}):
+        with mock.patch.dict(os.environ, {studio.MODEL_LOCATION_ENV: "global", studio.MODEL_PROJECT_ENV: "example-project"}):
             os.environ.pop("GOOGLE_API_KEY", None)
             with self.assertRaisesRegex(studio.ConfigError, "GOOGLE_API_KEY"):
                 studio.model_for("gemini-4-argon")

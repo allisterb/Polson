@@ -4,11 +4,16 @@ Nothing in the source names a Google Cloud project, region, bucket or service UR
 deployment to one is configuration, listed here in the order it has to exist. The service, the image repository
 and the runtime account's project number all follow from the project; the rest is recreated by hand.
 
+**Keep it that way: real names stay out of the repository**, this file included. The studio is deployed without a
+sign-in, so a project id, region or bucket name in a public repository is a head start for anyone probing it. Every
+value below is a placeholder.
+
 The commands are PowerShell. On a machine where gcloud cannot find Python, set
-`$env:CLOUDSDK_PYTHON` to its bundled interpreter first. `$P` is the new project and `$R` its region:
+`$env:CLOUDSDK_PYTHON` to its bundled interpreter first. `$P` is the project, `$R` its region, `$S` the service and
+`$B` its bucket:
 
 ```powershell
-$P = 'polson-ad-studio'; $R = 'us-east4'
+$P = '<project id>'; $R = '<region>'; $S = '<service name>'; $B = '<bucket name>'
 gcloud config set project $P
 ```
 
@@ -73,8 +78,8 @@ NIM's free tier is governed by the [NVIDIA API Trial Terms of Service](https://a
 So on Cloud Run:
 
 - **Token Factory**: create a `polson-nebius-key` secret, add `POLSON_NEBIUS_KEY=polson-nebius-key:latest` to
-  `--set-secrets`, and add `POLSON_NEBIUS_BASE_URL=https://api.tokenfactory.us-north1.nebius.com/v1` (or your
-  region's URL) **and `POLSON_NEMOTRON_PREFER=nebius`** to `--set-env-vars`. The base URL has no default, because the
+  `--set-secrets`, and add `POLSON_NEBIUS_BASE_URL=<your Token Factory base URL>` **and
+  `POLSON_NEMOTRON_PREFER=nebius`** to `--set-env-vars`. The base URL has no default, because the
   host is regional.
 - **Leave `POLSON_NVIDIA_NIM_KEY` unset.** Kept as the backup, NIM would serve every read Token Factory failed — the
   same terms, reached whenever the paid service has a bad minute. With no backup, a failed Token Factory read falls
@@ -85,11 +90,21 @@ So on Cloud Run:
 
 ## 4. The bucket
 
-Bucket names are global, so the current one cannot be reused:
+One per service, private, readable and writable only by the runtime account. Bucket names are global, so choose
+one that is not derived from the project id:
 
 ```powershell
-gcloud storage buckets create "gs://$P-artifacts" --project $P --location $R
+gcloud storage buckets create "gs://$B" --project $P --location $R --uniform-bucket-level-access --public-access-prevention
+gcloud storage buckets add-iam-policy-binding "gs://$B" --member "serviceAccount:$SA" --role roles/storage.objectAdmin
 ```
+
+**Two services never share a bucket.** The studio lists every run under `POLSON_MIRROR_URI` and restores whichever
+one is opened (`src/studio/archive.py`), so a shared mirror shows each service's visitors the other's work. A
+separate prefix would fix only that: `POLSON_ARTIFACT_SERVICE_URI` reads the bucket name and drops any path, so two
+services with a project of the same name would write the same artifact versions.
+
+**Before deleting a bucket, repoint or delete every service that names it.** A deleted name can be created again
+by anyone, and a service still configured for it would then write its runs into their bucket.
 
 ## 5. The service
 
@@ -97,12 +112,12 @@ The service URL contains the project number, and `POLSON_SELF_URL` must be that 
 leaves the keepalive quietly holding nothing, and a run nobody watches stops (`src/adk_agent/keepalive.py`).
 
 ```powershell
-$URL = "https://polson-studio-$N.$R.run.app"
-gcloud run deploy polson-studio --source . --project $P --region $R `
+$URL = "https://$S-$N.$R.run.app"
+gcloud run deploy $S --source . --project $P --region $R `
   --no-allow-unauthenticated --cpu 4 --memory 4Gi --max-instances 1 --timeout 3600 `
   --set-secrets "POLSON_AGENT_PLATFORM_KEY=polson-agent-key:latest,POLSON_PARALLEL_KEY=polson-parallel-key:latest,POLSON_QLOO_KEY=polson-qloo-key:latest" `
-  --set-env-vars "^;^POLSON_SELF_URL=$URL;POLSON_ARTIFACT_SERVICE_URI=gs://$P-artifacts;POLSON_MIRROR_URI=gs://$P-artifacts/studio;POLSON_ASK_SECONDS=300;POLSON_MAX_CREDIT_SECONDS=900;POLSON_BUDGET_TOKENS=3000000;POLSON_QLOO_BUDGET=360;POLSON_ASSETS_BUDGET=30;ADK_MAX_LLM_CALLS=500;POLSON_PEEK_STABLE_NAME=1;POLSON_ALLOW_ORIGINS=http://127.0.0.1:8080,http://localhost:8080"
-gcloud run services add-iam-policy-binding polson-studio --project $P --region $R --member "serviceAccount:$SA" --role roles/run.invoker
+  --set-env-vars "^;^POLSON_SELF_URL=$URL;POLSON_ARTIFACT_SERVICE_URI=gs://$B;POLSON_MIRROR_URI=gs://$B/studio;POLSON_ASK_SECONDS=300;POLSON_MAX_CREDIT_SECONDS=900;POLSON_BUDGET_TOKENS=3000000;POLSON_QLOO_BUDGET=360;POLSON_ASSETS_BUDGET=30;ADK_MAX_LLM_CALLS=500;POLSON_PEEK_STABLE_NAME=1;POLSON_ALLOW_ORIGINS=http://127.0.0.1:8080,http://localhost:8080"
+gcloud run services add-iam-policy-binding $S --project $P --region $R --member "serviceAccount:$SA" --role roles/run.invoker
 ```
 
 `^;^` makes `;` the separator, because `POLSON_ALLOW_ORIGINS` contains a comma. The invoker grant is what lets the
@@ -113,9 +128,21 @@ no `polson-basic-auth` secret. The startup log says `basic auth OFF`, which is e
 
 ### A public deploy
 
-A public service is open to anyone with the URL, and behind it an agent that spends metered models and a Qloo key
-on whatever a visitor types, so it **always carries basic auth**. Create the `polson-basic-auth` secret first (§3),
-then deploy in two steps:
+A public service is open to anyone with the URL, and behind it an agent that spends metered models, a Qloo key and
+a research key on whatever a visitor types. It is opened one of two ways.
+
+**Open, with no sign-in**, which is what a hackathon entry needs: judges are given a URL and nowhere to put a
+password. Then nothing stands between a visitor and a run but the spend brakes — `POLSON_MAX_RUNS_PER_DAY` (25) and
+`POLSON_MAX_CONCURRENT_RUNS` (2), counted in memory per instance (another reason for `--max-instances 1`), and each
+run's `POLSON_BUDGET_TOKENS`. Set those to what you will pay for a day before opening it, and put a budget on the
+billing account. The brakes are global, so a stranger who finds the URL can spend the day's runs before a judge
+does; finished runs stay readable when the allowance is gone. Deploy as above, then:
+
+```powershell
+gcloud run services add-iam-policy-binding $S --project $P --region $R --member allUsers --role roles/run.invoker
+```
+
+**Behind basic auth.** Create the `polson-basic-auth` secret first (§3), then deploy in two steps:
 
 1. Deploy as above, still with `--no-allow-unauthenticated`, but with
    `POLSON_BASIC_AUTH=polson-basic-auth:latest` added to `--set-secrets`. The startup log must then say
@@ -124,7 +151,7 @@ then deploy in two steps:
 2. Only once the log says so, open it:
 
    ```powershell
-   gcloud run services add-iam-policy-binding polson-studio --project $P --region $R --member allUsers --role roles/run.invoker
+   gcloud run services add-iam-policy-binding $S --project $P --region $R --member allUsers --role roles/run.invoker
    ```
 
 Never the other way round: a public revision without the secret is open to everyone.
@@ -133,7 +160,20 @@ Every route then needs the shared `user:password`: the studio, `/new`, ADK's API
 Judges need only the user name and password. The keepalive sends the same credential with its own request
 (`src/adk_agent/keepalive.py`), so runs nobody is watching keep their CPU.
 
-Reach a private service with `gcloud run services proxy polson-studio --project $P --region $R --port 8080`.
+Reach a private service with `gcloud run services proxy $S --project $P --region $R --port 8080`.
+
+### More than one service from one image
+
+Two entries that differ only in configuration — one reading films with Gemini, one with Nemotron — are two
+services on the same image, each with its own `$S`, `$B` (§4) and `POLSON_SELF_URL`. Deploy the first with
+`--source .`, then the second from the image the first built, with `--image` in place of `--source .`:
+
+```powershell
+$IMAGE = gcloud run services describe $S --project $P --region $R --format='value(spec.template.spec.containers[0].image)'
+```
+
+`POLSON_VERIFY_READER=nemotron` makes Nemotron the reader of finished films; unset, it is Gemini. Each service keeps
+its own run allowance, so two services can spend twice what one can.
 
 ## 6. Monitoring
 
