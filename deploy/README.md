@@ -136,7 +136,11 @@ password. Then nothing stands between a visitor and a run but the spend brakes â
 `POLSON_MAX_CONCURRENT_RUNS` (2), counted in memory per instance (another reason for `--max-instances 1`), and each
 run's `POLSON_BUDGET_TOKENS`. Set those to what you will pay for a day before opening it, and put a budget on the
 billing account. The brakes are global, so a stranger who finds the URL can spend the day's runs before a judge
-does; finished runs stay readable when the allowance is gone. Deploy as above, then:
+does; finished runs stay readable when the allowance is gone.
+
+ADK's own API is served beside the studio and checks no allowance: `/run_sse` alone would start runs past it. On
+Cloud Run `src/adk_agent/api_gate.py` answers it, the console and everything else outside the studio and `/new` with
+a 404, and the console is off. The startup log must say `API gate on`. Deploy as above, then:
 
 ```powershell
 gcloud run services add-iam-policy-binding $S --project $P --region $R --member allUsers --role roles/run.invoker

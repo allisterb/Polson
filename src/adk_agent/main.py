@@ -30,6 +30,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from google.adk.cli.fast_api import get_fast_api_app
 
+import api_gate
 import artifact_store
 
 #: The directory ADK scans for apps — one app per generated project, written by `newproject.py`.
@@ -83,8 +84,9 @@ ARTIFACT_SERVICE_URI = (
 #: Serve ADK's bundled console. On by default because it is the fastest way to *watch* a run — it
 #: renders the event stream, the tool calls and their arguments, and the agent graph, which is
 #: exactly the trace `CLAUDE.md` §6 asks a run to leave. Turn it off for a public deployment where
-#: the studio UI is the front door and the dev console should not be reachable.
-SERVE_CONSOLE = _flag("POLSON_SERVE_CONSOLE", True)
+#: the studio UI is the front door and the dev console should not be reachable. **Off by default behind
+#: `api_gate`**, which would answer the console's own API calls 404.
+SERVE_CONSOLE = _flag("POLSON_SERVE_CONSOLE", not api_gate.enabled())
 
 #: Branding for the console's logo area. `logo_text` and `logo_image_url` are the parts of
 #: google/adk-python#2859 that actually shipped in 2.8.0 — the `display_name` labelling for tools in
@@ -269,6 +271,9 @@ if _studio_mounted:
     import front_page
 
     _logger.warning("polson runtime: %s", front_page.install(app, front_page.STUDIO_HOME))
+
+# Inside basic auth, so a wrong password is a 401 rather than a 404: only the studio and intake answer a visitor.
+_logger.warning("polson runtime: %s", api_gate.install(app))
 
 # Last, so it is the outermost middleware: nothing above answers anyone without the password. Not wrapped like the
 # mounts: a malformed POLSON_BASIC_AUTH must stop the server starting rather than leave it open (basic_auth.parse).

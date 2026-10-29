@@ -36,6 +36,8 @@ import uuid
 from typing import Any, AsyncIterator, Callable
 
 import httpx
+
+import api_gate
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import PlainTextResponse, StreamingResponse
 
@@ -226,12 +228,13 @@ async def _hold_loop(client: Callable[[], httpx.AsyncClient] | None = None, retr
 
 
 async def _headers(web: httpx.AsyncClient) -> dict[str, str]:
-    """Basic auth in `Authorization` when set; on Cloud Run, an identity token in `X-Serverless-Authorization`.
+    """Basic auth in `Authorization` when set; on Cloud Run, an identity token in `X-Serverless-Authorization`; and
+    `api_gate`'s token, without which the hold route is closed to the request that holds it.
 
     Two headers because both gates may be up at once: a private service checks IAM, and Cloud Run reads the token
     from `X-Serverless-Authorization` when present and passes `Authorization` through to the app untouched.
     """
-    headers: dict[str, str] = {INSTANCE_HEADER: INSTANCE}
+    headers: dict[str, str] = {INSTANCE_HEADER: INSTANCE, **api_gate.internal()}
     basic = os.environ.get("POLSON_BASIC_AUTH", "").strip()
     if basic:
         headers["Authorization"] = "Basic " + base64.b64encode(basic.encode("utf-8")).decode("ascii")
