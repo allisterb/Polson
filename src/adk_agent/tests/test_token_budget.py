@@ -537,7 +537,9 @@ class TwoLimitTests(unittest.TestCase):
 
     def test_the_runaway_guard_is_derived_when_not_configured(self):
         """So an existing deployment gains it without setting anything new."""
-        self.assertEqual(4, studio.RAW_CAP_MULTIPLE)
+        self.assertEqual(8, studio.RAW_CAP_MULTIPLE)
+        # The trailer the multiple of four halted: real work, inside its spend cap, must pass the derived guard.
+        self.assertLess(12_298_594, studio.RAW_CAP_MULTIPLE * 3_000_000)
         self.assertGreater(studio.RAW_CAP_MULTIPLE * studio.CACHED_TOKEN_SHARE, 0)
         self.assertLess(studio.RAW_CAP_MULTIPLE, 1 / studio.CACHED_TOKEN_SHARE,
                         "a guard at or above 1/CACHED_TOKEN_SHARE can never fire before the "

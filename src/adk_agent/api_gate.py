@@ -7,9 +7,9 @@ Open — as a hackathon entry must be, judges being given a URL and no password 
 - list, read and delete every visitor's sessions and artifacts;
 - hold `/keepalive/hold` open, which keeps an instance's CPU allocated.
 
-So every path outside `PUBLIC` is answered 404, as though it did not exist, unless the request carries this process's
-`TOKEN`. The token is made at import and never leaves the process: `intake` sends it on the in-process requests that
-start a run, and `keepalive` on the request it holds against its own service.
+So every path outside `PUBLIC` is answered 404, as though it did not exist, unless the request carries the deployment's
+`TOKEN`, a hash of a secret its instances share (`_token`). It never leaves the service: `intake` sends it on the
+in-process requests that start a run, and `keepalive` on the request it holds against its own service.
 
 An allowlist, so a route a later ADK adds is closed until it is named here. Pure ASGI, like `basic_auth`, so the
 studio's event streams pass through untouched.
@@ -20,6 +20,7 @@ On by default on Cloud Run (`K_SERVICE` set) and off on a developer's machine, w
 
 from __future__ import annotations
 
+import hashlib
 import hmac
 import os
 import secrets
@@ -29,9 +30,22 @@ Scope = dict[str, Any]
 Receive = Callable[[], Awaitable[dict[str, Any]]]
 Send = Callable[[dict[str, Any]], Awaitable[None]]
 
-#: The header an internal request carries, and its value for this process.
+#: The header an internal request carries, and its value for this deployment.
 HEADER = "x-polson-internal"
-TOKEN = secrets.token_urlsafe(32)
+
+
+def _token() -> str:
+    """One value for every instance of a deployment, which no visitor can know: a one-way hash of the agent's key.
+
+    Random per process, it was right for the in-process launch and wrong for the keepalive: a hold that landed on a sibling
+    instance (Cloud Run starts one at times, 2026-10-29) was a stranger there, refused by the gate with a 404 before the
+    hold route could say whose it was. With no key (a developer's machine) it is random, as before.
+    """
+    key = os.environ.get("POLSON_AGENT_PLATFORM_KEY", "").strip()
+    return hmac.new(key.encode(), b"polson api gate", hashlib.sha256).hexdigest() if key else secrets.token_urlsafe(32)
+
+
+TOKEN = _token()
 
 #: Paths open to everyone, exactly. `/studio` is open with everything under it; the studio refuses what a reader may
 #: not do itself (`intake.observing_only`). `/new` and `/projects` are the intake form, which checks the allowance.
