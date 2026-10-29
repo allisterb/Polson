@@ -481,7 +481,7 @@ STARTERS: tuple[dict[str, str], ...] = (
         # can decide: the integral, its evaluation bracket and the area all go through `Verify.derivation`, and the claim
         # that the area grows at the curve's height through `Verify.claim`. States no figure: the worked values are the
         # agent's to compute and check.
-        "label": "Maths explainer: the fundamental theorem of calculus",
+        "label": "Math concept explainer: the fundamental theorem of calculus",
         "name": "ftcexplainer",
         "workflow": "math_explainer",
         "kind": "",

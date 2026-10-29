@@ -88,7 +88,7 @@
       </details>
       {% else %}<input type="hidden" name="route" value="0">{% endif %}
 
-      {% for i, opts in styles.items() if opts %}
+      {% for i, opts in styles.items() if opts and not card.type_in_form %}
       <details class="fr-pop" data-route="{{ i }}" {{ 'hidden' if i != route }}>
         {#- A card whose types are one family (a report, a report on an S-1) has a default, not a studio's choice. -#}
         {%- set fallback = card.default_type -%}
@@ -245,6 +245,25 @@
       </div>
     </section>
     <div class="fr-compose-main">
+    {#- The kind of thing the request is about, where the card asks it here rather than in the header: the report's kind.
+        One route on such a card, so no `data-route` to follow. -#}
+    {% if card.type_in_form %}{% for i, opts in styles.items() if opts and i == route %}
+    {%- set fallback = card.default_type -%}
+    <fieldset class="ps-brief fr-choice">
+      <legend class="ps-label">{{ card.style_label }}</legend>
+      <div class="fr-choice-row">
+        {% if not fallback %}
+        <label class="fr-choice-pill"><input class="fr-vh" type="radio" name="kind" value="" {{ 'checked' if not form.kind }}><span>Let the studio choose</span></label>
+        {% endif %}
+        {% for value, label in opts %}
+        <label class="fr-choice-pill">
+          <input class="fr-vh" type="radio" name="kind" value="{{ value }}" {{ 'checked' if form.kind == value or (not form.kind and value == fallback) }}>
+          <span>{{ label }}</span>
+        </label>
+        {% endfor %}
+      </div>
+    </fieldset>
+    {% endfor %}{% endif %}
     {#- What the request is about, first and required: the company, the film, the product. -#}
     {% for x in card.extras if x.subject %}
     <section class="ps-brief">

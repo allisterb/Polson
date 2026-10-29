@@ -402,7 +402,7 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
                     waiting=[r for r in rows if r["status"] == "needs-you"],
                     working=[r for r in rows if r["status"] == "running"],
                     drafts=[r for r in rows if r["status"] == "draft"][:3],
-                    cards=[c for c in catalogue.CARDS if c.image in templates.env.globals["gallery"]][:3])
+                    cards=[c for c in map(catalogue.BY_SLUG.get, catalogue.HOME) if c.image in templates.env.globals["gallery"]])
 
     @app.get("/workflows", response_class=HTMLResponse)
     async def workflows(request: Request) -> Any:

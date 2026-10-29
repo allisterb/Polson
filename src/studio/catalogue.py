@@ -209,6 +209,9 @@ class Card:
     types: tuple[str, ...] | None = None
     #: A file the request cannot run without, by extension: a report explainer with no report has nothing to explain.
     needs: str = ""
+    #: The type is chosen in the form, above the brief, rather than in the header: it is what the request is about (the
+    #: report's kind), not a setting every workflow has.
+    type_in_form: bool = False
 
     @property
     def multi_route(self) -> bool:
@@ -300,7 +303,7 @@ CARDS: tuple[Card, ...] = (
     # any other is answered as asked.
     Card("report-explainer", "Financial report explainer", "video", "Video · 45 seconds, questions answered from a filing",
          (Route("motion", "Motion graphics explainer"),),
-         image="report-explainer.webp", alt="A shareholder letter's question answered on screen: where the capacity is built",
+         image="report-explainer.webp", alt="An IPO prospectus question answered on screen: who controls the company after the IPO",
          extras=(Extra("viewer", "Who is watching", placeholder="Who they are, and what they already know", long=True),
                  Extra("questions", "Their questions",
                        placeholder="One question a line, up to five. Optional for a Form 10-K or S-1: the studio already asks "
@@ -310,13 +313,14 @@ CARDS: tuple[Card, ...] = (
                  NARRATION),
          style_label="Document", type_labels={"report": "Any report", "report.10k": "Form 10-K (annual report)",
                                               "report.s1": "Form S-1 (IPO prospectus)"},
-         audiences=True, audiences_optional=True, types=("report", "report.10k", "report.s1"), needs=".pdf"),
+         audiences=True, audiences_optional=True, types=("report", "report.10k", "report.s1"), needs=".pdf",
+         type_in_form=True),
     # A startup's case told to investors from its own pitch deck, and a financial model or metrics where it has them. The
     # motion workflow's `pitch` type: the documents read and checked as a report's are, every projection drawn and
     # labelled as one, the ask as stated. With places, a film per investor audience in its conventions; without, one.
     Card("startup-pitch", "Startup pitch", "video", "Video · 2 minutes from the deck, one film per investor audience",
          (Route("motion", "Motion graphics pitch"),),
-         image="startup-pitch.webp", alt="The ask from a retold startup pitch deck",
+         image="startup-pitch.webp", alt="A retold pitch deck's market: US$4.2B a year, the top four players holding 22%",
          extras=(Extra("company", "Company", placeholder="Its name, as the deck gives it", subject=True),
                  Extra("told_as", "Told as", ("The company's own pitch", "A retelling of a past deck"),
                        "The company's own pitch", about=True),
@@ -330,8 +334,8 @@ CARDS: tuple[Card, ...] = (
          audiences=True, audiences_optional=True, types=("pitch",), needs=".pdf"),
     # A theorem or concept explained in a film: equations, graphs and narration, every formula and claim checked before
     # it is drawn and the film read back after. The Nebius entry's; the `math_explainer` workflow.
-    Card("maths-explainer", "Maths explainer", "video", "Video · a theorem or concept, every step checked",
-         (Route("math_explainer", "Maths explainer"),),
+    Card("maths-explainer", "Math concept explainer", "video", "Video · a theorem or concept, every step checked",
+         (Route("math_explainer", "Math concept explainer"),),
          image="maths-explainer.webp", alt="The area under y = x² from 0 to 2 worked out as 8/3",
          extras=(Extra("topic", "Theorem or concept", placeholder="Named as a textbook would name it", subject=True),
                  Extra("viewer", "Who is watching", placeholder="Their level, and what they already know", long=True),
@@ -392,6 +396,9 @@ CARDS: tuple[Card, ...] = (
 )
 
 BY_SLUG: dict[str, Card] = {c.slug: c for c in CARDS}
+
+#: The home page's two rows of cards: the entries' workflows, in this order. A card without its gallery image is left out.
+HOME = ("film-trailer", "product-ad", "report-explainer", "startup-pitch", "maths-explainer", "film-poster")
 
 #: Cards by a former slug, for a link made before the change. A *request* recorded under one is placed by its workflow
 #: and type instead (`card_for`), since `poster` covered both of the cards that replaced it.
