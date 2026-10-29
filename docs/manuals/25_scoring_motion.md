@@ -1133,7 +1133,7 @@ backticks is measured by `Stage.borders` on the frames you give it; the rest are
 - DON'T let green into it `hue green < 2%`
 - DON'T set more than two typefaces `fonts <= 2`
 - DON'T stray off the palette `offPalette #0b1d26 #2a9d8f #f2d9b0 < 3%`
-- DO resolve on a balanced end card `symmetry on last > 0.9`
+- DO resolve on a balanced end card `balance on last > 0.9`
 - DON'T cut on the claim; let it settle.
 ```
 
@@ -1208,10 +1208,16 @@ good. Measured: a centred two-line lock-up **0.97**, one title on a thirds point
 disc bottom right **0.55**. **It weighs the whole frame, the ground included**, so a single small mark on an empty
 ground reads as balanced: nightshift2's opening, one stroke left of centre, measured 0.98. An off-centre opening needs
 its weight off-centre, a pool of light or a mass, and that run's fix, the light keyed from off-centre to centre across
-the camera pull, made the travel a move the viewer sees. Put the travel in `dos.md`, scoped to the ends of the film:
+the camera pull, made the travel a move the viewer sees.
+
+**`balance` asks the end card's question more directly**: where the frame's weight balances across its width, as a
+lever does, 1 on the middle and 0.9 at 5% of the width off it. A frame need not mirror itself to pass. cruelty2's end
+card, a centred lock-up over paper scraps strewn unevenly along its foot, measured 0.88 as `symmetry` and 0.99 as
+`balance`, and it reads as certain. So the resolve is held to `balance`, and the opening, which should not read as
+certain, to `symmetry`. Put the travel in `dos.md`, scoped to the ends of the film:
 
 ```markdown
-- DO resolve on a balanced end card `symmetry on last > 0.9`
+- DO resolve on a balanced end card `balance on last > 0.9`
 - DON'T open on certainty: leave the first frame open `symmetry on first < 0.85`
 ```
 

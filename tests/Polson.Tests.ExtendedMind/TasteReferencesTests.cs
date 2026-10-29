@@ -80,6 +80,37 @@ public class TasteReferencesTests : TestsRuntime, IDisposable
         Assert.Equal("t1", titles[0]["in"]);
     }
 
+    /// <summary>
+    /// cruelty2's row of kind "Research + Qloo" cited two web articles in italics, and they came back as unverified Qloo
+    /// titles. A mixed row fails, saying to split it, and its italics are not read as Qloo's.
+    /// </summary>
+    [Fact]
+    public void TestARowMixingQlooWithResearchIsToldToSplitNotReadAsQlooTitles()
+    {
+        var check = TasteReferences.Check(Table(
+            "| No red | *The Long Quiet* (t1); *Why is the Conservative Party blue?* (BBC News) | Research + Qloo |"), Session());
+
+        Assert.False((bool)check["passed"]!);
+        Assert.Equal(["No red: its Kind mixes Qloo with Research: give each kind its own row, so a Qloo row's italics are only Qloo's titles"],
+            (string[])check["unverified"]!);
+        Assert.Empty(Titles(check));
+    }
+
+    /// <summary>"would have argued *for* a red accent": stress, not a title. A lower-case title Qloo returned is still one.</summary>
+    [Fact]
+    public void TestALowerCaseItalicNoAnswerReturnedIsEmphasisNotATitle()
+    {
+        var session = Session();
+        session[2] = new() { Id = "t3", Op = "insights", Label = "other", Ok = true, Entities = [Entity("e-6", "mother!")] };
+
+        var stress = TasteReferences.Check(Table("| Gold | the field argued *for* red; *The Long Quiet* | Qloo (t1) |"), session);
+        var lower = TasteReferences.Check(Table("| Gold | *mother!* | Qloo (t1) |"), session);
+
+        Assert.True((bool)stress["passed"]!, (string)stress["summary"]!);
+        Assert.Equal(1, stress["checked"]);
+        Assert.Equal(["*mother!* (returned by t3, not by t1)"], (string[])lower["unverified"]!);
+    }
+
     /// <summary>The row cites t1 for a title only t3 returned: real evidence, cited to the wrong query.</summary>
     [Fact]
     public void TestATitleAnotherHandleReturnedSaysWhich()

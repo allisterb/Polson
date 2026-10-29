@@ -101,6 +101,34 @@ public class MotionDeliverablesTests : TestsRuntime, IDisposable
         Assert.Contains("palette in the clause", Assert.Throws<ArgumentException>(() => Stage().Borders("dos.md", "artifacts/graded.png")).Message);
     }
 
+    /// <summary>
+    /// cruelty2's end card, a centred lock-up over scraps strewn unevenly along its foot, failed `symmetry > 0.9` eight
+    /// times and is balanced. `balance` is where the weight balances across the width: 1 on the middle, 0.9 at 5% off it.
+    /// </summary>
+    [Fact]
+    public void TestBalanceIsWhereTheWeightSitsSoAnUnevenFootStillBalances()
+    {
+        Draw("centred.png", (c, p) => c.DrawRect(220, 140, 200, 60, p));
+        Draw("shifted.png", (c, p) => c.DrawRect(188, 140, 200, 60, p));                      // 32 px, 5% of 640, left
+        Draw("strewn.png", (c, p) =>
+        {
+            c.DrawRect(170, 120, 300, 40, p); c.DrawRect(240, 175, 160, 14, p);
+            foreach (var (x, y) in new[] { (8, 300), (150, 318), (262, 296), (380, 322), (498, 304), (590, 312) })
+                c.DrawRect(x, y, 44, 22, p);                                                    // a foot of scraps, not mirrored
+        });
+        File.WriteAllText(Path.Combine(root, "dos.md"), """
+            - DO resolve on a balanced end card `balance > 0.9`
+            - DO mirror it `symmetry > 0.9`
+            """);
+
+        double Value(string image, string clause) => (double)Lines(Stage().Borders("dos.md", $"artifacts/{image}"))[clause]["value"]!;
+
+        Assert.Equal(1, Value("centred.png", "balance > 0.9"), 3);
+        Assert.Equal(0.9, Value("shifted.png", "balance > 0.9"), 3);
+        Assert.True(Value("strewn.png", "balance > 0.9") > 0.95);
+        Assert.True(Value("strewn.png", "symmetry > 0.9") < 0.9, "the mirror test is the one that fails it");
+    }
+
     [Fact]
     public void TestAnUnknownMeasureAndAMissingFontListAreRefusedInWords()
     {

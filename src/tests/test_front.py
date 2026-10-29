@@ -47,6 +47,11 @@ def events(project: Path, *lines: dict) -> None:
             out.write(json.dumps({"ts": f"2026-10-18T10:00:{i:02d}.000Z", "seq": i, "src": "server", **line}) + "\n")
 
 
+#: What each card's request is about, required since 2026-10-29: a form posted without it is refused.
+SUBJECTS = {"film-trailer": {"x_film": "Nightshift (2026)"}, "product-ad": {"x_product": "Nightshift, a canned cold brew"},
+            "startup-pitch": {"x_company": "UberCab"}}
+
+
 class TechniqueCatalogueTests(unittest.TestCase):
     """The form's catalogue is the CLI's; a CLI that cannot answer hides the field rather than failing the form."""
 
@@ -97,8 +102,8 @@ class CatalogueTests(unittest.TestCase):
         self.assertEqual(c.workflow, "storyboard_quick")
 
     def test_refusals_say_what_was_wrong(self):
-        good = dict(card_slug="poster", title="Menu", route="0", kind="", sizes=["1200x1800"], custom="",
-                    formats=[".png"], extras={}, brief="Autumn menu.", places=["Lisbon"], ages=[""])
+        good = dict(card_slug="film-poster", title="Menu", route="0", kind="", sizes=["1200x1800"], custom="",
+                    formats=[".png"], extras={"film": "Menu (2026)"}, brief="Autumn menu.", places=["Lisbon"], ages=[""])
         cases = {
             "card_slug": ("logo-and-more", "not one the studio offers"),
             "title": ("   ", "Give the request a name"),
@@ -125,7 +130,7 @@ class CatalogueTests(unittest.TestCase):
 
     def test_an_extra_outside_its_options_is_refused(self):
         with self.assertRaisesRegex(StudioError, "duration"):
-            catalogue.parse("film-trailer", "T", "0", "", ["1920x1080"], "", [".mp4"], {"duration": "45 seconds"},
+            catalogue.parse("film-trailer", "T", "0", "", ["1920x1080"], "", [".mp4"], {"film": "T", "duration": "45 seconds"},
                             "x", ["Lagos"], [""])
 
     def test_the_trailer_card_follows_the_trailer_workflow(self):
@@ -134,11 +139,11 @@ class CatalogueTests(unittest.TestCase):
         duration = next(x for x in card.extras if x.key == "duration")
         self.assertEqual((duration.default, duration.options), ("15 seconds", ("15 seconds", "30 seconds")))
         self.assertEqual([f.ext for f in catalogue.FORMATS[card.kind]], [".mp4", ".webp"])
-        self.assertTrue(card.audiences and catalogue.BY_SLUG["poster"].audiences)
+        self.assertTrue(card.audiences and catalogue.BY_SLUG["film-poster"].audiences)
 
     def test_the_brief_carries_what_to_deliver_after_the_visitors_words(self):
         c = catalogue.parse("film-trailer", "Harbour trailer", "0", "", ["1920x1080", "1080x1920"], "", [".mp4"],
-                            {"duration": "30 seconds"}, "Lanterns on the water.",
+                            {"film": "Harbour (2026)", "duration": "30 seconds"}, "Lanterns on the water.",
                             ["Tokyo", "Mumbai", ""], ["45_to_54", "45_to_54", ""])
         text = c.brief_text(["map.png"])
         self.assertTrue(text.startswith("Lanterns on the water."))
@@ -174,11 +179,12 @@ class CatalogueTests(unittest.TestCase):
             self.assertIs(catalogue.card_for(workflow, "report"), catalogue.BY_SLUG["report-explainer"], workflow)
             self.assertIs(catalogue.card_for(workflow, "pitch"), catalogue.BY_SLUG["startup-pitch"], workflow)
             self.assertIs(catalogue.card_for(workflow, ""), catalogue.BY_SLUG["film-trailer"], workflow)
-        self.assertIs(catalogue.card_for("poster", "product"), catalogue.BY_SLUG["poster"])
+        self.assertIs(catalogue.card_for("poster", "product"), catalogue.BY_SLUG["product-poster"])
+        self.assertIs(catalogue.card_for("poster", ""), catalogue.BY_SLUG["film-poster"])
         with self.assertRaises(StudioError):
-            catalogue.parse("film-trailer", "Harbour", "0", "product", ["1920x1080"], "", [".mp4"], {}, "A film.",
+            catalogue.parse("film-trailer", "Harbour", "0", "product", ["1920x1080"], "", [".mp4"], {"film": "Harbour"}, "A film.",
                             ["Tokyo"], [""])
-        c = catalogue.parse("film-trailer", "Harbour", "0", "", ["1920x1080"], "", [".mp4"], {}, "A film.",
+        c = catalogue.parse("film-trailer", "Harbour", "0", "", ["1920x1080"], "", [".mp4"], {"film": "Harbour"}, "A film.",
                             ["Tokyo", "Mumbai"], ["", ""])
         self.assertEqual(c.kind, "")
         self.assertIn("- One film per audience", c.brief_text([]))
@@ -230,7 +236,7 @@ class CatalogueTests(unittest.TestCase):
         with self.assertRaisesRegex(StudioError, "attach the PDF"):
             card.check_files(["model.csv"])
         with self.assertRaisesRegex(StudioError, "told as from the list"):
-            catalogue.parse("startup-pitch", "X", "0", "", ["1920x1080"], "", [".mp4"], {"told_as": "Both"}, "A pitch.")
+            catalogue.parse("startup-pitch", "X", "0", "", ["1920x1080"], "", [".mp4"], {"company": "X", "told_as": "Both"}, "A pitch.")
 
     def test_a_report_explainer_needs_its_pdf(self):
         card = catalogue.BY_SLUG["report-explainer"]
@@ -239,8 +245,39 @@ class CatalogueTests(unittest.TestCase):
         card.check_files(["Annual Report.PDF"])
         catalogue.BY_SLUG["product-ad"].check_files([])     # a card that needs nothing refuses nothing
 
-    def test_a_poster_may_be_a_product_ad(self):
-        self.assertIn(("product", "Product ad"), catalogue.types_for(catalogue.BY_SLUG["poster"], "poster"))
+    def test_the_poster_workflow_is_two_cards_each_its_own_type(self):
+        """One card with a "Kind" inside hid the film poster; now each type is a card, as the video cards are."""
+        film, product = catalogue.BY_SLUG["film-poster"], catalogue.BY_SLUG["product-poster"]
+        self.assertEqual((film.fixed_type, product.fixed_type), ("film", "product"))
+        self.assertEqual({r.workflow for r in film.routes + product.routes}, {"poster"})
+        self.assertNotIn("poster", catalogue.BY_SLUG)
+        self.assertEqual(catalogue.RENAMED["poster"], "film-poster")
+        made = catalogue.parse("product-poster", "Cold brew", "0", "", ["1200x1800"], "", [".png"],
+                               {"product": "Night Shift cold brew"}, "A print ad.", ["Seoul"], [""])
+        self.assertEqual((made.workflow, made.kind), ("poster", "product"))
+        self.assertIn("- Product: Night Shift cold brew", made.brief_text([]))
+
+    def test_what_each_request_is_about_is_required_and_comes_first(self):
+        """The subject — company, film, product, theorem, name, book title — is typed once, first, and never left out."""
+        subjects = {"startup-pitch": "company", "film-poster": "film", "film-trailer": "film",
+                    "product-poster": "product", "product-ad": "product", "maths-explainer": "topic",
+                    "logo": "name", "book-cover": "book_title"}
+        self.assertEqual({c.slug: x.key for c in catalogue.CARDS for x in c.extras if x.subject}, subjects)
+        for slug, key in subjects.items():
+            card = catalogue.BY_SLUG[slug]
+            self.assertEqual(card.extras[0].key, key, slug)
+            size = catalogue.SIZES[card.kind][0].key
+            ext = catalogue.FORMATS[card.kind][0].ext
+            with self.assertRaisesRegex(StudioError, f"Give the {card.extras[0].label.lower()}: ", msg=slug):
+                catalogue.parse(slug, "X", "0", "", [size], "", [ext], {key: "   "}, "A brief.", ["Lisbon"], [""])
+
+    def test_a_film_poster_and_a_trailer_name_their_film(self):
+        """The Film line is what the run resolves with Qloo and researches before it designs."""
+        for slug, size, ext in (("film-poster", "1200x1800", ".png"), ("film-trailer", "1920x1080", ".mp4")):
+            made = catalogue.parse(slug, "Be Cool", "0", "", [size], "", [ext], {"film": "Be Cool (2005)"},
+                                   "A Chicago audience.", ["Chicago"], [""])
+            self.assertIn("- Film: Be Cool (2005)", made.brief_text([]), slug)
+            self.assertTrue(catalogue.BY_SLUG[slug].extras[0].subject, slug)
 
     def test_audiences_are_places_with_an_optional_age_band(self):
         self.assertEqual(catalogue.parse_audiences(["  São   Paulo ", "Mexico City", ""], ["", "55_and_older", ""]),
@@ -270,14 +307,14 @@ class CatalogueTests(unittest.TestCase):
 
     def test_an_audience_may_be_in_its_own_language_from_the_list(self):
         """English unsaid; another language named on the brief's line and in the record; one not offered refused."""
-        two = catalogue.parse("poster", "Seoul", "0", "film", ["1200x1800"], "", [".png"], {}, "A poster.",
+        two = catalogue.parse("film-poster", "Seoul", "0", "film", ["1200x1800"], "", [".png"], {"film": "Seoul"}, "A poster.",
                               places=["Seoul", "London, United Kingdom"], ages=["25_to_29", ""], languages=["ko", ""])
         self.assertEqual([("Seoul, South Korea", "25_to_29", "ko"), ("London, United Kingdom", "", "")], two.audiences)
         text = two.brief_text([])
         self.assertIn("Audience A: Seoul, South Korea, aged 25 to 29, in Korean", text)
         self.assertIn("Audience B: London, United Kingdom\n", text)
         self.assertEqual(("ko", "Korean"), (two.record()["audiences"][0]["language"], two.record()["audiences"][0]["languageLabel"]))
-        cairo = catalogue.parse("poster", "Cairo", "0", "film", ["1200x1800"], "", [".png"], {}, "A poster.",
+        cairo = catalogue.parse("film-poster", "Cairo", "0", "film", ["1200x1800"], "", [".png"], {"film": "Cairo"}, "A poster.",
                                 places=["Cairo"], ages=[""], languages=["ar"])
         self.assertIn("Audience A: Cairo, Egypt, in Arabic (its text checked by eye, not read back", cairo.brief_text([]))
         self.assertFalse(cairo.record()["audiences"][0]["readBack"])
@@ -291,7 +328,7 @@ class CatalogueTests(unittest.TestCase):
     def test_hindi_is_checked_by_eye_only_when_nemotron_reads(self):
         """Nemotron misread becool3's Hindi credits as unrelated sentences; Gemini, the default reader, read them."""
         def delhi():
-            return catalogue.parse("poster", "Delhi", "0", "film", ["1200x1800"], "", [".png"], {}, "A poster.",
+            return catalogue.parse("film-poster", "Delhi", "0", "film", ["1200x1800"], "", [".png"], {"film": "Delhi"}, "A poster.",
                                    places=["Mumbai, India"], ages=[""], languages=["hi"])
         with mock.patch.dict(os.environ, {catalogue.VERIFY_READER_ENV: ""}):
             self.assertEqual("gemini", catalogue.verify_reader())
@@ -313,7 +350,7 @@ class CatalogueTests(unittest.TestCase):
         self.assertIn("Audience A: Mumbai", text)
         self.assertIn("One film per audience", text)
         self.assertTrue(catalogue.BY_SLUG["report-explainer"].audiences_optional)
-        self.assertFalse(catalogue.BY_SLUG["poster"].audiences_optional)
+        self.assertFalse(catalogue.BY_SLUG["film-poster"].audiences_optional)
 
     def test_slugify_gives_a_valid_project_id(self):
         for title in ("Harbour festival trailer", "!!!", "Ünïcode café — poster", "x" * 200):
@@ -540,9 +577,9 @@ class FrontRoutingTests(unittest.TestCase):
         self.assertEqual(self.client.get("/requests/sly/thumb").status_code, 404)
 
     def compose(self, **overrides):
-        data = {"card": "poster", "title": "Autumn menu poster", "route": "0", "kind": "film",
+        data = {"card": "film-poster", "title": "Autumn menu poster", "route": "0", "kind": "film",
                 "sizes": ["1200x1800"], "formats": [".png", ".pdf"], "brief": "An autumn menu.",
-                "action": "save", "x_headline": "Autumn at the Lantern",
+                "action": "save", "x_film": "Autumn (2026)", "x_headline": "Autumn at the Lantern",
                 "aud_place": ["Lisbon", "", ""], "aud_age": ["55_and_older", "", ""]}
         data.update(overrides)
         return data
@@ -604,11 +641,13 @@ class FrontRoutingTests(unittest.TestCase):
     def test_the_product_ads_typed_fields_are_text_boxes_after_the_brief(self):
         """Product, comparables, claim and call to action are written, not chosen: room under the brief, not a bar field."""
         page = self.client.get("/compose/product-ad").text
-        brief = page.index('id="brief"')
-        for key in ("product", "comparables", "claim", "cta"):
+        brief, main = page.index('id="brief"'), page.index('class="fr-compose-main"')
+        for key in ("comparables", "claim", "cta"):
             box = page.index(f'<textarea id="x_{key}" name="x_{key}" rows="2"')
             self.assertGreater(box, brief, f"{key} should come after the brief")
             self.assertNotIn(f'<input class="fr-inline" name="x_{key}"', page)
+        # The product is what the ad is about: first, above the brief, and required.
+        self.assertLess(main, page.index('<textarea id="x_product" name="x_product" rows="2" maxlength="2000" required'), brief)
         self.assertIn('name="x_duration"', page[:brief])      # a choice stays in the bar
 
     def test_the_startup_pitch_composer_asks_for_its_terms_and_makes_audiences_optional(self):
@@ -617,10 +656,13 @@ class FrontRoutingTests(unittest.TestCase):
         brief = page.index('id="brief"')
         for key in ("duration", "narration"):
             self.assertIn(f'name="x_{key}"', page[:brief], f"{key} should be in the header")
-        for key in ("company", "told_as", "stage"):
+        for key in ("told_as", "stage"):
             self.assertNotIn(f'name="x_{key}"', page[:brief], f"{key} should be with the brief")
             self.assertGreater(page.index(f'name="x_{key}"'), brief)
-        self.assertIn('<input class="fr-brief-line" id="x_company" name="x_company"', page)
+        # The company is what the pitch is about: first, above the brief, and required.
+        company = page.index('<input class="fr-brief-line" id="x_company" name="x_company" maxlength="200" required')
+        self.assertLess(page.index('class="fr-compose-main"'), company)
+        self.assertLess(company, brief)
         self.assertIn('name="x_stage" value="As the deck says" checked', page)
         self.assertGreater(page.index('<textarea id="x_raise" name="x_raise" rows="2"'), brief)
         self.assertGreater(page.index('<textarea id="x_use_of_funds" name="x_use_of_funds"'), brief)
@@ -628,12 +670,12 @@ class FrontRoutingTests(unittest.TestCase):
 
     def test_the_posters_headline_is_a_text_box_after_the_brief(self):
         """A headline is words to be set, often two lines: written under the brief, not squeezed into the bar."""
-        page = self.client.get("/compose/poster").text
+        page = self.client.get("/compose/film-poster").text
         self.assertGreater(page.index('<textarea id="x_headline" name="x_headline" rows="2"'), page.index('id="brief"'))
         self.assertNotIn('<input class="fr-inline" name="x_headline"', page)
 
     def test_the_composer_offers_mp4_among_the_files_it_takes(self):
-        page = self.client.get("/compose/poster")
+        page = self.client.get("/compose/film-poster")
         self.assertIn(".mp4", page.text)
         self.assertIn("reference video (MP4)", page.text)
 
@@ -670,7 +712,7 @@ class FrontRoutingTests(unittest.TestCase):
             reply = self.client.post("/requests", data=self.compose(aud_place=["", "", ""], aud_age=["", "", ""]),
                                      follow_redirects=False)
         self.assertEqual(reply.status_code, 409)
-        self.assertIn("Say who the poster is for", reply.text)
+        self.assertIn("Say who the film poster is for", reply.text)
         self.assertEqual(handed, {})
 
     def test_the_request_page_shows_what_the_studio_learned(self):
@@ -755,7 +797,7 @@ class FrontRoutingTests(unittest.TestCase):
         self.assertNotIn("data-agent-log", page)
 
     def test_the_poster_composer_offers_its_graphic_design_techniques(self):
-        page = self.client.get("/compose/poster").text
+        page = self.client.get("/compose/film-poster").text
         self.assertIn("Graphic design", page)
         self.assertIn('name="tech_alternative-grid" value="" checked', page, "the studio decides unless asked")
         self.assertIn('name="tech_mockups" value="request"', page)
@@ -797,7 +839,7 @@ class FrontRoutingTests(unittest.TestCase):
 
     def test_an_observing_studio_offers_the_form_and_refuses_to_make(self):
         client = TestClient(app_mod.create_app(self.root, Registry(), observe_only=True, create_at="/new"))
-        page = client.get("/compose/poster")
+        page = client.get("/compose/film-poster")
         self.assertIn("can watch requests but not make them", page.text)
         reply = client.post("/requests", data=self.compose(), follow_redirects=False)
         self.assertEqual(reply.status_code, 409)
@@ -867,8 +909,8 @@ class CommissionedComposerTests(unittest.TestCase):
         self.assertRegex(page, r'value="start"\s*\n?\s*>Start in the studio', "Start must not be disabled")
 
     def test_a_workflow_the_host_does_not_run_says_so_before_the_form_is_filled(self):
-        page = self.client.get("/compose/poster").text
-        self.assertIn("does not make poster requests yet", page)
+        page = self.client.get("/compose/film-poster").text
+        self.assertIn("does not make film poster requests yet", page)
         self.assertIn('value="start" disabled', page)
 
     def test_a_request_is_commissioned_and_opens_its_own_page(self):
@@ -891,6 +933,7 @@ class CommissionedComposerTests(unittest.TestCase):
         data = {"card": card, "title": "Nightshift", "route": "0", "kind": "", "sizes": ["1920x1080"],
                 "formats": [".mp4"], "brief": "Fifteen seconds.", "aud_place": ["Berlin", "Lagos"],
                 "aud_age": ["", ""], "action": "start"}
+        data.update(SUBJECTS.get(card, {}))
         data.update(overrides)
         return data
 
@@ -970,11 +1013,11 @@ class CommissionedComposerTests(unittest.TestCase):
                 self.assertNotIn('name="kind"', self.client.get(f"/compose/{card}").text)
 
     def test_a_workflow_the_host_does_not_run_is_refused_without_commissioning(self):
-        reply = self.client.post("/requests", data={**self.drawing(), "card": "poster", "kind": "film",
+        reply = self.client.post("/requests", data={**self.drawing(), "card": "film-poster", "kind": "film", "x_film": "Lisbon",
                                                     "sizes": ["1200x1800"], "aud_place": ["Lisbon"],
                                                     "aud_age": [""]})
         self.assertEqual(reply.status_code, 409)
-        self.assertIn("does not make poster requests yet", reply.text)
+        self.assertIn("does not make film poster requests yet", reply.text)
         self.assertEqual(self.commissioner.made, [])
 
     def test_a_type_the_host_does_not_offer_is_refused(self):
@@ -1082,7 +1125,7 @@ class GalleryFallbackTests(unittest.TestCase):
     def card(self, gallery: frozenset) -> str:
         TestClient(app_mod.create_app(Path(tempfile.gettempdir()), Registry()))   # installs the front's globals
         template = app_mod.TEMPLATES.env.from_string(self.CARD)
-        return template.render(card=catalogue.BY_SLUG["poster"], gallery=gallery)
+        return template.render(card=catalogue.BY_SLUG["film-poster"], gallery=gallery)
 
     def test_a_missing_picture_falls_back_to_the_kind_icon(self):
         html = self.card(frozenset())
@@ -1090,7 +1133,7 @@ class GalleryFallbackTests(unittest.TestCase):
         self.assertIn("ps-wcard-empty", html)
 
     def test_a_picture_that_is_here_is_shown(self):
-        self.assertIn("/static/gallery/poster.webp", self.card(frozenset({"poster.webp"})))
+        self.assertIn("/static/gallery/film-poster.webp", self.card(frozenset({"film-poster.webp"})))
 
     def test_the_gallery_is_what_is_on_disk(self):
         TestClient(app_mod.create_app(Path(tempfile.gettempdir()), Registry()))

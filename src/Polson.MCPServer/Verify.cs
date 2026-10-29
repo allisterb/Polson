@@ -580,7 +580,7 @@ public sealed partial class VerifyToolkit
         return (computed, name, ignored, scale, stated);
     }
 
-    private const string SourcesExample = "DIRECTED BY F. GARY GRAY': { about: 'Be Cool (2005 film)', claim: 'Be Cool (2005) was directed by F. Gary Gray.' }";
+    private const string SourcesExample = "DIRECTED BY F. GARY GRAY': { about: 'Be Cool (2005 film)', claim: 'F. Gary Gray is credited as director in the on-screen credits of Be Cool (2005).' }";
 
     /// <summary>
     /// Each text the lookup left as <c>own words</c> or <c>unsourced figure</c> that the <c>sources</c> option states a fact

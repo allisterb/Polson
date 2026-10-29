@@ -57,6 +57,8 @@ public static class TasteReferences
             var problems = new List<string>();
             var handles = row.Handles.Length > 0 ? row.Handles : row.LeadHandles;
             if (handles.Length == 0) problems.Add("cites no Taste handle (t1, t2…), in the row or its section's first paragraph");
+            if (row.Mixed is { } other)
+                problems.Add($"its Kind mixes Qloo with {other}: give each kind its own row, so a Qloo row's italics are only Qloo's titles");
 
             var cited = new List<TasteResult>();
             foreach (var h in handles)
@@ -66,7 +68,8 @@ public static class TasteReferences
                 else cited.Add(r);
             }
 
-            var titleChecks = row.Titles.Select(t =>
+            // A mixed row's italics may be an article's title, so they are not read as Qloo's; the row fails until it is split.
+            var titleChecks = row.Titles.Where(t => row.Mixed is null && !Emphasis(t, results)).Select(t =>
             {
                 var key = Key(t);
                 var found = cited.FirstOrDefault(r => Returned(r, key) || Asked(r, key, idsByName));
@@ -79,7 +82,7 @@ public static class TasteReferences
                 };
             }).ToArray();
 
-            var tagChecks = row.Tags.Select(t =>
+            var tagChecks = row.Tags.Where(_ => row.Mixed is null).Select(t =>
             {
                 var key = Key(t);
                 var found = cited.FirstOrDefault(r => TagsOf(r).Any(n => Key(n) == key));
@@ -150,6 +153,15 @@ public static class TasteReferences
 
     #region Private methods
     private static bool Returned(TasteResult r, string key) => EntitiesOf(r).Any(e => Key(e.Name) == key);
+
+    /// <summary>
+    /// An italic word or two in lower case that no answer this session returned: stress (*for*), not a title. cruelty2's
+    /// "would have argued *for* a red accent" came back as an unverified Qloo title. A lower-case title Qloo did return
+    /// (*mother!*) is still checked.
+    /// </summary>
+    private static bool Emphasis(string text, IReadOnlyList<TasteResult> results) =>
+        !text.Any(char.IsUpper) && text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length <= 2
+        && !results.Any(r => r.Ok && Returned(r, Key(text)));
 
     /// <summary>Whether an entity of that name, known anywhere this session, is one of the ids this answer was asked about.</summary>
     private static bool Asked(TasteResult r, string key, Dictionary<string, string[]> idsByName) =>
@@ -228,6 +240,7 @@ public static class TasteReferences
                 if (cells.Count < 2 || !cells[^1].Contains("qloo", StringComparison.OrdinalIgnoreCase)) continue;
 
                 var evidence = string.Join(" | ", cells.Take(cells.Count - 1).Skip(1));
+                var mixed = OtherKind.Match(cells[^1]);
                 var choice = cells[0];
                 // Backticks are formatting, never part of a tag: `"Boom Bap"` (item 8) matched neither the reader nor the
                 // unread net and vanished, and the check passed with 0 tags read (poster6, 2026-10-25).
@@ -239,7 +252,8 @@ public static class TasteReferences
                     lead.Distinct().ToArray(),
                     [.. Italics(choice + " " + evidence).Distinct()],
                     [.. QuotedTags(plain).Distinct()],
-                    [.. Unread(plain).Distinct()]);
+                    [.. Unread(plain).Distinct()],
+                    mixed.Success ? mixed.Value : null);
             }
             i--;
         }
@@ -296,7 +310,8 @@ public static class TasteReferences
     #endregion
 
     #region Types
-    private sealed record Row(string Section, string Choice, string[] Handles, string[] LeadHandles, string[] Titles, string[] Tags, string[] Unread);
+    private sealed record Row(string Section, string Choice, string[] Handles, string[] LeadHandles, string[] Titles, string[] Tags, string[] Unread,
+        string? Mixed);
 
     private enum Lead { Waiting, Reading, Closed }
     #endregion
@@ -306,6 +321,13 @@ public static class TasteReferences
     private static readonly Regex Separator = new(@"^\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$", RegexOptions.Compiled);
     private static readonly Regex HandleRef = new(@"(?<![\w-])t(\d{1,3})(?![\w-])", RegexOptions.Compiled);
     private static readonly Regex Italic = new(@"(?<!\*)\*([^*\n]{1,80})\*(?!\*)", RegexOptions.Compiled);
+
+    /// <summary>
+    /// A kind beside Qloo in one row's Kind cell — "Research + Qloo" (cruelty2) — whose sources are written in italics too:
+    /// two web articles came back as unverified Qloo titles.
+    /// </summary>
+    private static readonly Regex OtherKind = new(@"\b(?:research|brief|document|assumed|computed|web)\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     /// <summary>
     /// <c>**"Glitzy"**</c>, or <c>"Glitzy" (item 10)</c> / <c>(10)</c> / <c>(t6 item 10)</c> / <c>(`t6` item 10)</c>, bold or not —
