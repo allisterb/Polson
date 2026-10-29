@@ -86,30 +86,43 @@ public class VerifyTests : TestsRuntime, IDisposable
         Assert.Null(wrong.Seen[0]);
     }
 
-    /// <summary>Arabic is a script the reader cannot be trusted with: an Arabic text or reading is recognised; others are not.</summary>
+    /// <summary>
+    /// With Nemotron reading, Arabic and Hindi are left to the eye: it read a correct Arabic heading as other words and
+    /// becool3's Hindi credits as unrelated sentences. A text in either script is then recognised; others are not.
+    /// </summary>
     [Fact]
-    public void TestArabicIsTheScriptLeftToTheEye()
+    public void TestArabicAndHindiAreLeftToTheEyeWhenNemotronReads()
     {
-        Assert.True(FilmReadBack.Unreadable("السوق الأمريكية: 4.2 مليار دولار"));
-        Assert.True(FilmReadBack.Unreadable("Revenue — الإيرادات"));
-        Assert.False(FilmReadBack.Unreadable("美国市场：42亿美元"));
-        Assert.False(FilmReadBack.Unreadable("अमेरिकी बाज़ार: 4.2"));
-        Assert.False(FilmReadBack.Unreadable("٤٫٢"));     // Arabic-Indic digits alone are a figure, which the reader does read
-        Assert.Contains("2 texts are in Arabic", FilmReadBack.UncheckedNote(2, "frame"));
+        Assert.True(FilmReadBack.Unreadable("السوق الأمريكية: 4.2 مليار دولار", nemotron: true));
+        Assert.True(FilmReadBack.Unreadable("Revenue — الإيرادات", nemotron: true));
+        Assert.True(FilmReadBack.Unreadable("अमेरिकी बाज़ार: 4.2", nemotron: true));
+        Assert.False(FilmReadBack.Unreadable("美国市场：42亿美元", nemotron: true));
+        Assert.False(FilmReadBack.Unreadable("٤٫٢", nemotron: true));     // Arabic-Indic digits alone are a figure, which it reads
+        Assert.False(FilmReadBack.Unreadable("४.२", nemotron: true));     // and Devanagari digits
+        Assert.Contains("2 texts are in Arabic or Hindi", FilmReadBack.UncheckedNote(2, "frame"));
         Assert.Equal("", FilmReadBack.UncheckedNote(0, "frame"));
     }
 
     /// <summary>
-    /// With Nemotron reading, Hindi joins Arabic: on becool3's Hindi film it read the credits as unrelated sentences. A
-    /// Devanagari text is then unchecked and the summary names both scripts; Gemini, which read that film, is trusted with it.
+    /// Gemini is trusted with both: it read becool3's Hindi film almost exactly, and in the Arabic probe (2026-10-29) read six
+    /// correct Arabic lines exactly and deliberately wrong ones as drawn. Its readings are checked like any other script's.
     /// </summary>
     [Fact]
-    public void TestHindiIsLeftToTheEyeOnlyWhenNemotronReads()
+    public void TestGeminiLeavesNoScriptToTheEye()
     {
-        Assert.True(FilmReadBack.Unreadable("अमेरिकी बाज़ार: 4.2", devanagari: true));
+        Assert.False(FilmReadBack.Unreadable("السوق الأمريكية: 4.2 مليار دولار"));
         Assert.False(FilmReadBack.Unreadable("अमेरिकी बाज़ार: 4.2"));
-        Assert.False(FilmReadBack.Unreadable("४.२", devanagari: true));   // Devanagari digits alone are a figure
-        Assert.Contains("3 texts are in Arabic or Hindi", FilmReadBack.UncheckedNote(3, "frame", "Arabic or Hindi"));
+    }
+
+    /// <summary>The Arabic probe's lines, read by Gemini as set: each is seen, the figures and brackets included.</summary>
+    [Fact]
+    public void TestArabicLinesReadAsSetAreSeen()
+    {
+        var shown = new[] { Shown("4.2 مليار دولار سنوياً", 0, 4), Shown("حصة أكبر أربع شركات: 22% (من الإيرادات)", 0, 4) };
+        var outcome = FilmReadBack.Match(shown, [Read("4.2 مليار دولار سنوياً", 0), Read("حصة أكبر أربع شركات: 22% (من الإيرادات)", 0)]);
+
+        Assert.All(outcome.Seen, r => Assert.NotNull(r));
+        Assert.Null(FilmReadBack.Match([Shown("4.2 مليار دولار سنوياً", 0, 4)], [Read("2.4 مليار دولار سنوياً", 0)]).Seen[0]);
     }
 
     /// <summary>The report film's case: the line was set with $974M and read with $744M. Not a match — a stray to look at.</summary>

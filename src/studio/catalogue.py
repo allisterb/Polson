@@ -45,25 +45,22 @@ AGE_BANDS: tuple[tuple[str, str], ...] = (
 
 #: The languages a poster or film can be made in for an audience, by code, English first and the default. Only those
 #: whose script the engine draws, a separate model reads back, and a voice speaks (probe 2026-10-27): German, Japanese,
-#: Chinese, Korean and Hindi measured, French, Spanish and Portuguese in German's Latin script. Arabic is offered too —
-#: drawn right since Motion text took the canvas's shaper, and voiced — but flagged, see `CHECKED_BY_EYE`.
+#: Chinese, Korean and Hindi measured, French, Spanish and Portuguese in German's Latin script, and Arabic, drawn right
+#: since Motion text took the canvas's shaper and read back by Gemini (probe 2026-10-29).
 LANGUAGES: tuple[tuple[str, str], ...] = (
     ("", "English"), ("de", "German"), ("fr", "French"), ("es", "Spanish"), ("pt", "Portuguese"),
     ("ja", "Japanese"), ("zh-Hans", "Chinese (Simplified)"), ("ko", "Korean"), ("hi", "Hindi"), ("ar", "Arabic"))
-
-#: Languages whose text the read-back cannot vouch for: the reader misread whole Arabic words that were drawn correctly
-#: (probe 2026-10-27). Their lines are checked by translation back and by the studio's own eye on the frame, and every
-#: place the language is named says so, so nobody takes an unchecked line for a checked one.
-CHECKED_BY_EYE: frozenset[str] = frozenset({"ar"})
 
 #: Which service reads the films back, as the engine's `Verify:Reader` falls back to it: `gemini` (the default) or
 #: `nemotron`. Set it in the studio's environment, which the MCP server it starts inherits, so both agree.
 VERIFY_READER_ENV = "POLSON_VERIFY_READER"
 
-#: Languages Nemotron cannot be trusted to read back, added to `CHECKED_BY_EYE` when it is the reader, so a demo on
-#: Nemotron shows which to avoid. Hindi: on becool3 (2026-10-28) it read a correctly drawn film's credits as unrelated
-#: sentences, where Gemini read the same film almost exactly. Arabic is in `CHECKED_BY_EYE` whichever reads.
-NEMOTRON_UNREADABLE: frozenset[str] = frozenset({"hi"})
+#: Languages Nemotron cannot be trusted to read back. With it reading, their lines are checked by translation back and by
+#: the studio's own eye on the frame, and every place the language is named says so, so nobody takes an unchecked line for
+#: a checked one. Arabic: it read correctly drawn words as others ("one cow carries the car", probe 2026-10-27). Hindi: on
+#: becool3 (2026-10-28) it read a film's credits as unrelated sentences. Gemini read both: the same Hindi film almost
+#: exactly, and six correct Arabic lines exactly and five of six deliberately wrong ones as drawn (probe 2026-10-29).
+NEMOTRON_UNREADABLE: frozenset[str] = frozenset({"ar", "hi"})
 
 
 def verify_reader() -> str:
@@ -72,8 +69,8 @@ def verify_reader() -> str:
 
 
 def checked_by_eye() -> frozenset[str]:
-    """The languages whose text the read-back cannot vouch for with this studio's reader."""
-    return CHECKED_BY_EYE | (NEMOTRON_UNREADABLE if verify_reader() == "nemotron" else frozenset())
+    """The languages whose text the read-back cannot vouch for with this studio's reader: none with Gemini."""
+    return NEMOTRON_UNREADABLE if verify_reader() == "nemotron" else frozenset()
 
 #: What is said of such a language wherever it is named.
 EYE_NOTE = "checked by eye, not read back"

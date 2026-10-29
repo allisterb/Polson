@@ -335,6 +335,11 @@ COPY src/orchestrator/ ./orchestrator/
 # `/app/bin/cli`, exactly as it finds `src/vision/` from `bin/cli` in a checkout, so they sit at
 # `/app/src/vision/` to mirror the repository.
 COPY src/vision/ ./src/vision/
+
+# The speech backend's two scripts and its lock, found the same way at `/app/src/speech/`: `g2p.py` guesses a word
+# the CMU dictionary lacks, and `align.py` times an English narration line word by word. Without them every narrated
+# English film failed at `Motion.speech` (the Trello pitch, 2026-10-29); the venv is built below.
+COPY src/speech/ ./src/speech/
 COPY docker-entrypoint.sh /usr/local/bin/polson-entrypoint
 RUN chmod +x /usr/local/bin/polson-entrypoint
 
@@ -383,9 +388,17 @@ USER polson
 #
 # The CMU Pronouncing Dictionary (3.6 MB, for `Motion.speech`) is fetched either way, beside the engine
 # in `/app/bin/cli/Speech` with its licence, the way the library is.
+#
+# **The speech backend** (`speech-venv`) is `/app/python-speech/`, from `src/speech/requirements.lock.txt`
+# (CPU-only torch and torchaudio, hash-checked), with NLTK's pinned data and the 378 MB wav2vec 2.0 aligner in
+# `/app/models/`, smoke-tested offline. Roughly a gigabyte, and what a narrated English film needs: without it
+# `Motion.speech` cannot time a recording word by word. `--build-arg POLSON_SPEECH=0` leaves it out, and narration
+# in English then refuses, saying what is missing; other languages are timed by the recording whole and still work.
 ARG POLSON_VISION=1
+ARG POLSON_SPEECH=1
 COPY tools/bootstrap.py /tmp/bootstrap.py
 RUN if [ "$POLSON_VISION" = "1" ]; then parts=library,models,speech,venv; else parts=library,speech; fi \
+    && if [ "$POLSON_SPEECH" = "1" ]; then parts="$parts,speech-venv"; fi \
     && PIP_NO_CACHE_DIR=1 python /tmp/bootstrap.py --root /app --library /app/bin/cli/Library \
        --speech /app/bin/cli/Speech --only "$parts"
 

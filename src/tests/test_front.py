@@ -314,10 +314,6 @@ class CatalogueTests(unittest.TestCase):
         self.assertIn("Audience A: Seoul, South Korea, aged 25 to 29, in Korean", text)
         self.assertIn("Audience B: London, United Kingdom\n", text)
         self.assertEqual(("ko", "Korean"), (two.record()["audiences"][0]["language"], two.record()["audiences"][0]["languageLabel"]))
-        cairo = catalogue.parse("film-poster", "Cairo", "0", "film", ["1200x1800"], "", [".png"], {"film": "Cairo"}, "A poster.",
-                                places=["Cairo"], ages=[""], languages=["ar"])
-        self.assertIn("Audience A: Cairo, Egypt, in Arabic (its text checked by eye, not read back", cairo.brief_text([]))
-        self.assertFalse(cairo.record()["audiences"][0]["readBack"])
         self.assertTrue(two.record()["audiences"][0]["readBack"])
         for bad in ("he", "fa", "Klingon"):
             with self.subTest(bad=bad), self.assertRaisesRegex(StudioError, "language from the list"):
@@ -325,19 +321,22 @@ class CatalogueTests(unittest.TestCase):
         with self.assertRaisesRegex(StudioError, "needs a place"):
             catalogue.parse_audiences([""], [""], ["ja"])
 
-    def test_hindi_is_checked_by_eye_only_when_nemotron_reads(self):
-        """Nemotron misread becool3's Hindi credits as unrelated sentences; Gemini, the default reader, read them."""
-        def delhi():
-            return catalogue.parse("film-poster", "Delhi", "0", "film", ["1200x1800"], "", [".png"], {"film": "Delhi"}, "A poster.",
-                                   places=["Mumbai, India"], ages=[""], languages=["hi"])
-        with mock.patch.dict(os.environ, {catalogue.VERIFY_READER_ENV: ""}):
-            self.assertEqual("gemini", catalogue.verify_reader())
-            self.assertTrue(delhi().record()["audiences"][0]["readBack"])
-            self.assertNotIn("checked by eye", delhi().brief_text([]))
-        with mock.patch.dict(os.environ, {catalogue.VERIFY_READER_ENV: "Nemotron"}):
-            self.assertEqual({"ar", "hi"}, set(catalogue.checked_by_eye()))
-            self.assertFalse(delhi().record()["audiences"][0]["readBack"])
-            self.assertIn("in Hindi (its text checked by eye, not read back", delhi().brief_text([]))
+    def test_hindi_and_arabic_are_checked_by_eye_only_when_nemotron_reads(self):
+        """Nemotron misread becool3's Hindi credits and a correct Arabic heading; Gemini, the default reader, read both."""
+        def made(place: str, lang: str):
+            return catalogue.parse("film-poster", place, "0", "film", ["1200x1800"], "", [".png"], {"film": place}, "A poster.",
+                                   places=[place], ages=[""], languages=[lang])
+        for place, lang, name in (("Mumbai, India", "hi", "Hindi"), ("Cairo", "ar", "Arabic")):
+            with self.subTest(lang=lang):
+                with mock.patch.dict(os.environ, {catalogue.VERIFY_READER_ENV: ""}):
+                    self.assertEqual("gemini", catalogue.verify_reader())
+                    self.assertEqual(frozenset(), catalogue.checked_by_eye())
+                    self.assertTrue(made(place, lang).record()["audiences"][0]["readBack"])
+                    self.assertNotIn("checked by eye", made(place, lang).brief_text([]))
+                with mock.patch.dict(os.environ, {catalogue.VERIFY_READER_ENV: "Nemotron"}):
+                    self.assertEqual({"ar", "hi"}, set(catalogue.checked_by_eye()))
+                    self.assertFalse(made(place, lang).record()["audiences"][0]["readBack"])
+                    self.assertIn(f"in {name} (its text checked by eye, not read back", made(place, lang).brief_text([]))
 
     def test_a_report_explainers_audiences_are_optional(self):
         """With places, a film per audience in its conventions; without, one film for whoever the brief describes."""
