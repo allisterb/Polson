@@ -378,7 +378,8 @@ of a family's name — `'Franklin Gothic Heavy'` is `'Franklin Gothic'` at `font
 - **One or two mock-ups per final**, `artifacts/mockup_<setting>_a.png` (check 7), labelled as mock-ups, as
   `Stage.mockup` draws them. For a richer street, a plate built around the panel (Manual 30 §5b) — one requisition,
   `find: true`. A mock-up is never evidence that the poster was placed anywhere; `direction.md` does not say it was.
-- **The process book, last**: `Stage.book('process.pdf', { title, pages })` (Manual 18 §3c) — the brief in a page, each
+- **The process book, last**: `Stage.book('process.pdf', { title, pages })` (Manual 18 §3c), a still a page as
+  `{ image: 'artifacts/00_map.png', caption }` and a text file as `{ title, file: 'concepts.md' }` — the brief in a page, each
   mind map (`00_map.png`), each audience's research board (`01_field_a.png`, never the sheet of posters) and matrix
   (`03_matrix_a.png`), each audience's concept sheet with `concepts.md` beside it, the kit sheet (`03_kit.png`), the comps that changed the direction, each final poster
   and its mock-ups after it,

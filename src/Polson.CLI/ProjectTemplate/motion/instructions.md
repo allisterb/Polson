@@ -612,7 +612,8 @@ set's own check from *More than one audience*:
 - **`findings.md`**: what the motion added to the poster, what the checks changed, and what you would
   do with more time.
 - **Two books, last** (Manual 25 §13d; Shaw, ch. 4), both with `Stage.book` (Manual 18 §3c), each naming only files
-  that exist and drawing nothing new, every caption saying what was decided, `findings.md` in neither:
+  that exist and drawing nothing new, every caption saying what was decided, `findings.md` in neither. A still is a
+  page as `{ image: 'artifacts/00_map.png', caption }`, a text file as `{ title, file: 'treatment.md' }`:
   - **`pitch.pdf`, `kind: 'pitch'`**: what sells the chosen concept, finished — `treatment.md` beside its shape, the
     design board, the kit sheet, a frame of each finished film (`comp.still`), and the film on its screen (the mock-up). Short: a page
     for each, no workshop sheets. Give it the film's own typeface and accent (`font`, `accent`) on the neutral ground,
