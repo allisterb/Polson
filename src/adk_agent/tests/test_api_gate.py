@@ -109,5 +109,33 @@ class ApiGateTests(unittest.TestCase):
             self.assertEqual(TestClient(app).get("/openapi.json").status_code, 200)
 
 
+class SharedTokenTests(unittest.TestCase):
+    """Every instance of a deployment holds the same token, so a sibling's keepalive hold is let through to say whose
+    it is (2026-10-29: refused by the gate with a 404, it could not learn it had reached a sibling)."""
+
+    def token(self, key: str) -> str:
+        with mock.patch.dict(os.environ, {"POLSON_AGENT_PLATFORM_KEY": key}):
+            return api_gate._token()
+
+    def test_instances_with_one_key_share_a_token_that_is_not_the_key(self):
+        self.assertEqual(self.token("k-123"), self.token("k-123"))
+        self.assertNotEqual(self.token("k-123"), self.token("k-456"))
+        self.assertNotIn("k-123", self.token("k-123"))
+
+    def test_without_a_key_each_process_has_its_own(self):
+        self.assertNotEqual(self.token(""), self.token(""))
+
+    def test_a_siblings_hold_passes_the_gate_and_is_told_it_reached_another_instance(self):
+        import keepalive
+        app = FastAPI()
+        keepalive.mount(app)
+        app.add_middleware(api_gate.ApiGate)
+        keepalive._tracked.clear()
+        with mock.patch.dict(os.environ, {"K_REVISION": "svc-00004"}):
+            reply = TestClient(app).get(keepalive.HOLD_PATH, headers={**api_gate.internal(), keepalive.INSTANCE_HEADER: "sibling"})
+        self.assertEqual(reply.status_code, 409)
+        self.assertEqual(reply.headers[keepalive.REVISION_HEADER], "svc-00004")
+
+
 if __name__ == "__main__":
     unittest.main()

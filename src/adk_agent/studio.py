@@ -1101,10 +1101,13 @@ CACHED_TOKEN_SHARE = 0.1
 #: Derived rather than configured so an existing deployment gains the guard without setting anything
 #: new, and set by what separates the two cases rather than by taste: a cached token is charged at
 #: `CACHED_TOKEN_SHARE`, so a *perfectly* cached run could reach ten times its spend cap in raw
-#: tokens. Four leaves a well-cached run of real work comfortable — kubrick1's 2,005,223 raw against
-#: a 2,000,000 spend cap sits at 0.25 of an 8,000,000 guard — while still bounding a loop.
+#: tokens. Eight leaves a well-cached run of real work room while still bounding a loop below that ten.
+#: **It was four, and four halted real work**: a 15-second trailer on 2026-10-29 took about 65 turns
+#: of ~190k context, 88% cached, and was stopped while encoding its film at 12,298,594 raw against a
+#: 12,000,000 guard — with 2,581,691 billable, inside its 3,000,000 spend cap. kubrick1, which set
+#: four, ran at about one raw token per billable; a long, well-cached run reaches five.
 #: `POLSON_BUDGET_RAW_TOKENS` overrides it outright.
-RAW_CAP_MULTIPLE = 4
+RAW_CAP_MULTIPLE = 8
 
 #: The spend cap a run gets when nothing sets one, in billable input tokens.
 #:
