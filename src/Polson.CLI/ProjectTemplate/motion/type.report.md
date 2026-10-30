@@ -163,6 +163,22 @@ an answer: the scene says the figure is not yet set, in those words.
 - **Say what moved it, if the document does.** A large change the filing explains — a charge that cut a margin, a
   product transition — gets its reason in the company's words, attributed. Leaving it out makes the figure look
   better or worse than the filing does.
+- **Never a cause of your own.** A label beside a figure says what it is — the line item, the period — never why. A
+  reason in your own words ("compute infrastructure scaling", "enterprise expansion") is a claim no check reads: the
+  read-back confirms text was read as set, not that it is true, and a figure's source covers its digits, not the words
+  next to it. A reason goes on screen only where the filing gives one, in its words, with its page (the rule above);
+  where it gives none, the label says nothing about why.
+- **A net loss is not an operating loss.** Below the operating line sit items that are not the business spending money
+  — a change in the fair value of convertible notes or warrants, an impairment, a gain on a sale. **When operating and
+  net income or loss differ by more than half of the larger, show both, side by side,** and name the largest line
+  between them as the statement titles it, with its figure. Net loss alone tells the viewer the company spent it.
+  anthropic_s_1_2 (2026-10-30) showed a six-month net loss of $(80,748)M captioned as compute scaling; the same page
+  printed an operating loss of $(693)M and $(72,388)M of *"Change in fair value of convertible notes, derivative
+  liabilities, and SAFEs"*. Every figure was right, and the film told investors the wrong thing.
+- **No adjectives on a figure.** Not "surge", "massive", "explosive", "unprecedented", "acceleration", "strong",
+  "worrying" — on screen, in a headline, in a label, in the voice, or in `findings.md`. The figure and its comparison
+  say how large it is; the word tells the viewer how to feel about it, which is the steering the colour rule below
+  forbids. *"$16,286M, 14× the same half a year earlier"* is the finding; *"surged"* is yours.
 
 ### Scenes
 

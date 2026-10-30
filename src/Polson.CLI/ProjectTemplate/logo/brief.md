@@ -21,6 +21,7 @@ do not invent a value and proceed as though the client had chosen it.
 | Parameter | Value |
 | :--- | :--- |
 | Company / product name (exact spelling and casing) | |
+| Tagline or descriptor, exactly as the client wrote it (or *none given*) | |
 | Industry & domain | |
 | Target audience | |
 | Core brand values (3–5 adjectives) | |

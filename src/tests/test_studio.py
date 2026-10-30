@@ -1904,6 +1904,28 @@ class DeliverableRouteTests(unittest.TestCase):
         self.assertEqual(picture["formats"][0]["durationMs"], 4000.0)
         self.assertEqual(picture["name"], "output")
 
+    def test_a_logos_mark_is_the_piece_and_its_brand_sheet_follows_it(self):
+        """polson_graphics_studio_logo offered only the board: the mark's `final.svg` is the piece, the sheet a second."""
+        for name in ("artifacts/final.png", "artifacts/final.svg", "artifacts/brand_sheet.png"):
+            self._made(name)
+        self._render_events(
+            {"type": "render", "ts": "2026-10-30T10:20:00Z", "artifact": "artifacts/final.png", "format": "png"},
+            {"type": "render", "ts": "2026-10-30T10:20:00Z", "artifact": "artifacts/final.svg", "format": "svg"},
+            {"type": "render", "ts": "2026-10-30T10:24:00Z", "artifact": "artifacts/brand_sheet.png", "format": "png"})
+
+        pieces = [d for d in self.client.get("/runs/acme-1/deliverables").json()["deliverables"] if d["kind"] == "render"]
+        self.assertEqual([["artifacts/final.png", "artifacts/final.svg"], ["artifacts/brand_sheet.png"]],
+                         [[f["path"] for f in p["formats"]] for p in pieces])
+        self.assertEqual("Brand sheet", pieces[1]["title"])
+
+    def test_a_sheet_that_is_the_piece_is_listed_once(self):
+        self._made("artifacts/brand_sheet.png")
+        self._render_events(
+            {"type": "render", "ts": "2026-10-30T10:24:00Z", "artifact": "artifacts/brand_sheet.png", "format": "png"})
+
+        pieces = [d for d in self.client.get("/runs/acme-1/deliverables").json()["deliverables"] if d["kind"] == "render"]
+        self.assertEqual(1, len(pieces))
+
     def test_the_finished_film_replaces_its_draft(self):
         self._made("artifacts/05_draft.mp4")
         self._made("output.mp4")

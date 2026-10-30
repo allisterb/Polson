@@ -728,6 +728,13 @@ def create_app(root: Path | None = None, registry: Registry | None = None,
         # The picture first, because it is the work. Everything under it is what the studio *says*
         # about the work, which is worth less to a reader who has not yet seen it.
         pieces = final_renders(run)
+        # A sheet the workflow names (`SHEETS`) after the piece, unless it is the piece: a run with no `final` shows its
+        # sheet as the piece, and once is enough.
+        shown = {f["path"] for p in pieces for f in p["formats"]}
+        for stem, (title, what) in SHEETS.items():
+            sheet = final_render(run, only=lambda artifact, s=stem: Path(artifact).stem == s)
+            if sheet and not shown & {f["path"] for f in sheet["formats"]}:
+                pieces = [*pieces, {**sheet, "title": title, "what": what}]
         written.extend(pieces)
 
         for name, title, what in DELIVERABLES:
@@ -973,6 +980,12 @@ FORMAT_ORDER = ("mp4", "webm", "webp", "png", "jpeg", "jpg", "svg", "pdf")
 #: The names the workflows give the finished piece (`output.mp4`, `output.svg`; `artifacts/final.svg` where a workflow
 #: names none and the agent chose). A per-audience `final_a` is found by `final_renders` before this is asked.
 PIECE_STEMS = ("output", "final")
+
+#: Pieces a workflow delivers beside its finished piece, by the name it gives them, as a reader would call each and what it
+#: holds. The logo workflow's mark is `final`; its presentation sheet is the second thing the client asked for.
+SHEETS: dict[str, tuple[str, str]] = {
+    "brand_sheet": ("Brand sheet", "the mark presented: its lockups, colours, clear space and type"),
+}
 
 #: The books the workflows name (`Stage.book`), as a reader would call them and with what each holds. Any other PDF a
 #: run sets beside the piece is listed under its file name.

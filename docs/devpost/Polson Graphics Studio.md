@@ -2,11 +2,14 @@
 
 ## What it does
 Polson Graphics Studio is an agentic co-creative graphics and motion design platform designed to provide an autonomous, affordable alternative to human-powered on-demand creative service platforms like Design Pickle and Superside, with innovative and accurate graphic and motion design work that adapts to different audiences and languages and cultures all over the world. Polson Graphics Studio provides an verifiable, culturally adaptable, alternative to diffusion model-powered generative AI systems like Google Veo or Adobe Firefly for professional-grade image and motion graphic design work for financial report visualizations, VC pitch decks, film trailers, product advertisments, logos, infographics, posters, and many other types of graphic and motion design projects where precision, accuracy, and cross-cultural adaptation is crucial. 
+
+![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/trailer5.webp)
+
 ![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/output.webp)
 
 ![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/pgs_design.webp)
 
-![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/s1_final_a.webp)
+
 
 
 Polson's overall goal to allow ordinary users to harness their creativity using AI with professional-level graphic and motion design that would be far too expensive to employ via traditional means, mirroring the use of AI for software development by non-expert users today, and which can't be done by current generative AI systems. It aims to be superior to even the most advanced diffusion model-powered image and video generators in the areas of precision and accuracy and cross-cultural adaptation. 
@@ -121,12 +124,12 @@ The Polson drawing and animation engine is exposed to agents as a 'Code Mode' MC
 A workflow is the set of inputs, prompts, guardrails, steps, design manuals, resources, and deliverables an agent uses for one kind of graphic production, e.g the [pitch workflow](https://github.com/allisterb/PolsonFramework/blob/master/src/Polson.CLI/ProjectTemplate/motion/type.pitch.md). Each workflow has a set of stages e.g. the **`vector_infographic`** workflow first researches its subjects them does the infographic composition then verifies amuch as possible the figures it drew were accurate: 
 ![The vector_infographic workflow](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/vector-infographic-workflow.svg)
 
-The deliverable is an SVG infographic that can be opened in Illustrator with the data being  visualized validated as much as possible:
+The deliverable is an SVG infographic that can be opened in Illustrator with the data being  visualized and validated as much as possible:
 
-![](https://imgur.com/isBlYIm.png)
+![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/final_b.svg)
 
 ## How Polson uses Qloo for cross-cultural graphic design
-Polson uses a .NET client to access the Qloo REST API. The capabilities of the Qloo API are exposed to the agent in the JavaScript SDK it uses to write code for the engine via the `Taste` global and functions like `find`, `contrast` etc. that the agent calls before graphic design work for different audiences to establish evidence for things like the pace of videos.
+Polson uses a .NET client to access the Qloo REST API with query patterns ported from the `@qloo/qloo-harness` pacjage. The capabilities of the Qloo API are exposed to the agent via an MCP tool and the `Taste` JavaScript global and functions like `find`, `contrast` etc. that the agent calls before graphic design work for different audiences to establish evidence for things like the pace of videos.
 ```
 Studio request composer
    │  User brief: "Audience A: Tokyo, aged 45 to 54"
@@ -184,10 +187,10 @@ The rule the workflows enforce: "no measurable difference" is an answer to repor
 For film posters and trailers 
 - **What the film's own fans in this city love** (film posters and trailers). Ask about the audience *with the film as a
   signal*, and subtract the same query without it. A city's whole audience points at its local music; its fans of
-  *this* film point somewhere quite different (§8.1).
+  *this* film point somewhere quite different.
 
 ### Product audiences
-- Qloo is used to frtermineWhat buyers of the comparable brands love here, minus what they love anywhere** (product ads). Resolve the brief's
+- Qloo is used to determine what buyers of the comparable brands love here, minus what they love anywhere** (product ads). Resolve the brief's
 comparable brands, then ask for the brands and artists their buyers like in each city and once globally. What remains
 locally is that market's own register. Qloo's brand tags (aesthetic, emotional tone, packaging format) supply the look,
 the voice and the packshot. Tags every audience shares are treated as the category's look, not as a difference. Qloo's place results (with a location filter) supply each city's setting and its mood tags.
