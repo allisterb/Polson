@@ -33,6 +33,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -100,6 +101,11 @@ MIRRORED_FILES = (
     "GEMINI.md", "CLAUDE.md",
     "output.webp", "output.svg", "output.png", "output.mp4",
 )
+
+#: A finished piece written at the project root under a deliverable's name — `final_a.png`, `final_b.pdf`, `output.svg` —
+#: whatever the list above names. intolerable_cruelty (a film poster, 2026-10-30) wrote its two finals at the root as PNG,
+#: SVG and PDF; none was here, the instance recycled, and the Deliverables tab linked four files that no longer existed.
+ROOT_DELIVERABLE = re.compile(r"(?:final|output)(?:_[a-z])?\.(?:png|svg|pdf|webp|jpe?g|mp4|gif)", re.IGNORECASE)
 
 #: Never copied, at any depth. `documents/` is the director's own supplied material — a client's
 #: unpublished figures, whatever was attached to the brief — and it is not ours to put anywhere.
@@ -261,6 +267,10 @@ class ProjectMirror:
             path = self.root / name
             if path.is_file():
                 yield name, path
+
+        for path in sorted(self.root.iterdir()) if self.root.is_dir() else ():
+            if path.is_file() and path.name not in MIRRORED_FILES and ROOT_DELIVERABLE.fullmatch(path.name):
+                yield path.name, path
 
         for folder in MIRRORED_DIRS:
             base = self.root / folder
