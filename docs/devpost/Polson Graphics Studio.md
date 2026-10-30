@@ -79,7 +79,7 @@ An agentic graphic and motion design system that is precise, accurate and reliab
 Such a system would give ordinary people the power to create professional graphic design productions on their own without needing years of specialized knowledge and training. It would also give professional graphic designers the ability to automate lower-level tasks and projects and allow them to reach higher levels of productivity and creativity and autonomoy.
 
 Overall such a system has the potential to enable the same revolutionary collaboration and automation for graphic design as exists for software development today. 
-![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/trailer5.webp)
+![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/anthropic_s1_outside_cc.webp)
 
 
 
@@ -126,7 +126,7 @@ The deliverable is an SVG infographic that can be opened in Illustrator with the
 ![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/final_b.svg)
 
 ## How Polson uses Qloo for cross-cultural graphic design
-Polson uses a .NET client to access the Qloo REST API with query patterns ported from the `@qloo/qloo-harness` pacjage. The capabilities of the Qloo API are exposed to the agent via an MCP tool and the `Taste` JavaScript global and functions like `find`, `contrast` etc. that the agent calls before graphic design work for different audiences to establish evidence for things like the pace of videos.
+Polson uses a .NET client to access the Qloo REST API with query patterns ported from the `@qloo/qloo-harness` package. The capabilities of the Qloo API are exposed to the agent via an MCP tool and the `Taste` JavaScript global and functions like `find`, `contrast` etc. that the agent calls before graphic design work for different audiences to establish evidence for things like the pace of videos.
 ```
 Studio request composer
    │  User brief: "Audience A: Tokyo, aged 45 to 54"
@@ -158,8 +158,8 @@ Agents make multiple profile calls to attempt to determine statistically, for ea
 1. The audience's list, at a popularity floor of 0.5. Measured with no floor the list is long-tail titles no one would recognise; at 0.9 it is the all-time hits. 0.5 keeps titles that are both recognisable and distinctive.
 2. The same query for the place with no age band, this is the **baseline**.
 3. **Distinctive** = in the audience's list and not in the baseline, kept in the audience's own rank order. These are the
-   references the design cites. **Shared** = popular there whoever you are.
-4. One tag query for the place's aesthetic vocabulary, reported as the *place's*, never the audience's.
+   references the design cites. **Shared** = popular there for any age band.
+4. One tag query for the place's aesthetic vocabulary, reported as the place's and not the audience's.
 
 ### Audience contrasts
 
@@ -173,27 +173,18 @@ The studio's Contrast tab draws this for each request
 
 ### Pace for motion design
 `profile.pace()` counts the audience's distinctive films and shows that Qloo tags fast-paced and slow.
-`Taste.comparePace(a, b)` runs **Fisher's exact test** on the two audiences' counts. `comparePaceAll` covers three to six
+`Taste.comparePace(a, b)` runs Fisher's exact test on the two audiences' counts. `comparePaceAll` covers three to six
 audiences, Holm-adjusted for the number of pairs.
 
 The rule the workflows enforce: "no measurable difference" is an answer to report, not a reason to invent one. Where pace doesn't differ, the films share a beat grid and differ only where the evidence does (grade, imagery, voice).
 ### Audience choices
 ![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/studio_choices.png)
 
-Every design decision the agent makes for an audience is written down as a row in a `Choice | Evidence | Kind` table in the project's `direction.md`, which the studio's Choices tab draws. **Evidence** names the Qloo answer it came from by its handle (`t7`, `t8`…, each one a query recorded in the run) and the item's rank in that answer, so a reader can open the query and see the tag or title the choice rests on. **Kind** keeps the sources apart: *Qloo* (from an audience's data), *Brief* (the client asked for it), *Research* (a cited source), *Rule* (a workflow rule that holds for every audience), *Check* (measured on the finished piece) and *Assumed* (decided without evidence, and said so). A choice with no evidence cannot pass as one with some.
+Every design decision the agent makes for an audience is written down as a row in the project's `direction.md`, which the studio's Choices tab draws.
+![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/choices3.png)
+**Evidence** names the Qloo answer it came from by its handle (`t7`, `t8`…, each one a query recorded in the run) and the item's rank in that answer, so a reader can open the query and see the tag or title the choice rests on. **Kind** keeps the sources apart: *Qloo* (from an audience's data), *Brief* (the client asked for it), *Research* (a cited source), *Rule* (a workflow rule that holds for every audience), *Check* (measured on the finished piece) and *Assumed* (decided without evidence, and said so). A choice with no evidence cannot pass as one with some.
 
-**What looks different comes from what each audience over-indexes on; what is shared comes from what they have in common.** In *Nightshift*, two poster ads for one canned cold brew, the buyers of the comparable brands in Berlin and in Seoul (30–34) were compared, each against the same buyers worldwide:
-
-| | Berlin | Seoul |
-|---|---|---|
-| Shared system | *Minimalist* is the top brand tag in both cities (41 of 50 Berlin brands, 36 of 50 Seoul), so it is the **category's** look and goes into the shared kit, not into either ad | same |
-| Ground | `#131318`, near-black: the places Berlin's buyers favour and Seoul's do not are late-night and indoor (*Gritty*, *Nightlife*, *Late night food*), with *Dark Palette* among the brand tags | `#EFE9DC`, a warm pale: *Neutral Color Palette*, *Understated Elegance*, and daylit places |
-| Lead colour | a sodium amber: *Deep Amber Hues*, *Golden Color Palettes* | a gold-amber: *Gold and Amber Tones*, *Gold Packaging* |
-| Concept | *the amber row*, a row of bottle forms ending in the can: *Vintage Posters*, *Classic Labeling*, *Mixology* | *the long steep*, an arc of twenty marks round the can, one an hour: *Slow Living*, *Elegant*, *Chic* |
-
-Each audience gets three concepts drawn from its own profile before the agent looks at the other audience's, and the rejected ones stay in the table with what lost them. Berlin's *twenty hours, magnified* was dropped because its dial was the same device Seoul's chosen concept used, and two ads that both count hours on an arc would read as one.
-
-**Motion needs evidence of its own.** A poster's evidence decides what a film looks like; nothing in it decides how the film moves. So for trailers, product films, pitches and reports, the agent counts each audience's distinctive films that Qloo tags fast-paced or slow, and tests the difference before writing a single beat. In two trailer studies for *Be Cool* (2005), aimed at 45-to-54-year-olds:
+Design decisions like  colord comes from what each audience over-indexes on; what is shared comes from what they have in common. Motion also needs evidence of its own. A poster's evidence decides what a film looks like; nothing in it decides how the film moves. So for trailers, product films, pitches and reports, the agent counts each audience's distinctive films that Qloo tags fast-paced or slow, and tests the difference before writing a single beat. In two trailer studies for *Be Cool* (2005), aimed at 45-to-54-year-olds:
 
 | | Tokyo | Mumbai |
 |---|---|---|
@@ -286,8 +277,48 @@ decides how the film moves"*.
   formats follow the locale's own rules (Unicode CLDR), labelled *Rule*, not Qloo.
 
 
+## What we built during the hackathon
+
+- **Qloo as the evidence layer.** A .NET Qloo client (query patterns ported from `@qloo/qloo-harness`) with parameter
+  validation, rate limiting, a private server-side cache and a per-run budget, exposed to agents as the `Taste` tool.
+  On top of it: audience profiles (what an audience over-indexes on against its own place), contrasts between
+  audiences, the pace test (Fisher's exact test on fast- and slow-paced titles, Holm-adjusted for three to six
+  audiences), the comparable-brands method for product ads, visual research from an audience's posters and logos
+  measured in OKLCH, and `Taste.checkReferences()`, which fails a run that cites a title its queries never returned.
+- **Verification**: `Verify.film` and `Verify.image` read the finished piece back with an independent model and source
+  every text on it (a document's page, the brief, research, Qloo, or the arithmetic shown); stated facts are checked on
+  the web through Parallel.ai; checks record their own verdicts, so an agent cannot mark one passed.
+- **The client studio**: a request composer with audiences the
+  Audiences, Contrast and Choices views of each run's Qloo evidence
+
 
 ## Challenges we ran into
+
+* Correct figures can still tell the wrong story. One  narrated film on Anthropic's S-1 got every figure right
+and still misled: it captioned a six-month net loss of 80,748M as the cost of scaling compute. Verifying figures in a graphic needs to take into account the layout and meaning as well, not just the text.
+
+* Large 300+ page filing PDFs are hard for models to handle. For the Anthropic S-1, every question originally sent about 400k tokens. Now the agent finds each answer's pages by heading, and asks each question of the relavent pages only.
+
+* Caching is probably the most important cost-saving optimization for agentic apps. It took me quite a while to work out the most effective cache strategy when using Google ADK.
+
+* Taste data has a shape that must be learnt e.g. A place with no age band has no baseline to subtract; audience movie lists
+default to recent titles.
+
 ## Accomplishments that we're proud of
+- Audience variants that differ only where the evidence does e.g. pace differences between audiences are tested using statistical tests and "no measurable difference" is reported.
+- Validating numbers in motion graphics from large documents. Each number on screen is found on a page page of the filing (or computed in the script, with the working shown), and the finished film is then read back by an independent model and compared with what was set.
+- Having agents follow a design process and produce different deliverables. Brief, research board, mind map, kit of parts etc. are all produced alongside the finished SVG, PNG, WebP, MP4 and print PDF.
+
+
+Overall I was able to create a product from several of my research interests that I think has a great deal of potential in todays hyper-competitive market for AI generative graphics.
 ## What we learned
-## What's next for Untitled
+
+- A check the agent can write is not a check. Verdicts are recorded by the tools, not reported by the agent.
+- Digits are not the claim. The words around a figure carry the story, and need rules of their own.
+- "No measurable difference" is an answer. Forcing a difference between two audiences is the stereotype problem by another route.
+
+
+
+## What's next for Polson Graphics Studio
+* I would like to built different workflows like creating visualizations and motion graphics for scientific papers. 
+* I would like to be able use character animation as well in the motion graphics.

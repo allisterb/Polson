@@ -896,6 +896,8 @@ public abstract class ReadBackCheck(string name, Dictionary<string, object?>[] i
             + (pending == 0 ? "" : $" {pending} reading{(pending == 1 ? "" : "s")} of text the {Piece} never set: look at {evidence} ({string.Join(", ", Strays.Where(s => s.Verdict is null).Select(s => s.Frame ?? "none saved"))}), then Verify.stray('{Name}', n, 'misread' | 'real').")
             + (real == 0 ? "" : $" {real} confirmed fault{(real == 1 ? "" : "s")} in the {Piece}: fix and {Again} again.")
             + (Ignored.Length == 0 ? "" : $" {Ignored.Length} computed entr{(Ignored.Length == 1 ? "y was" : "ies were")} not used, as the working shows no arithmetic ({string.Join(", ", Ignored.Take(4).Select(k => $"'{Clip(k)}'"))}): a figure from a document is found on its page without one, and a fact no document holds goes in sources.")
+            + (Empty ? $" Nothing was checked: the {Piece} set no text and the reader read none, so this read-back vouches for nothing. "
+                + $"Pass the canvas or paper the {Piece} was drawn on, after everything is drawn; a {Piece} with no words needs no read-back." : "")
             + FilmReadBack.UncheckedNote(counts["unchecked"] is int u ? u : 0, Evidence, UnreadableScripts)
             + (Inconclusive(counts) ? $" The reader saw {counts["seen"]} of the {(int)counts["seen"]! + (int)counts["missed"]!} texts it "
                 + $"could check, under half, so this read-back cannot vouch for the {Piece}: hold texts longer or set them larger and "
@@ -906,7 +908,8 @@ public abstract class ReadBackCheck(string name, Dictionary<string, object?>[] i
             ["ok"] = true,
             // The claim is that every text "was read as set": a reader that saw under half of them has not shown that.
             // nvdatenk1 passed with 0 of 92 seen, because coverage was never part of the verdict.
-            ["passed"] = unsourced == 0 && unsupported.Length == 0 && pending == 0 && real == 0 && !Inconclusive(counts),
+            // Nor has one that read nothing: coffee_1 failed on 15 unsourced figures, then passed on "0 texts on the image".
+            ["passed"] = unsourced == 0 && unsupported.Length == 0 && pending == 0 && real == 0 && !Inconclusive(counts) && !Empty,
             [NameKey] = Name,
             ["items"] = Items.Cast<object?>().ToArray(),
             ["strays"] = Strays.Select(s => (object?)s.Dict()).ToArray(),
@@ -930,6 +933,9 @@ public abstract class ReadBackCheck(string name, Dictionary<string, object?>[] i
     protected abstract string MissedNote(Dictionary<string, object?> item);
 
     /// <summary>Whether the reader saw under half of the texts it could check (at least three), so the check says little.</summary>
+    /// <summary>The piece set no text and the reader read none: nothing was compared, so nothing can pass.</summary>
+    private bool Empty => Items.Length == 0 && Strays.Count == 0;
+
     private static bool Inconclusive(Dictionary<string, object?> counts) =>
         (int)counts["seen"]! + (int)counts["missed"]! is var checkable && checkable >= 3 && (int)counts["seen"]! * 2 < checkable;
 
