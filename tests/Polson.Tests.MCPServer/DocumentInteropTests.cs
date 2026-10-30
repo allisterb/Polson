@@ -131,6 +131,28 @@ public class DocumentInteropTests : TestsRuntime, IDisposable
         Assert.Equal("InvalidRequest|true", Logged(result));
     }
 
+    /// <summary>
+    /// Jint 4.9.2: after an await on a host call, a parameter default that reads a property throws a bare
+    /// NullReferenceException inside the engine. anthropic_s_1_outside_cc hit it three times with nothing to say which
+    /// line; the error now names the pattern and the way round it. When an upgraded Jint fixes it, this test says so.
+    /// </summary>
+    [Fact]
+    public async Task TestAParameterDefaultReadingAPropertyAfterAHostAwaitIsExplained()
+    {
+        File.WriteAllText(Path.Combine(root, "notes.txt"), "Revenue was 215,938.");
+        JsDrawingEngine.Documents = new AnsweringLater(new DocumentBudget(5), root, new DocumentCache(Path.Combine(root, "cache")));
+
+        var result = await Run("""
+            const T = { figure: 104 };
+            function f(g, size = T.figure) { return size; }
+            await Documents.ask('notes.txt', 'What was revenue?');
+            log('got ' + f(null));
+            """);
+
+        Assert.False(result.Success, "the engine no longer fails here: remove the explanation in JsDrawingEngine.Explain");
+        Assert.Contains("Read the default inside the body", result.Error);
+    }
+
     /// <summary><c>Documents.find</c> reaches a script, awaited like <c>ask</c>, and its hits read as an array.</summary>
     [Fact]
     public async Task TestFindIsReachableFromAScript()
@@ -254,6 +276,19 @@ public class DocumentInteropTests : TestsRuntime, IDisposable
             byte[] bytes, string mime, string query, string model, string? schema, bool images, int[]? pages,
             System.Threading.CancellationToken ct) =>
             Task.FromResult(new Generation("215,938", 10, null));
+    }
+
+    /// <summary>An answer that arrives later, as a real model's does, so the script is suspended at its await.</summary>
+    private sealed class AnsweringLater(DocumentBudget budget, string root, DocumentCache cache)
+        : DocumentProcessor("test-key", budget, root, "fake-model", cache)
+    {
+        protected override async Task<Generation> Generate(
+            byte[] bytes, string mime, string query, string model, string? schema, bool images, int[]? pages,
+            System.Threading.CancellationToken ct)
+        {
+            await Task.Delay(50, ct);
+            return new Generation("215,938", 10, null);
+        }
     }
     #endregion
 }

@@ -653,6 +653,21 @@ public partial class ProjectGeneratorTests : TestsRuntime, IDisposable
             File.ReadAllText(Path.Combine(root, "out10k", "GEMINI.md")), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A logo run passed <c>tagline: ''</c> and set its own descriptor under the mark with <c>paper.text</c>. The rule is
+    /// about every word drawn, the mark file is the mark alone, and the server's check is named so the agent expects it.
+    /// </summary>
+    [Fact]
+    public void TestALogoIsToldEveryWordDrawnIsTheClientsAndTheMarkStandsAlone()
+    {
+        Assert.True(ProjectGenerator.Create(Options("words", o => o.Workflow = "logo")));
+
+        var text = File.ReadAllText(Path.Combine(root, "words", "GEMINI.md"));
+        Assert.Contains("**The rule is about every word drawn, not the `tagline` argument**", text, StringComparison.Ordinal);
+        Assert.Contains("**The mark and its wordmark, and nothing else**", text, StringComparison.Ordinal);
+        Assert.Contains("*Client's words on …*", text, StringComparison.Ordinal);
+    }
+
     /// <summary>A report on a 10-K is the report type with a professional's questions, keyed to the form's Items.</summary>
     [Fact]
     public void TestAReportOnA10KIsTheReportTypeWithAProfessionalsQuestions()

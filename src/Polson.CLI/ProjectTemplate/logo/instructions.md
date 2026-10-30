@@ -227,10 +227,17 @@ re-render that same function (Manual 12 §3 explains the contract and its three 
 spells it. A tagline or descriptor only when the brief gives one, word for word — never one you wrote, however well
 it fits. polson_graphics_studio_logo (2026-10-30) set *"Autonomous Co-creative Motion and Vector Runtime"* under the
 name, and the client had said no such thing. With none given, leave it out: `tagline: ''` in
-`generateBrandPresentationSheet` and `drawWordmarkLockup` (an absent one prints the toolkit's own placeholder). If a
+`generateBrandPresentationSheet` and `drawWordmarkLockup` (an absent one prints the toolkit's own placeholder).
+**The rule is about every word drawn, not the `tagline` argument**: `paper.text`, `fillText`, a footer, a caption, a
+label beside the mark. A second run of the same brief passed `tagline: ''`, recorded that it had invented no tagline,
+and set *"DETERMINISTIC VECTOR & MOTION RUNTIME"* under the mark with `paper.text`. **The server now reads the words
+off what you draw**: on `final` a word the brief does not contain fails the check *Client's words on …*, recorded
+whatever you write; on the brand sheet and a mock-up it is a `[WARN] words:` naming them, since a sheet's own labels (a
+colour's name, a typeface) are fine there. If a
 lockup needs a line to be judged, ask the director for it (in an autonomous run, record in `questions.md` that none was
-given and leave the line empty). A mock-up's sample copy (a card's address, an app's menu) is labelled as a sample
-in `direction.md`, never presented as the client's.
+given and leave the line empty). A mock-up's sample copy (a card's address, an app's menu) is the brief's words or an
+obvious placeholder (*Name Surname*, *Menu item*), labelled as a sample in `direction.md`, never a line about the client
+in your words.
 
 **The client receives the identity, not one board**: the mark, then the brand sheet, the scale ladder, the monochrome
 test, the kit sheet and every `mockup_*.png`, in that order, each beside the others on the studio's page. So each board is
@@ -242,6 +249,9 @@ polson_graphics_studio_logo (2026-10-30) drew all of them and its page offered t
 - **The mark is `artifacts/final.svg` and `artifacts/final.png`**, in every format the brief's *Formats* line names
   (`final.webp`, `final.pdf` beside them when asked). Drawn on a `SnapPaper` with `outSvg`, so the SVG is the mark
   itself, not a picture of it: the brief's formats are the mark's, and a client asking for `.svg` wants the vector.
+  **The mark and its wordmark, and nothing else**: no footer, caption, grid, crosshair, label or ground pattern. A
+  client places the file on their own pages; anything around the mark goes with it. Presentation belongs on the
+  brand sheet.
   Render it last, from the finished mark function, after the boards. polson_graphics_studio_logo (2026-10-30) wrote
   its vector as `polson_logo_mark.svg` and the page offered the director only the presentation board.
 - **The presentation sheet is `artifacts/brand_sheet.png`** (and `.webp`), the last `generateBrandPresentationSheet`.

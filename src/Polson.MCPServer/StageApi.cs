@@ -311,6 +311,18 @@ public sealed class StageApi
             o["label"]?.ToString() ?? Polson.Drawing.Skia.Mockup.DefaultLabel,
             onto, MockupCorners(o["corners"]), side, top, back, accent, o["find"] is true);
 
+        // A logo's mock-up carries words the agent wrote as readily as a sheet does (ClientWords): said while it can be fixed.
+        if (ClientWords.Applies(projectRoot)
+            && ClientWords.Foreign(ClientWords.LinesOf(o["design"]), ClientWords.Brief(projectRoot!)) is { Length: > 0 } foreign)
+        {
+            var what = filePath ?? "this mock-up";
+            result?.Logs.Add(ClientWords.SheetWarning(what, foreign));
+            events?.Append("render.words", session?.Stage, executionId, new Dictionary<string, object?>
+            {
+                ["artifact"] = filePath, ["words"] = foreign,
+            });
+        }
+
         var drawn = Polson.Drawing.Skia.Mockup.Render(design, spec);
         using var picture = drawn.Image;
         var canvas = new Polson.Drawing.Skia.SkiaCanvas(picture.Width, picture.Height);
@@ -1015,6 +1027,9 @@ public sealed class StageApi
         if (clean.StartsWith(VerifyToolkit.ClaimPrefix, StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException($"Stage.check: a claim beginning '{VerifyToolkit.ClaimPrefix}' is recorded by Verify.claim itself, "
                 + "from the code that checked it. Run the check; do not write its verdict.");
+        if (clean.StartsWith(ClientWords.ClaimPrefix, StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException($"Stage.check: a claim beginning '{ClientWords.ClaimPrefix}' is recorded by the server when a logo's "
+                + "mark is written, from the words it drew. Fix the words; do not write the verdict.");
         if (clean.StartsWith(VerifyToolkit.DerivationPrefix, StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException($"Stage.check: a claim beginning '{VerifyToolkit.DerivationPrefix}' is recorded by Verify.derivation "
                 + "itself, from the mathematics. Run the check; do not write its verdict.");

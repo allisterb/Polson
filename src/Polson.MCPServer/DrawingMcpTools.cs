@@ -1065,6 +1065,36 @@ public partial class DrawingMcpTools
                 });
             }
 
+            // A logo's words, read off what was drawn rather than off the tagline argument (ClientWords): on the mark a word
+            // the brief does not contain fails a check the server records; the brand sheet, with labels of its own, warns.
+            if (result.Success && ClientWords.Applies(ProjectRoot)
+                && new[] { outSvg, outFile }.FirstOrDefault(p => !string.IsNullOrWhiteSpace(p)
+                    && Path.GetFileNameWithoutExtension(p) is "final" or "brand_sheet") is { } piece)
+            {
+                var lines = ClientWords.LinesOf(result.RenderedFromPaper ? result.SvgXml : result.ResultCanvas);
+                var foreign = ClientWords.Foreign(lines, ClientWords.Brief(ProjectRoot!));
+                var artifact = piece.Replace('\\', '/');
+                if (Path.GetFileNameWithoutExtension(piece) == "final")
+                {
+                    var claim = ClientWords.Claim(artifact);
+                    var detail = foreign.Length == 0 ? $"{lines.Count} line(s), every word in the brief" : ClientWords.MarkDetail(foreign);
+                    Events.Append("check", session.Stage, executionId, new Dictionary<string, object?>
+                    {
+                        ["claim"] = claim, ["passed"] = foreign.Length == 0, ["detail"] = detail,
+                    });
+                    result.Logs.Add($"[CHECK] {(foreign.Length == 0 ? "PASS" : "FAIL")} {claim} - {detail}");
+                    result.RecordCheck(claim, foreign.Length == 0, detail);
+                }
+                else if (foreign.Length > 0)
+                {
+                    result.Logs.Add(ClientWords.SheetWarning(artifact, foreign));
+                    Events.Append("render.words", session.Stage, executionId, new Dictionary<string, object?>
+                    {
+                        ["script"] = scriptPath, ["artifact"] = artifact, ["words"] = foreign,
+                    });
+                }
+            }
+
             // A family Skia does not have draws in a substitute with no signal at all, so the type in the peek is not
             // the type the script and the direction name (poster3's review). Checked on every paper, asked or not.
             if (result.Success && result.RenderedFromPaper && FontAudit.Check(result.SvgXml ?? "") is { Count: > 0 } fonts)
