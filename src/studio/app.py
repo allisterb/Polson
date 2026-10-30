@@ -730,11 +730,18 @@ def create_app(root: Path | None = None, registry: Registry | None = None,
         pieces = final_renders(run)
         # A sheet the workflow names (`SHEETS`) after the piece, unless it is the piece: a run with no `final` shows its
         # sheet as the piece, and once is enough.
+        # Only a piece under the workflow's own name: an older logo run with no `final` falls back to its board, which is
+        # not the mark.
+        if ((named := PIECE_TITLES.get(run.project.workflow)) and len(pieces) == 1
+                and pieces[0].get("name") in PIECE_STEMS):
+            pieces = [{**pieces[0], "title": named[0], "what": named[1]}]
         shown = {f["path"] for p in pieces for f in p["formats"]}
-        for stem, (title, what) in SHEETS.items():
+        for stem, title, what in SHEETS.get(run.project.workflow, ()):
             sheet = final_render(run, only=lambda artifact, s=stem: Path(artifact).stem == s)
             if sheet and not shown & {f["path"] for f in sheet["formats"]}:
                 pieces = [*pieces, {**sheet, "title": title, "what": what}]
+        if run.project.workflow in MOCKUPS:
+            pieces = [*pieces, *mockups(run)]
         written.extend(pieces)
 
         for name, title, what in DELIVERABLES:
@@ -981,11 +988,25 @@ FORMAT_ORDER = ("mp4", "webm", "webp", "png", "jpeg", "jpg", "svg", "pdf")
 #: names none and the agent chose). A per-audience `final_a` is found by `final_renders` before this is asked.
 PIECE_STEMS = ("output", "final")
 
-#: Pieces a workflow delivers beside its finished piece, by the name it gives them, as a reader would call each and what it
-#: holds. The logo workflow's mark is `final`; its presentation sheet is the second thing the client asked for.
-SHEETS: dict[str, tuple[str, str]] = {
-    "brand_sheet": ("Brand sheet", "the mark presented: its lockups, colours, clear space and type"),
+#: Pieces a workflow delivers beside its finished piece, by the name its instructions give them, in reading order, as a
+#: reader would call each and what it holds. **Per workflow**, because the names are not unique to one: a poster run
+#: draws a `03_kit` too, and there it is working, not delivered. The logo workflow's mark is `final`, and an identity is
+#: the mark with the boards that prove it: polson_graphics_studio_logo drew all of these and its page offered one.
+SHEETS: dict[str, tuple[tuple[str, str, str], ...]] = {
+    "logo": (
+        ("brand_sheet", "Brand sheet", "the mark presented: its lockups, colours, clear space and type"),
+        ("06_favicon_ladder", "Scale ladder", "the mark from full size down to a 16 px favicon"),
+        ("06_monochrome_test", "Monochrome", "the mark in one colour: positive, knockout, greyscale and app icon"),
+        ("03_kit", "Kit of parts", "the shapes the mark is built from, and what else they make"),
+    ),
 }
+
+#: The piece as a workflow with sheets calls it, beside them: "the finished piece" says nothing next to a brand sheet.
+PIECE_TITLES: dict[str, tuple[str, str]] = {"logo": ("The mark", "the mark itself, in each format the brief asked for")}
+
+#: Workflows whose `Stage.mockup` renders are delivered after the sheets, one each. A mock-up is never the piece (it is
+#: recorded as a sheet so that it cannot be), but a logo's mock-ups are the identity applied, which the client asked for.
+MOCKUPS = {"logo"}
 
 #: The books the workflows name (`Stage.book`), as a reader would call them and with what each holds. Any other PDF a
 #: run sets beside the piece is listed under its file name.
@@ -1011,6 +1032,29 @@ def books(run: Run, piece: set[str]) -> list[dict[str, Any]]:
         title, what = BOOKS.get(path.stem.lower(), (path.stem.replace("_", " ").capitalize(), "a book the studio set"))
         found[artifact] = {"kind": "book", "name": path.name, "path": artifact, "title": title, "what": what,
                            "bytes": path.stat().st_size}
+    return list(found.values())
+
+
+def mockups(run: Run) -> list[dict[str, Any]]:
+    """This run's `Stage.mockup` renders, one entry each in the order first written, the last write of each kept."""
+    events = read_events(run.project.server_events)
+    executions = research_executions(events)
+    found: dict[str, dict[str, Any]] = {}
+    for event in events:
+        artifact = event.get("artifact") or ""
+        if (event.get("type") != "render" or event.get("kind") != "mockup" or not artifact
+                or is_research(event, executions) or (run.since and (event.get("ts") or "") < run.since)):
+            continue
+        if (path := artifact_file(run, artifact)) is None:
+            continue
+        place = path.stem.lower().removeprefix("mockup").strip("_- ").replace("_", " ") or event.get("setting") or ""
+        # The vehicle in both: the Deliverables tab shows only `what`, and four identical captions say nothing.
+        found[artifact] = {"kind": "render", "name": path.stem, "title": f"Mock-up: {place}" if place else "Mock-up",
+                           "what": f"{place + ': ' if place else ''}a drawn mock-up of the mark in use, "
+                                   "not a photograph of a real one",
+                           "state": run_state(run),
+                           "formats": [{"format": path.suffix.lower().lstrip("."), "path": artifact,
+                                        "bytes": path.stat().st_size}]}
     return list(found.values())
 
 

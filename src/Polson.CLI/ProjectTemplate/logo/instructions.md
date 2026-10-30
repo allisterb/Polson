@@ -232,7 +232,12 @@ lockup needs a line to be judged, ask the director for it (in an autonomous run,
 given and leave the line empty). A mock-up's sample copy (a card's address, an app's menu) is labelled as a sample
 in `direction.md`, never presented as the client's.
 
-**Two files carry fixed names, because the studio's page finds the work by them:**
+**The client receives the identity, not one board**: the mark, then the brand sheet, the scale ladder, the monochrome
+test, the kit sheet and every `mockup_*.png`, in that order, each beside the others on the studio's page. So each board is
+finished work, not a working test: titled, the client's words only, nothing on it you would not show them.
+polson_graphics_studio_logo (2026-10-30) drew all of them and its page offered the client only the presentation board.
+
+**These files carry fixed names, because the studio's page finds the work by them:**
 
 - **The mark is `artifacts/final.svg` and `artifacts/final.png`**, in every format the brief's *Formats* line names
   (`final.webp`, `final.pdf` beside them when asked). Drawn on a `SnapPaper` with `outSvg`, so the SVG is the mark
@@ -240,6 +245,12 @@ in `direction.md`, never presented as the client's.
   Render it last, from the finished mark function, after the boards. polson_graphics_studio_logo (2026-10-30) wrote
   its vector as `polson_logo_mark.svg` and the page offered the director only the presentation board.
 - **The presentation sheet is `artifacts/brand_sheet.png`** (and `.webp`), the last `generateBrandPresentationSheet`.
+- **The scale ladder is `artifacts/06_favicon_ladder.png`, the monochrome test `artifacts/06_monochrome_test.png`**, the
+  last of each, re-rendered from the finished mark function if the mark changed after them.
+- **The kit sheet is `artifacts/03_kit.png`**, and the mock-ups `artifacts/mockup_<vehicle>.png` (`mockup_card`,
+  `mockup_sign`…), the vehicle in the name, since the page titles each by it.
+
+Any other name is working material: it stays in the run's record, and the client is not shown it.
 
 A mark that stops reading when its colour is removed, or closes up at 16px, is not finished — it is
 a mark that has only been seen at one size in one colour. Fix it and re-run the boards.
