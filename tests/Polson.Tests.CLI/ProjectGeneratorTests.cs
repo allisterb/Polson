@@ -631,6 +631,28 @@ public partial class ProjectGeneratorTests : TestsRuntime, IDisposable
         Assert.Contains("operating income or loss, and net income or loss", s1, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Parallel's finance index (2026-10): a report may answer a question the filing cannot (its named competitors, what
+    /// has happened since filing) from one research run, but a figure only from a primary source, and never a price,
+    /// a valuation or an estimate. The old ban on outside figures stays for everything else.
+    /// </summary>
+    [Fact]
+    public void TestAReportBringsInOutsideContextOnlyFromPrimarySourcesAndOnlyWhenAsked()
+    {
+        foreach (var (name, type) in new[] { ("outplain", "report"), ("outs1", "report.s1"), ("out10k", "report.10k") })
+        {
+            Assert.True(ProjectGenerator.Create(Options(name, o => { o.Workflow = "motion"; o.Type = type; })));
+            var text = File.ReadAllText(Path.Combine(root, name, "GEMINI.md"));
+            Assert.Contains("### Outside the filing — only when a question asks", text, StringComparison.Ordinal);
+            Assert.Contains("**A figure** only from a **primary source**", text, StringComparison.Ordinal);
+            Assert.Contains("a share price, a valuation or market capitalisation", text, StringComparison.Ordinal);
+            Assert.Contains("**Never an outside benchmark, an industry average or a", text, StringComparison.Ordinal);
+        }
+        Assert.Contains("S-1's **Competition** section", File.ReadAllText(Path.Combine(root, "outs1", "GEMINI.md")), StringComparison.Ordinal);
+        Assert.Contains("**A peer is compared only when the brief asks, and only filing to filing.**",
+            File.ReadAllText(Path.Combine(root, "out10k", "GEMINI.md")), StringComparison.Ordinal);
+    }
+
     /// <summary>A report on a 10-K is the report type with a professional's questions, keyed to the form's Items.</summary>
     [Fact]
     public void TestAReportOnA10KIsTheReportTypeWithAProfessionalsQuestions()

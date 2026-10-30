@@ -53,6 +53,10 @@ const TENK_QUESTIONS = [
 - **The prior year is the comparison, and the filing prints it.** A 10-K's statements show the prior years beside the
   current one: every change on screen is computed from two found figures, its working in `direction.md`. Never an
   analyst's estimate, a consensus or a share price: none of them is in the filing.
+- **A peer is compared only when the brief asks, and only filing to filing.** The peers are the ones the brief names or
+  the 10-K's competition section does; each peer's figure comes from that peer's own 10-K or 10-Q for the nearest period,
+  found through *Outside the filing* above, with its own source line. Fiscal years differ: name each company's year,
+  and put two figures on one axis only when their periods match.
 - **"None" is an answer.** Items 1B and 9 usually say *none* or *not applicable*, and an unqualified opinion with no
   material weakness is the usual finding. For this audience that is worth one line on screen (*"Auditor: no material
   weakness; two critical audit matters"*), not a scene of its own. **Anything else is a scene**: a qualified opinion, a
