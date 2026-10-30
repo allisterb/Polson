@@ -244,6 +244,16 @@ class ModelWaitTests(unittest.TestCase):
         # Logged at once, before the first backoff has passed: no time of its own, less the 8.8 s not yet slept.
         self.assertAlmostEqual(17.2 - 8.8, second, delta=0.5)
 
+    def test_what_was_given_back_is_in_the_record(self):
+        """The page's clock gives it back too: anthropic_s_1's read 50 minutes when the run's own read about 35."""
+        transcript_mod.watch_retries(8, on_wait=lambda inv, agent, seconds: 184.8)
+        run(self.call(self.LINE))
+        self.assertEqual(184.8, self.waits()[0]["credited"])
+
+        transcript_mod.watch_retries(8, on_wait=lambda inv, agent, seconds: 0.0)
+        run(self.call(self.LINE))
+        self.assertNotIn("credited", self.waits()[1], "past the ceiling nothing is given back, and nothing said")
+
     def test_the_count_starts_again_with_each_call(self):
         run(self.call(self.LINE))
         run(self.call(self.LINE))

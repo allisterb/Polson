@@ -153,7 +153,7 @@ $URL = "https://$S-$N.$R.run.app"
 gcloud run deploy $S --source . --project $P --region $R `
   --no-allow-unauthenticated --cpu 4 --memory 4Gi --max-instances 1 --timeout 3600 --session-affinity `
   --set-secrets "POLSON_AGENT_PLATFORM_KEY=polson-agent-key:latest,POLSON_PARALLEL_KEY=polson-parallel-key:latest,POLSON_QLOO_KEY=polson-qloo-key:latest" `
-  --set-env-vars "^;^POLSON_SELF_URL=$URL;POLSON_ARTIFACT_SERVICE_URI=gs://$B;POLSON_MIRROR_URI=gs://$B/studio;POLSON_ASK_SECONDS=300;POLSON_MAX_CREDIT_SECONDS=900;POLSON_BUDGET_TOKENS=4500000;POLSON_QLOO_BUDGET=360;POLSON_ASSETS_BUDGET=30;POLSON_RESEARCH_PROCESSOR=core;ADK_MAX_LLM_CALLS=500;POLSON_PEEK_STABLE_NAME=1;POLSON_ALLOW_ORIGINS=http://127.0.0.1:8080,http://localhost:8080"
+  --set-env-vars "^;^POLSON_SELF_URL=$URL;POLSON_ARTIFACT_SERVICE_URI=gs://$B;POLSON_MIRROR_URI=gs://$B/studio;POLSON_ASK_SECONDS=300;POLSON_MAX_CREDIT_SECONDS=900;POLSON_BUDGET_TOKENS=4500000;POLSON_REQUEST_TIMEOUT_SECONDS=300;POLSON_QLOO_BUDGET=360;POLSON_ASSETS_BUDGET=30;POLSON_RESEARCH_PROCESSOR=core;ADK_MAX_LLM_CALLS=500;POLSON_PEEK_STABLE_NAME=1;POLSON_ALLOW_ORIGINS=http://127.0.0.1:8080,http://localhost:8080"
 gcloud run services add-iam-policy-binding $S --project $P --region $R --member "serviceAccount:$SA" --role roles/run.invoker
 ```
 
@@ -298,6 +298,10 @@ Worth setting deliberately rather than leaving at defaults:
   after each) an invocation may have back, default 1800, apart from the director's allowance above. Each retry also
   shows on the request page as *The model timed out (504). Asking again …*. A Trello pitch lost 25–30 of its 90 minutes
   to nine 504s before this; past the ceiling the clock runs, so a model that never answers still ends in a halt.
+- **`POLSON_REQUEST_TIMEOUT_SECONDS`**: how long one model call may take before it is abandoned and retried, default
+  180; **set to 300 here**. A long run's turns grow with its context: anthropic_s_1 (2026-10-30, ~280k tokens) answered
+  in 108–111 s and then 504'd at exactly 180 s on attempt after attempt, each retry starting the turn over. 300 s still
+  turns a hang into a retry within five minutes.
 - **`POLSON_PEEK_STABLE_NAME`**: save every peek under one artifact name per file type rather than the render's own
   path, on since 2026-10-20 (`0` turns it off). ADK writes the artifact *name list* into the instructions, the head of
   the prompt-cache prefix, so each new name re-bills the whole conversation at full price while a new *version* costs

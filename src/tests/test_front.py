@@ -209,6 +209,18 @@ class CatalogueTests(unittest.TestCase):
                             {"narration": "Disabled"}, "Explain the annual report.", [], [])
         self.assertIn("- Narration: Disabled", c.brief_text([]))
 
+    def test_a_narrated_films_webp_is_a_silent_preview_beside_its_mp4(self):
+        """An animated WebP has no sound: asked for alone with a voice, the film is still an MP4, the WebP beside it."""
+        voiced = catalogue.parse("report-explainer", "S-1", "0", "", ["1920x1080"], "", [".webp"], {}, "Explain the S-1.")
+        self.assertEqual([".mp4", ".webp"], [f.ext for f in voiced.formats])
+        self.assertIn("- Formats: .mp4, .webp (a silent preview beside the narrated .mp4)", voiced.brief_text([]))
+        silent = catalogue.parse("report-explainer", "S-1", "0", "", ["1920x1080"], "", [".webp"], {"narration": "Disabled"},
+                                 "Explain the S-1.")
+        self.assertEqual([".webp"], [f.ext for f in silent.formats])
+        self.assertIn("- Formats: .webp\n", silent.brief_text([]))
+        trailer = catalogue.parse("film-trailer", "T", "0", "", ["1920x1080"], "", [".webp"], {"film": "T"}, "x", ["Lagos"], [""])
+        self.assertEqual([".webp"], [f.ext for f in trailer.formats])
+
     def test_a_report_explainers_long_fields_keep_one_question_a_line(self):
         c = catalogue.parse("report-explainer", "NVIDIA explained", "0", "", ["1920x1080"], "", [".mp4"],
                             {"viewer": "Retail investors\nwho know the products", "questions": "How big was revenue?\n\nWhere did it come from?\n"},
@@ -532,6 +544,12 @@ class FrontRoutingTests(unittest.TestCase):
         self.assertNotIn("New request</a>", self.client.get("/compose/film-trailer").text)
         for path in ("/home", "/workflows", "/requests"):
             self.assertIn("New request</a>", self.client.get(path).text, path)
+
+    def test_the_composer_labels_a_narrated_films_webp_a_silent_preview(self):
+        page = self.client.get("/compose/report-explainer").text
+        self.assertIn(f'data-silent-label="{catalogue.SILENT_PREVIEW}"', page)
+        self.assertIn(f">{catalogue.SILENT_PREVIEW}</span>", page)
+        self.assertNotIn("data-silent-label", self.client.get("/compose/film-trailer").text)
 
     def test_the_home_page_shows_the_entries_workflows_in_two_rows(self):
         """Nine cards, three rows, in `catalogue.HOME`'s order, and no others."""

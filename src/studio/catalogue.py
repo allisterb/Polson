@@ -270,6 +270,10 @@ FORMATS: dict[str, tuple[Format, ...]] = {
 #: Whether a film is spoken as well as set on screen. Disabled, every word is on screen and the film is silent.
 NARRATION = Extra("narration", "Narration", ("Enabled", "Disabled"), "Enabled")
 
+#: What a video card's .webp is when the film is narrated: an animated WebP has no sound, so the film itself is the MP4
+#: and the WebP a silent copy beside it (the motion template: "A film with sound stays a video").
+SILENT_PREVIEW = "Silent preview"
+
 #: Which film a film poster or trailer is for. A real film by title and year, which the run resolves with Qloo and
 #: researches before it designs; or a new film's title, with its logline and comparables in the brief.
 FILM = Extra("film", "Film", placeholder="A real film's title and year, e.g. Be Cool (2005), or a new film's title",
@@ -481,6 +485,10 @@ class Commission:
     request: list[str] = field(default_factory=list)
     deny: list[str] = field(default_factory=list)
 
+    @property
+    def narrated(self) -> bool:
+        return (NARRATION.label, "Enabled") in self.extras
+
     def audience_lines(self) -> list[str]:
         """'Audience A: Tokyo, aged 45 to 54, in Japanese', as the poster and trailer briefs name them. English unsaid."""
         words, tongues = dict(AGE_BANDS), dict(LANGUAGES)
@@ -502,7 +510,9 @@ class Commission:
         if len(self.audiences) > 1:
             lines.append(f"- One {'ad' if self.kind == 'product' else self.card.piece} per audience")
         lines += ["- Sizes: " + "; ".join(f"{s.label} {s.detail}" for s in self.sizes),
-                  "- Formats: " + ", ".join(f.ext for f in self.formats)]
+                  "- Formats: " + ", ".join(f.ext + (" (a silent preview beside the narrated .mp4)"
+                                                     if f.ext == ".webp" and self.card.kind == "video" and self.narrated
+                                                     else "") for f in self.formats)]
         for label, value in self.extras:
             asked = [q.strip() for q in re.split(r"[;\n]", value) if q.strip()] if label == "Their questions" else []
             lines += [f"- {label}:"] + [f"  {i}. {q}" for i, q in enumerate(asked, 1)] if asked else [f"- {label}: {' '.join(value.split())}"]
@@ -612,6 +622,9 @@ def parse(card_slug: str, title: str, route: str, kind: str, sizes: list[str], c
             raise StudioError(f"Give the {extra.label.lower()}: {extra.placeholder[:1].lower()}{extra.placeholder[1:]}.")
         if value:
             pairs.append((extra.label, value))
+    # A narrated film is an MP4 whatever was ticked: a WebP alone would ask for the voice to be dropped.
+    if card.kind == "video" and (NARRATION.label, "Enabled") in pairs and ".mp4" not in {f.ext for f in chosen_formats}:
+        chosen_formats.insert(0, allowed[".mp4"])
 
     audiences = parse_audiences(places or [], ages or [], languages) if card.audiences else []
     if card.audiences and not audiences and not card.audiences_optional:

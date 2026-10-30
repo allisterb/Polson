@@ -304,7 +304,8 @@ def make_plugin(project_dir: str | Path):
             record and no other. Counted per call, so `attempt` is the one that failed: 1 is the original request.
 
             Each failed attempt is also timed, from the start of the call or the end of the last backoff to its retry
-            line, and given back with the backoff that follows (`_on_wait`): the attempt that answers is not.
+            line, and given back with the backoff that follows (`_on_wait`): the attempt that answers is not. What was
+            given back is the event's `credited`, so the page's clock can give it back as well.
             """
             try:
                 invocation = getattr(callback_context, "invocation_id", None) or None
@@ -315,15 +316,17 @@ def make_plugin(project_dir: str | Path):
                     nonlocal failed, mark
                     failed += 1
                     fields = retry_fields(message)
-                    self.agent.append("model.wait", at=timestamp(), uuid=_id(), invocation=invocation, agent=agent,
-                                      attempt=failed, attempts=_attempts or None, **fields)
                     now, backoff = time.monotonic(), fields["seconds"] or 0.0
+                    credited = 0.0
                     if _on_wait is not None:
                         try:
-                            _on_wait(invocation, agent, now - mark + backoff)
+                            credited = float(_on_wait(invocation, agent, now - mark + backoff) or 0.0)
                         except Exception as exc:                # pragma: no cover - a recorder never fails the call
                             _logger.debug("polson transcript: model wait not credited (%s)", exc)
                     mark = now + backoff
+                    self.agent.append("model.wait", at=timestamp(), uuid=_id(), invocation=invocation, agent=agent,
+                                      attempt=failed, attempts=_attempts or None, credited=round(credited, 1) or None,
+                                      **fields)
 
                 _turn.set(tell)
             except Exception as exc:

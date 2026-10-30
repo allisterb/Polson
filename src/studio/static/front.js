@@ -216,22 +216,63 @@
     syncRoute();
 
     // Audiences: every row is in the page so the form works without this; empty rows past the first wait
-    // behind "Add another audience".
+    // behind "Add another audience", and any row can be removed again.
     var audiences = form.querySelector('[data-audiences]');
     if (audiences) {
       var rows = Array.prototype.slice.call(audiences.querySelectorAll('[data-audience]'));
       var add = audiences.querySelector('[data-add-audience]');
+      var fields = function (r) { return [r.querySelector('input'), r.querySelector('select[name=aud_age]'), r.querySelector('[data-language]')]; };
+      var blank = function (r) { return fields(r).every(function (f) { return !f || !f.value.trim(); }); };
+      var shownRows = function () { return rows.filter(function (r) { return !r.hidden; }); };
+      // The × shows wherever removing changes something: a second row, or a lone row with something in it.
+      var syncRemove = function () {
+        var shown = shownRows();
+        rows.forEach(function (r) { r.querySelector('[data-remove-audience]').hidden = r.hidden || (shown.length < 2 && blank(r)); });
+        add.hidden = shown.length >= rows.length;
+      };
       var syncRows = function () {
         var shown = rows.filter(function (r, i) { return i === 0 || r.querySelector('input').value.trim(); }).length;
         rows.forEach(function (r, i) { r.hidden = i >= shown && !r.querySelector('input').value.trim(); });
-        add.hidden = shown >= rows.length;
+        syncRemove();
       };
       add.addEventListener('click', function () {
         var next = rows.filter(function (r) { return r.hidden; })[0];
         if (next) { next.hidden = false; next.querySelector('input').focus(); }
-        add.hidden = !rows.some(function (r) { return r.hidden; });
+        syncRemove();
       });
+      // Removing a row moves the ones under it up, so the letters stay A, B, C… as the request will name them, and the
+      // last shown row is the one hidden. The only row is cleared instead.
+      rows.forEach(function (row, at) {
+        row.querySelector('[data-remove-audience]').addEventListener('click', function () {
+          var shown = shownRows().length;
+          for (var i = at; i < rows.length - 1; i++) {
+            var to = fields(rows[i]), from = fields(rows[i + 1]);
+            to.forEach(function (f, n) { if (f) { f.value = from[n] ? from[n].value : ''; f.setCustomValidity(''); } });
+          }
+          fields(rows[rows.length - 1]).forEach(function (f) { if (f) { f.value = ''; f.setCustomValidity(''); } });
+          if (shown > 1) rows[shown - 1].hidden = true;
+          rows.forEach(function (r) { var p = r.querySelector('[data-place]'); if (p && p.value.trim()) p.dispatchEvent(new Event('change', { bubbles: true })); });
+          if (placeWhy && !form.querySelector('[data-place]:invalid')) placeWhy.hidden = true;
+          summarise(audiences); syncRemove();
+          var focus = rows[Math.min(at, shownRows().length - 1)].querySelector('input');
+          if (focus) focus.focus();
+        });
+      });
+      audiences.addEventListener('input', syncRemove);
+      audiences.addEventListener('change', syncRemove);
       syncRows();
+    }
+
+    // A narrated film's .webp is a silent copy beside its MP4 (compose.html): the tile's label follows Narration.
+    var silent = form.querySelectorAll('[data-silent-label]'), silentHint = form.querySelector('[data-silent-hint]');
+    if (silent.length) {
+      var syncSilent = function () {
+        var on = form.querySelector('input[name=x_narration]:checked'), narrated = !on || on.value === 'Enabled';
+        silent.forEach(function (s) { s.textContent = s.getAttribute(narrated ? 'data-silent-label' : 'data-plain-label'); });
+        if (silentHint) silentHint.hidden = !narrated;
+      };
+      form.addEventListener('change', function (e) { if (e.target.name === 'x_narration') syncSilent(); });
+      syncSilent();
     }
 
     document.addEventListener('click', function (e) {
@@ -479,6 +520,10 @@
 
   // Says the model is slow to answer and the studio is asking again. Until the next turn there is nothing else to show,
   // and a page that only stops moving reads as a crash: a Trello turn waited 10.6 minutes through two 504s (2026-10-29).
+  //
+  // It counts on, a second at a time: each attempt may take minutes to fail, and a sentence that says "in 8 s" for three
+  // minutes read as the page having stuck after the run had carried on (anthropic_s_1, 2026-10-30).
+  var waitTimer = 0;
   function waiting(e) {
     if (finished) return;
     var note = page.querySelector('[data-waiting]');
@@ -488,9 +533,17 @@
       note.setAttribute('role', 'status');
       questions.parentNode.insertBefore(note, questions);
     }
-    note.textContent = window.PolsonRecord.detail('model.wait', e);
+    var asked = (Date.parse(e.ts) || Date.now()) + (e.seconds || 0) * 1000;
+    var first = window.PolsonRecord.detail('model.wait', e).split('. ')[0] + '.';
+    var tries = e.attempts ? ' (attempt ' + (e.attempt + 1) + ' of ' + e.attempts + ')' : '';
+    var tick = function () {
+      var ms = Date.now() - asked;
+      note.textContent = first + (ms < 0 ? ' Asking again in ' + Math.ceil(-ms / 1000) + ' s' + tries
+        : ' Asked again' + tries + ', waiting ' + span(ms) + ' for its answer') + '; the run carries on as soon as it answers.';
+    };
+    clearInterval(waitTimer); tick(); waitTimer = setInterval(tick, 1000);
   }
-  function answered() { var note = page.querySelector('[data-waiting]'); if (note) note.remove(); }
+  function answered() { clearInterval(waitTimer); var note = page.querySelector('[data-waiting]'); if (note) note.remove(); }
 
   // The sidebar count is drawn when the page loads; one run at a time means this page's questions are all of it.
   function clearBadge() {
@@ -880,7 +933,9 @@
 
   // The Progress card's clock: time spent, and time left of the commission's deadline, each second while it works and
   // fixed once it has ended.
-  var clockBox = page.querySelector('[data-clock]'), endedAt = 0;
+  // Time the runtime gave back for model calls that failed (`model.wait`'s `credited`) is given back here too, so the time
+  // left is the runtime's: anthropic_s_1's page read 50 minutes when the run's own clock read about 35 (2026-10-30).
+  var clockBox = page.querySelector('[data-clock]'), endedAt = 0, givenBack = 0;
   function span(ms) {
     var s = Math.max(0, Math.round(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60);
     return (h ? h + ':' + String(m).padStart(2, '0') : String(m)) + ':' + String(s % 60).padStart(2, '0');
@@ -889,9 +944,10 @@
     if (!clockBox || !started) return;
     var over = finished || stoppedOnce || page.dataset.status === 'delivered' || page.dataset.status === 'stopped';
     var end = endedAt || (over ? lastTs : 0), spent = (end || Date.now()) - started;
-    var minutes = Number(clockBox.dataset.deadline) || 0, left = minutes * 60000 - spent;
+    var minutes = Number(clockBox.dataset.deadline) || 0, left = minutes * 60000 - (spent - givenBack);
     clockBox.hidden = false;
-    clockBox.querySelector('[data-clock-elapsed]').textContent = (end ? 'Took ' : 'Elapsed ') + span(spent);
+    clockBox.querySelector('[data-clock-elapsed]').textContent = (end ? 'Took ' : 'Elapsed ') + span(spent)
+      + (givenBack >= 1000 ? ' (' + span(givenBack) + ' given back for model timeouts)' : '');
     clockBox.querySelector('[data-clock-left]').textContent = !minutes ? ''
       : end ? 'of its ' + minutes + '-minute deadline'
       : left >= 0 ? span(left) + ' left of ' + minutes + ' min'
@@ -914,7 +970,7 @@
     later();
   });
   on('budget', budget);
-  on('model.wait', waiting);
+  on('model.wait', function (e) { givenBack += (Number(e.credited) || 0) * 1000; waiting(e); });
   // Any sign of the next turn, or the run's end, means the wait is over.
   ['usage', 'thinking', 'text', 'tool.call', 'run.end'].forEach(function (kind) { on(kind, answered); });
   on('question.open', ask);

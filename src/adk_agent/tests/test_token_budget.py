@@ -275,6 +275,25 @@ class BudgetStatusTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(status["inputTokensUsedPercent"], 40.0)
         self.assertEqual(status["deadlineMinutes"], 30.0)
 
+    async def test_says_how_much_time_was_given_back(self):
+        """`Stage.elapsedMinutes` cannot see a credit, and deadline.md said to believe it: anthropic_s_1 (2026-10-30) lost
+        about 20 minutes to 504s that the breaker gave back and the agent's own clock did not."""
+        ctx = _Ctx()
+        studio._invocation_started[ctx.invocation_id] = studio.time.monotonic() - 40 * 60
+        studio._credited.pop(ctx.invocation_id, None)
+        studio._model_credited.pop(ctx.invocation_id, None)
+        self.addCleanup(studio._credited.pop, ctx.invocation_id, None)
+        self.addCleanup(studio._model_credited.pop, ctx.invocation_id, None)
+        studio.credit_wait(ctx.invocation_id, None, 60)
+        studio.credit_model_wait(ctx.invocation_id, None, 9 * 60)
+
+        status = await studio._make_budget_status(None, 70.0)(ctx)
+
+        self.assertEqual(status["minutesCreditedBack"], 10.0)
+        self.assertAlmostEqual(status["minutesElapsed"], 30.0, delta=0.2)
+        self.assertAlmostEqual(status["minutesRemaining"], 40.0, delta=0.2)
+        self.assertIn("Stage.elapsedMinutes", status["note"])
+
     async def test_says_so_when_the_run_has_no_budget(self):
         status = await studio._make_budget_status(None, None)(_Ctx())
         self.assertEqual(status["inputTokensSpent"], 0)

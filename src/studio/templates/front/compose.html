@@ -59,6 +59,7 @@
               <select name="aud_lang" aria-label="Audience {{ 'ABCDEF'[i] }} language" data-language>
                 {% for code, words in languages %}<option value="{{ code }}" {{ 'selected' if (a.lang or '') == code }}>{{ words }}{% if code in checked_by_eye %} ({{ eye_note }}){% endif %}</option>{% endfor %}
               </select>
+              <button type="button" class="fr-audience-remove" data-remove-audience aria-label="Remove audience {{ 'ABCDEF'[i] }}" title="Remove this audience" hidden>{{ m.icon('close', 16) }}</button>
             </div>
             {% endfor %}
           </div>
@@ -174,16 +175,21 @@
         <summary class="ps-field"><span class="ps-field-label">Formats<span class="ps-req" aria-hidden="true"> *</span></span><span class="ps-field-value" data-summary>Choose</span>{{ m.icon('chevron-down', 18) }}</summary>
         <section class="ps-ogrid fr-panel fr-narrow" aria-label="Formats">
           <h3 class="ps-ogrid-title">Formats</h3><p class="ps-ogrid-hint">Choose all that apply</p>
+          {#- A narrated film's .webp is a silent copy beside its MP4; the label follows the Narration choice (front.js). -#}
+          {%- set voiced = card.kind == 'video' and card.extras|selectattr('key', 'equalto', 'narration')|list -%}
+          {%- set narrated = voiced and (extras_in.get('narration') or 'Enabled') == 'Enabled' -%}
           <div class="ps-ogrid-tiles" style="--cols: {{ [formats|length, 4]|min }}">
             {% for f in formats %}
+            {%- set silent = voiced and f.ext == '.webp' -%}
             <label class="ps-otile" data-label="{{ f.ext }}">
               <input class="fr-vh" type="checkbox" name="formats" value="{{ f.ext }}" {{ 'checked' if f.ext in chosen_formats }}>
               <span class="ps-otile-check" aria-hidden="true">{{ m.icon('check', 14) }}</span>
               <span class="ps-otile-art"><span class="ps-otile-glyph">{{ f.ext }}</span></span>
-              <span class="ps-otile-text"><span class="ps-otile-label">{{ f.label }}</span></span>
+              <span class="ps-otile-text"><span class="ps-otile-label" {% if silent %}data-silent-label="{{ silent_preview }}" data-plain-label="{{ f.label }}"{% endif %}>{{ silent_preview if silent and narrated else f.label }}</span></span>
             </label>
             {% endfor %}
           </div>
+          {% if voiced %}<p class="ps-ogrid-hint" data-silent-hint {% if not narrated %}hidden{% endif %}>A narrated film is always an MP4. The .webp is a silent copy beside it, for pages that show images.</p>{% endif %}
         </section>
       </details>
 
