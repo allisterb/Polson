@@ -1904,8 +1904,21 @@ class DeliverableRouteTests(unittest.TestCase):
         self.assertEqual(picture["formats"][0]["durationMs"], 4000.0)
         self.assertEqual(picture["name"], "output")
 
+    def _as_logo(self) -> None:
+        """The fixture project as a logo run: the sheets and mock-ups a run delivers are the logo workflow's."""
+        project = self.root / "acme"
+        manifest = json.loads((project / "project.json").read_text(encoding="utf-8"))
+        (project / "project.json").write_text(json.dumps({**manifest, "workflow": "logo"}), encoding="utf-8")
+        self.registry._runs["acme-1"] = Run(
+            id="acme-1", project=_loaded(project), prompt="", stream=None,
+            started="2026-09-08T00:00:00+00:00", status="done")
+
+    def _pieces(self) -> list[dict]:
+        return [d for d in self.client.get("/runs/acme-1/deliverables").json()["deliverables"] if d["kind"] == "render"]
+
     def test_a_logos_mark_is_the_piece_and_its_brand_sheet_follows_it(self):
         """polson_graphics_studio_logo offered only the board: the mark's `final.svg` is the piece, the sheet a second."""
+        self._as_logo()
         for name in ("artifacts/final.png", "artifacts/final.svg", "artifacts/brand_sheet.png"):
             self._made(name)
         self._render_events(
@@ -1919,12 +1932,64 @@ class DeliverableRouteTests(unittest.TestCase):
         self.assertEqual("Brand sheet", pieces[1]["title"])
 
     def test_a_sheet_that_is_the_piece_is_listed_once(self):
+        self._as_logo()
         self._made("artifacts/brand_sheet.png")
         self._render_events(
             {"type": "render", "ts": "2026-10-30T10:24:00Z", "artifact": "artifacts/brand_sheet.png", "format": "png"})
 
-        pieces = [d for d in self.client.get("/runs/acme-1/deliverables").json()["deliverables"] if d["kind"] == "render"]
-        self.assertEqual(1, len(pieces))
+        self.assertEqual(1, len(self._pieces()))
+
+    def test_a_logo_delivers_its_boards_and_mockups_after_the_mark(self):
+        """The identity, not one board: the sheets in the workflow's order, then each mock-up titled by its vehicle."""
+        self._as_logo()
+        made = ("final.svg", "03_kit.png", "test_mark.webp", "06_favicon_ladder.webp", "06_monochrome_test.webp",
+                "brand_sheet.png", "mockup_card.png", "mockup_sign.png")
+        for name in made:
+            self._made(f"artifacts/{name}")
+        self._render_events(*(
+            {"type": "render", "ts": f"2026-10-30T10:{i:02}:00Z", "artifact": f"artifacts/{name}",
+             "format": name.rsplit(".", 1)[1],
+             **({"motion": "sheet", "kind": "mockup", "setting": "card"} if name.startswith("mockup") else {})}
+            for i, name in enumerate(made)))
+
+        pieces = self._pieces()
+        self.assertEqual(["final", "brand_sheet", "06_favicon_ladder", "06_monochrome_test", "03_kit", "mockup_card",
+                          "mockup_sign"], [p["name"] for p in pieces])
+        self.assertEqual(["The mark", "Brand sheet", "Scale ladder", "Monochrome", "Kit of parts", "Mock-up: card",
+                          "Mock-up: sign"], [p.get("title") for p in pieces])
+        self.assertTrue(pieces[-1]["what"].startswith("sign: "), "four identical mock-up captions say nothing")
+        self.assertNotIn("test_mark", {p["name"] for p in pieces}, "a working render is not delivered")
+
+    def test_a_logo_without_a_final_does_not_call_its_board_the_mark(self):
+        """polson_graphics_studio_logo has no `final`: its piece falls back to the board, which is not the mark."""
+        self._as_logo()
+        self._made("artifacts/07_presentation_board.webp")
+        self._render_events({"type": "render", "ts": "2026-10-30T10:24:00Z",
+                             "artifact": "artifacts/07_presentation_board.webp", "format": "webp"})
+
+        self.assertNotEqual("The mark", self._pieces()[0].get("title"))
+
+    def test_every_sheet_the_page_looks_for_is_named_in_its_workflows_instructions(self):
+        """The page finds the boards by name, and the agent learns the name only from the template: one renamed is lost."""
+        templates = Path(__file__).resolve().parents[1] / "Polson.CLI" / "ProjectTemplate"
+        for workflow, sheets in app_mod.SHEETS.items():
+            text = (templates / workflow / "instructions.md").read_text(encoding="utf-8")
+            for stem, _, _ in sheets:
+                self.assertIn(f"artifacts/{stem}.png", text, f"{workflow} never tells the agent to write {stem}")
+        for workflow in app_mod.MOCKUPS:
+            self.assertIn("Stage.mockup", (templates / workflow / "instructions.md").read_text(encoding="utf-8"))
+
+    def test_another_workflows_kit_and_mockups_are_not_delivered(self):
+        """A poster draws a `03_kit` and mock-ups too, as working material; only its piece is the deliverable."""
+        for name in ("final.png", "03_kit.png", "mockup_wall.png"):
+            self._made(f"artifacts/{name}")
+        self._render_events(
+            {"type": "render", "ts": "2026-10-30T10:00:00Z", "artifact": "artifacts/03_kit.png", "format": "png"},
+            {"type": "render", "ts": "2026-10-30T10:01:00Z", "artifact": "artifacts/final.png", "format": "png"},
+            {"type": "render", "ts": "2026-10-30T10:02:00Z", "artifact": "artifacts/mockup_wall.png", "format": "png",
+             "motion": "sheet", "kind": "mockup", "setting": "onto"})
+
+        self.assertEqual(["final"], [p["name"] for p in self._pieces()])
 
     def test_the_finished_film_replaces_its_draft(self):
         self._made("artifacts/05_draft.mp4")
