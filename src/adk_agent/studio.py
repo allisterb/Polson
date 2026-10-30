@@ -644,6 +644,13 @@ def _make_budget_status(token_cap: int | None, budget_minutes: float | None):
         if budget_minutes:
             status["deadlineMinutes"] = budget_minutes
             status["minutesRemaining"] = round(max(0.0, budget_minutes - elapsed), 1)
+            # Said outright, since nothing else tells the agent: `Stage.elapsedMinutes` in the sandbox cannot see a credit
+            # and reads later than this by exactly this much (`credit_wait`).
+            given = (_credited.get(invocation, 0.0) + _model_credited.get(invocation, 0.0)) / 60.0
+            status["minutesCreditedBack"] = round(given, 1)
+            status["note"] += (" The deadline is measured on minutesElapsed and minutesRemaining here. Time spent waiting "
+                               "on the director or on model calls that failed and were retried is given back, so these "
+                               "read lower than Stage.elapsedMinutes by minutesCreditedBack: believe these.")
         if not token_cap and not budget_minutes:
             status["note"] = "This run has no budget set; the figures above are what you have spent."
         return status
@@ -1192,8 +1199,8 @@ def resolve_token_cap(explicit: int | None = None) -> int | None:
     return None if cap <= 0 else cap
 
 
-def credit_wait(invocation: str | None, agent_name: str | None, seconds: float) -> bool:
-    """Gives back time the agent spent waiting on a person. False when there was nothing to credit.
+def credit_wait(invocation: str | None, agent_name: str | None, seconds: float) -> float:
+    """Gives back time the agent spent waiting on a person. The seconds given back, 0 when there was nothing to credit.
 
     **Both clocks are wall-clock, and waiting is not working.** `_invocation_started` anchors the
     circuit breaker and `budget_status`'s `minutesRemaining`; `_role_clock` anchors the per-role
@@ -1224,7 +1231,7 @@ def credit_wait(invocation: str | None, agent_name: str | None, seconds: float) 
     return _credit(invocation, agent_name, seconds, _credited, MAX_CREDIT_SECONDS, "waiting")
 
 
-def credit_model_wait(invocation: str | None, agent_name: str | None, seconds: float) -> bool:
+def credit_model_wait(invocation: str | None, agent_name: str | None, seconds: float) -> float:
     """Gives back time a model call spent failing: an attempt that timed out or was refused, and the backoff after it.
 
     **The agent cannot make the model answer, so it should not pay for the model not answering.** A Trello pitch
@@ -1238,10 +1245,13 @@ def credit_model_wait(invocation: str | None, agent_name: str | None, seconds: f
 
 
 def _credit(invocation: str | None, agent_name: str | None, seconds: float, ledger: dict[str, float], ceiling: float,
-            what: str) -> bool:
-    """Moves the breaker's and the role's anchors on by `seconds`, up to `ceiling` in total per invocation."""
+            what: str) -> float:
+    """Moves the breaker's and the role's anchors on by `seconds`, up to `ceiling` in total per invocation.
+
+    Returns the seconds actually given back (0.0, falsy, for none), which the run's record carries so the page's clock
+    can give them back too."""
     if not invocation or seconds <= 0:
-        return False
+        return 0.0
 
     # Clamped rather than refused: a wait that straddles the ceiling is credited up to it. Refusing
     # the whole wait would make one long question cost more than two short ones summing to the same.
@@ -1250,7 +1260,7 @@ def _credit(invocation: str | None, agent_name: str | None, seconds: float, ledg
     if seconds <= 0:
         _TURN_LOG.warning("polson budget: %s has spent its %.0fs of free %s; the clock runs",
                           invocation, ceiling, what)
-        return False
+        return 0.0
 
     credited = False
     if invocation in _invocation_started:
@@ -1267,7 +1277,7 @@ def _credit(invocation: str | None, agent_name: str | None, seconds: float, ledg
         ledger[invocation] = already + seconds
         _TURN_LOG.warning("polson budget: %.0fs of %s credited back to %s (%.0fs of %.0fs used)",
                           seconds, what, invocation, ledger[invocation], ceiling)
-    return credited
+    return seconds if credited else 0.0
 
 
 def _billable(invocation: str) -> int:

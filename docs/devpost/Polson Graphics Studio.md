@@ -1,7 +1,7 @@
 # Polson Graphics Studio: Cross-cultural, verifiable, agentic graphic and motion design
 
 ## What it does
-Polson Graphics Studio is an agentic co-creative graphics and motion design platform designed to provide an autonomous, affordable alternative to human-powered on-demand creative service platforms like Design Pickle and Superside, with innovative and accurate graphic and motion design work that adapts to different audiences and languages and cultures all over the world. Polson Graphics Studio provides an accurate, culturally adaptable, alternative to diffusion model-powered generative AI systems like Google Veo or Adobe Firefly for professional-grade image and motion graphic design work for financial report visualizations, VC pitch decks, film trailers, product advertisments, logos, infographics, posters, and many other types of graphic and motion design projects where precision, accuracym and cross-cultural adaptation is crucial. 
+Polson Graphics Studio is an agentic co-creative graphics and motion design platform designed to provide an autonomous, affordable alternative to human-powered on-demand creative service platforms like Design Pickle and Superside, with innovative and accurate graphic and motion design work that adapts to different audiences and languages and cultures all over the world. Polson Graphics Studio provides an verifiable, culturally adaptable, alternative to diffusion model-powered generative AI systems like Google Veo or Adobe Firefly for professional-grade image and motion graphic design work for financial report visualizations, VC pitch decks, film trailers, product advertisments, logos, infographics, posters, and many other types of graphic and motion design projects where precision, accuracy, and cross-cultural adaptation is crucial. 
 ![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/output.webp)
 
 ![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/pgs_design.webp)
@@ -9,20 +9,23 @@ Polson Graphics Studio is an agentic co-creative graphics and motion design plat
 ![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/s1_final_a.webp)
 
 
-Polson is designed to allow ordinary users to harness their creativity using AI with professional-level graphic and motion design that would be far too expensive to employ via traditional means, mirroring the use of AI for software development by non-expert users today. It aims to be superior to even the most advanced diffusion model-powered image and video generators in the areas of precision and accuracy and cross-cultural adaptation. 
-![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/startuppitch3.png)
+Polson's overall goal to allow ordinary users to harness their creativity using AI with professional-level graphic and motion design that would be far too expensive to employ via traditional means, mirroring the use of AI for software development by non-expert users today, and which can't be done by current generative AI systems. It aims to be superior to even the most advanced diffusion model-powered image and video generators in the areas of precision and accuracy and cross-cultural adaptation. 
+![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/final_a.svg)
 
-In [contrast](https://higgsfield.ai/blog/AI-Motion-Design-When-Video-Generation-Meets-Code) to standard agentic image or video generators that use diffusion-based models, Polson Graphics Studio uses a  procedural drawing and animation engine that agents using multimodal LLMs like Claude Opus 5 and Gemini 3.8 write code for to create visual artifacts that they can perceive both visually and as code.  Polson attempts to bring the same co-creative environment for agentic software development that modern artificial intelligence enables to the task of visual art and graphic design.  The agent has access to a wide range of tools to interact with, experiment on, and verify the drawing and animations it creates, to access and use knowledge in graphic design manuals and other resources, and to offload research tasks to cloud-based systems like Qloo.  
+In [contrast](https://higgsfield.ai/blog/AI-Motion-Design-When-Video-Generation-Meets-Code) to standard agentic image or video generators that use diffusion models, Polson Graphics Studio uses a  procedural drawing and animation engine that agents using multimodal LLMs like Claude Opus 5 and Gemini 3.8 write code for to create visual artifacts that they can perceive both visually and as code.  Polson attempts to bring the same co-creative, verifiable environment for agentic software development that modern artificial intelligence enables, to the task of visual art and graphic design.  The agent has access to a wide range of tools to interact with, experiment on, and verify the drawing and animations it creates, to access and use knowledge in graphic design manuals and other resources, and to offload research tasks to cloud-based systems like Qloo.  
 
-Each studio project collects natural language briefs, PDF documents, brand images and other user-supplied assets and follows a formal graphic design workflow, with detailed validation phases desiged to check the accuracy of each fact, number or equation that appears on-screen and delivers raster and vector images and videos in different formats together with creative briefs, brand sheets, mood boards, and many different types of artifacts that are typically the result of the graphic design process.
+Each studio project collects natural language briefs, PDF documents, brand images and other user-supplied assets and follows a formal graphic design workflow, with detailed validation phases desiged to check the accuracy of each fact or number  that appears on-screen and delivers raster and vector images and videos in different formats together with creative briefs, brand sheets, mood boards, and many different types of artifacts that are typically the result of the graphic design process.
 ![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/design_board.png)
 ![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/kitofparts2.png)
 
 
-Polson Graphics Studio uses Qloo to provide a cultural intelligence layer that agents use to adapt a single design campaign for different audiences.  
+Polson Graphics Studio uses Qloo to provide a cultural intelligence layer that agents use to gain insight into and guide design decisions for an audience, and to adapt a single design campaign for different audiences:
+![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/s1-audiences.PNG)
+
+![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/studio_choices.png)
 
 ## Polson Framework
-Polson is a a framework for agentic co-creative visual art and graphic design, built on the principles of [Enactive Co-Creative AI](https://www.co-creativeai.com/). Polson attempts to address the fundamental limitations of diffusion based-based image generation models for graphic design work with a code-based procedural drawing and animation engine that agents using multimodal LLMs like Gemini and Claude write code for to create visual artifacts that they can perceive both visually and as code, and can make precise, verifiable, mutations of the visual artifact state through code operations in response to instructions or user or other agent feedback, without drifting and losing coherency. Polson attempts to bring the same co-creative environment for software development collaboration and automation to the task of visual art and graphic design.  
+[Polson](https://github.com/allisterb/Polson) is a a framework for agentic co-creative visual art and graphic design, built on the principles of [Enactive Co-Creative AI](https://www.co-creativeai.com/). Polson attempts to address the fundamental limitations of diffusion model-based image and video generators for graphic design work with a code-based procedural drawing and animation engine that agents using multimodal LLMs like Gemini and Claude write code for to create visual artifacts that they can perceive both visually and as code, and can make precise, verifiable, mutations of the visual artifact state through code operations in response to instructions or user or other agent feedback, without drifting and losing coherency. Polson attempts to bring the same co-creative environment for software development collaboration and automation to the task of visual art and graphic design.  
 
 In the field of computational creativity, co-creative agents collaborate with humans continuously in real time with improvisations that enrich the whole creative process. 
 ![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/interaction1.png)
@@ -69,13 +72,13 @@ What is needed for localization and cross-cultural graphic design is evidence ab
 ### The possibility of agentic graphic design
 Programmers today are accustomed to collaborating with LLM-based agents on developing software, and the astonishing levels of productivity and creativity that these collaborations enable.  The entire software development industry is being transformed, for better or worse, by the automation of all aspects of software development by agents. But no equivalent creative collaboration and automation has taken root in the field of visual arts or graphic design.
 
-Neural models that generate and manipulate images and other visual artifacts suffer from a core problem in modern artificial intelligence: the innate inability of neural models to handle prolonged, iterative interaction over non-language data that maintans a consistent level of *precision*, *coherency*, and *verifiability*. Language in all its human (and artificial) varieties is discrete, segmentable, addressable. Visual information is continuous, non-segmented, and entangled. When you ask a diffusion-based model like Midjourney or Google's Nano Banana to create or change an image, it follows a completely different process compared to asking an LLM to create or make a change to a program's source code. There are no precise, deterministic tools a diffusion-based model can use to attempt precise operations on an image like "make the hat on the man in the third row red" or "change the figure in the third row to $550,000", in such a way that the objects and properties referred to in the operation retain the permanence humans are accustomed to when thinking and speaking and acting. There are also very limited environmental tools for models to check and validate the text and figures embedded in a visual artifact, the way program code can be checked and validated and tested. This makes agentic graphic design work for things like presentations of financial reports and data very difficult.
+Neural models that generate and manipulate images and other visual artifacts suffer from a core problem in modern artificial intelligence: the innate inability of neural models to handle prolonged, iterative interaction over non-language data that maintans a consistent level of *precision*, *coherency*, and *verifiability*. Language in all its human (and artificial) varieties is discrete, segmentable, addressable. Visual information is continuous, non-segmented, and entangled. When you ask a diffusion-based model like Midjourney or Google's Nano Banana to create or change an image, it follows a completely different process compared to asking an LLM to create or make a change to a program's source code or to edit a podcast script. There are no precise, deterministic tools a diffusion-based model can use to attempt precise operations on an image like "make the hat on the man in the third row red" or "change the figure in the third row to $550,000", in such a way that the objects and properties referred to in the operation retain the permanence humans are accustomed to when thinking and speaking and acting. There are also very limited environmental tools for models to check and validate the text and figures embedded in a visual artifact, the way program code can be checked and validated and tested. This makes agentic graphic design work for things like presentations of financial reports and data very difficult.
 
 An agentic graphic and motion design system that is precise, accurate and reliable enough for medium-horizon tasks like creating videos for VC pitches or analysis of S-1 filings while being able to create design variants that can autonomously adapt to audiences in different cultures or regions requires a fundamentally different approach to agentic systems for image and video generation today. 
 
 Such a system would give ordinary people the power to create professional graphic design productions on their own without needing years of specialized knowledge and training. It would also give professional graphic designers the ability to automate lower-level tasks and projects and allow them to reach higher levels of productivity and creativity and autonomoy.
 
-But such a system has the potential to enable the same revolutionary collaboration and automation for graphic design as exists for software development today. 
+Overall such a system has the potential to enable the same revolutionary collaboration and automation for graphic design as exists for software development today. 
 ![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/trailer5.webp)
 
 
@@ -123,7 +126,7 @@ The deliverable is an SVG infographic that can be opened in Illustrator with the
 ![](https://imgur.com/isBlYIm.png)
 
 ## How Polson uses Qloo for cross-cultural graphic design
-Polson uses a .NET client to access the Qloo REST API. The capabilities of the Qloo API are exposed to the agent in the JS SDK via the `Taste` global and functions like `find`, `contrast` etc. that the agent calls before graphic design work for different audiences to establish evidence for things like the pace of videos.
+Polson uses a .NET client to access the Qloo REST API. The capabilities of the Qloo API are exposed to the agent in the JavaScript SDK it uses to write code for the engine via the `Taste` global and functions like `find`, `contrast` etc. that the agent calls before graphic design work for different audiences to establish evidence for things like the pace of videos.
 ```
 Studio request composer
    │  User brief: "Audience A: Tokyo, aged 45 to 54"
@@ -143,23 +146,20 @@ Studio request composer
 Run record: every query, its purpose, cost, cache status
    │
    ▼
- Studio request pages: Audiences · Contrast · Choices · Verification 
+ Studio request results: Audiences · Contrast · Choices · Verification 
 ```
 ### Audience profiles
 
 An audience profile call looks like: 
 `Taste({ op: 'profile', audience: { location: 'Tokyo', age: '45_to_54' } })
 ` 
-Agents make multipe profile calls to attempt to determine statistically, for each domain (films, TV, music artists) what this audience loves that its city does not:
+Agents make multiple profile calls to attempt to determine statistically, for each domain (films, TV, music artists) what this audience loves that its city or area does not:
 
 1. The audience's list, at a popularity floor of 0.5. Measured with no floor the list is long-tail titles no one would recognise; at 0.9 it is the all-time hits. 0.5 keeps titles that are both recognisable and distinctive.
-2. The same query for the place with no age band: the **baseline**.
+2. The same query for the place with no age band, this is the **baseline**.
 3. **Distinctive** = in the audience's list and not in the baseline, kept in the audience's own rank order. These are the
    references the design cites. **Shared** = popular there whoever you are.
 4. One tag query for the place's aesthetic vocabulary, reported as the *place's*, never the audience's.
-
-That is about seven requests. A second audience in the same city costs four, because the baseline comes from the cache.
-If a domain has nothing distinctive, the profile says so, so the agent reports it rather than inventing a difference.
 
 ### Audience contrasts
 

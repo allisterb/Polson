@@ -50,7 +50,13 @@ committing to another full pass. It costs nothing and returns both allowances:
 ```
 
 The binding constraint is whichever is nearer, and it is not always the clock: a run can be half an
-hour from its deadline and nearly out of tokens. If the tool is not there, this run has no token
+hour from its deadline and nearly out of tokens.
+
+**Where the host offers `budget_status`, its minutes are the deadline's clock, not `Stage.elapsedMinutes`.**
+Time spent waiting on the director, or on model calls that failed and were retried, is given back to
+the run, and only `budget_status` knows it: its `minutesCreditedBack` says how much, and
+`Stage.elapsedMinutes` reads later than its `minutesElapsed` by that amount. Call it before you cut
+anything for time. Without the tool, `Stage.elapsedMinutes` is the clock. If the tool is not there, this run has no token
 budget or no way to report one — work to the clock and to the `[studio runtime]` notices, which
 arrive either way.
 
