@@ -7,9 +7,6 @@ Polson Graphics Studio is an agentic co-creative graphics and motion design plat
 
 ![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/output.webp)
 
-![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/pgs_design.webp)
-
-
 
 
 Polson's overall goal to allow ordinary users to harness their creativity using AI with professional-level graphic and motion design that would be far too expensive to employ via traditional means, mirroring the use of AI for software development by non-expert users today, and which can't be done by current generative AI systems. It aims to be superior to even the most advanced diffusion model-powered image and video generators in the areas of precision and accuracy and cross-cultural adaptation. 
@@ -18,7 +15,7 @@ Polson's overall goal to allow ordinary users to harness their creativity using 
 In [contrast](https://higgsfield.ai/blog/AI-Motion-Design-When-Video-Generation-Meets-Code) to standard agentic image or video generators that use diffusion models, Polson Graphics Studio uses a  procedural drawing and animation engine that agents using multimodal LLMs like Claude Opus 5 and Gemini 3.8 write code for to create visual artifacts that they can perceive both visually and as code.  Polson attempts to bring the same co-creative, verifiable environment for agentic software development that modern artificial intelligence enables, to the task of visual art and graphic design.  The agent has access to a wide range of tools to interact with, experiment on, and verify the drawing and animations it creates, to access and use knowledge in graphic design manuals and other resources, and to offload research tasks to cloud-based systems like Qloo.  
 
 Each studio project collects natural language briefs, PDF documents, brand images and other user-supplied assets and follows a formal graphic design workflow, with detailed validation phases desiged to check the accuracy of each fact or number  that appears on-screen and delivers raster and vector images and videos in different formats together with creative briefs, brand sheets, mood boards, and many different types of artifacts that are typically the result of the graphic design process.
-![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/design_board.png)
+
 ![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/kitofparts2.png)
 
 
@@ -37,7 +34,7 @@ Co-creativity allows participants to improvise and fuse and construct ideas base
 
 ### Polson Graphic Design
 Polson Graphics Studio uses a procedural drawing and animation engine combined with a formal graphic and motion design process and a rigorous verification
-phase powered by a VLM model and research services like [Parallel.ai](https://docs.parallel.ai/decisions/decisions-quickstart) that verify as much as possible every fact and figure that appears in a graphic. Agents do not rely on diffusion models to generate images or graphics which always carries the probabilty of hallucinations or inconsistency. Instead every pixel in a Polson graphic or video is created via code, and within the framework of a graphic design process and workflow and verification the agent is instructed to follw. This makes Polson suitable for autonomously designing things like VC pitch decks and financial report visualization where accuracy and versimilitude is critical
+phase powered by a VLM model and research services like [Parallel.ai](https://docs.parallel.ai/decisions/decisions-quickstart) that verify as much as possible every fact and figure that appears in a graphic. Agents do not rely on diffusion models to generate images or graphics which always carries the probabilty of hallucinations or inconsistency. Instead the agent writes code to create and assemble the parts of the graphic production, and within the framework of a graphic design process and workflow and verification the agent is instructed to follow. This makes Polson suitable for autonomously designing things like VC pitch decks and financial report visualization where accuracy and versimilitude is critical
 
 The graphic design process Polson agents follow is based on books like Ellen Lupton's *Graphic Design Thinking: Beyond Brainstorming*, wiith steps and processes like: 
 * Brainstorming
@@ -114,14 +111,14 @@ It also displays the choices it made based on the Qloo data:
 The Polson [drawing engine](https://github.com/allisterb/Polson/blob/master/src/Polson.MCPServer/JsDrawingEngine.cs) is a JavaScript procedural code-as-state drawing engine that uses [Skia](https://skia.org/) for rendering. It has both a 2D vector API compatible with [Snap.svg](https://github.com/adobe-webplatform/Snap.svg), and a 2D raster API with a Canvas2D compatible surface, as well as the conventional Skia 2D API, including Skia [SkSL](https://skia.org/docs/user/sksl/) shaders. The engine does not rely on an embedded browser for executing JavaScript or rendering which allows it to be extremely fast for drawing. Snap.svg and Canvas2D APIs were chosen simply for how much JavaScript code currently exists for drawing using these 2 API shapes that LLMs would be exposed to. Both vector and raster APIs in Polson draw directly to Skia canvases where they can be rendered as bitmaps in different image formats like WebP, or if using the vector API as SVGs that can be consumed by programs like Illustrator or Inkscape.
 
 ### Animation
-The Polson [procedural animation API](https://github.com/allisterb/PolsonFramework/tree/master/src/Polson.Animation) was ported from the [Synfig Studio](https://github.com/synfig/synfig) and [EffectCraft](https://github.com/storytold/effectcraft/) projects. Like the drawing API, agents write JavaScript code to create animations then check and verify the animation visually, and it can be rendered to different video formats like `.webp` without requiring a browser. The engine supports different languages and is capable of producing many different drawing and text and camera effects:
+The Polson [procedural animation API](https://github.com/allisterb/Polson/tree/master/src/Polson.Animation) was ported from the [Synfig Studio](https://github.com/synfig/synfig) and [EffectCraft](https://github.com/storytold/effectcraft/) projects. Like the drawing API, agents write JavaScript code to create animations then check and verify the animation visually, and it can be rendered to different video formats like `.webp` without requiring a browser. The engine supports different languages and is capable of producing many different drawing and text and camera effects:
 ![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/becool_output.webp)
 ### Code Mode MCP Server
 The Polson drawing and animation engine is exposed to agents as a 'Code Mode' MCP server. Code Mode is a technique for [programmatic tool calling](https://platform.claude.com/cookbook/tool-use-programmatic-tool-calling-ptc) by agents using a code execution environment described by [Cloudfare](https://blog.cloudflare.com/code-mode-mcp/) and [Anthropic](https://www.anthropic.com/engineering/code-execution-with-mcp). Instead of requiring the agent to call individual drawing tools one-at-time with a full model round-trip with each result, the agent writes an entire JavaScript program against a typed SDK to complete one stage of the graphic or art production process. 
  
 
 ### Workflows
-A workflow is the set of inputs, prompts, guardrails, steps, design manuals, resources, and deliverables an agent uses for one kind of graphic production, e.g the [pitch workflow](https://github.com/allisterb/PolsonFramework/blob/master/src/Polson.CLI/ProjectTemplate/motion/type.pitch.md). Each workflow has a set of stages e.g. the **`vector_infographic`** workflow first researches its subjects them does the infographic composition then verifies amuch as possible the figures it drew were accurate: 
+A workflow is the set of inputs, prompts, guardrails, steps, design manuals, resources, and deliverables an agent uses for one kind of graphic production, e.g the [pitch workflow](https://github.com/allisterb/Polson/blob/master/src/Polson.CLI/ProjectTemplate/motion/type.pitch.md). Each workflow has a set of stages e.g. the **`vector_infographic`** workflow first researches its subjects them does the infographic composition then verifies amuch as possible the figures it drew were accurate: 
 ![The vector_infographic workflow](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/vector-infographic-workflow.svg)
 
 The deliverable is an SVG infographic that can be opened in Illustrator with the data being  visualized and validated as much as possible:
@@ -182,6 +179,34 @@ audiences, Holm-adjusted for the number of pairs.
 The rule the workflows enforce: "no measurable difference" is an answer to report, not a reason to invent one. Where pace doesn't differ, the films share a beat grid and differ only where the evidence does (grade, imagery, voice).
 ### Audience choices
 ![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/studio_choices.png)
+
+Every design decision the agent makes for an audience is written down as a row in a `Choice | Evidence | Kind` table in the project's `direction.md`, which the studio's Choices tab draws. **Evidence** names the Qloo answer it came from by its handle (`t7`, `t8`…, each one a query recorded in the run) and the item's rank in that answer, so a reader can open the query and see the tag or title the choice rests on. **Kind** keeps the sources apart: *Qloo* (from an audience's data), *Brief* (the client asked for it), *Research* (a cited source), *Rule* (a workflow rule that holds for every audience), *Check* (measured on the finished piece) and *Assumed* (decided without evidence, and said so). A choice with no evidence cannot pass as one with some.
+
+**What looks different comes from what each audience over-indexes on; what is shared comes from what they have in common.** In *Nightshift*, two poster ads for one canned cold brew, the buyers of the comparable brands in Berlin and in Seoul (30–34) were compared, each against the same buyers worldwide:
+
+| | Berlin | Seoul |
+|---|---|---|
+| Shared system | *Minimalist* is the top brand tag in both cities (41 of 50 Berlin brands, 36 of 50 Seoul), so it is the **category's** look and goes into the shared kit, not into either ad | same |
+| Ground | `#131318`, near-black: the places Berlin's buyers favour and Seoul's do not are late-night and indoor (*Gritty*, *Nightlife*, *Late night food*), with *Dark Palette* among the brand tags | `#EFE9DC`, a warm pale: *Neutral Color Palette*, *Understated Elegance*, and daylit places |
+| Lead colour | a sodium amber: *Deep Amber Hues*, *Golden Color Palettes* | a gold-amber: *Gold and Amber Tones*, *Gold Packaging* |
+| Concept | *the amber row*, a row of bottle forms ending in the can: *Vintage Posters*, *Classic Labeling*, *Mixology* | *the long steep*, an arc of twenty marks round the can, one an hour: *Slow Living*, *Elegant*, *Chic* |
+
+Each audience gets three concepts drawn from its own profile before the agent looks at the other audience's, and the rejected ones stay in the table with what lost them. Berlin's *twenty hours, magnified* was dropped because its dial was the same device Seoul's chosen concept used, and two ads that both count hours on an arc would read as one.
+
+**Motion needs evidence of its own.** A poster's evidence decides what a film looks like; nothing in it decides how the film moves. So for trailers, product films, pitches and reports, the agent counts each audience's distinctive films that Qloo tags fast-paced or slow, and tests the difference before writing a single beat. In two trailer studies for *Be Cool* (2005), aimed at 45-to-54-year-olds:
+
+| | Tokyo | Mumbai |
+|---|---|---|
+| Pace evidence | 14 fast, 12 slow: no real lean | 23 fast, 5 slow |
+| The test | `Taste.comparePace`: Fisher's exact **p = 0.040**, a measurable difference | |
+| Pace | 6 arrivals, median hold 2.75 s, the title landing at 10.9 s | 8 arrivals, median hold 1.75 s, the title landing at 5 s |
+| Grade | lifted blacks and softened colour (contrast 0.94, saturation 0.9), from the style tags its distinctive films share: *Dreamlike Visuals*, *Flowing* | warmer and crisper (contrast 1.08, saturation 1.1), from *Warm Toned*, *Glitzy*, *Crisp* |
+
+A check on the finished films then confirmed the difference is really there, rather than only claimed: the Mumbai film changes more often and holds for less time than the Tokyo one.
+
+**"No difference" is an answer too.** In a startup pitch made for two audiences, the comparison came back at p = 0.556, so the two films share one beat grid and set of holds, and that row of the table reads *shared, because the evidence does not separate them*. Inventing a difference the data does not support would put a stereotype where the evidence should be. The same holds for the facts: in a pitch or a report every figure is the same in every audience's film, and only the telling (pace, grade, voice, and numbers written the way that place writes them) is the audience's.
+
+Before a run is delivered, `Taste.checkReferences()` confirms that every title or tag the direction cites was actually returned by a recorded query, so a reference cannot be invented after the fact.
 
 ### Film audiences
 For film posters and trailers 

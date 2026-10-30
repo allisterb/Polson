@@ -304,6 +304,28 @@ public class VerifyTests : TestsRuntime, IDisposable
         Assert.Equal(("unsourced figure", "no source for 183.4"), sources.Classify("$183.4B profit", computed));
     }
 
+    /// <summary>
+    /// A research figure with a thousands separator is found in the research. anthropic_s_1_outside_cc set Alphabet's
+    /// $229,692M from a research answer printing "$229,692 million", and all three such figures came back unsourced:
+    /// the research text was matched after its comma had become a space.
+    /// </summary>
+    [Fact]
+    public void TestAResearchFigureWithAThousandsSeparatorIsSourced()
+    {
+        var session = new SessionContext();
+        var task = session.Research.Start("trun_1", "peers", "Alphabet's six months to June 30, 2026", "core", "running");
+        session.Research.Complete(task, new Dictionary<string, object?>
+        {
+            ["output"] = "the Consolidated Statements of Income report “Revenues” of $229,692 million and “Income from operations” of 80,466 million",
+        }, []);
+        var sources = new FilmSources(root, session);
+        var none = new Dictionary<string, string>();
+
+        Assert.Equal(("research", "trun_1"), sources.Classify("$229,692M", none));
+        Assert.Equal(("research", "trun_1"), sources.Classify("Alphabet  +$80,466M", none));
+        Assert.Equal(("unsourced figure", "no source for 44796"), sources.Classify("$44,796M", none));
+    }
+
     /// <summary>A sentence is sourced figure by figure: a document's figure and a computed one in one line, from two pages.</summary>
     [Fact]
     public void TestASentenceIsSourcedFigureByFigure()

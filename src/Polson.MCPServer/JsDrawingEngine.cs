@@ -1155,6 +1155,18 @@ public partial class JsDrawingEngine : Runtime
             return $"{message} The reason is: {reason.Message}";
         }
 
+        // A Jint 4.9.2 fault: after an await on a host call (Documents.ask, Research, Assets), a parameter default that reads
+        // a property — `size = T.figure`, `{ color = P.ink }` — throws a bare NullReferenceException inside the engine.
+        // anthropic_s_1_outside_cc (2026-10-30) hit it three times with nothing to say which line; a literal default and
+        // destructuring in the body both work.
+        if (ex is NullReferenceException && ex.StackTrace?.Contains("FunctionEnvironment.AddFunctionParameters", StringComparison.Ordinal) == true)
+        {
+            return $"{message} This is a fault in the JavaScript engine, not your data: after an `await` on Documents.ask, "
+                + "Research or Assets, a function whose parameter default reads a property — `function f(g, size = T.figure)`, "
+                + "`function f(g, { color = P.ink })` — fails when called. Read the default inside the body instead: "
+                + "`function f(g, o) { const { size = T.figure, color = P.ink } = o; … }`. A literal default (`size = 104`) is fine.";
+        }
+
         // Jint's own time limit throws a bare TimeoutException, whose message names nothing: on a live
         // run it read as the network, and fourteen minutes went on the wrong hypothesis.
         if (ex is TimeoutException || ex.InnerException is TimeoutException)

@@ -1505,8 +1505,11 @@ internal sealed class FilmSources
             .SelectMany(r => r.Entities.OfType<Dictionary<string, object?>>()
                 .Select(e => (Name: FilmReadBack.Normal(e.GetValueOrDefault("name") as string), r.Id)))
             .Where(x => x.Name.Length > 0).GroupBy(x => x.Name).ToDictionary(g => g.Key, g => g.First().Id) ?? [];
+        // Figures taken as the brief's are, before Normal spaces out a thousands separator: matched against the normal text,
+        // "$44,796 million" was "44 796 million", and anthropic_s_1_outside_cc's three 10-Q figures came back unsourced.
         research = session?.Research.All.Where(t => t.Status == "completed" && t.Result is not null)
-            .Select(t => (t.Id, Text: Normal(JsonSerializer.Serialize(t.Result)))).ToArray() ?? [];
+            .Select(t => JsonSerializer.Serialize(t.Result, Unescaped) is var raw
+                ? (t.Id, Text: Normal(raw), Figures: FilmReadBack.Figures(raw).ToHashSet()) : default).ToArray() ?? [];
     }
     #endregion
 
@@ -1533,7 +1536,7 @@ internal sealed class FilmSources
         {
             foreach (var (doc, number, pageText, _) in pages)
                 if (n.Length >= 4 && pageText.Contains(n, StringComparison.Ordinal)) return ("document", $"{doc} p. {number}");
-            foreach (var (id, body) in research)
+            foreach (var (id, body, _) in research)
                 if (n.Length >= 4 && body.Contains(n, StringComparison.Ordinal)) return ("research", id);
             return ("own words", null);
         }
@@ -1550,7 +1553,7 @@ internal sealed class FilmSources
                 if (p.Figures.Contains(f)) return ("document", $"{p.Doc} p. {p.Page}");
             if (computedFigures.TryGetValue(f, out var how)) return ("computed", $"{f} = {how}");
             foreach (var r in research)
-                if (r.Text.Contains(f, StringComparison.Ordinal)) return ("research", r.Id);
+                if (r.Figures.Contains(f)) return ("research", r.Id);
             return briefFigures.Contains(f) ? ("brief", "brief.md") : (null, f);
         }
         var found = figures.Distinct().Select(SourceOf).ToArray();
@@ -1623,6 +1626,9 @@ internal sealed class FilmSources
     private readonly HashSet<string> briefFigures;
     private readonly (string Doc, int Page, string Text, HashSet<string> Figures)[] pages;
     private readonly Dictionary<string, string> qloo;
-    private readonly (string Id, string Text)[] research;
+    private readonly (string Id, string Text, HashSet<string> Figures)[] research;
+
+    /// <summary>For reading a research result, never for writing one: its words as written, not as <c>’</c>.</summary>
+    private static readonly JsonSerializerOptions Unescaped = new() { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
     #endregion
 }
