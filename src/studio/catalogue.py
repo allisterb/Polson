@@ -276,6 +276,8 @@ FILM = Extra("film", "Film", placeholder="A real film's title and year, e.g. Be 
              subject=True)
 
 CARDS: tuple[Card, ...] = (
+    # **Working workflows first, in rows of three as the pages lay them out** (2026-10-30): what this deployment runs,
+    # then what it does not yet (motion graphic, storyboard, comic, painting), so a visitor's eye meets what they can start.
     # The workflow is built and measured around 15-second films; longer ones are more encode parts and more
     # clock, so 30 is the most the form offers. A director who wants longer says so in the brief.
     Card("film-trailer", "Film trailer", "video", "Video · 15 seconds, one film per audience",
@@ -351,6 +353,53 @@ CARDS: tuple[Card, ...] = (
                  NARRATION),
          brief="A motion graphic explanation of the theorem or concept for the viewer: the idea built step by step, "
                "with a worked example, every formula and claim checked."),
+    # The `poster` workflow's two types as two cards, as the video cards split `motion`: one card with a "Kind" inside hid
+    # the film poster behind a choice a visitor had to open the card to see. `poster` was the one card before 2026-10-29;
+    # a request recorded under it is placed by its type (`card_for`).
+    Card("product-poster", "Product poster", "image", "Image · one print ad per audience",
+         (Route("poster", "Taste-grounded print ad"),),
+         image="product-poster.webp", alt="Two Nightshift cold brew print ads: a dark bar shelf for Berlin, a pale arc for Seoul",
+         extras=(Extra("product", "Product", placeholder="Its name, and what it is", long=True, rows=2, subject=True),
+                 Extra("comparables", "Comparable brands", placeholder="Two or three real brands like it", long=True, rows=2),
+                 Extra("claim", "Claim", placeholder="The one claim, worded as it may appear", long=True, rows=2),
+                 Extra("cta", "Call to action", placeholder="What the viewer should do next", long=True, rows=2)),
+         audiences=True, types=("product",),
+         brief="A print ad for the product for each audience, built on its one claim and ending on the call to "
+               "action."),
+    Card("film-poster", "Film poster", "image", "Image · one poster per audience",
+         (Route("poster", "Taste-grounded poster"),),
+         image="film-poster.webp", alt="A Be Cool one-sheet: a gold record label behind crosshairs over a black vinyl",
+         extras=(FILM, Extra("headline", "Headline", placeholder="The words that must appear", long=True, rows=2)),
+         audiences=True, types=("film",),
+         brief="A one-sheet poster for the film for each audience: true to its tone, with the title and its real "
+               "billing."),
+    # Audiences optional, as the report explainer's: with places, an infographic per audience with the same figures, its
+    # palette chosen against what that audience watches (Qloo's field) and its numerals and language the locale's
+    # (`_shared/audience_design.md`); without, one piece.
+    Card("infographic", "Infographic", "document", "Document · checked figures",
+         (Route("vector_infographic", "Vector", "Delivered as SVG, every figure checked"),
+          Route("infographic", "Raster", "Delivered as an image")),
+         image="infographic.webp", alt="A blueprint infographic of a lunar descent",
+         type_labels={t: t.capitalize() for t in projects.WORKFLOWS["infographic"]},
+         audiences=True, audiences_optional=True),
+    Card("logo", "Logo and identity", "image", "Image · a mark and its sheet",
+         (Route("logo", "Mark and brand sheet"),),
+         image="logo.webp", alt="A brand presentation sheet for a P mark",
+         type_labels={"antique": "Antique", "geometric": "Geometric", "modern": "Modern"},
+         extras=(Extra("name", "Name", placeholder="The name the mark is for", subject=True),),
+         brief="A logo mark and brand sheet for the name: simple, distinctive, and legible from a favicon to a sign."),
+    Card("book-cover", "Book cover", "image", "Image · one composed cover",
+         (Route("cover", "Composed cover"),),
+         image="book-cover.webp", alt="The Salt Watch: a lighthouse keeper's silhouette under a sweeping beam, a torn logbook at his feet",
+         extras=(Extra("book_title", "Book title", placeholder="As it should appear", subject=True),
+                 Extra("author", "Author", placeholder="As it should appear")),
+         brief="A cover for the book that tells a reader its genre and mood at thumbnail size, with the title and "
+               "author clear."),
+    Card("drawing", "Drawing", "image", "Image · pencil to finish",
+         (Route("drawing", "Drawing", "Built up in passes"),
+          Route("sketch_scene", "Sketched scene", "One scene from gesture")),
+         image="drawing.webp", alt="A pencil drawing of an arcade in perspective",
+         style_label="How to work", type_labels={"review": "Work with me", "seed": "Surprise me"}),
     Card("motion-graphic", "Motion graphic", "motion", "Animation · one action, keyed",
          (Route("animation", "One keyed action"),),
          image="motion-graphic.webp", alt="A jointed figure at a railing, one arm swept out toward a boat",
@@ -366,64 +415,25 @@ CARDS: tuple[Card, ...] = (
          (Route("comic", "Comic page"), Route("comic_studio", "Comic with a studio of agents", "Several agents, one page")),
          image="comic.webp", alt="An inked gull riding a bicycle on a boardwalk",
          style_label="How to work", type_labels={"review": "Work with me", "seed": "Surprise me"}),
-    # The `poster` workflow's two types as two cards, as the video cards split `motion`: one card with a "Kind" inside hid
-    # the film poster behind a choice a visitor had to open the card to see. `poster` was the one card before 2026-10-29;
-    # a request recorded under it is placed by its type (`card_for`).
-    Card("film-poster", "Film poster", "image", "Image · one poster per audience",
-         (Route("poster", "Taste-grounded poster"),),
-         image="film-poster.webp", alt="A Be Cool one-sheet: a gold record label behind crosshairs over a black vinyl",
-         extras=(FILM, Extra("headline", "Headline", placeholder="The words that must appear", long=True, rows=2)),
-         audiences=True, types=("film",),
-         brief="A one-sheet poster for the film for each audience: true to its tone, with the title and its real "
-               "billing."),
-    Card("product-poster", "Product poster", "image", "Image · one print ad per audience",
-         (Route("poster", "Taste-grounded print ad"),),
-         extras=(Extra("product", "Product", placeholder="Its name, and what it is", long=True, rows=2, subject=True),
-                 Extra("comparables", "Comparable brands", placeholder="Two or three real brands like it", long=True, rows=2),
-                 Extra("claim", "Claim", placeholder="The one claim, worded as it may appear", long=True, rows=2),
-                 Extra("cta", "Call to action", placeholder="What the viewer should do next", long=True, rows=2)),
-         audiences=True, types=("product",),
-         brief="A print ad for the product for each audience, built on its one claim and ending on the call to "
-               "action."),
-    Card("book-cover", "Book cover", "image", "Image · one composed cover",
-         (Route("cover", "Composed cover"),),
-         extras=(Extra("book_title", "Book title", placeholder="As it should appear", subject=True),
-                 Extra("author", "Author", placeholder="As it should appear")),
-         brief="A cover for the book that tells a reader its genre and mood at thumbnail size, with the title and "
-               "author clear."),
-    Card("logo", "Logo and identity", "image", "Image · a mark and its sheet",
-         (Route("logo", "Mark and brand sheet"),),
-         image="logo.webp", alt="A brand presentation sheet for a P mark",
-         type_labels={"antique": "Antique", "geometric": "Geometric", "modern": "Modern"},
-         extras=(Extra("name", "Name", placeholder="The name the mark is for", subject=True),),
-         brief="A logo mark and brand sheet for the name: simple, distinctive, and legible from a favicon to a sign."),
-    # Audiences optional, as the report explainer's: with places, an infographic per audience with the same figures, its
-    # palette chosen against what that audience watches (Qloo's field) and its numerals and language the locale's
-    # (`_shared/audience_design.md`); without, one piece.
-    Card("infographic", "Infographic", "document", "Document · checked figures",
-         (Route("vector_infographic", "Vector", "Delivered as SVG, every figure checked"),
-          Route("infographic", "Raster", "Delivered as an image")),
-         image="infographic.webp", alt="A blueprint infographic of a lunar descent",
-         type_labels={t: t.capitalize() for t in projects.WORKFLOWS["infographic"]},
-         audiences=True, audiences_optional=True),
     Card("painting", "Painting", "image", "Image · one scene",
          (Route("painting", "Painted scene"),),
          image="painting.webp", alt="A lit house behind bare trees at dusk"),
-    Card("drawing", "Drawing", "image", "Image · pencil to finish",
-         (Route("drawing", "Drawing", "Built up in passes"),
-          Route("sketch_scene", "Sketched scene", "One scene from gesture")),
-         image="drawing.webp", alt="A pencil drawing of an arcade in perspective",
-         style_label="How to work", type_labels={"review": "Work with me", "seed": "Surprise me"}),
 )
 
 BY_SLUG: dict[str, Card] = {c.slug: c for c in CARDS}
 
-#: The home page's two rows of cards: the entries' workflows, in this order. A card without its gallery image is left out.
-HOME = ("film-trailer", "product-ad", "report-explainer", "startup-pitch", "maths-explainer", "film-poster")
+#: The home page's three rows of cards, in this order: the workflows a visitor can start, the entries' first.
+HOME = ("film-trailer", "product-ad", "report-explainer", "startup-pitch", "maths-explainer", "product-poster",
+        "film-poster", "infographic", "logo")
 
 #: Cards by a former slug, for a link made before the change. A *request* recorded under one is placed by its workflow
 #: and type instead (`card_for`), since `poster` covered both of the cards that replaced it.
 RENAMED: dict[str, str] = {"poster": "film-poster"}
+
+#: The type an untyped project of a workflow is, as the CLI defaults it: an untyped poster is a film poster. Named rather
+#: than read off the card order, which named every untyped poster "Product poster" once that card moved first (2026-10-30).
+UNTYPED_IS: dict[str, str] = {"poster": "film"}
+
 
 def card_for(workflow: str, type_: str = "") -> Card | None:
     """
@@ -433,6 +443,7 @@ def card_for(workflow: str, type_: str = "") -> Card | None:
     first card named every one of them "Film trailer". A former workflow name is read as its current one.
     """
     workflow = projects.canonical(workflow)
+    type_ = type_ or UNTYPED_IS.get(workflow, "")
     cards = [c for c in CARDS if any(r.workflow == workflow for r in c.routes)]
     return (next((c for c in cards if type_ and c.fixed_type == type_), None)
             or next((c for c in cards if not type_ and c.types == ()), None)
