@@ -72,6 +72,15 @@ found nowhere, with no `unsearched` pages left, means the filing has no such sec
   revalued each period until they convert, and a fast-rising valuation shows up as a large loss below the operating
   line. That is why *A net loss is not an operating loss* above matters most in an S-1: ask for both lines and the one
   between them, and when the brief's question is about losses, the scene shows the operating loss beside the net loss.
+- **An S-1 has no history outside itself, so two questions an investor brings are outside it by nature**, and
+  *Outside the filing* above is how they are answered, when the brief asks them:
+  - *How does it compare with its competitors?* The competitors are the ones the S-1's **Competition** section names,
+    found with `Documents.find(REPORT, 'Competition')`, never ones you pick. Each is compared on what its own filing
+    reports for the same period: a listed one's 10-Q or 10-K, a segment named as a segment. One that files nothing is
+    said to file nothing; its revenue in the press is not a reported figure.
+  - *What has happened since it was filed?* An S-1 is filed before pricing, and an amended S-1/A sets the price range
+    and the share count, then the final prospectus the price. Look on EDGAR for filings after this one's date. A range
+    from an S-1/A is the filing's figure, from a later filing, and its source line names that filing and its date.
 - **The offering price is not a value.** It is negotiated between the company and its underwriters, and the bulletin
   warns it may bear little relationship to where the shares trade. Never present it, or anything computed from it, as
   what the company is worth.
