@@ -50,7 +50,7 @@ public static class LayoutAudit
     {
         if (string.IsNullOrWhiteSpace(svgXml)) return [];
         SvgDocument document;
-        try { document = SvgDocument.FromSvg<SvgDocument>(svgXml); }
+        try { document = PosterTypeAudit.Parse(svgXml); }
         catch (Exception) { return []; }
 
         var lines = PosterTypeAudit.Lines(document)

@@ -374,6 +374,33 @@ public class TasteToolTests : TestsRuntime, IDisposable
         Assert.Contains(reply["warnings"]!.AsArray(), w => w!.GetValue<string>().Contains("nothing distinctive"));
     }
 
+    /// <summary>
+    /// A place with no age or gender is set against the world: its own place's baseline would be the audience itself, and
+    /// coffee_1 (2026-10-30, Tokyo and Lagos at any age) came back with nothing distinctive. The reply says which.
+    /// </summary>
+    [Fact]
+    public async Task Profile_APlaceAloneIsSetAgainstTheWorld()
+    {
+        string? baselineQuery = null, audienceQuery = null;
+        DrawingMcpTools.TasteClient = new QlooClient("test-key", new HttpClient(new StubHandler(r =>
+        {
+            var q = Uri.UnescapeDataString(r.RequestUri!.Query);
+            if (!q.Contains("urn:tag")) { if (q.Contains("signal.location")) audienceQuery = q; else baselineQuery = q; }
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("""{ "results": { "entities": [], "tags": [] } }""", Encoding.UTF8, "application/json") };
+        })), QlooClient.HackathonBaseUrl);
+
+        var reply = await new DrawingMcpTools().Taste("profile", audience: """{"location":"Port Sample"}""", type: "movie");
+        var aged = await new DrawingMcpTools().Taste("profile", audience: """{"location":"Port Sample","age":"55_and_older"}""", type: "movie");
+
+        Assert.Contains("signal.location.query=Port Sample", audienceQuery);
+        Assert.NotNull(baselineQuery);
+        Assert.DoesNotContain("signal.location", baselineQuery);
+        Assert.Contains("filter.type=urn:entity:movie", baselineQuery);
+        Assert.Equal("world", reply["against"]!.GetValue<string>());
+        Assert.Contains(reply["warnings"]!.AsArray(), w => w!.GetValue<string>().Contains("over the world's popular list"));
+        Assert.Equal("place", aged["against"]!.GetValue<string>());
+    }
+
     [Theory]
     [InlineData("""{"age":"55_and_older"}""", null, "needs a location")]
     [InlineData("""{"location":"Port Sample"}""", "movie,tag", "not an entity type")]

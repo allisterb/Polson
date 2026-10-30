@@ -69,14 +69,14 @@ public class VectorTrackedTextTests : TestsRuntime
         Assert.Equal(parts[0] + 54f, parts[1], 1f);
     }
 
-    /// <summary>The run reaches the deliverable as real, individually placed text elements.</summary>
+    /// <summary>The paper holds a glyph per letter; the markup it saves holds the run as one text.</summary>
     /// <remarks>
-    /// One <c>&lt;text&gt;</c> per glyph rather than tspans, because scripts address the glyphs as the group's children.
-    /// The reason first recorded here — that the serialiser dropped a <c>&lt;text&gt;</c>'s children — no longer holds
-    /// (checked 2026-10-16), and repeating it in Manual 27 sent the poster1 run away from per-line tspans.
+    /// Scripts address the glyphs as the group's children, and the layout audits measure them, so the live paper keeps
+    /// them. The saved SVG puts them back as one run with <c>letter-spacing</c>: positions measured in one face are wrong
+    /// in any other, and a viewer without the face drew all_in_1's tracked lines unevenly (2026-10-30).
     /// </remarks>
     [Fact]
-    public void TestEachGlyphIsItsOwnTextElementInTheMarkup()
+    public void TestTheGlyphsAreLiveAndTheMarkupIsOneRun()
     {
         var result = Execute("""
             const p = Snap(700, 90);
@@ -86,7 +86,7 @@ public class VectorTrackedTextTests : TestsRuntime
             """);
 
         var parts = Numbers(result);
-        Assert.Equal(3f, parts[0]);
+        Assert.Equal(1f, parts[0]);
         Assert.Equal(3f, parts[1]);
     }
     #endregion
@@ -204,6 +204,49 @@ public class VectorTrackedTextTests : TestsRuntime
             """);
 
         Assert.Equal(0f, Numbers(result)[0]);
+    }
+    #endregion
+
+    #region Saved SVG Tests
+    /// <summary>
+    /// The saved SVG carries a tracked run as one <c>&lt;text&gt;</c> with <c>letter-spacing</c>, so a viewer without the face
+    /// still spaces it evenly; the live paper keeps its glyphs, which the audits measure.
+    /// </summary>
+    /// <remarks>all_in_1 (2026-10-30) saved every tracked letter as its own text at a position measured in Fira Code, and
+    /// a browser without Fira Code drew each in a fallback face at that position: every tracked line unevenly spaced.</remarks>
+    [Fact]
+    public void TestTheSavedSvgCarriesARunWithLetterSpacing()
+    {
+        var result = new JsDrawingEngine().Execute("""
+            const p = Snap(700, 90);
+            p.rect(0, 0, 700, 90).attr({ fill: '#ffffff' });
+            const g = p.trackedText(20, 60, 'HAND GLOVES', 12, { 'font-family': 'Arial', 'font-size': 40, fill: '#000000' });
+            log(g.children.length);
+            return p;
+            """, 700, 90, null, "png", 100);
+
+        Assert.True(result.Success, result.Error);
+        Assert.Equal(11f, Numbers(result)[0]);                       // the live paper: a glyph per letter, the space included
+
+        var svg = result.SvgXml;
+        Assert.Equal(1, svg.Split("<text").Length - 1);
+        Assert.Contains("letter-spacing=\"12\"", svg, StringComparison.Ordinal);
+        Assert.Contains(">HAND GLOVES</text>", svg, StringComparison.Ordinal);
+        Assert.DoesNotContain("data-tracked", svg, StringComparison.Ordinal);
+
+        // And it renders back to the same run: the saved SVG through the pipeline, against the live render.
+        Assert.Equal(Ink(result.ImageBytes!), Ink(Polson.Drawing.Svg.SvgRenderPipeline.RenderToImage(svg, 700, 90, "png", 100)));
+    }
+
+    /// <summary>The leftmost and rightmost dark columns of a render, to the pixel.</summary>
+    private static (int, int) Ink(byte[] png)
+    {
+        using var bmp = SkiaSharp.SKBitmap.Decode(png);
+        int min = int.MaxValue, max = -1;
+        for (var y = 0; y < bmp.Height; y++)
+            for (var x = 0; x < bmp.Width; x++)
+                if (bmp.GetPixel(x, y).Red < 128) { min = Math.Min(min, x); max = Math.Max(max, x); }
+        return (min, max);
     }
     #endregion
 

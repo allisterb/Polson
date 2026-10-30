@@ -112,7 +112,7 @@ public class PosterTypeAuditTests : TestsRuntime
             new System.Collections.Generic.Dictionary<string, object?> { ["font-family"] = "Arial", ["font-size"] = 75, ["text-anchor"] = "middle" });
         paper.Text(100, 700, "Algunas señales son para una sola persona.").Attr("font-size", 24);
 
-        var lines = PosterTypeAudit.Lines(SvgDocument.FromSvg<SvgDocument>(paper.ToString()));
+        var lines = PosterTypeAudit.Lines(PosterTypeAudit.Parse(paper.ToString()));
 
         Assert.Equal(2, lines.Count);
         var title = Assert.Single(lines, l => l.Words.StartsWith("LA", StringComparison.Ordinal));

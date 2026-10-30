@@ -75,6 +75,15 @@ public static partial class PosterTypeAudit
 
     #region Methods
     /// <summary>The lines of type a document draws, in paper units.</summary>
+    /// <summary>
+    /// Saved markup as the audits must read it: parsed, with every <c>letter-spacing</c> run set as the glyphs it renders
+    /// to (<see cref="SvgTracking.ForRender"/>), so a tracked line measures its tracked width.
+    /// </summary>
+    /// <remarks>A paper saves <c>paper.trackedText</c> as one run with <c>letter-spacing</c> (<see cref="SvgTracking.ForSave"/>),
+    /// which the parser alone measures untracked. Parse once and measure lines and shapes from the one document, so their
+    /// paint order agrees.</remarks>
+    public static SvgDocument Parse(string svgXml) => SvgTracking.ForRender(SvgDocument.FromSvg<SvgDocument>(svgXml));
+
     public static IReadOnlyList<TypeLine> Lines(SvgDocument document)
     {
         var lines = new List<TypeLine>();

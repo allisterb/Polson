@@ -422,7 +422,7 @@ public class SnapPaper : SnapElement
     {
         using var sw = new StringWriter();
         using var xw = XmlWriter.Create(sw, new XmlWriterSettings { OmitXmlDeclaration = true, Indent = true });
-        Document.Write(xw);
+        SvgTracking.ForSave(Document).Write(xw);
         xw.Flush();
         return sw.ToString();
     }
