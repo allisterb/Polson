@@ -8,6 +8,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using Polson.ExtendedMind.ParallelSearch;
+using Polson.ExtendedMind.Taste;
 
 /// <summary>
 /// Checks the numbers drawn on a deliverable against the research they claim to rest on.
@@ -37,11 +38,14 @@ public static partial class FigureVerifier
 {
     #region Methods
     /// <summary>
-    /// Verifies every tagged figure in <paramref name="svg"/> against the archived research.
+    /// Verifies every tagged figure in <paramref name="svg"/> against the archived research, or the Qloo answer it names.
     /// </summary>
     /// <param name="svg">The saved markup.</param>
     /// <param name="archive">Where finished research runs are filed.</param>
-    public static Verdict Verify(string svg, ResearchArchive archive)
+    /// <param name="taste">This session's Qloo answer by id (<c>t3</c>), or null; a tag whose id is one (<c>t3:…</c>) is
+    /// resolved against it. A taste infographic's figures are Qloo's, and a check that could only read research
+    /// would have reported every one of them as unarchived.</param>
+    public static Verdict Verify(string svg, ResearchArchive archive, Func<string, TasteResult?>? taste = null)
     {
         var verdict = new Verdict();
         if (string.IsNullOrWhiteSpace(svg)) return verdict;
@@ -80,6 +84,18 @@ public static partial class FigureVerifier
             var runId = tag[..split];
             var field = tag[(split + 1)..];
 
+            if (QlooId().IsMatch(runId))
+            {
+                if (taste?.Invoke(runId) is not { Ok: true } answer)
+                {
+                    verdict.Findings.Add(new Finding(tag, drawn, null,
+                        "Qloo answer " + runId + " is not in this session, so this figure cannot be checked"));
+                    continue;
+                }
+                Check(verdict, tag, drawn, JsonSerializer.SerializeToElement(answer, ScriptNames), field, "Qloo answered");
+                continue;
+            }
+
             if (!loaded.TryGetValue(runId, out var run))
             {
                 loaded[runId] = run = archive.Load(runId);
@@ -92,23 +108,28 @@ public static partial class FigureVerifier
                 continue;
             }
 
-            if (Resolve(run.Result, field) is not { } expected)
-            {
-                verdict.Findings.Add(new Finding(tag, drawn, null,
-                    "the archived result has no field '" + field + "'"));
-                continue;
-            }
-
-            if (Agrees(drawn, expected))
-            {
-                verdict.Verified++;
-                continue;
-            }
-
-            verdict.Findings.Add(new Finding(tag, drawn, expected, "the drawn value is not what the research returned"));
+            Check(verdict, tag, drawn, run.Result, field, "the research returned");
         }
 
         return verdict;
+    }
+
+    /// <summary>Compares one tagged figure with the value at <paramref name="field"/> in its source, and records the outcome.</summary>
+    private static void Check(Verdict verdict, string tag, string drawn, object? source, string field, string what)
+    {
+        if (Resolve(source, field) is not { } expected)
+        {
+            verdict.Findings.Add(new Finding(tag, drawn, null, "the archived result has no field '" + field + "'"));
+            return;
+        }
+
+        if (Agrees(drawn, expected))
+        {
+            verdict.Verified++;
+            return;
+        }
+
+        verdict.Findings.Add(new Finding(tag, drawn, expected, "the drawn value is not what " + what));
     }
 
     /// <summary>
@@ -221,6 +242,13 @@ public static partial class FigureVerifier
 
     [GeneratedRegex(@"\s+")]
     private static partial Regex Whitespace();
+
+    /// <summary>A Qloo answer's id, as `Taste` hands it out: <c>t3</c>. Research run ids are <c>trun_…</c>.</summary>
+    [GeneratedRegex(@"^t\d+$")]
+    private static partial Regex QlooId();
+
+    /// <summary>A Qloo answer as a script sees it: camelCase members (<c>profile.domains</c>), its maps' own keys kept.</summary>
+    private static readonly JsonSerializerOptions ScriptNames = new(JsonSerializerDefaults.Web);
     #endregion
 
     #region Child types

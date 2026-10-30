@@ -842,7 +842,7 @@ public partial class ProjectGeneratorTests : TestsRuntime, IDisposable
     [Fact]
     public void TestWorkflowsCarryTheirOwnDefaultDeadline()
     {
-        Assert.Equal(15, ProjectGenerator.DeadlineFor("logo", null));
+        Assert.Equal(20, ProjectGenerator.DeadlineFor("logo", null));
         Assert.Equal(120, ProjectGenerator.DeadlineFor("painting", null));
 
         // A test fixture rather than a commission: it is judged on what it exercises.
@@ -864,13 +864,13 @@ public partial class ProjectGeneratorTests : TestsRuntime, IDisposable
         Assert.True(ProjectGenerator.Create(Options("dl-default", o => o.Workflow = "logo")));
 
         var manifest = File.ReadAllText(Path.Combine(root, "dl-default", "project.json"));
-        Assert.Contains("\"deadlineMinutes\": 15", manifest, StringComparison.Ordinal);
+        Assert.Contains("\"deadlineMinutes\": 20", manifest, StringComparison.Ordinal);
 
         // The runtime reads the manifest and the agent reads the instructions; they are generated
         // from one value so the two cannot tell the agent different things.
         var instructions = File.ReadAllText(Path.Combine(root, "dl-default", "GEMINI.md"));
         Assert.Contains("## The deadline", instructions, StringComparison.Ordinal);
-        Assert.Contains("You have 15 minutes", instructions, StringComparison.Ordinal);
+        Assert.Contains("You have 20 minutes", instructions, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using Polson.ExtendedMind.ParallelSearch;
+using Polson.ExtendedMind.Taste;
 using Polson.MCPServer;
 using Xunit;
 
@@ -179,6 +180,43 @@ public class FigureVerifierTests : TestsRuntime, IDisposable
 
         Assert.Single(verdict.Findings);
         Assert.Equal(0, verdict.Verified);
+    }
+
+    /// <summary>
+    /// A taste infographic's figures are Qloo's: a tag naming an answer (<c>t3</c>) resolves against it, by the path a script
+    /// sees, and a wrong figure is caught the same way a research one is.
+    /// </summary>
+    [Fact]
+    public void TestAFigureTaggedToAQlooAnswerReconcilesAgainstIt()
+    {
+        var answer = new TasteResult
+        {
+            Id = "t3", Op = "insights", Label = "audience A films", Ok = true,
+            Entities = [new Dictionary<string, object?> { ["name"] = "Your Name.", ["affinity"] = 0.92 }],
+        };
+        TasteResult? Taste(string id) => id == "t3" ? answer : null;
+
+        var verdict = FigureVerifier.Verify(Svg(
+            "<text data-basis='t3:entities.0.affinity'>0.92</text>"
+            + "<text data-basis='t3:entities.0.name'>Your Name.</text>"
+            + "<text data-basis='t3:entities.0.affinity'>0.71</text>"), archive, Taste);
+
+        Assert.Equal((3, 2), (verdict.Checked, verdict.Verified));
+        var wrong = Assert.Single(verdict.Findings);
+        Assert.Equal(("0.71", "0.92"), (wrong.Drawn, wrong.Expected));
+        Assert.Contains("Qloo answered", wrong.Reason, StringComparison.Ordinal);
+    }
+
+    /// <summary>An answer not in this session cannot be checked, which is said, not counted as wrong; a research id is unaffected.</summary>
+    [Fact]
+    public void TestAQlooAnswerNotInTheSessionIsUncheckable()
+    {
+        var verdict = FigureVerifier.Verify(Svg(
+            "<text data-basis='t9:entities.0.affinity'>0.5</text>"
+            + $"<text data-basis='{Run}:totalRuntimeMinutes'>1636</text>"), archive, _ => null);
+
+        Assert.Equal(1, verdict.Verified);
+        Assert.Contains("not in this session", Assert.Single(verdict.Findings).Reason, StringComparison.Ordinal);
     }
     #endregion
 

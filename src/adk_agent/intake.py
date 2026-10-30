@@ -266,6 +266,10 @@ DEADLINES: dict[str, int] = {
 PER_AUDIENCE_MINUTES: dict[str, int] = {
     "poster": 20,
     "motion": 25,
+    # An infographic for another audience is a variant of the first (same figures and layout; palette, numerals and
+    # language move, `_shared/audience_design.md`), so less than a poster's fresh design.
+    "vector_infographic": 10,
+    "infographic": 10,
 }
 
 #: How a brief names each audience: `Audience A:` to `Audience F:`. The composer writes one per line; the starters

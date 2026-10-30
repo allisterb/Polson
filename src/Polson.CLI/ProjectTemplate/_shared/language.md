@@ -6,7 +6,7 @@ speaks: German, French, Spanish, Portuguese, Japanese, Chinese (Simplified), Kor
 and Arabic (2026-10-29), which has rules of its own — see its point below.
 
 - **Every word that audience reads is in its language**: the title, every claim and label, the call to action, the
-  end card, and every figure, written as that language writes it — `Locale.number(value, { locale })` with the
+  end card, and every figure, written as that language writes it — `Locale.number(value, { locale: 'ja-JP' })` with the
   language's locale for the place (`ja-JP`, `de-DE`, `zh-CN`, `ko-KR`). Names stay as given: the product's, the
   company's, a person's. A quotation from a document is translated and attributed as a translation (*"from the
   filing, translated"*).

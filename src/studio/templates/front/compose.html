@@ -38,7 +38,7 @@
         <section class="ps-ogrid fr-panel" aria-label="Audience">
           <h3 class="ps-ogrid-title">Who is it for?</h3>
           {% if card.audiences_optional %}
-          <p class="ps-ogrid-hint">Optional. Name a place, and an age band if it matters, and the {{ card.piece }} is made in that audience's conventions: paced from what they watch, its figures written as they write them. With more than one, a {{ card.piece }} for each as one campaign: one design, the figures the same, adapted to each audience. For a design of its own for each audience, commission each one separately.</p>
+          <p class="ps-ogrid-hint">Optional. Name a place, and an age band if it matters, and the {{ card.piece }} is made in that audience's conventions: {{ 'paced from what they watch' if card.kind == 'video' else 'its colours chosen against what they watch' }}, its figures written as they write them. With more than one, a {{ card.piece }} for each as one campaign: one design, the figures the same, adapted to each audience. For a design of its own for each audience, commission each one separately.</p>
           {% else %}
           <p class="ps-ogrid-hint">A place and an age band for each audience. With more than one, the studio makes {{ 'an' if card.piece == 'ad' else 'a' }} {{ card.piece }} for each as one campaign: one design, adapted to what each audience loves, and compares them. For a design of its own for each audience, commission each one separately.</p>
           {% endif %}
