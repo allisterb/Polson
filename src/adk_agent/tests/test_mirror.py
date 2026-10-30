@@ -176,6 +176,21 @@ class MirrorSelectionTests(unittest.TestCase):
         asyncio.run(self.mirror.sweep())
         self.assertEqual(asyncio.run(self.mirror.sweep()), 0)
 
+    def test_a_final_written_at_the_root_is_copied(self):
+        """intolerable_cruelty (2026-10-30) wrote `final_a.png`/`.svg`/`.pdf` at the root rather than in `artifacts/`; none was
+        mirrored, its instance recycled, and the Deliverables tab linked four files that were gone. A root file named as a
+        deliverable is a deliverable, wherever the agent put it; a look-alike name is not."""
+        for name in ("final_a.png", "final_a.svg", "final_b.pdf", "final.webp", "output_c.mp4"):
+            (self.root / name).write_bytes(b"piece")
+        (self.root / "final_draft_notes.txt").write_text("not a piece", encoding="utf-8")
+        (self.root / "finalize.js").write_text("// not a piece", encoding="utf-8")
+        asyncio.run(self.mirror.sweep())
+
+        for name in ("final_a.png", "final_a.svg", "final_b.pdf", "final.webp", "output_c.mp4"):
+            self.assertIn(f"mirror/acme/{name}", self.bucket.uploaded, name)
+        self.assertNotIn("mirror/acme/final_draft_notes.txt", self.bucket.uploaded)
+        self.assertNotIn("mirror/acme/finalize.js", self.bucket.uploaded)
+
     def test_a_file_appearing_later_at_the_root_is_not_copied_by_default(self):
         """The root list is an allowlist, so a new file is not published by accident."""
         (self.root / "scratch.txt").write_text("working notes", encoding="utf-8")
