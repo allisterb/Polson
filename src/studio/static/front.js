@@ -654,7 +654,9 @@
         var tabs = el('div', 'ps-tabs fr-pieces'); tabs.setAttribute('role', 'tablist'); tabs.setAttribute('data-pieces', '');
         pieces.forEach(function (d, i) {
           var letter = (/audience ([A-Z])/i.exec(d.what || '') || [])[1];
-          var t = el('button', 'ps-tab', letter ? 'Audience ' + letter.toUpperCase() : 'Piece ' + (i + 1));
+          // A sheet beside the piece (a logo's brand sheet) says what it is, and the piece is then "The piece".
+          var t = el('button', 'ps-tab', letter ? 'Audience ' + letter.toUpperCase()
+            : d.title || (pieces.some(function (p) { return p.title; }) ? 'The piece' : 'Piece ' + (i + 1)));
           t.type = 'button'; t.setAttribute('role', 'tab'); t.setAttribute('aria-selected', i === 0 ? 'true' : 'false');
           t.addEventListener('click', function () {
             tabs.querySelectorAll('.ps-tab').forEach(function (o) { o.setAttribute('aria-selected', 'false'); });

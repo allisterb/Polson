@@ -223,6 +223,24 @@ re-render that same function (Manual 12 §3 explains the contract and its three 
 3. `Logo.generateBrandPresentationSheet(...)` — lockups, colour chips, clear space.
 4. The kit sheet (`03_kit.png`) and the language applied: three or four `mockup_*.png` vehicles, one of them the push.
 
+**Every word on the mark, the lockups, the sheet and the mock-ups is the client's.** The name exactly as the brief
+spells it. A tagline or descriptor only when the brief gives one, word for word — never one you wrote, however well
+it fits. polson_graphics_studio_logo (2026-10-30) set *"Autonomous Co-creative Motion and Vector Runtime"* under the
+name, and the client had said no such thing. With none given, leave it out: `tagline: ''` in
+`generateBrandPresentationSheet` and `drawWordmarkLockup` (an absent one prints the toolkit's own placeholder). If a
+lockup needs a line to be judged, ask the director for it (in an autonomous run, record in `questions.md` that none was
+given and leave the line empty). A mock-up's sample copy (a card's address, an app's menu) is labelled as a sample
+in `direction.md`, never presented as the client's.
+
+**Two files carry fixed names, because the studio's page finds the work by them:**
+
+- **The mark is `artifacts/final.svg` and `artifacts/final.png`**, in every format the brief's *Formats* line names
+  (`final.webp`, `final.pdf` beside them when asked). Drawn on a `SnapPaper` with `outSvg`, so the SVG is the mark
+  itself, not a picture of it: the brief's formats are the mark's, and a client asking for `.svg` wants the vector.
+  Render it last, from the finished mark function, after the boards. polson_graphics_studio_logo (2026-10-30) wrote
+  its vector as `polson_logo_mark.svg` and the page offered the director only the presentation board.
+- **The presentation sheet is `artifacts/brand_sheet.png`** (and `.webp`), the last `generateBrandPresentationSheet`.
+
 A mark that stops reading when its colour is removed, or closes up at 16px, is not finished — it is
 a mark that has only been seen at one size in one colour. Fix it and re-run the boards.
 

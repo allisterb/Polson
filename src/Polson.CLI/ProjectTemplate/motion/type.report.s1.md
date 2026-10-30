@@ -16,7 +16,8 @@ A prospectus is laid out by rule, so the headings are the same in every S-1: **f
 const S1_QUESTIONS = [
     { q: 'What does the company do, and how does it make money: its products or services, and who pays for them?',
       at: ['Prospectus Summary', 'Business'] },                                   // bulletin: Prospectus Summary, Business
-    { q: 'How have revenue and net income or loss changed across the periods the financial statements cover?',
+    { q: 'How have revenue, operating income or loss, and net income or loss changed across the periods the financial '
+        + 'statements cover, and what is the largest line between operating and net income or loss, as the statement titles it?',
       at: ['Consolidated Statements of Operations', 'Summary Consolidated Financial'] },   // L&W p. 28: the summary page
     { q: 'Which key metrics and non-GAAP measures does management use, how does the filing define each, and what is the '
         + 'most directly comparable GAAP figure beside it?',
@@ -67,6 +68,10 @@ found nowhere, with no `unsearched` pages left, means the filing has no such sec
   mitigating language, so the section is written to sound negative (L&W p. 6). Choose risks particular to this company
   (a named dependency, a lawsuit, a structure), report each in the filing's words, and never rank them by your own
   sense of how serious they are.
+- **A company's losses before its IPO are often mostly not spending.** Convertible notes, SAFEs and warrants are
+  revalued each period until they convert, and a fast-rising valuation shows up as a large loss below the operating
+  line. That is why *A net loss is not an operating loss* above matters most in an S-1: ask for both lines and the one
+  between them, and when the brief's question is about losses, the scene shows the operating loss beside the net loss.
 - **The offering price is not a value.** It is negotiated between the company and its underwriters, and the bulletin
   warns it may bear little relationship to where the shares trade. Never present it, or anything computed from it, as
   what the company is worth.

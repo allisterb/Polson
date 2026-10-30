@@ -115,11 +115,13 @@ def status_of(project: Path, run: Run | None, events: list[dict[str, Any]],
     # The agent's own ending, where its runtime wrote one, outranks the files: a run that hit a quota error
     # after writing output.png stopped, and the live page says so from the same event.
     since = after[0].get("ts", "") if started else ""
+    completed = False
     for e in reversed(read_events(project / "events" / "agent.jsonl")):
         if e.get("type") == "run.end" and (e.get("ts") or "") >= since:
             how = e.get("reason") or e.get("status") or ""
             if e.get("error") or how not in ("", "completed", "done"):
                 return "stopped"
+            completed = True
             break
     # A run this server did not start, whose record is still moving, is running: nightshift1, launched with `claude -p`,
     # read as Stopped on the home page while its server wrote an event every few seconds, because only a watched run
@@ -130,7 +132,9 @@ def status_of(project: Path, run: Run | None, events: list[dict[str, Any]],
     # writes no run.end, so a run that delivered `final_a.mp4` would otherwise read as stopped.
     if any(e.get("type") == "render" and FINAL.fullmatch(Path(e.get("artifact") or "").stem) for e in after):
         return "delivered"
-    if any(e.get("type") == "run.end" for e in after) and any(e.get("type") == "render" for e in events):
+    # The agent's own completed `run.end` counts as the server's does: on ADK the server writes none while its process
+    # lives, and polson_graphics_studio_logo (2026-10-30), completed with a brand sheet, read as Stopped.
+    if (completed or any(e.get("type") == "run.end" for e in after)) and any(e.get("type") == "render" for e in events):
         return "delivered"
     return "stopped"
 

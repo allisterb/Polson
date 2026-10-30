@@ -423,6 +423,15 @@ class StatusTests(unittest.TestCase):
             {"ts": "2026-10-18T10:00:09.000Z", "type": "run.end", "status": "incomplete", "error": "429"}) + "\n")
         self.assertEqual(self.status(p), "stopped")
 
+    def test_the_agents_own_completed_ending_delivers_a_run_without_a_final(self):
+        """polson_graphics_studio_logo: an ADK run completed with a brand sheet and no `final`, and read as Stopped."""
+        p = project_dir(self.root, "logo")
+        events(p, {"type": "run.start", "ts": "2026-10-30T10:14:27.000Z"},
+               {"type": "render", "artifact": "artifacts/07_presentation_board.png", "format": "png", "ts": "2026-10-30T10:25:00.000Z"})
+        (p / "events" / "agent.jsonl").write_text(json.dumps(
+            {"ts": "2026-10-30T10:27:01.000Z", "type": "run.end", "status": "completed"}) + "\n")
+        self.assertEqual(self.status(p), "delivered")
+
     def test_a_run_started_elsewhere_reads_as_running_while_its_record_moves(self):
         """nightshift1 (claude -p) read as Stopped while its server wrote every few seconds: a moving record is a live run."""
         from datetime import datetime, timedelta, timezone

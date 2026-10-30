@@ -610,6 +610,27 @@ public partial class ProjectGeneratorTests : TestsRuntime, IDisposable
         Assert.Empty(Directory.GetFiles(Path.Combine(root, "s1"), "*s1.md", SearchOption.AllDirectories));
     }
 
+    /// <summary>
+    /// anthropic_s_1_2 (2026-10-30): every figure right, and a net loss that was mostly a fair-value change captioned as
+    /// compute spending. Every report is told to show both losses, give no cause of its own and no adjective; an S-1 asks
+    /// for the operating line too.
+    /// </summary>
+    [Fact]
+    public void TestAReportShowsBothLossesAndNoCauseOrAdjectiveOfItsOwn()
+    {
+        Assert.True(ProjectGenerator.Create(Options("s1loss", o => { o.Workflow = "motion"; o.Type = "report.s1"; })));
+        Assert.True(ProjectGenerator.Create(Options("plainloss", o => { o.Workflow = "motion"; o.Type = "report"; })));
+
+        var s1 = File.ReadAllText(Path.Combine(root, "s1loss", "GEMINI.md"));
+        var plain = File.ReadAllText(Path.Combine(root, "plainloss", "GEMINI.md"));
+        foreach (var rule in new[] { "**Never a cause of your own.**", "**A net loss is not an operating loss.**", "**No adjectives on a figure.**" })
+        {
+            Assert.Contains(rule, plain, StringComparison.Ordinal);
+            Assert.Contains(rule, s1, StringComparison.Ordinal);
+        }
+        Assert.Contains("operating income or loss, and net income or loss", s1, StringComparison.Ordinal);
+    }
+
     /// <summary>A report on a 10-K is the report type with a professional's questions, keyed to the form's Items.</summary>
     [Fact]
     public void TestAReportOnA10KIsTheReportTypeWithAProfessionalsQuestions()
