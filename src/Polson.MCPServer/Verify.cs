@@ -781,7 +781,7 @@ public sealed partial class VerifyToolkit
         private static Still FromPaper(SnapPaper p)
         {
             var (w, h) = (p.Width > 0 ? (int)MathF.Ceiling(p.Width) : 800, p.Height > 0 ? (int)MathF.Ceiling(p.Height) : 600);
-            var document = SvgDocument.FromSvg<SvgDocument>(p.ToString());
+            var document = PosterTypeAudit.Parse(p.ToString());
             var page = document.ViewBox is { Width: > 0, Height: > 0 } vb ? SKRect.Create(vb.MinX, vb.MinY, vb.Width, vb.Height) : SKRect.Create(0, 0, w, h);
             var (sx, sy) = (w / page.Width, h / page.Height);
             return new()

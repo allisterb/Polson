@@ -6,7 +6,9 @@ change how it looks and reads, never what it says. Without audience lines there 
 
 **1. Each audience's taste, measured.** `Taste({ op: 'profile', audience: '{"location":"Lagos","age":"25_to_29"}',
 label: 'audience A' })` returns, per domain, the titles distinctive to that audience. A location is required; check the
-answer's `locality` is the place you meant. Ask once per audience and reuse the answer by id: requests are metered.
+answer's `locality` is the place you meant. With an age band, distinctive is against the place (what this group favours
+that the city does not); with a place alone, `against` is `'world'` and it is what the city favours over the world's
+popular list. Say which in `direction.md`. Ask once per audience and reuse the answer by id: requests are metered.
 
 **2. The field: what that audience already looks at.** In one script per audience,
 `await Taste.images(profile, { type: 'film', take: 16 })` fetches the posters of its distinctive films, and

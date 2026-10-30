@@ -226,7 +226,7 @@ public static partial class SvgPdfWriter
         if (bleedPt > 0) warnings.AddRange(CheckBleed(skSvg.Picture, toPage, mediaWidth, mediaHeight, bleedPt));
         if (safePt > 0) warnings.AddRange(CheckSafeArea(svgXml, box, bleedX, bleedY, mediaWidth, mediaHeight, bleedPt, safePt));
 
-        var lines = PosterTypeAudit.Lines(SvgDocument.FromSvg<SvgDocument>(StripDeclaration(svgXml)));
+        var lines = PosterTypeAudit.Lines(PosterTypeAudit.Parse(StripDeclaration(svgXml)));
         warnings.AddRange(PosterTypeAudit.CheckLineLength(lines));
         warnings.AddRange(PosterTypeAudit.CheckGroupSpacing(lines));
         warnings.AddRange(PosterTypeAudit.CheckBackgrounds(PosterTypeAudit.MeasureBackgrounds(StripDeclaration(svgXml), lines)));

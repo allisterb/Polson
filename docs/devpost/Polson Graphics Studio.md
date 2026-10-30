@@ -105,38 +105,20 @@ It also displays the choices it made based on the Qloo data:
 
 The Polson [drawing engine](https://github.com/allisterb/Polson/blob/master/src/Polson.MCPServer/JsDrawingEngine.cs) is a JavaScript procedural code-as-state drawing engine that uses [Skia](https://skia.org/) for rendering. It has both a 2D vector API compatible with [Snap.svg](https://github.com/adobe-webplatform/Snap.svg), and a 2D raster API with a Canvas2D compatible surface, as well as the conventional Skia 2D API, including Skia [SkSL](https://skia.org/docs/user/sksl/) shaders. The engine does not rely on an embedded browser for executing JavaScript or rendering which allows it to be extremely fast for drawing. Snap.svg and Canvas2D APIs were chosen simply for how much JavaScript code currently exists for drawing using these 2 API shapes that LLMs would be exposed to. Both vector and raster APIs in Polson draw directly to Skia canvases where they can be rendered as bitmaps in different image formats like WebP, or if using the vector API as SVGs that can be consumed by programs like Illustrator or Inkscape.
 
+### Animation
+The Polson [procedural animation API](https://github.com/allisterb/PolsonFramework/tree/master/src/Polson.Animation) was ported from the [Synfig Studio](https://github.com/synfig/synfig) and [EffectCraft](https://github.com/storytold/effectcraft/) projects. Like the drawing API, agents write JavaScript code to create animations then check and verify the animation visually, and it can be rendered to different video formats like `.webp` without requiring a browser. The engine supports different languages and is capable of producing many different drawing and text and camera effects:
+![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/becool_output.webp)
 ### Code Mode MCP Server
-The Polson drawing engine is exposed to agents as a 'Code Mode' MCP server. Code Mode is a technique for [programmatic tool calling](https://platform.claude.com/cookbook/tool-use-programmatic-tool-calling-ptc) by agents using a code execution environment described by [Cloudfare](https://blog.cloudflare.com/code-mode-mcp/) and [Anthropic](https://www.anthropic.com/engineering/code-execution-with-mcp). Instead of requiring the agent to call individual drawing tools one-at-time with a full model round-trip with each result, the agent writes an entire JavaScript program against a typed SDK to complete one stage of the graphic or art production process. 
+The Polson drawing and animation engine is exposed to agents as a 'Code Mode' MCP server. Code Mode is a technique for [programmatic tool calling](https://platform.claude.com/cookbook/tool-use-programmatic-tool-calling-ptc) by agents using a code execution environment described by [Cloudfare](https://blog.cloudflare.com/code-mode-mcp/) and [Anthropic](https://www.anthropic.com/engineering/code-execution-with-mcp). Instead of requiring the agent to call individual drawing tools one-at-time with a full model round-trip with each result, the agent writes an entire JavaScript program against a typed SDK to complete one stage of the graphic or art production process. 
  
 
 ### Workflows
-A workflow is the set of inputs, prompts, guardrails, steps, resources, and deliverables an agent uses for one kind of graphic production, e.g the [pitch workflow](https://github.com/allisterb/PolsonFramework/blob/master/src/Polson.CLI/ProjectTemplate/motion/type.pitch.md). Each workflow has a set of stages
-
-It is not a prompt template — it is a generated project directory carrying the instructions, the manuals to consult, the house styles available, the deadline, and the definition of done. Polson currently ships : `vector_infographic`, `infographic`, and `drawing_partner`,
-
-The one worth walking through is **`vector_infographic`**, because it is the one where being wrong is cheapest to hide. A drawing that misses is visibly a miss. An infographic that misstates a number renders perfectly.
-
+A workflow is the set of inputs, prompts, guardrails, steps, design manuals, resources, and deliverables an agent uses for one kind of graphic production, e.g the [pitch workflow](https://github.com/allisterb/PolsonFramework/blob/master/src/Polson.CLI/ProjectTemplate/motion/type.pitch.md). Each workflow has a set of stages e.g. the **`vector_infographic`** workflow first researches its subjects them does the infographic composition then verifies amuch as possible the figures it drew were accurate: 
 ![The vector_infographic workflow](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/vector-infographic-workflow.svg)
 
-The deliverable is an `.svg` that opens in Illustrator with its shapes selectable, its type editable and its geometry scalable — which is why the surface is not a choice: the agent builds on `Snap(width, height)` from the first script and never touches a raster canvas, because a raster canvas cannot become vector afterwards. There is no tracing step. The run is one agent on a 30-minute wall-clock deadline, with a token cap and a circuit breaker behind it, in one of five house styles: `blueprint`, `brutalist`, `editorial`, `specimen`, `swiss`.
+The deliverable is an SVG infographic that can be opened in Illustrator with the data being  visualized validated as much as possible:
 
-
-
-#### Vector Infographic Workflow Stages
-
-| Stage | `Stage.begin(...)` | What it settles |
-|---|---|---|
-| 1 | `Data` | What the piece is for, what the brief left open, where every figure comes from |
-| 2 | `Forms` | Which form answers each question — compare, count, follow, locate, what share |
-| 3 | `Composition` | The named pattern, the zones, where the reader is standing |
-| 4 | `Encode` | Scales, baselines, ticks — the geometry that carries the numbers |
-| 5 | `Palette & Type` | The design language applied |
-| 6 | `Detail` | Ground, texture, the small deliberate marks separating crafted from generated |
-| 7 | `Audit` | The litmus tests, read back off the render |
-
-`Stage.begin(...)` persists across scripts and files every script, render and note that follows under that heading — so the record is grouped by intent rather than by call order.
-
-The loop is the part that makes this agentic rather than a pipeline. If the audit sends the agent back to a form choice, it declares `Forms` again rather than 
+![](https://imgur.com/isBlYIm.png)
 
 ## How Polson uses Qloo for cross-cultural graphic design
 Polson uses a .NET client to access the Qloo REST API. The capabilities of the Qloo API are exposed to the agent in the JS SDK via the `Taste` global and functions like `find`, `contrast` etc. that the agent calls before graphic design work for different audiences to establish evidence for things like the pace of videos.
@@ -228,17 +210,14 @@ it would.
 | **Report explainer** | `motion` / `report` | Optional | With places: pace and grade per audience. The facts are never Qloo's |
 
 
-### 7.1 Film poster (the lead)
-
-Nine stages after Laserow & Delgado's *Making Posters*. The Qloo and research layers are ours.
-
+#### Film poster:
 1. **Audience.** A profile per audience, its place checked. The director is asked whether any distinctive reference would
    be wrong to borrow from.
-2. **The film's own fans** in each city (§6.4), and `demographics` on the film to confirm the age skew.
+2. **The film's own fans** in each city, and `demographics` on the film to confirm the age skew.
 3. **One `compare`** per audience: its references against the rest of the set's.
 4. **Mind map and research board.** Each audience gets a branch of its distinctive titles and tags, each cited with its
    handle. The map is checked: a node cited to an answer that didn't return it is fixed or dropped. Then the colour field
-   of the audience's own films (§6.5).
+   of the audience's own films.
 5. **Concepts.** Three per audience, each starting from a different item in that audience's profile, named.
    Later audiences' concepts are drawn from their own profile **before** looking back at the first.
 6. **Direction.** One section per audience; each section after the first opens with what its poster does differently,
@@ -249,7 +228,7 @@ Nine stages after Laserow & Delgado's *Making Posters*. The Qloo and research la
    forcing a difference the evidence does not support"*.
 9. **Before delivery:** the colour check against the field, and `Taste.checkReferences()`.
 
-### 7.2 Product ad (poster or film)
+#### Product ad (poster or film):
 
 **"Dynamic creative"**: one template, with each variant being what its audience's evidence decides.
 
@@ -261,7 +240,7 @@ Nine stages after Laserow & Delgado's *Making Posters*. The Qloo and research la
 - **The claim** comes only from the brief, and is read back off the finished film word for word.
 - **Age- or place-restricted products** go to the director: *"Qloo measures taste; it knows nothing about the law."*
 
-### 7.3 Film trailer, startup pitch, report explainer
+#### Film trailer, startup pitch, report explainer:
 
 Motion needs evidence a poster doesn't, because *"a poster's evidence decides what the film looks like; nothing in it
 decides how the film moves"*.
@@ -276,41 +255,7 @@ decides how the film moves"*.
 - **Pitch and report films.** The case and the facts are shared; *"only its telling is the audience's"*. Number
   formats follow the locale's own rules (Unicode CLDR), labelled *Rule*, not Qloo.
 
----
 
-## 8. What Qloo changed in real runs
-
-From the studio's own run records (`direction.md` and the agent's `findings.md`). These are the cases a judge can open
-on the demo.
-
-### 8.1 *Be Cool* posters, Tokyo 45–54 and Mumbai 45–54 (poster5)
-
-- **Pace became composition.** Of each audience's distinctive films and shows, Qloo tags Tokyo's 14 fast and 12 slow
-  (54%), and Mumbai's 23 fast and 5 slow (82%). Fisher's exact test: *p* = 0.040. The Mumbai poster got a radial burst;
-  the Tokyo poster a left-weighted vertical. The agent: *"I would not have inverted the scale of the subject between two
-  posters of one set on instinct; a p-value made it defensible."*
-- **The film's fans are not the city.** Without the film as a signal, each city's artists are its own local music. With
-  it, Tokyo's fans point to golden-age hip hop and funk, Mumbai's to Motown, disco and adult pop. *"Had I designed from
-  the profiles alone I would have made a poster about Japanese city pop…"*
-- **A measurement overruled the designer.** The agent's instinct for Tokyo was amber or sodium orange. The colour field
-  of that audience's sixteen distinctive film posters had exactly two empty hue sectors, teal and green, so the poster is
-  teal: *"because of a measurement that contradicted me."* For Mumbai, red-orange held 9 of 16 posters and none of the 16
-  was light, so that poster sits in the crowded hue but departs in value, on a cream ground.
-- **The age band was checked.** `demographics` on the film confirmed its skew to 45–54.
-
-### 8.2 *Be Cool* trailers, the same two audiences (trailer5)
-
-The same pace test, on film:
-
-| | Tokyo | Mumbai |
-|---|---|---|
-| Arrival beats | 6 | 8 |
-| Median hold | 2.75 s | 1.75 s |
-| Title lands at | 10.9 s | 5.0 s |
-
-A `Stage.check` confirmed the difference across the whole film. The grades come from each audience's films' style tags:
-gentle for Tokyo, where the lean was mixed; warmer, crisper and more saturated for Mumbai, whose "Glitzy" tag also
-motivated a glint beat.
 
 ## Challenges we ran into
 ## Accomplishments that we're proud of

@@ -386,6 +386,8 @@ public class VectorLogoToolkit
             cursor += advances[i] + spacing;
         }
 
+        // Saved as one run with letter-spacing, so a viewer without this face still spaces it evenly (SvgTracking.ForSave).
+        group.Node.CustomAttributes[SvgTracking.Marker] = spacing.ToString(System.Globalization.CultureInfo.InvariantCulture);
         return group;
     }
 

@@ -220,11 +220,19 @@ public partial class DrawingMcpTools
         var distinctiveAll = new List<object?>();
         QlooLocality? locality = null;
 
+        // **What the audience is set against.** An age, gender or audience against its place: what this group favours that
+        // the place does not. A place alone against the world: with nothing to take away, the place's own baseline is the
+        // audience itself, and coffee_1 (2026-10-30, Tokyo and Lagos at any age) came back with every title shared and
+        // nothing distinctive, so its run had no field to design from.
+        var demographic = template.Names.Any(n => n.StartsWith("signal.demographics.", StringComparison.Ordinal) && template[n] is not null);
+        var against = demographic ? "place" : "world";
+
         foreach (var (given, urn) in domains)
         {
             var mine = template.Clone().Set("filter.type", urn);
             var baseline = mine.Clone();
-            foreach (var n in baseline.Names.Where(n => n.StartsWith("signal.demographics.", StringComparison.Ordinal)).ToArray()) baseline[n] = null;
+            var prefix = demographic ? "signal.demographics." : "signal.location";
+            foreach (var n in baseline.Names.Where(n => n.StartsWith(prefix, StringComparison.Ordinal)).ToArray()) baseline[n] = null;
 
             var a = await client.Insights(mine, ct);
             var b = await client.Insights(baseline, ct);
@@ -302,9 +310,14 @@ public partial class DrawingMcpTools
             ["requests"] = responses.Select(r => r.Request).ToArray(),
         };
 
+        profile["against"] = against;
+
         var notes = new List<string>();
+        if (!demographic)
+            notes.Add("This audience is a place with no age or gender, so its distinctive titles are what the place favours over the world's "
+                      + "popular list, not what one group in it favours. Say so where you cite it.");
         if (domainNodes.Cast<Dictionary<string, object?>>().Any(d => ((object?[])d["distinctive"]!).Length == 0))
-            notes.Add("A domain has nothing distinctive: this audience's list matches its place's. Say so rather than read a difference into it.");
+            notes.Add($"A domain has nothing distinctive: this audience's list matches the {(demographic ? "place's" : "world's")}. Say so rather than read a difference into it.");
 
         var result = registry.Add(id => TasteObjects.ProfileResult(id, label, profile, responses, [.. distinctiveAll], placeTags, locality, notes));
 
@@ -326,6 +339,7 @@ public partial class DrawingMcpTools
                 ["place"] = locality?.Name ?? template[place] as string, ["age"] = template["signal.demographics.age"] as string,
                 ["gender"] = template["signal.demographics.gender"] as string,
             },
+            ["against"] = against,
             ["domains"] = domainNodes.Cast<Dictionary<string, object?>>().Select(d => (object?)new Dictionary<string, object?>
             {
                 ["type"] = d["type"],
@@ -347,7 +361,7 @@ public partial class DrawingMcpTools
         var reply = new JsonObject
         {
             ["ok"] = result.Ok, ["op"] = "profile", ["id"] = result.Id, ["label"] = label, ["fromCache"] = result.FromCache,
-            ["requests"] = responses.Count,
+            ["requests"] = responses.Count, ["against"] = against,
         };
         if (!result.Ok) { reply["error"] = result.Error; reply["remedy"] = result.Remedy; }
         if (locality is not null) reply["locality"] = new JsonObject { ["name"] = locality.Name, ["disambiguation"] = locality.Disambiguation };
