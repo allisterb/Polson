@@ -534,7 +534,7 @@ class FrontRoutingTests(unittest.TestCase):
             self.assertIn("New request</a>", self.client.get(path).text, path)
 
     def test_the_home_page_shows_the_entries_workflows_in_two_rows(self):
-        """Six cards, in `catalogue.HOME`'s order, and no others."""
+        """Nine cards, three rows, in `catalogue.HOME`'s order, and no others."""
         self.assertTrue(all(slug in catalogue.BY_SLUG for slug in catalogue.HOME))
         page = self.client.get("/home").text
         shown = [s for s in catalogue.HOME if f'/compose/{s}"' in page]
@@ -915,6 +915,21 @@ class CommissionedComposerTests(unittest.TestCase):
         self.assertNotIn("can watch requests but not make them", page)
         self.assertNotIn("Save as draft", page, "this host cannot start a draft later")
         self.assertRegex(page, r'value="start"\s*\n?\s*>Start in the studio', "Start must not be disabled")
+
+    def test_only_the_workflows_the_host_runs_are_listed(self):
+        """A card the host cannot start is hidden, on the workflows page and the dashboard, until it can (2026-10-30)."""
+        listed = re.findall(r'href="[^"]*/compose/([a-z-]+)"', self.client.get("/workflows").text)
+        self.assertIn("drawing", listed)
+        self.assertIn("infographic", listed)
+        self.assertIn("film-trailer", listed)
+        for hidden in ("film-poster", "logo", "painting", "comic", "storyboard", "motion-graphic"):
+            self.assertNotIn(hidden, listed, hidden)
+        self.assertNotIn('/compose/film-poster"', self.client.get("/home").text)
+
+    def test_a_studio_that_runs_nothing_still_lists_the_catalogue(self):
+        watching = TestClient(app_mod.create_app(self.root, Registry(), observe_only=True))
+        listed = re.findall(r'href="[^"]*/compose/([a-z-]+)"', watching.get("/workflows").text)
+        self.assertEqual(len(listed), len(catalogue.CARDS))
 
     def test_a_workflow_the_host_does_not_run_says_so_before_the_form_is_filled(self):
         page = self.client.get("/compose/film-poster").text

@@ -197,6 +197,16 @@ def offered(state: Any, card: catalogue.Card) -> dict[int, tuple[str, ...] | Non
             if (types := state.commissioner.types(r.workflow)) is not None}
 
 
+def runnable(state: Any, cards: Any = None) -> list[catalogue.Card]:
+    """The cards this host can start, in order: a card none of whose routes it runs is hidden until it does.
+
+    Showing them disabled told a visitor what the studio could not do before what it could (2026-10-30: four of fifteen on
+    Cloud Run). A host that runs nothing, one only watching, shows them all, so its pages are the catalogue rather than empty.
+    """
+    cards = list(catalogue.CARDS if cards is None else cards)
+    return [c for c in cards if offered(state, c)] or cards
+
+
 def still_renders(project: Path, events: list[dict[str, Any]]):
     """The still images the record says were rendered, newest first, inside the project and never from `documents/`,
     whether or not they are on disk."""
@@ -402,11 +412,12 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
                     waiting=[r for r in rows if r["status"] == "needs-you"],
                     working=[r for r in rows if r["status"] == "running"],
                     drafts=[r for r in rows if r["status"] == "draft"][:3],
-                    cards=[c for c in map(catalogue.BY_SLUG.get, catalogue.HOME) if c.image in templates.env.globals["gallery"]])
+                    # Every card in HOME, imaged or not: the macro draws a kind icon in a missing image's place, so the rows hold.
+                    cards=runnable(request.app.state, [catalogue.BY_SLUG[s] for s in catalogue.HOME]))
 
     @app.get("/workflows", response_class=HTMLResponse)
     async def workflows(request: Request) -> Any:
-        return page(request, "workflows.html", "new", cards=catalogue.CARDS)
+        return page(request, "workflows.html", "new", cards=runnable(request.app.state))
 
     @app.get("/compose/{slug}", response_class=HTMLResponse)
     async def compose(request: Request, slug: str) -> Any:
