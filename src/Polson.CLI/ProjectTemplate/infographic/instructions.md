@@ -282,6 +282,10 @@ sourced values say the opposite — **the claim may change, and the change is an
 whatever was easy to draw is the failure this freeze exists to prevent; a goal revised in the open,
 for a stated reason, is a studio doing its job.
 
+{{AUDIENCE_DESIGN}}
+
+{{LANGUAGE}}
+
 ### Stage 2 — one form per question, and at least three different forms
 
 For each figure or group, write the question it answers — compare, count, follow, locate, how big,

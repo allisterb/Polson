@@ -397,11 +397,15 @@ CARDS: tuple[Card, ...] = (
          type_labels={"antique": "Antique", "geometric": "Geometric", "modern": "Modern"},
          extras=(Extra("name", "Name", placeholder="The name the mark is for", subject=True),),
          brief="A logo mark and brand sheet for the name: simple, distinctive, and legible from a favicon to a sign."),
+    # Audiences optional, as the report explainer's: with places, an infographic per audience with the same figures, its
+    # palette chosen against what that audience watches (Qloo's field) and its numerals and language the locale's
+    # (`_shared/audience_design.md`); without, one piece.
     Card("infographic", "Infographic", "document", "Document · checked figures",
          (Route("vector_infographic", "Vector", "Delivered as SVG, every figure checked"),
           Route("infographic", "Raster", "Delivered as an image")),
          image="infographic.webp", alt="A blueprint infographic of a lunar descent",
-         type_labels={t: t.capitalize() for t in projects.WORKFLOWS["infographic"]}),
+         type_labels={t: t.capitalize() for t in projects.WORKFLOWS["infographic"]},
+         audiences=True, audiences_optional=True),
     Card("painting", "Painting", "image", "Image · one scene",
          (Route("painting", "Painted scene"),),
          image="painting.webp", alt="A lit house behind bare trees at dusk"),

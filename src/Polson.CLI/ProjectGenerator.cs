@@ -443,6 +443,11 @@ internal static class ProjectGenerator
             // Shared by the workflows that make a piece per audience — the poster and the film — so the rule is one text.
             ["LANGUAGE"] = Render("_shared", "language.md", []),
 
+            // What audience lines ask of an infographic: a piece per audience, the same figures, each in a palette chosen
+            // against what that audience loves (Qloo's field) and its locale's conventions, with no style assumed for a place.
+            // Shared by the vector and raster infographic, so the two read one rule.
+            ["AUDIENCE_DESIGN"] = Render("_shared", "audience_design.md", []),
+
             // What earlier runs of this project left behind, and how to write for the next one.
             // Shared because a tool nobody is told to call is never called: `artifact.read` was
             // instrumented and stayed at zero across whole runs until the instructions said to look.

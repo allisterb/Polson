@@ -398,7 +398,9 @@ class WorkflowTypeTests(unittest.TestCase):
         with mock.patch.object(intake, "_base_token_cap", return_value=3_000_000):
             self.assertEqual(intake.token_budget("poster", brief), 6_000_000)
             self.assertIsNone(intake.token_budget("poster", "Audience A: X\nAudience B: Y"))
-            self.assertIsNone(intake.token_budget("infographic", brief), "only the audience workflows scale")
+            self.assertIsNone(intake.token_budget("drawing", brief), "only the audience workflows scale")
+            # An infographic is one since it makes a piece per audience (`_shared/audience_design.md`).
+            self.assertEqual(intake.token_budget("vector_infographic", brief), 6_000_000)
         with mock.patch.object(intake, "_base_token_cap", return_value=None):
             self.assertIsNone(intake.token_budget("poster", brief), "an uncapped host stays uncapped")
 

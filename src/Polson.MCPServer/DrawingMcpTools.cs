@@ -2157,9 +2157,10 @@ public partial class DrawingMcpTools
 
 
     [McpServerTool(Name = "VerifyFigures")]
-    [Description("Checks the figures drawn on a saved SVG against the research they are tagged to. Reads the markup here and returns only a verdict, so nothing large reaches your context. Tag a figure when you draw it: .attr({ 'data-basis': 'trun_abc:films.3.runtime' }).")]
+    [Description("Checks the figures drawn on a saved SVG against the research or Qloo answer they are tagged to. Reads the markup here and returns only a verdict, so nothing large reaches your context. Tag a figure when you draw it: .attr({ 'data-basis': 'trun_abc:films.3.runtime' }) for research, .attr({ 'data-basis': 't3:entities.0.affinity' }) for a Qloo answer, the path as Taste.get('t3') shows it.")]
     public JsonObject VerifyFigures(
-        [Description("Path of the saved SVG, relative to the project directory.")] string path)
+        [Description("Path of the saved SVG, relative to the project directory.")] string path,
+        RequestContext<CallToolRequestParams>? context = null)
     => Recorded(nameof(VerifyFigures), () =>
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
@@ -2175,7 +2176,8 @@ public partial class DrawingMcpTools
         var archive = new ResearchArchive(
             SessionContext.ResearchArchiveDir ?? Path.Combine(ProjectRoot, ".polson", "research"));
 
-        var verdict = FigureVerifier.Verify(File.ReadAllText(full), archive);
+        var session = Registry.GetOrCreate(GetSessionId(context?.Server));
+        var verdict = FigureVerifier.Verify(File.ReadAllText(full), archive, session.Taste.Get);
 
         var response = new JsonObject
         {
@@ -2194,8 +2196,8 @@ public partial class DrawingMcpTools
             response["advice"] =
                 "No figure on this page carries a data-basis tag, so none of them was checked. Tag "
                 + "each number as you draw it with the run and field it came from — "
-                + "paper.text(x, y, '1,636').attr({ 'data-basis': 'trun_abc:totalRuntimeMinutes' }) — "
-                + "and run this again.";
+                + "paper.text(x, y, '1,636').attr({ 'data-basis': 'trun_abc:totalRuntimeMinutes' }), or a Qloo answer's "
+                + "id and path, 't3:entities.0.affinity' — and run this again.";
             return response;
         }
 
