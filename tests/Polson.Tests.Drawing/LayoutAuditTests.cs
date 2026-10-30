@@ -68,6 +68,39 @@ public class LayoutAuditTests : TestsRuntime
         Assert.Empty(Paper(Card + Text(306, 200, "Inside", 24)));
     }
 
+    /// <summary>
+    /// A label a little too long for its pill: almost all of it on the shape, so never a straddle, and it went unreported.
+    /// A label that fits, and one with room to spare, are not.
+    /// </summary>
+    [Fact]
+    public void TestALabelRunningPastTheSideOfItsBoxIsReported()
+    {
+        // The box ends at x = 400; the line, set to end at 412, overruns it by 12 units and is otherwise wholly on it.
+        const string Pill = """<rect x="40" y="100" width="360" height="44" fill="#1b2530"/>""";
+        var over = Assert.Single(Paper(Pill + Text(412, 130, "AI and compute, 40 episodes", extra: "text-anchor=\"end\"")));
+        Assert.Contains("side of the rectangle it sits on", over);
+        Assert.Contains("the box is too small for it", over);
+
+        Assert.Empty(Paper(Pill + Text(390, 130, "AI and compute, 40 episodes", extra: "text-anchor=\"end\"")));
+    }
+
+    /// <summary>
+    /// all_in_2025: the title ended a few letters inside the audience panel beside it — barely on the panel, so never a
+    /// straddle. A title that stops short, and a caption above a bar whose box dips into it, are not reported.
+    /// </summary>
+    [Fact]
+    public void TestALineRunningIntoTheShapeBesideItIsReported()
+    {
+        const string Panel = """<rect x="600" y="40" width="260" height="80" fill="#ffffff" stroke="#e2e2e2"/>""";
+        var into = Assert.Single(Paper(Panel + Text(612, 100, "WHAT ALL-IN TALKED ABOUT", 40, "text-anchor=\"end\"")));
+        Assert.Contains("runs into the rectangle beside it", into);
+
+        Assert.Empty(Paper(Panel + Text(590, 100, "WHAT ALL-IN TALKED ABOUT", 40, "text-anchor=\"end\"")));
+
+        const string Bar = """<rect x="40" y="200" width="400" height="24" fill="#d86a2b"/>""";
+        Assert.Empty(Paper(Bar + Text(40, 196, "AI & Compute", 20)));
+    }
+
     [Fact]
     public void TestADividerThroughALineIsReportedAndAnUnderlineIsNot()
     {

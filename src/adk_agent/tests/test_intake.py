@@ -361,12 +361,25 @@ class WorkflowTypeTests(unittest.TestCase):
              mock.patch.object(intake, "archived_names", return_value=[]):
             self.assertEqual(intake.check("p", "motion", "", brief(6)), 100, "still clamped to the ceiling")
 
+    def test_an_infographics_second_audience_adds_time(self):
+        """Its 30 was set for one piece; a pair is a second piece, where a poster's or a film's allowance is set for two."""
+        def brief(n):
+            return "An infographic.\n" + "".join(f"Audience {chr(65 + i)}: Somewhere, aged 30s\n" for i in range(n))
+
+        with mock.patch.object(intake, "MAX_DEADLINE_MINUTES", 218), \
+             mock.patch.object(intake, "archived_names", return_value=[]):
+            self.assertEqual(intake.check("p", "vector_infographic", "", brief(0)), 30)
+            self.assertEqual(intake.check("p", "vector_infographic", "", brief(1)), 30)
+            self.assertEqual(intake.check("p", "vector_infographic", "", brief(2)), 40)
+            self.assertEqual(intake.check("p", "infographic", "", brief(3)), 50)
+
     def test_six_audiences_fit_under_the_keepalive(self):
         """The composer offers six; the scaled default for six must not be clamped on a host with the keepalive."""
         ceiling = intake._max_deadline(keepalive.MAX_HOLD_MINUTES * 60.0)
         for workflow, extra in intake.PER_AUDIENCE_MINUTES.items():
             with self.subTest(workflow=workflow):
-                self.assertLessEqual(intake.DEADLINES[workflow] + 4 * extra, ceiling)
+                self.assertLessEqual(intake.DEADLINES[workflow] + (6 - intake.AUDIENCES_IN_DEADLINE.get(workflow, 2)) * extra,
+                                     ceiling)
 
     def test_a_type_with_its_own_allowance_takes_it_over_its_workflows(self):
         """A pitch is two minutes of narrated film to a trailer's fifteen seconds; a set of six still fits the keepalive."""
