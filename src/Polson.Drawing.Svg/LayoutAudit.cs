@@ -185,6 +185,31 @@ public static class LayoutAudit
         var share = shape.Outline is { } outline ? ShareInPath(outline, text)
                   : shape.Round ? ShareInEllipse(shape.Box, text)
                   : Area(SKRect.Intersect(shape.Box, text)) / Area(text);
+
+        // **A label a little too long for its box.** Mostly on the shape, it is no straddle, and the share above let it
+        // through: a pill or panel whose text runs past its side by a few letters. Measured on the sides only — a line's box
+        // runs from the font's ascent to its descent, taller than its letters, so its top and bottom would cry wolf.
+        if (share >= 1 - StraddleShare && share < 1 && shape.Outline is null && !shape.Round
+            && text.MidY > shape.Box.Top && text.MidY < shape.Box.Bottom
+            && (Side: shape.Box.Left - text.Left > text.Right - shape.Box.Right ? "left" : "right",
+                By: MathF.Max(shape.Box.Left - text.Left, text.Right - shape.Box.Right)) is var (side, by)
+            && by > MathF.Max(1f, line.SizePaper * 0.1f))
+            return Invariant($"runs past the {side} side of the {shape.Name} it sits on at ({shape.Box.Left:0}, {shape.Box.Top:0}, ")
+                 + Invariant($"{shape.Box.Width:0}×{shape.Box.Height:0}) by {by:0} units: the box is too small for it. ")
+                 + "Widen the box, or set the line smaller or shorter";
+
+        // **A line that runs into its neighbour.** Barely on the shape, it is no straddle either: all_in_2025 (2026-10-30)
+        // set its title to end a few letters inside the panel beside it. Entering from one side only, level with the shape:
+        // a caption above a bar, whose box dips into it, and a shape the line passes clean over, are neither.
+        if (share > 0 && share <= StraddleShare && shape.Outline is null && !shape.Round
+            && text.MidY > shape.Box.Top && text.MidY < shape.Box.Bottom
+            && (text.Left < shape.Box.Left && text.Right < shape.Box.Right ? text.Right - shape.Box.Left
+                : text.Right > shape.Box.Right && text.Left > shape.Box.Left ? shape.Box.Right - text.Left : 0f) is var into
+            && into > MathF.Max(1f, line.SizePaper * 0.05f))
+            return Invariant($"runs into the {shape.Name} beside it at ({shape.Box.Left:0}, {shape.Box.Top:0}, ")
+                 + Invariant($"{shape.Box.Width:0}×{shape.Box.Height:0}) by {into:0} units. ")
+                 + "Shorten or shrink the line, or move it or the shape apart";
+
         if (share <= StraddleShare || share >= 1 - StraddleShare) return null;
 
         // A small shape inside the line's box is a bullet or an icon, not a collision.

@@ -257,7 +257,8 @@ DEADLINES: dict[str, int] = {
     "cover": 25,
 }
 
-#: Minutes added to a commission's deadline for each audience past the second (`Audience C:` onward).
+#: Minutes added to a commission's deadline for each audience past the ones its allowance was sized for
+#: (`AUDIENCES_IN_DEADLINE`: the second for a poster or a film, `Audience C:` onward).
 #:
 #: **A set is more work in two places, and only one of them scales.** Each audience is its own profile and its
 #: own piece — a poster or a trailer — so that half is linear. The comparison is pairwise, but local
@@ -271,6 +272,11 @@ PER_AUDIENCE_MINUTES: dict[str, int] = {
     "vector_infographic": 10,
     "infographic": 10,
 }
+
+#: How many audiences a workflow's `DEADLINES` allowance already covers; two where absent. A poster's 55 and a film's 70
+#: were set for the pair those workflows were built around. An infographic's 30 was set for one piece, before it took
+#: audiences, so its second audience adds time too: all_in_2 (2026-10-30, two audiences) went out on a single piece's 30.
+AUDIENCES_IN_DEADLINE: dict[str, int] = {"vector_infographic": 1, "infographic": 1}
 
 #: How a brief names each audience: `Audience A:` to `Audience F:`. The composer writes one per line; the starters
 #: and a hand-typed brief run them inline, so this does not anchor on a line start.
@@ -780,7 +786,7 @@ def check(name: str, workflow: str, kind: str, brief: str, deadline: str = "",
     # wins: a poster's 45 is offered whole with the keepalive on and as 38 without it, never past the run limit.
     minutes = DEADLINES.get(f"{workflow}.{kind}", DEADLINES.get(workflow))
     if minutes is not None:
-        if (extra := audiences_in(brief) - 2) > 0:
+        if (extra := audiences_in(brief) - AUDIENCES_IN_DEADLINE.get(workflow, 2)) > 0:
             minutes += PER_AUDIENCE_MINUTES.get(workflow, 0) * extra
         minutes = min(minutes, MAX_DEADLINE_MINUTES)
     if (asked := deadline.strip()):

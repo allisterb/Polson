@@ -278,18 +278,16 @@ decides how the film moves"*.
 
 
 ## What we built during the hackathon
-
-- **Qloo as the evidence layer.** A .NET Qloo client (query patterns ported from `@qloo/qloo-harness`) with parameter
-  validation, rate limiting, a private server-side cache and a per-run budget, exposed to agents as the `Taste` tool.
-  On top of it: audience profiles (what an audience over-indexes on against its own place), contrasts between
-  audiences, the pace test (Fisher's exact test on fast- and slow-paced titles, Holm-adjusted for three to six
+During this hackathon I added the following features to the Polson project:
+- **Qloo as a cross-culture evidence layer**: A .NET Qloo client (query patterns ported from `@qloo/qloo-harness`) with parameter validation, rate limiting, a private server-side cache and a per-run budget, exposed to agents as the `Taste` tool. On top of it: audience profiles (what an audience over-indexes on against its own place), contrasts between audiences, the pace test (Fisher's exact test on fast- and slow-paced titles, Holm-adjusted for three to six
   audiences), the comparable-brands method for product ads, visual research from an audience's posters and logos
   measured in OKLCH, and `Taste.checkReferences()`, which fails a run that cites a title its queries never returned.
+- **Motion**: the animation model ported from Synfig and EffectCraft and spoken narration timed to each scene. The motion workflows: film trailer, product ad, startup pitch and financial report explainer (S-1 and 10-K) each making one film per audience from shared facts from Qloo.
 - **Verification**: `Verify.film` and `Verify.image` read the finished piece back with an independent model and source
   every text on it (a document's page, the brief, research, Qloo, or the arithmetic shown); stated facts are checked on
   the web through Parallel.ai; checks record their own verdicts, so an agent cannot mark one passed.
 - **The client studio**: a request composer with audiences the
-  Audiences, Contrast and Choices views of each run's Qloo evidence
+  Audiences, Contrast and Choices views of each run's Qloo evidence.
 
 
 ## Challenges we ran into
