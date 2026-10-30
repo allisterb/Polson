@@ -5204,7 +5204,7 @@ Checks a finished film (`Verify.film`) or a still (`Verify.image`) three ways, a
   - **`brief`**: the text is in `brief.md`;
   - **`document`**: its figures are on a page of a document `Documents.ask` read, given as `documents/x.pdf p. 51`;
   - **`qloo`**: a title a Taste answer returned;
-  - **`research`**: in a completed research result;
+  - **`research`**: in a completed research result. A figure is found by its digits, commas ignored, anywhere in the result, a prose answer's text included (`$229,692M` in *"Revenues of $229,692 million"*); a text without figures is found word for word;
   - **`computed`**: a figure you computed, which you pass with its working;
   - **`web`**: a fact no document holds, which you state in `sources` and the check verifies on the web;
   - **`scale`**: an axis label you declare, such as a tick or a scale's end (`scale: ['0%', '1,000%']`). It marks a ruler, not a claim;
@@ -5235,6 +5235,8 @@ for (const s of v.strays) log(`stray ${s.n}: read "${s.read}" at ${s.at} s — l
 ```
 
 **Pass the delivered film, whatever its size.** A film over the watcher's 7.5 MB (a grainy 1080 master runs to tens of MB) is read from a copy at most 720 px tall, `artifacts/verify/<name>-watch.mp4`, and `v.summary` says so. Don't make a smaller copy by hand: at 270 px tall one run's small type fell to 7 px and five of eight lines were missed.
+
+**A read-back that read nothing fails**: a piece that set no text, read by a reader that saw none, has been compared with nothing. Pass the canvas or paper the piece was drawn on, after everything is drawn.
 
 **The check records its own verdict.** Each run of it, and each stray settled, records a judged `check` with the claim `Read-back of <film or image>: every text has a source and was read as set` and `v.summary` as its detail. `Stage.check` refuses a claim beginning `Read-back of`. Do not write a verdict for it: a live run dropped its `Verify.image` call and wrote the claim as passed, over a check that had failed.
 

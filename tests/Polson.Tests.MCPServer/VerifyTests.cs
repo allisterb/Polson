@@ -326,6 +326,22 @@ public class VerifyTests : TestsRuntime, IDisposable
         Assert.Equal(("unsourced figure", "no source for 44796"), sources.Classify("$44,796M", none));
     }
 
+    /// <summary>
+    /// A read-back that compared nothing vouches for nothing. coffee_1 failed its read-back on 15 unsourced figures, then
+    /// recorded a pass on "0 texts on the image", and the page called every figure sourced.
+    /// </summary>
+    [Fact]
+    public void TestAReadBackThatReadNothingFails()
+    {
+        var empty = new ImageCheck("artifacts/final_a.png", "canvas", 1200, 1800, [], [], "reader", null).Result();
+        Assert.False((bool)empty["passed"]!);
+        Assert.Contains("Nothing was checked", (string)empty["summary"]!);
+
+        var one = new ImageCheck("artifacts/final_a.png", "canvas", 1200, 1800,
+            [new Dictionary<string, object?> { ["text"] = "Nightshift", ["source"] = "brief", ["status"] = "seen" }], [], "reader", null).Result();
+        Assert.True((bool)one["passed"]!);
+    }
+
     /// <summary>A sentence is sourced figure by figure: a document's figure and a computed one in one line, from two pages.</summary>
     [Fact]
     public void TestASentenceIsSourcedFigureByFigure()
