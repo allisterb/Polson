@@ -1,7 +1,7 @@
 {
   "name": "polson_turns",
   "description": "One model turn (polson.turn log line)",
-  "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"polson-studio\" AND textPayload=~\"^turn .* in=\"",
+  "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"SERVICE_NAME\" AND textPayload=~\"^turn .* in=\"",
   "metricDescriptor": {
     "metricKind": "DELTA",
     "valueType": "INT64",

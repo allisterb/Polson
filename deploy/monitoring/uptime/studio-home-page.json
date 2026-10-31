@@ -1,0 +1,24 @@
+{
+  "displayName": "Polson — studio home page",
+  "monitoredResource": {
+    "type": "uptime_url",
+    "labels": {
+      "project_id": "PROJECT_ID",
+      "host": "SERVICE_HOST"
+    }
+  },
+  "httpCheck": {
+    "path": "/studio/home",
+    "port": 443,
+    "useSsl": true,
+    "validateSsl": true,
+    "requestMethod": "GET",
+    "acceptedResponseStatusCodes": [
+      {
+        "statusClass": "STATUS_CLASS_2XX"
+      }
+    ]
+  },
+  "period": "300s",
+  "timeout": "10s"
+}

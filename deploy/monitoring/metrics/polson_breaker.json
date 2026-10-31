@@ -1,7 +1,7 @@
 {
   "name": "polson_breaker",
   "description": "Circuit breaker halted a run (spend or runaway)",
-  "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"polson-studio\" AND textPayload=~\"^BREAKER .* halted\"",
+  "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"SERVICE_NAME\" AND textPayload=~\"^BREAKER .* halted\"",
   "metricDescriptor": {
     "metricKind": "DELTA",
     "valueType": "INT64",

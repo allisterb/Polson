@@ -4,7 +4,7 @@
   "conditions": [
     {
       "conditionThreshold": {
-        "filter": "metric.type=\"run.googleapis.com/container/billable_instance_time\" AND resource.type=\"cloud_run_revision\" AND resource.label.\"service_name\"=\"polson-studio\"",
+        "filter": "metric.type=\"run.googleapis.com/container/billable_instance_time\" AND resource.type=\"cloud_run_revision\" AND resource.label.\"service_name\"=\"SERVICE_NAME\"",
         "comparison": "COMPARISON_GT",
         "thresholdValue": 0.9,
         "duration": "14400s",
@@ -26,7 +26,7 @@
     }
   ],
   "documentation": {
-    "content": "The polson-studio service has been billed for over 90% of every minute for 4 hours. An alert only: nothing is shut down. A run is held awake (keepalive.py) for at most its deadline plus 30 minutes and never more than 4 hours (a trailer for six audiences is about 3 h 15 min), and no run lasts long enough to fill the gaps between, so this means either steady use (a judge exploring) or something holding the instance that should not. Check the service's request log for /keepalive/hold and long-lived requests.",
+    "content": "The service has been billed for over 90% of every minute for 4 hours. An alert only: nothing is shut down. A run is held awake (keepalive.py) for at most its deadline plus 30 minutes and never more than 4 hours (a trailer for six audiences is about 3 h 15 min), and no run lasts long enough to fill the gaps between, so this means either steady use (a judge exploring) or something holding the instance that should not. Check the service's request log for /keepalive/hold and long-lived requests.",
     "mimeType": "text/markdown"
   },
   "notificationChannels": [

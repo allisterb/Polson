@@ -1,12 +1,12 @@
 # Polson
 
-Polson is a framework for agentic co-creative visual art and graphic design, built on the principles of [Enactive AI](https://www.enactive-ai.com/).
+Polson is a framework for agentic co-creative visual art and graphic design, built on the principles of [Enactive AI](https://www.enactive-ai.com/#framework).
 
 ![](https://imgur.com/kMxGLm0.png)
 
-![](https://imgur.com/otjil6S.png)
+![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/trailer5.webp)
 
-![](https://imgur.com/xuiONgF.png)
+![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/cocreative.png)
 Polson runs in three modes:
 
 | Mode | Orchestrator | Interface | Python environment |
@@ -16,7 +16,6 @@ Polson runs in three modes:
 | **Graphics Studio** | Polson, through Google ADK | `adk_agent` web interface + ADK console | `python-adk/` |
 
 The screenshot below show Polson running in Claude Desktop:
-![](https://imgur.com/KElTXyn.png)
 ![](https://imgur.com/R1xnUWJ.png)
 
 Managed mode allows you to use your existing agent subscription while terminal and graphics studio mode require API usage and access key.
@@ -28,26 +27,32 @@ Managed mode allows you to use your existing agent subscription while terminal a
 ## Requirements
 
 
+### Required
 | | |
 | :--- | :--- |
 | .NET 10 SDK | Builds the drawing engine and MCP server. |
 | Python 3.13 | Runs the studio, the orchestrator and the ADK agent. Not needed to build just the MCP server drawing tools. |
-| 
+| A Google Agent Platform API key | The Graphics Studio's agent model (Gemini), the read-back that checks finished pieces, narration, and generated materials. Managed mode can run without it, but loses those. |
 
-## Optional
+### Optional
 
+Each of these switches a capability on; without it, the capability says so at startup and refuses when asked, rather than failing silently.
 
 | | |
 | :--- | :--- |
-| A [Parallel](https://parallel.ai) API key | Without it research is silently disabled — infographics figures cannot be sourced. |
-| A Google Agent Platform API key | For using a Google Cloud-hosted AI model for material asset generation. |
-| `potrace` on PATH | For vector tracing bitmaps with`bitmap.trace(...)`. `apt-get install potrace`, or set `Tools:Potrace`. |
+| A [Qloo](https://www.qloo.com/) API key | Audience evidence: profiles, contrasts, the pace test and visual research for posters, trailers, product ads and audience-aware infographics. A hackathon key works only against `https://hackathon.api.qloo.com`, the default. |
+| A [Parallel](https://parallel.ai) API key | Research with a citation per field (an infographic's figures, a film's credits, facts outside a filing), and the web check on stated facts in a read-back. |
+| An [NVIDIA NIM](https://build.nvidia.com) or [Nebius Token Factory](https://tokenfactory.nebius.com) key | Nemotron 3.5 Super VL, which reads supplied PDFs with every figure checked against its page. Without either, documents are read by Gemini, unchecked. |
+| `ffmpeg` on PATH | Films as MP4, and narration joined to them. Set `Tools:FFmpeg` if it is elsewhere. |
+| `potrace` on PATH | Vector tracing of bitmaps with `bitmap.trace(...)`. `apt-get install potrace`, or set `Tools:Potrace`. |
+
+The container image ([`Dockerfile`](Dockerfile)) installs everything a deployed studio needs, typefaces included, and is the complete reference for system packages.
 
 
 
 ## Setup
 
-Once per checkout. All three modes share §1 and §2; §3 depends on which you want.
+Once per checkout, step 1 and 2 are required.
 
 ### 1. Build the engine
 
@@ -72,13 +77,30 @@ cp ./appsettings.json.example ./bin/cli/appsettings.json
 
 This is the only place a key lives — every mode reads this one file, so no two of them can disagree about which key. It is gitignored, and a rebuild does not overwrite it.
 
+**Keys:**
+
+| Setting | What it enables |
+| :--- | :--- |
+| `ApiKeys:GoogleAgentPlatform` | Gemini: the studio's agent, the read-back (`Verify`), narration (`Assets.speak`) and generated materials. Also read by the agent runtime. |
+| `ApiKeys:Qloo` | The `Taste` tool and its audience evidence. |
+| `ApiKeys:Parallel` | `Research`, and the web check on stated facts. |
+| `ApiKeys:NvidiaNIM` or `ApiKeys:NebiusTokenFactory` | Nemotron for reading documents and, if chosen, films. Token Factory also needs `NebiusTokenFactory:BaseUrl` (its host is regional); with both, `Nemotron:Prefer` (`nim` or `nebius`) picks the first to try. |
+
+An empty key disables its capability; the server says which at startup, and a script asking for it gets a refusal it can read.
+
+**Limits and choices** (all optional):
+
 | Setting | Default | What it does |
 | :--- | :--- | :--- |
-| `ApiKeys:GoogleAgentPlatform` | — | The Agent Platform key. Also read by the agent runtime. |
-| `ApiKeys:Parallel` | — | The research key. **Not in the example file — add it under `ApiKeys` yourself.** Empty means `Research` refuses in a way a script can read, and says so at startup. |
-| `Assets:Budget` | `120` | Image generations allowed **per server run** — a hard ceiling, so a stuck retry loop cannot spend without bound. |
-| `Documents:Budget` | — | Document reads allowed per run. Listing is always free. |
 | `Server:DefaultTimeoutSeconds` | `30` | How long one `ExecuteScript` may run. |
+| `Assets:Budget` | `120` | Image generations allowed **per server run**: a hard ceiling, so a stuck retry loop cannot spend without bound. |
+| `Assets:Model` · `Assets:SpeechModel` | `gemini-2.5-flash-image` · `gemini-3.8-flash-lite-tts` | The models for generated materials and for narration. |
+| `Documents:Budget` | — | Document reads allowed per run. Listing and `Documents.find` are always free. |
+| `Research:Processor` · `Research:Budget` | `base` · `2` | Parallel's tier for research (`core` is the deployed choice, about $0.025 a run), and runs allowed per session. |
+| `Qloo:Budget` · `Qloo:MonthlyReserve` | `120` · `1000` | Qloo requests per session, and how much of the key's monthly quota is never spent. |
+| `Verify:Reader` | `gemini` | Who reads finished pieces back: `gemini` (Gemini 3.8 Flash) or `nemotron`. Also `POLSON_VERIFY_READER`. |
+
+In a container every setting can come from an environment variable instead (`POLSON_QLOO_KEY` for `ApiKeys:Qloo`, `POLSON_RESEARCH_PROCESSOR` for `Research:Processor`, and so on): [`docker-entrypoint.sh`](docker-entrypoint.sh) holds the full map.
 
 ### 3. Install the Python environment your mode needs
 
@@ -106,33 +128,19 @@ python3.13 -m venv python
 
 ---
 
-## Running it
+## Running 
 
-Three modes, and nothing to choose between them permanently — they read and write the
-same projects, so the same directory can be driven by your own host today and by Polson
-tomorrow.
+Each mode read and writes the same project directories
 
 ### Mode 1 — Managed: your own agent host drives
 
 Polson generates the project; your host drives the agent — and pays for the model, which is why this is the cheapest way in.
 
 ```bash
-[./]polson create-project projects roaster agy --workflow logo --type modern
+[./]polson create-project projects roaster claude --workflow logo --type modern
 ```
 
-> `[./]polson` is `./polson` on Linux and macOS and `.\polson.ps1` on Windows. Both dispatch the
-> verb — .NET for `create-project`, `reset`, `eval`, `report`, `server` and `version`; Python for
-> `studio` and `orchestrator` — and both pass the exit code through. `polson.cmd` is gone: cmd cannot do the
-> branching, and it reported success whatever the CLI actually returned.
-
 The `sdk` argument decides what the config files are called — `agy` for Google Antigravity, `claude` for Claude Code:
-
-| | `agy` | `claude` |
-| :--- | :--- | :--- |
-| Instructions | `GEMINI.md` | `CLAUDE.md` |
-| MCP wiring | `.agents/mcp_config.json` | `.mcp.json` |
-| Tool policy | `.agents/settings.json` | `.claude/settings.local.json` |
-
 Add `--prompt "..."` to write the brief in a line, or `--brief <file>` to supply it from a file. Either is treated as untrusted data and normalised before it is written.
 
 Then fill in `brief.md`, open the directory with your agent host, and tell it to begin. Everything between the `BRIEF-BEGIN` and `BRIEF-END` markers is read as a client's statement, never as instructions to the agent.
@@ -160,27 +168,12 @@ case after the templates have changed:
 That regenerates every generated file — so a hand-edited `CLAUDE.md` goes back to the template — and
 needs the parent directory, the id and the sdk again. Both routes clear the run identically.
 
-Either way it **archives rather than deletes**: `events/`, `scripts/`, `artifacts/` and the files the
-agent wrote about itself (`findings.md`, `critique_log.md`, `artwork.js`, `output.*`) move to
-`previous/<timestamp>/` with a README saying what they are. That default was paid for — an earlier
-version deleted, and took with it the only measurements saying whether a change had been worth
-making.
-
-Two things stay put: **`brief.md`**, the one file a person authors, and **`.polson/`**, so a reset of
-the *work* is not a reset of the *spend* — the research and asset caches survive.
-
-`create-project --reset` keeps what the project *is*, too. The workflow, type and profile recorded in
-`project.json` are inherited when you do not restate them, so it cannot quietly turn a `drawing`
-project into a `logo` one; naming `--workflow` still changes it, because that is someone asking.
-`--force` is the blunter neighbour: it regenerates every generated file **including `brief.md`**,
-which has cost a hand-written brief before.
 
 #### Watching it happen
 
 The studio's pages work over a project whoever is driving it — the MCP server writes the record regardless of which host called it, so this only puts a reader on it. Nothing is started and nothing is spent.
 
-**The main way, since 2026-10-18,** is the studio on the ADK runtime, exactly as the container runs it. It needs the
-`python-adk/` venv (`src/adk_agent/README.md`). From the repo root:
+From the repo root:
 
 ```bash
 [./]polson studio ../PolsonRuns
@@ -198,17 +191,6 @@ It watches every run in the folder, whoever is driving it, and starts ADK runs f
 - **Stopping:** `tools\adk-studio-stop.cmd [port]` stops it. It finds the studio by its port and leaves anything
   else on that port alone.
 
-**The studio with its Antigravity driver** is `agy-studio`, on the `python/` venv, which holds the Antigravity
-standalone harness. That venv cannot share `python-adk/`. With the base lock installed (§3):
-
-```bash
-[./]polson agy-studio projects --observe-only
-```
-
-That is `python -m studio` (from `src/`: `python -m studio ../projects --observe-only`), on
-`http://127.0.0.1:8000`, and its options are the module's own.
-
-**The base lock deliberately carries no agent SDK.** `studio/` has no reference to one and the driver is imported lazily, so serving the pages and reading a record need none of it — 17 packages rather than 52. Install the driver lock instead if you also want the page's **Start** button, which turns this from observing into mode 2 with a page attached.
 
 **Think before binding beyond `127.0.0.1`.** A reachable studio is an open cost surface, and visitor-typed text reaches an agent holding tools.
 
@@ -233,32 +215,33 @@ inside the SDK import. (Equivalent directly, from `src/`: `python -m orchestrato
 
 ### Mode 3 — Graphics Studio: Polson hosts the agent, with its own interface
 
-Polson runs the agent on Google ADK and serves the whole studio — the commission form, the run pages and ADK's own console. This is the mode a visitor can be handed, and the one [`deploy/README.md`](deploy/README.md) deploys.
+Polson runs the agent on Google ADK and serves the whole studio — the request form, the run pages and ADK's own console.
 
 ```bash
-python-adk/Scripts/python.exe -m uvicorn main:app --host 127.0.0.1 --port 8000 --app-dir src/adk_agent
+[./]polson studio ../PolsonRuns
 ```
 
-On Linux or macOS the interpreter is at `python-adk/bin/python`.
-
-Then open:
+The folder is where projects are written; it must exist, and it is independent of the repo. The verb runs `src/adk_agent/serve.py` on the `python-adk/` interpreter (`--port`, default 8010, and `--host`). Then open:
 
 | | |
 | :--- | :--- |
-| `http://127.0.0.1:8000/new` | **Start here.** The commission form: a name, a workflow, a house style, a brief, and a document to attach. |
-| `http://127.0.0.1:8000/studio` | Projects, and the run pages — the live record, the renders, the sense-making curve. |
-| `http://127.0.0.1:8000/` | Google ADK's own console: sessions, tool calls and artifacts as ADK reports them. |
+| `http://127.0.0.1:8010/studio/home` | **Start here.** Pick a workflow, write the brief, add audiences and documents, choose sizes and formats. Each request's page then follows the run live: the agent's activity and questions, its Qloo evidence (Audiences, Contrast, Choices), the verification, and the deliverables. |
+| `http://127.0.0.1:8010/studio/` | The developer view: the live trace, the renders beside the scripts that made them, the sense-making curve. |
+| `http://127.0.0.1:8010/dev-ui/` | Google ADK's own console: sessions, tool calls and artifacts as ADK reports them. |
 
-Projects are written to `projects/` beside the checkout. Set `POLSON_PROJECTS_DIR` to put them elsewhere — they hold everything a run produces and are independent of the repo.
+Environment variables, all optional:
 
-Useful environment variables, all optional:
+| | Default | |
+| :--- | :--- | :--- |
+| `POLSON_MODEL` | `gemini-3.8-flash` | The agent's model. |
+| `POLSON_BUDGET_TOKENS` | `2000000` | Billable input-token cap for one run, before a workflow's own multiple (a narrated report gets four times it). A circuit breaker stops the run at the cap plus a grace period. `0` means uncapped. |
+| `POLSON_BUDGET_MINUTES` | — | Wall-clock deadline where the workflow sets none. Each workflow has its own, and more audiences add time. |
+| `POLSON_REQUEST_TIMEOUT_SECONDS` | `180` | How long one model call may take before it is retried. The deployed studio uses `300`: late in a long run, turns take over 100 s. Time lost to retries is credited back to the run's clock. |
+| `POLSON_ASK_SECONDS` | `120` | How long the agent waits when it asks you a question. |
+| `POLSON_MAX_RUNS_PER_DAY` · `POLSON_MAX_CONCURRENT_RUNS` | `25` · `2` | Brakes for a public studio. |
+| `POLSON_VERIFY_READER` | `gemini` | Who reads finished pieces back (`gemini` or `nemotron`). |
 
-| | |
-| :--- | :--- |
-| `POLSON_BUDGET_TOKENS` | Billable input-token cap for one run. A circuit breaker stops the run at the allowance plus a grace period. |
-| `POLSON_BUDGET_MINUTES` | Wall-clock deadline, where the workflow does not set its own. |
-| `POLSON_MODEL` | Defaults to `gemini-3.8-flash`. |
-| `POLSON_ASK_SECONDS` | How long the agent waits when it asks you a question. |
+The deployment adds the variables that only matter on Cloud Run (the keepalive's own URL, the bucket mirror, the artifact service); [`deploy/README.md`](deploy/README.md) lists them with the full deploy command.
 
 **Think before binding to `0.0.0.0`.** A public URL is an open cost surface, and visitor-typed text reaches an agent holding tools.
 
@@ -266,49 +249,31 @@ Useful environment variables, all optional:
 
 ## Workflows
 
-A workflow decides the stages the agent works through and the instructions it is given. A type narrows the visual direction.
+A workflow decides the stages the agent works through and the instructions it is given. A type narrows it. **Audiences** are places with an age band (*Tokyo, aged 45 to 54*): where a workflow takes them, it makes one piece per audience, each designed from that audience's Qloo evidence, with the facts shared and only their telling changed.
 
-| Workflow | Types | What it makes |
-| :--- | :--- | :--- |
-| `vector_infographic` | `blueprint`, `brutalist`, `editorial`, `specimen`, `swiss` | A data graphic delivered as **editable SVG**, from sourced and cited figures. |
-| `infographic` | same | The same, delivered as raster. |
-| `drawing` | `review`, `seed` | A drawing made turn by turn with you, in pencil and pen. The one that stops and asks. `seed` opens from a sketch of yours in `seed/`. |
-| `logo` | `antique`, `geometric`, `modern` | A logo or wordmark, with scale and monochrome stress tests. |
-| `comic` | `review`, `seed` | A comic panel through pencil, colour, ink and self-critique. |
-| `comic_studio` | — | A comic page. Multi-agent: penciler, colorist, inker, critic — colour before ink, deliberately. |
-| `painting` | — | A painted scene. The only workflow that requisitions material — surfaces from a cloud model, form drawn by the toolkit. |
+| Workflow | Types | Audiences | What it makes |
+| :--- | :--- | :--- | :--- |
+| `poster` | `film`, `product` | required, 1–6 | A film poster or a product ad, its image, composition and palette decided by each audience's evidence. |
+| `motion` | — (film trailer), `product`, `pitch`, `report`, `report.s1`, `report.10k` | required for a trailer or product ad; optional otherwise | Motion graphics as MP4 and WebP, narrated if asked: a film trailer, a product ad, a startup pitch, or an explainer for a financial document (an S-1, a 10-K) with every figure checked against its page. Pace and grade come from each audience's evidence. |
+| `vector_infographic` | `blueprint`, `brutalist`, `editorial`, `specimen`, `swiss` | optional | A data graphic as **editable SVG**, from sourced and cited figures; with audiences, colours chosen against what each audience watches, numbers written its way. |
+| `infographic` | same | optional | The same, delivered as raster. |
+| `logo` | `antique`, `geometric`, `modern` | — | A mark and its identity: the mark as SVG and PNG, brand sheet, scale ladder to 16 px, monochrome test, kit of parts and mock-ups. Every word on the mark is checked against the brief. |
+| `cover` | — | — | A book cover, composed as one image. |
+| `math_explainer` | — | — | A short animated explanation of a theorem or concept, with every equation checked. |
+| `animation` | — | — | Character animation: a cartoon figure moving through its beats. |
+| `storyboard`, `storyboard_cast`, `storyboard_quick` | — | — | Storyboards: who is where, facing which way, how close the camera is. |
+| `sketch_scene` | — | — | A posed figure scene sketched from a sentence. |
+| `drawing` | `review`, `seed` | — | A drawing made turn by turn with you, in pencil and pen. The one that stops and asks. `seed` opens from a sketch of yours in `seed/`. |
+| `comic` | `review`, `seed` | — | A comic panel through pencil, colour, ink and self-critique. |
+| `comic_studio` | — | — | A comic page. Multi-agent: penciler, colorist, inker, critic — colour before ink, deliberately. |
+| `painting` | — | — | A painted scene: surfaces requisitioned from a cloud model, form drawn by the toolkit. |
 
-**Attach a document and the agent will read it.** Anything you upload lands in the project's `documents/` folder; `Documents.list()` is free and `Documents.ask(path, question)` puts the question to Gemini. It reads scanned PDFs with no text layer, so a screenplay or a scanned report works as a brief.
+`harness` is the framework's own evaluation workflow, not a commission. In the studio, **"Decide everything"** runs any of these without questions: the agent takes the answer it would have proposed, and lists each decision for review afterwards.
 
----
-
-## Reading a run back
-
-Everything a run produces stays in the project directory: renders in `artifacts/`, every executed script in `scripts/`, the record in `events/`, and the basis for any sourced figure in `.polson/research/`. [`docs/project-layout.md`](docs/project-layout.md) is the contract for all of it.
-
-```bash
-[./]polson report projects/acme
-```
-
-```
-    events recorded        344
-    scripts executed       33
-    scripts failed         0
-    renders recorded       33
-    stage notes            160
-    looked before drawing  175 probes across 13 of 33 scripts
-    stages declared        32 across 6 sessions
-
-    Nothing unaccounted for: every artifact traces to a render, every script to an execution.
-```
-
-The report is the machine-checkable half — script paths, durations, artifact paths, byte counts. The stages and notes beside it are the agent's own account of what it was doing, which is what makes a run legible rather than merely logged.
+**Attach a document and the agent will read it.** Anything you upload lands in the project's `documents/` folder. `Documents.list()` and `Documents.find(path, phrase)` are free; `Documents.ask(path, question)` reads the pages asked about with Nemotron 3.5 Super VL and checks every figure in its answer against the page's own text. Without a Nemotron key it falls back to Gemini, which reads scanned PDFs too, but its figures are then unchecked.
 
 ---
 
-## Deploying it
-
-**Mode 3 is the one that deploys**, because it is the only one that hosts the agent *and* serves a page — the other two need either your own agent host or your own terminal. It runs as one container: the ADK runtime, the .NET engine, the SDK docs and the web interface. See [`deploy/README.md`](deploy/README.md) for the Cloud Run path, and [`src/adk_agent/README.md`](src/adk_agent/README.md) for what the image contains and why.
 
 ## Licence
 

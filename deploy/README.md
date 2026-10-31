@@ -308,6 +308,19 @@ Worth setting deliberately rather than leaving at defaults:
   nothing. Cache misses had taken 57% and 62% of two drawing runs' budgets.
 - **`POLSON_RESEARCH_PROCESSOR`**: the Parallel processor research runs on; `core` (about $0.025 a run) is enough.
 
+**A warm instance for a judging window.** Scaled to zero, the first visit waits for a cold start, long enough for a
+visitor to take the site for down. Keep one instance up for the window, at the service level so no revision is deployed
+and a running request is untouched, and take it off afterwards; it bills an idle instance around the clock:
+
+```powershell
+gcloud run services update $S --project $P --region $R --min=1          # the window opens
+gcloud run services update $S --project $P --region $R --min=default    # the window closes
+```
+
+Use `--min`, not `--min-instances`: the second is set on the revision and deploys a new one. CPU during a run needs no
+setting of its own: the keepalive (`src/adk_agent/keepalive.py`) holds a request open while a run works, so
+`--no-cpu-throttling` would only add cost.
+
 ## 8. Two commas, two traps
 
 Both bite on the same character, in opposite directions.
@@ -448,12 +461,33 @@ answers "what is in this image", never "what is in the running instance's projec
 
 ## 13. Monitoring
 
-`monitoring/` holds the log-based metrics and alert policies, exported without project ids or addresses. Make an
-email notification channel in the console (Monitoring › Alerting › Edit notification channels), then:
+`monitoring/` holds the log-based metrics, alert policies and an uptime check, exported without project ids, service
+names or addresses: each file has placeholders that `apply.py` fills in. Make an email notification channel in the
+console (Monitoring › Alerting › Edit notification channels), then:
 
 ```powershell
-python deploy/monitoring/apply.py $P "projects/$P/notificationChannels/<id>"
+python deploy/monitoring/apply.py $P $S "projects/$P/notificationChannels/<id>" "$S-<hash>-<region code>.a.run.app"
 ```
+
+The last argument is the service's host, from its URL without `https://`; leave it out to skip the uptime check.
+
+| What | Fires when |
+| :--- | :--- |
+| A single turn over 300k input tokens | A run's context has grown past the point where each turn is slow and costly. |
+| Circuit breaker halted a run | A run hit its token or time budget and was stopped. |
+| Model turns over 150 in an hour | Something is calling the model far more than a run should. |
+| Request rate spike | Over 2 requests a second for 5 minutes: scraping or enumeration, which the turn alerts never see. |
+| Memory over 85% for 5 minutes | The instance is near its limit. |
+| Billed continuously for 4 hours | The service has been billed nearly every minute for 4 hours. |
+| Studio home page is down | More than one checker region has failed for 5 minutes. |
+
+**Every filter names one service.** All six alerts watched `polson-studio` until 2026-10-30, a day after the entry
+moved to a new service, so nothing watched the live one. A new service means running `apply.py` for it, or editing
+the existing filters to name it.
+
+**A minimum instance trips the billing alert.** With `--min=1` (§7, for a judging window) the service is billed around
+the clock, so "billed continuously" fires every four hours. Leave that one on the old service, or disable it, until the
+minimum comes off.
 
 Budgets belong to the billing account, not the project, and are not here.
 

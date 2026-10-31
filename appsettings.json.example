@@ -1,6 +1,22 @@
 {
   "ApiKeys": {
-    "GoogleAgentPlatform": ""
+    "GoogleAgentPlatform": "",
+    "Qloo": "",
+    "Parallel": "",
+    "NvidiaNIM": "",
+    "NebiusTokenFactory": ""
+  },
+  "Qloo": {
+    "BaseUrl": "https://hackathon.api.qloo.com"
+  },
+  "NebiusTokenFactory": {
+    "BaseUrl": ""
+  },
+  "Research": {
+    "Processor": "core"
+  },
+  "Verify": {
+    "Reader": "gemini"
   },
   "Assets": {
     "Model": "gemini-2.5-flash-image",

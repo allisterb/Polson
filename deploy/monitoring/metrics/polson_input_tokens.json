@@ -1,7 +1,7 @@
 {
   "name": "polson_input_tokens",
   "description": "Input tokens per model turn, from the polson.turn log line. Count of points = turns.",
-  "filter": "resource.type=\"cloud_run_revision\"\nresource.labels.service_name=\"polson-studio\"\ntextPayload=~\"^turn .* in=[0-9]+\"",
+  "filter": "resource.type=\"cloud_run_revision\"\nresource.labels.service_name=\"SERVICE_NAME\"\ntextPayload=~\"^turn .* in=[0-9]+\"",
   "metricDescriptor": {
     "metricKind": "DELTA",
     "valueType": "DISTRIBUTION",

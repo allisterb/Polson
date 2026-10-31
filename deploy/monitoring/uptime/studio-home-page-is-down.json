@@ -1,0 +1,36 @@
+{
+  "displayName": "Polson — studio home page is down",
+  "combiner": "OR",
+  "conditions": [
+    {
+      "displayName": "More than one checker region failing for 5 minutes",
+      "conditionThreshold": {
+        "filter": "metric.type=\"monitoring.googleapis.com/uptime_check/check_passed\" AND metric.label.check_id=\"CHECK_ID\" AND resource.type=\"uptime_url\"",
+        "aggregations": [
+          {
+            "alignmentPeriod": "1200s",
+            "perSeriesAligner": "ALIGN_NEXT_OLDER",
+            "crossSeriesReducer": "REDUCE_COUNT_FALSE",
+            "groupByFields": [
+              "resource.label.*"
+            ]
+          }
+        ],
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 1,
+        "duration": "300s",
+        "trigger": {
+          "count": 1
+        }
+      }
+    }
+  ],
+  "documentation": {
+    "content": "The studio's home page has failed from more than one checker region for 5 minutes. Check the Cloud Run service's revisions and logs. Each check is a request to the service, so delete the check with the service.",
+    "mimeType": "text/markdown"
+  },
+  "notificationChannels": [
+    "NOTIFICATION_CHANNEL"
+  ],
+  "enabled": true
+}
