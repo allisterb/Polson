@@ -117,7 +117,8 @@ There are **two virtual environments and three locks**, and which you need follo
 On Linux and macOS each is `install.sh`, taking the same optional `driver` argument. Create the environment first — `python/` for the first two modes, `python-adk/` for the third:
 
 ```bash
-python3.13 -m venv python
+python3.13 -m venv python        # Managed and Terminal
+python3.13 -m venv python-adk    # Graphics Studio
 ```
 
 > **Name the version, not `python3`.** Where `python3` is older — Ubuntu 22.04's is 3.10 — `python3 -m venv` builds the environment with that one silently, and the failure surfaces later and further away, as pip refusing a pinned package. On Debian and Ubuntu install `python3.13-venv` too, or `venv` fails on a missing `ensurepip`.
@@ -125,6 +126,13 @@ python3.13 -m venv python
 `requirements.txt` pins every package — transitive ones included — to an exact version and hash, and the install refuses anything that does not match.
 
 > **The two environments are separate on purpose, and the names matter.** ADK caps `websockets<16` where the Antigravity SDK has no upper bound, so in one shared environment the second install silently wins and neither lock then describes what is actually there. See [`src/adk_agent/README.md`](src/adk_agent/README.md).
+
+### 4. Install additional tools and typefaces
+
+```bash
+py -3.13 tools/bootstrap.py      # python3.13 on Linux and macOS
+```
+
 
 ---
 
