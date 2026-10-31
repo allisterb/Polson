@@ -8,20 +8,19 @@ Polson Graphics Studio is an agentic co-creative graphics and motion design plat
 ![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/output.webp)
 
 
-
 Polson's overall goal to allow ordinary users to harness their creativity using AI with professional-level graphic and motion design that would be far too expensive to employ via traditional means, mirroring the use of AI for software development by non-expert users today, and which can't be done by current generative AI systems. It aims to be superior to even the most advanced diffusion model-powered image and video generators in the areas of precision and accuracy and cross-cultural adaptation. 
-![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/final_a.svg)
+![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/allin_final_a.svg)
 
 In [contrast](https://higgsfield.ai/blog/AI-Motion-Design-When-Video-Generation-Meets-Code) to standard agentic image or video generators that use diffusion models, Polson Graphics Studio uses a  procedural drawing and animation engine that agents using multimodal LLMs like Claude Opus 5 and Gemini 3.8 write code for to create visual artifacts that they can perceive both visually and as code.  Polson attempts to bring the same co-creative, verifiable environment for agentic software development that modern artificial intelligence enables, to the task of visual art and graphic design.  The agent has access to a wide range of tools to interact with, experiment on, and verify the drawing and animations it creates, to access and use knowledge in graphic design manuals and other resources, and to offload research tasks to cloud-based systems like Qloo.  
 
-Each studio project collects natural language briefs, PDF documents, brand images and other user-supplied assets and follows a formal graphic design workflow, with detailed validation phases desiged to check the accuracy of each fact or number  that appears on-screen and delivers raster and vector images and videos in different formats together with creative briefs, brand sheets, mood boards, and many different types of artifacts that are typically the result of the graphic design process.
+Each studio project collects natural language briefs, PDF documents, brand images and other user-supplied assets and follows a formal graphic design workflow, with detailed validation phases desiged to check the accuracy of each fact or number  that appears on-screen and delivers raster and vector images and videos in different formats together with creative briefs, brand sheets, mood boards, verification reports, and many different types of artifacts that are typically the result of the graphic design process.
 
 ![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/kitofparts2.png)
 
 
-Polson Graphics Studio uses Qloo to provide a cultural intelligence layer that agents use to gain insight into and guide design decisions for an audience, and to adapt a single design campaign for different audiences:
+Polson Graphics Studio uses Qloo to provide a cultural intelligence layer that agents use to gain insight into and guide design decisions for an audience:
 ![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/s1-audiences.PNG)
-
+ and to adapt a single design campaign for different audiences:
 ![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/studio_choices.png)
 
 ## Polson Framework
@@ -32,9 +31,9 @@ In the field of computational creativity, co-creative agents collaborate with hu
 Co-creativity allows participants to improvise and fuse and construct ideas based on decisions of their peers so the whole creative product emerges through interaction and negotiation between  multiple peers and is greater than the sum of individual parts.
 ![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/interaction2.png)
 
-### Polson Graphic Design
+### Graphic Design in Polson
 Polson Graphics Studio uses a procedural drawing and animation engine combined with a formal graphic and motion design process and a rigorous verification
-phase powered by a VLM model and research services like [Parallel.ai](https://docs.parallel.ai/decisions/decisions-quickstart) that verify as much as possible every fact and figure that appears in a graphic. Agents do not rely on diffusion models to generate images or graphics which always carries the probabilty of hallucinations or inconsistency. Instead the agent writes code to create and assemble the parts of the graphic production, and within the framework of a graphic design process and workflow and verification the agent is instructed to follow. This makes Polson suitable for autonomously designing things like VC pitch decks and financial report visualization where accuracy and versimilitude is critical
+phase powered by a VLM model and research services like [Parallel.ai](https://docs.parallel.ai/decisions/decisions-quickstart) that verify as much as possible every fact and figure that appears in a graphic. Agents do not rely on diffusion models to generate images or graphics which always carries the probabilty of hallucinations or inconsistency. Instead the agent writes code to create and assemble the parts of the graphic production, within the framework of a graphic design process and workflow and verification process the agent is instructed to follow. This makes Polson suitable for autonomously designing things like VC pitch decks and financial report visualization where accuracy and versimilitude is critical.
 
 The graphic design process Polson agents follow is based on books like Ellen Lupton's *Graphic Design Thinking: Beyond Brainstorming*, wiith steps and processes like: 
 * Brainstorming
@@ -53,11 +52,43 @@ The graphic design process Polson agents follow is based on books like Ellen Lup
 Motion design uses artifacts like design boards:
 ![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/designboard.png)
 
-An integral part of the graphics design process are checks the agent can do against documented graphuc and motion design  guidelines and constraints:
+
+### Verification in  Polson
+Verification in Polson has 2 parts: design verification and data verification.
+
+#### Design Verification
+An integral part of the graphics design process in Polson are checks the agent can do against documented graphic and motion design guidelines and constraints, as well as verification of the figures and facts that appear on screen
 ![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/checks2.png)
 Checks can be done via code or visually by the agent looking at an image or video and judging for itself:
-![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/checks4.png)
+![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/verify-jap.png)
 
+Layout is measured, not eyeballed, because models are poor at noticing their own layout mistakes. Every image Polson renders is measured automatically, and the agent is told about any line of text that:
+- sits on top of another line,
+- runs off the edge of the page,
+- has a rule or divider running through it,
+- runs past the side of the box or card it sits on, or into the element beside it,
+- or is set in a typeface that isn't available and was silently replaced.
+
+Films get their own checks: every line held on screen long enough to read, nothing outside the title-safe area, no two lines overlapping once they settle, figures that arrive whole rather than counting up (a counter shows numbers the document never printed), and text contrast of at least 4.5 : 1.
+
+### Data verification
+Diffusion models can draw charts and infographics but they cannot tell you where the numbers on it came from, and they will happily draw figures that are nowhere in the sources. For visualizations of financial reports and investor pitches and other documents, that is the one thing that can't happen. 
+
+In Polson every piece goes through data verification checks the agent cannot skip, and the **Verification** tab lists each check, including the ones that failed and how they were fixed.
+![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/verification.png)
+
+When a piece is finished, the studio lists every text on it and looks up where each one came from:
+- **A document**: the figure is found on a page of the PDF the client supplied, by searching the page's text, not by trusting the model. For long filings like an S-1, the agent first finds the right pages by their headings, then asks each question of those pages only, and every figure in the answer is checked against the page it came from.
+- **The brief**, **a Qloo answer** (each cited title must be one a recorded query actually returned), or **research** through Parallel.ai, which returns a citation for every field.
+- **Arithmetic**: a growth rate or a share is computed in the script, and the working is passed along with it ("16,286 / 1,163 = 14.003").
+- **Facts no document holds**, like a film's credits or "no later filing has set a price range", are checked on the web through Parallel.ai, and come back supported, unsettled or not supported.
+
+A figure with no source fails the check and has to come off the screen. Figures from outside a filing are held to a higher bar: they must come from a primary source (a regulator's filing, an exchange, the company itself), and their digits must appear in the excerpt that source returned. 
+
+The 2nd phase of validation is where an independent model reads the finished piece. After the film is encoded or the image rendered, a separate model watches or reads it the way a viewer would, and its reading is compared with what the piece actually set. A line it read differently is a legibility problem; a figure it saw that the piece never set is flagged, and the agent has to look at that exact frame and say whether it was a misreading or a real fault. 
+
+
+Agents can't verifiy their own work. Every verdict is recorded by the tool that ran the check, never by the agent, and a check that compared nothing (an image with no text read back) fails rather than passes.
 
 ### Deliverables
 The end result of a Polson graphics design run is the finished media production together with a set of deliverables which mirror the deliverables from a human-led graphic design project:
@@ -104,6 +135,7 @@ The studio displays the audience data it got from Qloo for the different audienc
 It also displays the choices it made based on the Qloo data:
 
 ![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/studio_choices.png)
+
 ## How we built it
 
 ### Engine
@@ -286,7 +318,7 @@ During this hackathon I added the following features to the Polson project:
 - **Verification**: `Verify.film` and `Verify.image` read the finished piece back with an independent model and source
   every text on it (a document's page, the brief, research, Qloo, or the arithmetic shown); stated facts are checked on
   the web through Parallel.ai; checks record their own verdicts, so an agent cannot mark one passed.
-- **The client studio**: a request composer with audiences the
+- **The client studio**: a request composer with audiences and the
   Audiences, Contrast and Choices views of each run's Qloo evidence.
 
 
