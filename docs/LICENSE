@@ -22,7 +22,11 @@ obligations travel with the material regardless of what this file says:
 
 | Manual | Source | Terms |
 | :--- | :--- | :--- |
-| 01–09 | *Imaginative Drawing* | All rights reserved. Principles distilled and chapters cited; nothing reproduced. |
+| 01, 02, 04–09 | Andrew Loomis, *Drawing the Head and Hands* (1956), *Figure Drawing for All It's Worth* (1943), *Creative Illustration* (1947), *Successful Drawing* (1951), *The Eye of the Painter* (1961) | US copyright status contested: widely circulated as public domain on lapsed renewals, and reissued under licence from the estate. Treated as all rights reserved: principles distilled and pages cited; nothing reproduced. |
+| 01, 05, 08 | Michael Hampton, *Figure Drawing: Design and Invention* (2009) | All rights reserved. Same handling, cited by section. |
+| 03 | Klaus Janson, *The DC Comics Guide to Inking Comics* (2003); Jack Hamm, *Drawing the Head and Figure* (1963) | All rights reserved. Same handling. |
+| 06 | Ernest R. Norling, *Perspective Made Easy* (1939; Dover 1999) | All rights reserved. Same handling. |
+| 08 | Jack Faragasso, *Mastering Drawing the Human Figure* (1998) | All rights reserved, with a retrieval-system clause: distilled and cited, and its text is kept out of the retrieval corpus. |
 | 10, 12 | George Bokhua, *Principles of Logo Design* | All rights reserved. Distilled and cited, never quoted at length. |
 | 11 | Robin Williams, *The Non-Designer's Design Book*; Doyald Young, *Fonts and Logos* | All rights reserved. Same handling. |
 | 12 §2.5 | *Graphic Design and Print Production Fundamentals* (BCcampus / Graphic Communications Open Textbook Collective) | **CC BY 4.0** — attributed in the manual. §2.4 of that book is CC BY-NC-ND 3.0 and is **not** adapted here. |
@@ -32,6 +36,10 @@ obligations travel with the material regardless of what this file says:
 | 16 | — | No external source. Documents a Polson subsystem and the studio's own form-versus-substance policy. |
 | 17 | Klaus Janson, *The DC Comics Guide to Pencilling Comics* (Watson-Guptill / DC Comics, 2002), ch. 1 and ch. 13 | All rights reserved. Distilled and cited in our own words, never quoted at length — same handling as the Bokhua row. |
 | 18 | Davis, Hsiao, Singh, Lin & Magerko, *Creative Sense-Making*, C&C '17 | ACM, all rights reserved. Its three stated limitations of video coding are cited and answered, not quoted. The OCSM applicability clause (CC BY 4.0) is attributed as in Manual 15. |
+
+Manuals 01–09 once cited John Guy, *Imaginative Drawing* (2025). Every citation was withdrawn on 2026-09-02, because
+its terms ask that it be shared only whole and withhold permission for any part of it to be used to train AI. Nothing
+of it remains in these manuals, and it is not to be re-added.
 
 `docs/creative-sense-making.md` implements a framework from the research
 literature — principally Nicholas Davis's work on creative sense-making and the
