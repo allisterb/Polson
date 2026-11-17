@@ -54,6 +54,22 @@ def document(events: Iterable[dict[str, Any]], since: str | None = None) -> str 
     return "\n".join(out).rstrip() + "\n"
 
 
+def unresolved(events: Iterable[dict[str, Any]], since: str | None = None) -> list[dict[str, Any]]:
+    """The checks still failing at the end of the run, neither passed later nor kept with a reason: the studio's own
+    (`by: verify`, which `Stage.check` cannot write or keep) first, then the agent's, each in the order it last ran.
+
+    the_odyssey (2026-11-15) was told by `Verify.film` that both films were 1280 × 720 against a brief asking for
+    1920 × 1080, left them so, and its report never said. The verdict was in this document and nowhere a reader looks
+    first, so the run page shows these beside the finished work.
+    """
+    checks = [e for e in events if e.get("type") == "check" and e.get("claim")
+              and not (since and (e.get("ts") or "") < since)]
+    still = [c for c in _latest(checks).values() if not c.get("passed") and not c.get("accepted")]
+    return [{"claim": c["claim"], "detail": _short(c.get("detail")) if c.get("detail") is not None else None,
+             "studio": c.get("by") == "verify", "ts": c.get("ts")}
+            for c in sorted(still, key=lambda c: c.get("by") != "verify")]
+
+
 def _summary(checks: list[dict[str, Any]], reads: list[dict[str, Any]], events: list[dict[str, Any]]) -> list[str]:
     final = _latest(checks)
     failed_once = {c["claim"] for c in checks if not c.get("passed") and not c.get("accepted")}

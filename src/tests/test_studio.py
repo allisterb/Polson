@@ -1598,6 +1598,20 @@ class DeliverableRouteTests(unittest.TestCase):
         self.assertNotIn("trust me", raw)
         self.assertIn("<h2>Checks that failed</h2>",
                       self.client.get("/runs/acme-1/deliverables/verification.md?rendered=1").text)
+
+    def test_the_listing_carries_the_checks_still_failing(self):
+        """the_odyssey's films missed the brief's size and its report never said; the page shows it from the record."""
+        self.assertEqual(self.client.get("/runs/acme-1/deliverables").json()["unresolved"], [])
+        events = self.root / "acme" / "events"
+        events.mkdir(exist_ok=True)
+        size = "Delivered size of artifacts/final_a.mp4: one the brief asks for"
+        (events / "server.jsonl").write_text("\n".join(json.dumps(e) for e in [
+            {"type": "check", "claim": size, "passed": False, "by": "verify",
+             "detail": "1280 × 720 px; the brief asks for 1920 × 1080.", "ts": "2026-11-15T14:20:00Z"},
+            {"type": "check", "claim": "contrast", "passed": True, "ts": "2026-11-15T14:21:00Z"}]) + "\n", encoding="utf-8")
+
+        unresolved = self.client.get("/runs/acme-1/deliverables").json()["unresolved"]
+        self.assertEqual([(u["claim"], u["studio"]) for u in unresolved], [(size, True)])
     # endregion
 
     # region Serving one

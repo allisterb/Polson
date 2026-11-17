@@ -101,5 +101,28 @@ class DocumentTests(unittest.TestCase):
         self.assertIn("| new |", doc)
 
 
+class UnresolvedTests(unittest.TestCase):
+    """What the run page shows beside the finished work: checks failing at the end, whatever the report says."""
+
+    def test_the_studios_failing_checks_come_first_and_fixed_or_kept_ones_are_left_out(self):
+        """the_odyssey: both films at 1280 × 720 against 1920 × 1080, and a report that never said so."""
+        size = "Delivered size of artifacts/final_a.mp4: one the brief asks for"
+        got = verification.unresolved([
+            check("the title holds two seconds", False, "10:00", "1.4 s"),
+            check(size, False, "20:00", "1280 × 720 px; the brief asks for 1920 × 1080.", by="verify"),
+            check("contrast", False, "21:00", "3.9 : 1"), check("contrast", True, "22:00", "4.6 : 1"),
+            check("the end card is centred", False, "23:00", "3 px", accepted=True, reason="the grid wants it"),
+        ])
+        self.assertEqual([(u["claim"], u["studio"]) for u in got], [(size, True), ("the title holds two seconds", False)])
+        self.assertEqual(got[0]["detail"], "1280 × 720 px; the brief asks for 1920 × 1080.")
+
+    def test_a_check_that_failed_then_passed_is_resolved(self):
+        self.assertEqual(verification.unresolved([check("x", False, "10:00"), check("x", True, "11:00")]), [])
+
+    def test_a_previous_runs_failures_are_left_out(self):
+        got = verification.unresolved([check("old", False, "00:00"), check("new", False, "30:00")], since="2026-10-27T21:20:00Z")
+        self.assertEqual([u["claim"] for u in got], ["new"])
+
+
 if __name__ == "__main__":
     unittest.main()

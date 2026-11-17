@@ -763,7 +763,8 @@ def create_app(root: Path | None = None, registry: Registry | None = None,
 
         # The run's checks as the record has them, failures and fixes included: written by the studio, never read from a
         # file the agent could have written (`studio.verification`).
-        if (checked := verification.document(read_events(run.project.server_events), run.since)) is not None:
+        events = read_events(run.project.server_events)
+        if (checked := verification.document(events, run.since)) is not None:
             written.append({"kind": "document", "name": verification.NAME, "title": verification.TITLE,
                             "what": verification.WHAT, "bytes": len(checked.encode("utf-8"))})
 
@@ -774,8 +775,11 @@ def create_app(root: Path | None = None, registry: Registry | None = None,
         # The audiences' films side by side in one file, when it has been made from these very films; `comparable` says
         # the page may offer to make it.
         films = compare.films(Path(run.project.root), pieces, front.read_request(Path(run.project.root)).get("audiences") or [])
+        # Checks still failing, shown beside the finished work so a failure the agent left out of its report is not left
+        # out of the page too (`verification.unresolved`).
         return JSONResponse({"deliverables": written, "comparable": bool(films),
-                             "comparison": compare.current(Path(run.project.root), films) if films else None})
+                             "comparison": compare.current(Path(run.project.root), films) if films else None,
+                             "unresolved": verification.unresolved(events, run.since)})
 
     @app.post("/runs/{run_id}/comparison")
     async def make_comparison(run_id: str) -> JSONResponse:

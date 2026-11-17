@@ -142,6 +142,12 @@
         {#- Who each audience is, for the labels on the side-by-side films (front.js). -#}
         <script type="application/json" data-audience-labels>{{ (rec.audiences or [])|tojson }}</script>
       </section>
+      {#- Checks still failing at the end, from the run record rather than the agent's report (front.js, /deliverables). -#}
+      <section class="fr-card fr-unresolved" data-unresolved hidden aria-labelledby="unresolved-title">
+        <h2 class="fr-heading" id="unresolved-title">Checks still failing</h2>
+        <p class="fr-small">Each verdict as the check recorded it when it ran, whatever the run's report says.</p>
+        <ul class="fr-vchecks" data-unresolved-list></ul>
+      </section>
       <section class="fr-card" data-documents hidden aria-labelledby="documents-title">
         <h2 class="fr-heading" id="documents-title">What the studio wrote</h2>
         {#- A document opens in the reader below; a book (a PDF) downloads. -#}

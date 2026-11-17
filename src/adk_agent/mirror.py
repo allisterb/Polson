@@ -277,7 +277,10 @@ class ProjectMirror:
             if not base.is_dir():
                 continue
             for path in sorted(base.rglob("*")):
-                if not path.is_file():
+                # A `.part` is a file the engine is still writing (FFmpeg encodes to `<out>.part` or `<out>.<guid>.part` and
+                # renames it): copied mid-write, it is a broken copy, and once renamed it is a blob nobody removes.
+                # the_odyssey (2026-11-15) left 0-byte `final_*.webp.part` and `final_*_part*.mp4.<guid>.part` in the bucket.
+                if not path.is_file() or path.suffix == ".part":
                     continue
                 rel = path.relative_to(self.root).as_posix()
                 # The second lock. `documents/` is not under any mirrored directory, so this only
