@@ -394,7 +394,7 @@
     dirty = false;
     timeline.textContent = '';
     var list = stages.slice();
-    if (finished) list.push({ name: 'Delivered', state: 'done', note: '', thumbs: [] });
+    if (finished) list.push({ name: 'Delivered', state: 'done', note: unresolvedNote, thumbs: [] });
     list.forEach(function (s) {
       var li = el('li', 'ps-run-step is-' + s.state);
       if (s.state === 'current') li.setAttribute('aria-current', 'step');
@@ -669,6 +669,7 @@
       if (pieces.length) present(pieces[0]);
 
       loadLearned();
+      unresolved(data.unresolved || []);
 
       // One row each: the file, and what it holds. A document is read here; a book is a PDF the studio set, so it
       // downloads.
@@ -698,6 +699,32 @@
       page.querySelector('[data-documents]').hidden = !docs.children.length;
       deliverablesTab();
     });
+  }
+
+  // The checks still failing at the end, as the record has them: the studio's own first, which the agent can neither write
+  // nor keep. the_odyssey left both films at the wrong size and its report never said; the page says it here, and on the
+  // Delivered step where the Progress view ends.
+  var unresolvedNote = '';
+  function unresolved(list) {
+    var box = page.querySelector('[data-unresolved]'), ul = page.querySelector('[data-unresolved-list]');
+    var studio = list.filter(function (c) { return c.studio; }).length;
+    unresolvedNote = !list.length ? ''
+      : list.length + ' check' + (list.length === 1 ? ' is' : 's are') + ' still failing'
+        + (studio ? ', ' + (studio === list.length ? (list.length === 1 ? 'the studio\'s own' : 'all the studio\'s own') : studio + ' of them the studio\'s own') : '')
+        + '. See Deliverables.';
+    later();
+    if (!box || !ul) return;
+    ul.textContent = '';
+    list.forEach(function (c) {
+      var li = el('li');
+      li.appendChild(el('span', 'fr-vcheck is-fail', 'Fail'));
+      var body = el('div');
+      body.appendChild(el('span', '', c.claim));
+      body.appendChild(el('span', 'fr-vjudged', c.studio ? 'checked by the studio' : 'the agent\'s own check'));
+      if (c.detail) body.appendChild(el('p', 'fr-small', c.detail));
+      li.appendChild(body); ul.appendChild(li);
+    });
+    box.hidden = !list.length;
   }
 
   // One film per audience, side by side on one clock, so a moment in one is the same moment in the others. The longest
@@ -861,8 +888,9 @@
     var tab = views && views.querySelector('.ps-tab[data-view="deliverables"]');
     if (!tab) return;
     var learnedBox = page.querySelector('[data-learned]');
+    var failing = page.querySelector('[data-unresolved-list]');
     tab.hidden = !(page.querySelector('[data-finished-list]').children.length || page.querySelector('[data-doc-list]').children.length
-                   || (learnedBox && !learnedBox.hidden));
+                   || (failing && failing.children.length) || (learnedBox && !learnedBox.hidden));
     if (!tab.hidden && viewFromHash() === 'deliverables' && tab.getAttribute('aria-selected') !== 'true') select('deliverables');
   }
 

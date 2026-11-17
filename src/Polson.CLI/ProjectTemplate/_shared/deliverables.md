@@ -66,3 +66,22 @@ this way.
 
 The shell is for *reading and finding* — `grep`, `sed -n`, `diff`, `head`. The moment you are
 producing content rather than locating it, use the editor.
+
+### A failed check is fixed, or it is in your report
+
+Every check records its verdict when it runs, and the run page shows **every check still failing at the
+end beside the finished work**, whatever your report says. The studio's own checks come first: the ones the
+`Verify` calls record (`Read-back of …`, `Delivered size of …`, `Derivation …`), which `Stage.check` can
+neither write nor keep. So before you finish, for each check that failed and has not passed since:
+
+- **fix it and run the check again** — this is the default, and a deliverable that misses the brief (its
+  size, its format, a word it did not ask for) is the first to fix; or
+- **if you cannot**, say so in your **final message**, and in your findings where this workflow asks for
+  them: which check, what it measured, and why it stands. For one of your own, also record it with `Stage.check(claim, false, detail, { accepted:
+  'why it is kept' })`.
+
+A live run was told its films were 1280 × 720 against a brief asking for 1920 × 1080, judged the fix too
+slow with 42 minutes left, and finished without saying so; only a "future improvement" line in its
+findings hinted at it. The director read the report and believed the films were what was asked for.
+The check was right and the page now shows it — a report that leaves it out is now visibly wrong, not
+merely incomplete.

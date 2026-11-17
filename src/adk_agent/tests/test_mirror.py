@@ -123,6 +123,16 @@ class MirrorSelectionTests(unittest.TestCase):
         self.assertEqual(self.bucket.uploaded.get("mirror/acme/output.webp"),
                          b"a later pass, with the marks")
 
+    def test_a_file_still_being_written_is_not_copied(self):
+        """the_odyssey left 0-byte `final_*.webp.part` and `final_*_part*.mp4.<guid>.part` blobs in the bucket: FFmpeg's
+        encodes in flight, copied mid-write and never removed once renamed."""
+        (self.root / "artifacts" / "final_a.webp.part").write_bytes(b"")
+        (self.root / "artifacts" / "final_a_part2.mp4.0123abcd.part").write_bytes(b"half a film")
+        asyncio.run(self.mirror.sweep())
+
+        self.assertFalse([k for k in self.bucket.uploaded if k.endswith(".part")])
+        self.assertIn("mirror/acme/artifacts/stage1.webp", self.bucket.uploaded)
+
     def test_the_directors_documents_are_never_copied(self):
         """`documents/` is the client's own material and is not ours to put anywhere."""
         asyncio.run(self.mirror.sweep())

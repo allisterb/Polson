@@ -1051,7 +1051,9 @@ public sealed class FilmCheck(string video, double duration, Dictionary<string, 
         { Error: { } why } unread => $" Its size could not be read ({why}), so it was not compared with the brief's {string.Join(" or ", unread.Asked)}.",
         var s => $" {Video} is {s.Width} × {s.Height} px, and the brief asks for {string.Join(" or ", s.Asked)}: build the composition "
             + "at a size the brief names (Motion.composition({ width, height, … })) and encode again. Draft small; deliver at size. "
-            + "The size is recorded as a check of its own, apart from this read-back.",
+            + "If one encode at that size runs past the script limit, encode it in parts, a span a script, and join them. "
+            + "The size is recorded as a check of its own, apart from this read-back, and the run page shows it while it fails: "
+            + "a size you leave is named in your report, with why.",
     };
 
     protected override string MissedNote(Dictionary<string, object?> item) => $"on screen {item["seconds"]:0.#} s";
