@@ -793,21 +793,44 @@ public class CanvasRenderingContext2D
         return result;
     }
 
+    /// <summary>
+    /// The HTML canvas <c>TextMetrics</c>, each distance from the point <c>fillText</c> would be given, under the current
+    /// <c>textAlign</c> and <c>textBaseline</c>: <c>actualBoundingBox*</c> is the ink of this string as it is drawn (shaped,
+    /// tracked, from fallback faces), <c>fontBoundingBox*</c> the face's ascent and descent, whatever the string.
+    /// </summary>
+    /// <remarks>
+    /// Until 2026-11-17 <c>actualBoundingBoxAscent</c> was the face's ascent: 90.5 px for an "H" in Arial at 100 px, whose
+    /// ink is 72 px tall. A cap height taken from it was a quarter too large, which is what a legibility check would have
+    /// passed small type on. <c>fontBoundingBox*</c> was the face's whole glyph box (<c>Top</c>/<c>Bottom</c>), not its
+    /// ascent and descent as browsers report.
+    /// </remarks>
     public Dictionary<string, object> MeasureText(string text)
     {
         ProbeScope.Record(ProbeScope.Kinds.Measure);
         text ??= string.Empty;
         using var font = new SKFont(_currentState.Typeface, _currentState.FontSize);
-        var width = MeasureRun(text, font, ResolveLetterSpacing());
+        var line = TextShaper.Shape(text, font, ResolveLetterSpacing());
         font.GetFontMetrics(out var metrics);
+        var ink = TextShaper.InkBounds(line, font);
 
+        // Where the baseline and the left edge sit relative to the point given, as fillText places them.
+        var baseline = ResolveBaselineY(0f, metrics);
+        var start = _currentState.TextAlign switch
+        {
+            "center" => -line.Width / 2f,
+            "right" or "end" => -line.Width,
+            _ => 0f
+        };
+        var none = ink.IsEmpty;
         return new Dictionary<string, object>
         {
-            ["width"] = width,
-            ["actualBoundingBoxAscent"] = -metrics.Ascent,
-            ["actualBoundingBoxDescent"] = metrics.Descent,
-            ["fontBoundingBoxAscent"] = -metrics.Top,
-            ["fontBoundingBoxDescent"] = metrics.Bottom
+            ["width"] = line.Width,
+            ["actualBoundingBoxLeft"] = none ? 0f : -(start + ink.Left),
+            ["actualBoundingBoxRight"] = none ? 0f : start + ink.Right,
+            ["actualBoundingBoxAscent"] = none ? 0f : -(baseline + ink.Top),
+            ["actualBoundingBoxDescent"] = none ? 0f : baseline + ink.Bottom,
+            ["fontBoundingBoxAscent"] = -(baseline + metrics.Ascent),
+            ["fontBoundingBoxDescent"] = baseline + metrics.Descent
         };
     }
 

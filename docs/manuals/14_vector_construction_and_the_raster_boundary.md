@@ -423,7 +423,7 @@ The return value is **how many rule-to-element applications happened**, which is
 
 A vector scene measures itself, which is what lets it be composed rather than positioned by guess.
 
-**`getBBox()`** returns `{ x, y, width, height, cx, cy, x2, y2 }` — and for a `<text>` element it is a **real font measurement**, honouring `font-family` (including a fallback list), `font-size`, `font-weight`, `font-style` and `text-anchor`. It agrees with `ctx.measureText(...)` for the same string. Remember SVG's `y` is the **baseline**, so the returned box starts above it.
+**`getBBox()`** returns `{ x, y, width, height, cx, cy, x2, y2 }` — and for a `<text>` element it is a **real font measurement**, honouring `font-family` (including a fallback list), `font-size`, `font-weight`, `font-style` and `text-anchor`. Its width agrees with `ctx.measureText(...).width`; **its height is the face's line box, ascent to descent, not the ink**, so an "H" and a "g" get the same height. For a cap height, use `ctx.measureText('H').actualBoundingBoxAscent`. Remember SVG's `y` is the **baseline**, so the returned box starts above it.
 
 ```js
 const heading = paper.text(40, 60, 'Meridian Cycles');

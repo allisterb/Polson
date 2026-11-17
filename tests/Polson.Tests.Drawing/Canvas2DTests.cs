@@ -1,9 +1,12 @@
 namespace Polson.Tests.Drawing;
 
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using Polson.Drawing.Skia;
 using Polson.Drawing.Svg;
 using Polson.MCPServer;
+using SkiaSharp;
 using Xunit;
 
 public class Canvas2DTests : TestsRuntime
@@ -143,6 +146,64 @@ public class Canvas2DTests : TestsRuntime
 
         var imgBytes = canvas.ToImageBytes();
         Assert.True(imgBytes.Length > 0);
+    }
+
+    private static float Metric(Dictionary<string, object> m, string key) => Convert.ToSingle(m[key]);
+
+    /// <summary>
+    /// <c>actualBoundingBox*</c> is the ink of the string, <c>fontBoundingBox*</c> the face's ascent and descent. Until
+    /// 2026-11-17 the "actual" ascent was the face's: 90.5 for an "H" whose ink is 72 tall, so a cap height read from it
+    /// was a quarter too large.
+    /// </summary>
+    [Fact]
+    public void TestMeasureTextGivesTheInkAndTheFacesAscentApart()
+    {
+        var ctx = new SkiaCanvas(10, 10).GetContext("2d");
+        ctx.Font = "100px Arial";
+
+        var h = ctx.MeasureText("H");
+        Assert.InRange(Metric(h, "actualBoundingBoxAscent"), 70f, 74f);       // Arial's cap height is 0.716 em
+        Assert.InRange(Metric(h, "actualBoundingBoxDescent"), -1f, 1f);
+        Assert.InRange(Metric(h, "fontBoundingBoxAscent"), 89f, 92f);         // its ascent, 0.905 em
+        Assert.InRange(Metric(h, "fontBoundingBoxDescent"), 20f, 23f);        // its descent, 0.212 em
+        Assert.True(Metric(h, "actualBoundingBoxLeft") <= 0f && Metric(h, "actualBoundingBoxRight") > 50f);
+
+        var g = ctx.MeasureText("g");
+        Assert.True(Metric(g, "actualBoundingBoxDescent") > 15f, $"g descends {Metric(g, "actualBoundingBoxDescent")}");
+        Assert.True(Metric(g, "actualBoundingBoxAscent") < Metric(h, "actualBoundingBoxAscent"));
+
+        foreach (var nothing in new[] { "", " " })
+        {
+            var m = ctx.MeasureText(nothing);
+            Assert.Equal(0f, Metric(m, "actualBoundingBoxAscent"));
+            Assert.Equal(0f, Metric(m, "actualBoundingBoxDescent"));
+        }
+    }
+
+    /// <summary>The distances are from the point <c>fillText</c> is given, under <c>textAlign</c> and <c>textBaseline</c>,
+    /// and they match where the ink is drawn.</summary>
+    [Fact]
+    public void TestMeasureTextMatchesTheInkFillTextDraws()
+    {
+        var canvas = new SkiaCanvas(300, 200);
+        var ctx = canvas.GetContext("2d");
+        ctx.FillStyle = "#ffffff";
+        ctx.FillRect(0, 0, 300, 200);
+        ctx.Font = "100px Arial";
+        ctx.FillStyle = "#000000";
+        ctx.TextAlign = "center";
+        ctx.TextBaseline = "middle";
+        var m = ctx.MeasureText("H");
+        ctx.FillText("H", 150, 100);
+
+        using var bitmap = SKBitmap.Decode(canvas.ToImageBytes());
+        var rows = Enumerable.Range(0, bitmap.Height).Where(y => Enumerable.Range(0, bitmap.Width).Any(x => bitmap.GetPixel(x, y).Red < 128)).ToArray();
+        var cols = Enumerable.Range(0, bitmap.Width).Where(x => Enumerable.Range(0, bitmap.Height).Any(y => bitmap.GetPixel(x, y).Red < 128)).ToArray();
+
+        Assert.InRange(rows.First(), 100 - Metric(m, "actualBoundingBoxAscent") - 1.5f, 100 - Metric(m, "actualBoundingBoxAscent") + 1.5f);
+        Assert.InRange(rows.Last() + 1, 100 + Metric(m, "actualBoundingBoxDescent") - 1.5f, 100 + Metric(m, "actualBoundingBoxDescent") + 1.5f);
+        Assert.InRange(cols.First(), 150 - Metric(m, "actualBoundingBoxLeft") - 1.5f, 150 - Metric(m, "actualBoundingBoxLeft") + 1.5f);
+        Assert.InRange(cols.Last() + 1, 150 + Metric(m, "actualBoundingBoxRight") - 1.5f, 150 + Metric(m, "actualBoundingBoxRight") + 1.5f);
     }
     #endregion
 

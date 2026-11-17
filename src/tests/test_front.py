@@ -287,17 +287,32 @@ class CatalogueTests(unittest.TestCase):
         """The subject — company, film, product, theorem, name, book title — is typed once, first, and never left out."""
         subjects = {"startup-pitch": "company", "film-poster": "film", "film-trailer": "film",
                     "product-poster": "product", "product-ad": "product", "maths-explainer": "topic",
-                    "logo": "name", "book-cover": "book_title",
+                    "logo": "name", "book-cover": "book_title", "store-sign": "store",
                     "film-poster-qloo": "film", "film-trailer-qloo": "film", "product-poster-qloo": "product",
                     "product-ad-qloo": "product"}
         self.assertEqual({c.slug: x.key for c in catalogue.CARDS for x in c.extras if x.subject}, subjects)
         for slug, key in subjects.items():
             card = catalogue.BY_SLUG[slug]
             self.assertEqual(card.extras[0].key, key, slug)
-            size = catalogue.SIZES[card.kind][0].key
-            ext = catalogue.FORMATS[card.kind][0].ext
+            size = card.size_presets[0].key
+            ext = card.format_options[0].ext
             with self.assertRaisesRegex(StudioError, f"Give the {card.extras[0].label.lower()}: ", msg=slug):
                 catalogue.parse(slug, "X", "0", "", [size], "", [ext], {key: "   "}, "A brief.", ["Lisbon"], [""])
+
+    def test_a_store_sign_is_a_screen_in_the_poster_workflow(self):
+        """Screen sizes and no print file; the brief carries the pixels the size check reads, and the screen and distance."""
+        card = catalogue.BY_SLUG["store-sign"]
+        self.assertEqual([f.ext for f in card.format_options], [".png", ".svg"])
+        self.assertIs(catalogue.card_for("poster", "store"), card)
+        made = catalogue.parse("store-sign", "Sole Mates", "0", "", ["1080x1920"], "", [".png"],
+                               {"store": "Sole Mates", "sells": "a shoe store"}, "A sign for level 2.", [], [])
+        self.assertEqual((made.workflow, made.kind), ("poster", "store"))
+        brief = made.brief_text([])
+        for line in ("- Store: Sole Mates", "- What it sells: a shoe store", "- Sizes: Portrait screen 1080 × 1920 px",
+                     '- Screen: 55" panel', "- Read from: 5 m"):
+            self.assertIn(line, brief)
+        with self.assertRaisesRegex(StudioError, "not a preset"):
+            catalogue.parse("store-sign", "X", "0", "", ["2480x3508"], "", [".png"], {"store": "X"}, "A brief.", [], [])
 
     def test_a_film_poster_and_a_trailer_name_their_film(self):
         """The Film line is what the run resolves with Qloo and researches before it designs."""

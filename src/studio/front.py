@@ -451,7 +451,7 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
         # the styles are, since a technique belongs to a workflow.
         designs = {i: techniques.for_workflow(r.workflow) for i, r in enumerate(card.routes)}
         return page(request, "compose.html", "new", status_code=status_code, card=card,
-                    sizes=catalogue.SIZES[card.kind], formats=catalogue.FORMATS[card.kind],
+                    sizes=card.size_presets, formats=card.format_options,
                     silent_preview=catalogue.SILENT_PREVIEW,
                     styles=styles, offered=runs, designs=designs,
                     can_make=not state.observe_only or state.commissioner is not None,

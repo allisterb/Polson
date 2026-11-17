@@ -149,12 +149,14 @@ Object returned by `ctx.measureText(text)`:
   "type": "object",
   "properties": {
     "width": { "type": "number", "description": "Advance width of the measured text in CSS pixels." },
-    "actualBoundingBoxAscent": { "type": "number", "description": "Distance from alphabetic baseline to top of glyph bounding box." },
-    "actualBoundingBoxDescent": { "type": "number", "description": "Distance from alphabetic baseline to bottom of glyph bounding box." },
-    "fontBoundingBoxAscent": { "type": "number", "description": "Distance from baseline to highest ascent of font." },
-    "fontBoundingBoxDescent": { "type": "number", "description": "Distance from baseline to lowest descent of font." }
+    "actualBoundingBoxLeft": { "type": "number", "description": "Distance left from the fillText point (as textAlign places the text) to the left of the ink; positive leftward." },
+    "actualBoundingBoxRight": { "type": "number", "description": "Distance right from the fillText point to the right of the ink." },
+    "actualBoundingBoxAscent": { "type": "number", "description": "Distance up from the fillText point (as textBaseline places the baseline) to the top of the ink of this string: the cap height for \"H\". 0 for a string with no ink." },
+    "actualBoundingBoxDescent": { "type": "number", "description": "Distance down from the fillText point to the bottom of the ink of this string. 0 for a string with no ink." },
+    "fontBoundingBoxAscent": { "type": "number", "description": "Distance up from the fillText point to the face's ascent, whatever the string." },
+    "fontBoundingBoxDescent": { "type": "number", "description": "Distance down from the fillText point to the face's descent, whatever the string." }
   },
-  "required": ["width", "actualBoundingBoxAscent", "actualBoundingBoxDescent", "fontBoundingBoxAscent", "fontBoundingBoxDescent"]
+  "required": ["width", "actualBoundingBoxLeft", "actualBoundingBoxRight", "actualBoundingBoxAscent", "actualBoundingBoxDescent", "fontBoundingBoxAscent", "fontBoundingBoxDescent"]
 }
 ```
 

@@ -104,7 +104,7 @@ WORKFLOWS: dict[str, tuple[str, ...]] = {
     # poster; `product` makes either one a product ad, the dynamic-creative case (`docs/internal/product-ad-probe.md`).
     # Their deadlines are the craft defaults (55 and 70, since the brain dump): no entry in `DEADLINES` below, since the keepalive's
     # ceiling (218) holds both, where the old 38 held neither — and a set of six, at +20 or +25 per audience.
-    "poster": ("film", "product"),
+    "poster": ("film", "product", "store"),
     # `product` is a product ad; `report` explains a long document the director attached (a 10-K) — the Nebius entry,
     # read by Nemotron through `Documents.ask` and needing no Qloo. **No type is a film trailer**, so it is in
     # `UNTYPED_IS_A_CHOICE` below.

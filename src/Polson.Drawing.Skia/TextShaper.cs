@@ -148,6 +148,30 @@ internal static class TextShaper
     /// <summary><c>font.MeasureText(text)</c> as <see cref="DrawText"/> draws it.</summary>
     public static float Measure(string text, SKFont font) => Shape(text, font, 0f).Width;
 
+    /// <summary>
+    /// The ink of a shaped line as <see cref="Draw"/> draws it: the union of its glyphs' outlines, with the line's left edge
+    /// at x = 0 and its baseline at y = 0 (y down). Empty for a line with no ink, a space or nothing.
+    /// </summary>
+    public static SKRect InkBounds(Line line, SKFont font)
+    {
+        var ink = SKRect.Empty;
+        var cursor = 0f;
+        foreach (var run in line.Runs)
+        {
+            using var runFont = new SKFont(run.Typeface, font.Size) { ScaleX = font.ScaleX, SkewX = font.SkewX, Embolden = font.Embolden };
+            for (var i = 0; i < run.Glyphs.Length; i++)
+            {
+                using var glyph = runFont.GetGlyphPath(run.Glyphs[i]);
+                if (glyph is null || glyph.IsEmpty) continue;
+                var b = glyph.TightBounds;
+                b.Offset(cursor + run.Positions[i].X, run.Positions[i].Y);
+                ink = ink.IsEmpty ? b : SKRect.Union(ink, b);
+            }
+            cursor += run.Width + line.Spacing;
+        }
+        return ink;
+    }
+
     /// <summary>Splits a line into runs of one face and one direction, by grapheme cluster.</summary>
     private static List<(int Start, int Length, SKTypeface Typeface, Dir Dir)> Segment(string text, SKTypeface primary,
         Dictionary<SKTypeface, SKFont> probes)
