@@ -57,7 +57,7 @@ WORKFLOWS: dict[str, tuple[str, ...]] = {
     "storyboard_cast": (),
     "cover": (),
     # Posters, a film's or a product's print ad, from the brief and research; audiences are language versions.
-    "poster": ("film", "product"),
+    "poster": ("film", "product", "store"),
     # The two Qloo twins: `poster` and `motion` as the hackathon entry built them, each audience designed from its Qloo
     # taste profile. Offered only while Qloo is on (`catalogue.taste_available`).
     "poster_qloo": ("film", "product"),

@@ -228,6 +228,17 @@ class Card:
     #: elsewhere (a `subject` field, or the document it `needs`): there a general brief is still about something. On
     #: the others the brief is the only place the subject is, and a prefilled one would be made as typed, about nothing.
     brief: str = ""
+    #: The sizes and formats offered, when not the kind's: a store sign is an image whose sizes are screens, with no print.
+    sizes: tuple[Size, ...] = ()
+    formats: tuple[Format, ...] = ()
+
+    @property
+    def size_presets(self) -> tuple[Size, ...]:
+        return self.sizes or SIZES[self.kind]
+
+    @property
+    def format_options(self) -> tuple[Format, ...]:
+        return self.formats or FORMATS[self.kind]
 
     @property
     def multi_route(self) -> bool:
@@ -260,7 +271,8 @@ class Card:
     @property
     def piece(self) -> str:
         """What one audience gets, in the visitor's words."""
-        return "ad" if self.fixed_type == "product" else "film" if self.kind == "video" else "piece"
+        return ("ad" if self.fixed_type == "product" else "sign" if self.fixed_type == "store"
+                else "film" if self.kind == "video" else "piece")
 
 
 #: Presets per kind. A tile draws the ratio, so the order is the order a person scans in.
@@ -307,6 +319,22 @@ PRODUCT: tuple[Extra, ...] = (
     Extra("claim", "Claim", placeholder="The one claim, worded as it may appear", long=True, rows=2),
     Extra("cta", "Call to action", placeholder="What the viewer should do next", long=True, rows=2))
 TRAILER_LENGTH = Extra("duration", "Duration", ("15 seconds", "30 seconds"), "15 seconds")
+
+#: What a store sign asks for: the store, what it sells, at most one message, and the screen and distance it is read at,
+#: which decide its smallest type (`type.store.md`, after the 2010 ADA Standards' Table 703.5.5).
+STORE: tuple[Extra, ...] = (
+    Extra("store", "Store", placeholder="Its name, exactly as it appears", subject=True),
+    Extra("sells", "What it sells", placeholder="In a few words: a shoe store, children's books", long=True, rows=2),
+    Extra("message", "Message", placeholder="One line, worded as it may appear; blank for none. No offer or price "
+                                            "unless the store gives it.", long=True, rows=2),
+    Extra("screen", "Screen", ('43" panel', '55" panel', '65" panel', '75" panel'), '55" panel'),
+    Extra("distance", "Read from", ("3 m", "5 m", "8 m", "12 m"), "5 m"))
+
+#: A mall's screens: a freestanding display is portrait, a wall screen often landscape; HD or 4K.
+SIGNAGE_SIZES: tuple[Size, ...] = (Size("Portrait screen", 1080, 1920), Size("Portrait 4K", 2160, 3840),
+                                   Size("Landscape screen", 1920, 1080), Size("Landscape 4K", 3840, 2160))
+#: A screen plays the picture; the SVG is the editable master. No print file: a screen has no trim or bleed.
+SIGNAGE_FORMATS: tuple[Format, ...] = (Format(".png", "Image"), Format(".svg", "Vector"))
 
 CARDS: tuple[Card, ...] = (
     # **Working workflows first, in rows of three as the pages lay them out** (2026-10-30): what this deployment runs,
@@ -392,6 +420,14 @@ CARDS: tuple[Card, ...] = (
          extras=PRODUCT,
          audiences=True, audiences_optional=True, types=("product",),
          brief="A print ad for the product, built on its one claim and ending on the call to action."),
+    # A store's sign on a mall's digital screen: the poster workflow's `store` type, built at the screen's pixels, its
+    # smallest type checked against the viewing distance, and shown in a freestanding display (`Stage.mockup` 'totem').
+    Card("store-sign", "Store sign", "image", "Image · a mall screen, read from where people walk",
+         (Route("poster", "Digital sign"),),
+         extras=STORE, audiences=True, audiences_optional=True, types=("store",),
+         sizes=SIGNAGE_SIZES, formats=SIGNAGE_FORMATS,
+         brief="A sign for the store on a mall's digital screen: its name and what it sells, readable at a glance by "
+               "someone walking past."),
     Card("film-poster", "Film poster", "image", "Image · a one-sheet",
          (Route("poster", "One-sheet poster"),),
          image="film-poster.webp", alt="A Be Cool one-sheet: a gold record label behind crosshairs over a black vinyl",
@@ -640,7 +676,7 @@ def parse(card_slug: str, title: str, route: str, kind: str, sizes: list[str], c
         raise StudioError(f"{card.title} does not offer that {card.style_label.lower()}.")
     kind = card.fixed_type or kind or card.default_type
 
-    presets = {s.key: s for s in SIZES[card.kind]}
+    presets = {s.key: s for s in card.size_presets}
     picked = [presets[k] for k in dict.fromkeys(sizes) if k in presets]
     if len(picked) != len(set(sizes)):
         raise StudioError("One of the sizes is not a preset; use the custom size for anything else.")
@@ -652,7 +688,7 @@ def parse(card_slug: str, title: str, route: str, kind: str, sizes: list[str], c
     if not picked:
         raise StudioError("Choose at least one size.")
 
-    allowed = {f.ext: f for f in FORMATS[card.kind]}
+    allowed = {f.ext: f for f in card.format_options}
     chosen_formats = [allowed[f] for f in dict.fromkeys(formats) if f in allowed]
     if len(chosen_formats) != len(set(formats)):
         raise StudioError(f"{card.title} cannot be delivered in one of those formats.")

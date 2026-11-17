@@ -566,7 +566,7 @@ Represents any SVG node in the document hierarchy:
 
 ### Geometry & Measurement
 
-- `element.getBBox()` → `SnapBBox` — Calculates the element's bounding box. **For a `<text>` element this is a real font measurement**, honouring `font-family` (including a fallback list), `font-size`, `font-weight`, `font-style` and `text-anchor` — so it agrees with `ctx.measureText(...)` for the same string. Remember SVG's `y` is the **baseline**, so the returned box starts above it.
+- `element.getBBox()` → `SnapBBox` — Calculates the element's bounding box. **For a `<text>` element this is a real font measurement**, honouring `font-family` (including a fallback list), `font-size`, `font-weight`, `font-style` and `text-anchor` — its width agrees with `ctx.measureText(...).width` for the same string. **Its height is the face's line box, not the ink**: from the face's ascent above the baseline to its descent below, the same for "H" as for "g" (`measureText`'s `fontBoundingBox*`). For a capital or x-height, read the ink with `measureText`'s `actualBoundingBox*`. Remember SVG's `y` is the **baseline**, so the returned box starts above it.
 
 > [!TIP]
 > This is how a vector layout measures before it places. `Layout`, `Scale` and `Css` are globals and work the same on either side of the SDK, so a measured heading composes exactly as it does on canvas:
@@ -786,7 +786,7 @@ and the results chain: `a.union(b).subtract(c)`.
 - `ctx.fillEquation(latex: string, x: number, y: number, options?: { size?: number })` → `object` — Typesets and fills an equation from LaTeX (see **Equation**), placed by `textAlign` and `textBaseline` as text is, coloured by `fillStyle` where the LaTeX sets none. `size` is the em in canvas units, the current font's size by default. Returns `{ x, y, x2, y2, baseline, width, height, ascent, descent, linear, latex, ok, size }` and records the equation's `linear` form as drawn text, so the layout audit and `Verify.image` see it. Throws on a parse error, naming where.
 - `ctx.strokeWrappedText(text: string, x: number, y: number, maxWidth: number, lineHeight?: number)` → `TextBlock` — The same, stroked.
 - `ctx.measureWrappedText(text: string, maxWidth: number, lineHeight?: number)` → `TextBlock` — Wraps and reports the box the paragraph *would* occupy, **without drawing it**.
-- `ctx.measureText(text: string)` → `TextMetrics` — Returns `{ width, actualBoundingBoxAscent, actualBoundingBoxDescent, fontBoundingBoxAscent, fontBoundingBoxDescent }`.
+- `ctx.measureText(text: string)` → `TextMetrics` — Returns `{ width, actualBoundingBoxLeft, actualBoundingBoxRight, actualBoundingBoxAscent, actualBoundingBoxDescent, fontBoundingBoxAscent, fontBoundingBoxDescent }`, each distance measured from the point `fillText` would be given, under the current `textAlign` and `textBaseline`. **`actualBoundingBox*` is the ink of this string as drawn** — shaped, tracked, fallback faces included — so `measureText('H').actualBoundingBoxAscent` is the cap height (72 for Arial at 100px) and `'x'` the x-height; a space or an empty string measures 0. **`fontBoundingBox*` is the face's ascent and descent**, whatever the string (90.5 and 21.2 for Arial at 100px): the line box, as `getBBox()` gives it for SVG text.
 
 A `TextBlock` is a rectangle plus what was needed to produce it: `{ x, y, width, height, x2, y2, cx, cy, lines, lineCount, lineHeight, ascent, descent, positioned }`. `lines` is the wrapped text as an array, `width` is the widest line, and `height` is `lineCount × lineHeight`.
 

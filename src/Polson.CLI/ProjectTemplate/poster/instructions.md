@@ -245,6 +245,10 @@ for them.
 
 ## Making it
 
+> **A sign on a screen (the `store` type) is not printed**: it is built at the screen's pixels and writes no print
+> file, as its type section above says. That section replaces the paper sizes, the bleed and `outPdf` below, and the
+> print checks; everything else here holds.
+
 **Build the poster on a Snap paper in the page's proportions, from the first script.** The print file
 needs a vector paper — a canvas cannot carry a bleed — and the paper *is* the trimmed page:
 
@@ -334,7 +338,7 @@ of a family's name — `'Franklin Gothic Heavy'` is `'Franklin Gothic'` at `font
 5. **Contrast** — WCAG, as above, for every text-on-colour pair.
 6. **In its setting** (Manual 30 §5; Lupton's *Mock-Ups*). `Stage.mockup('artifacts/mockup_wall_a.png', { design: paper,
    setting: 'wall', size: '<the brief's size>' })` hangs the final at its real size beside a figure 1.7 m tall;
-   `'shelter'` or `'billboard'` sets it in the street, `'frame'` framed. Look at it: does the headline hold at that size,
+   `'shelter'` or `'billboard'` sets it in the street, `'frame'` framed, `'totem'` on a mall's freestanding screen. Look at it: does the headline hold at that size,
    and the image? It is the two reading distances shown as the client will see them. Record what you saw with
    `Stage.note`.
 
@@ -342,7 +346,8 @@ of a family's name — `'Franklin Gothic Heavy'` is `'Franklin Gothic'` at `font
 
 ## Before you finish
 
-- The final poster for each audience: `outFile` PNG, `outSvg`, and `outPdf` at the brief's size, in `artifacts/`. Name
+- The final poster for each audience: `outFile` PNG, `outSvg`, and `outPdf` at the brief's size (a sign on a screen:
+  no `outPdf`, and its mock-up is the `'totem'`), in `artifacts/`. Name
   them by audience letter — `artifacts/final_a.png` / `.svg` / `.pdf`, then `final_b`, … — and do
   not overwrite comps. **The brief's size is the deliverable's**: a `final_` file at another size comes back with
   a `[WARN] … the brief asks for …`, which is a fault to fix, not a note to keep. **Budget the clock per poster**: the deadline already counts the size of the set,

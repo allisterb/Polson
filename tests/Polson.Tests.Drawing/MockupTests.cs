@@ -47,6 +47,8 @@ public class MockupTests : TestsRuntime
     [InlineData("frame", 420, 594)]
     [InlineData("shelter", 700, 990)]
     [InlineData("billboard", 1280, 720)]
+    [InlineData("totem", 1080, 1920)]
+    [InlineData("totem", 1920, 1080)]
     [InlineData("phone", 700, 990)]
     [InlineData("screen", 1280, 720)]
     [InlineData("card", 850, 550)]
@@ -82,6 +84,25 @@ public class MockupTests : TestsRuntime
         var tall = result.Corners[3].Y - result.Corners[0].Y;
         Assert.Equal(594 * result.PixelsPerMm!.Value, tall, 1.0);
         Assert.Equal((420.0, 594.0), (Math.Round(result.WidthMm), Math.Round(result.HeightMm)));
+    }
+
+    /// <summary>A mall display is a 55" panel unless told otherwise: 685 × 1218 mm in portrait, standing above a figure's waist.</summary>
+    [Fact]
+    public void TestATotemIsA55InchPanelStandingAboveTheFloor()
+    {
+        using var design = Design(1080, 1920, Marker);
+
+        var result = Mockup.Render(design, new Mockup.Spec("totem"));
+        using var image = result.Image;
+        if (Environment.GetEnvironmentVariable("POLSON_MOCKUP_OUT") is { Length: > 0 } dir)
+            System.IO.File.WriteAllBytes(System.IO.Path.Combine(dir, "totem.png"), image.Encode(SKEncodedImageFormat.Png, 90).ToArray());
+
+        Assert.Equal((685.0, 1218.0), (Math.Round(result.WidthMm), Math.Round(result.HeightMm)));
+        // Taller than wide on the picture too, and its bottom edge clear of the picture's bottom (it stands on a plinth).
+        var tall = result.Corners[3].Y - result.Corners[0].Y;
+        var wide = result.Corners[1].X - result.Corners[0].X;
+        Assert.True(tall > wide * 1.4, $"{tall} tall, {wide} wide");
+        Assert.True(result.Corners[3].Y < 940, $"bottom at {result.Corners[3].Y}");
     }
 
     [Fact]

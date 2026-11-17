@@ -7,7 +7,8 @@ using System.Linq;
 using SkiaSharp;
 
 /// <summary>
-/// A design shown where it will live — on a wall, in a frame, in a bus shelter, on a billboard, a phone, a screen, a
+/// A design shown where it will live — on a wall, in a frame, in a bus shelter, on a billboard, a mall's freestanding
+/// display, a phone, a screen, a
 /// business card or a box — or pinned into four corners of a picture: Lupton's mock-up (<i>Graphic Design Thinking</i>,
 /// pp. 136–138), drawn rather than photographed. <c>Stage.mockup</c>.
 /// </summary>
@@ -41,7 +42,7 @@ public static class Mockup
 
     #region Constants
     /// <summary>The drawn settings.</summary>
-    public static readonly string[] Settings = ["wall", "frame", "shelter", "billboard", "phone", "screen", "card", "box"];
+    public static readonly string[] Settings = ["wall", "frame", "shelter", "billboard", "totem", "phone", "screen", "card", "box"];
 
     public const string DefaultLabel = "Mock-up — simulated placement";
     #endregion
@@ -69,6 +70,7 @@ public static class Mockup
             "wall" or "frame" => Wall(canvas, image, spec, wmm, hmm, spec.Setting == "frame"),
             "shelter" => Shelter(canvas, image, spec, wmm, hmm),
             "billboard" => Billboard(canvas, image, spec, wmm, hmm),
+            "totem" => Totem(canvas, image, spec, wmm, hmm, accent),
             "phone" => Device(canvas, image, spec, phone: true),
             "screen" => Device(canvas, image, spec, phone: false),
             "card" => Card(canvas, image, spec, wmm, hmm, accent),
@@ -317,6 +319,74 @@ public static class Mockup
         Fill(canvas, Panel(cam, fit, 0, centreY, Depth + 40, wmm + 300, hmm + 300, Yaw), new SKColor(0x3b, 0x3d, 0x42));
         var quad = Panel(cam, fit, 0, centreY, Depth, wmm, hmm, Yaw);
         Pin(canvas, design, quad);
+        return (quad, null);
+    }
+
+    /// <summary>
+    /// A freestanding digital display in a mall concourse, a little turned: the lit screen in a dark cabinet on a plinth,
+    /// shopfronts behind, a polished floor, and a figure beside it for scale.
+    /// </summary>
+    private static (SKPoint[], double?) Totem(SKCanvas canvas, SKImage design, Spec spec, double wmm, double hmm, SKColor accent)
+    {
+        const double Eye = 1600, Depth = 5200, Yaw = -14, Plinth = 140, Lift = 380, Rim = 70;
+        var cam = new Camera(0, Eye, 0, 0);
+        var centreY = Lift + hmm / 2;
+        var top = centreY + hmm / 2 + Rim;
+        var cx = -wmm * 0.25;
+        var (r, n) = Axes(Yaw);
+        var cabW = wmm + Rim * 2;
+        // A step to the side and a little behind the display's face, so the figure is at about its distance: nearer the
+        // camera, it read as a giant beside the display.
+        var personX = cx + cabW / 2 + 900;
+        var personZ = Depth + 300;
+        var view = new[]
+        {
+            cam.Project(cx - wmm * 1.3, -60, Depth - 400), cam.Project(cx + wmm * 1.3, top + 500, Depth),
+            cam.Project(personX + 500, -60, personZ),
+        };
+        var fit = Fit(view, spec.Width, spec.Height, 0.94f);
+
+        // The concourse: a warm wall of shopfronts behind, the polished floor in front.
+        const double Back = Depth + 7000;
+        var floorY = fit.MapPoint(cam.Project(0, 0, Back)).Y;
+        Vertical(canvas, 0, floorY, spec.Width, new SKColor(0xe9, 0xe1, 0xd3), new SKColor(0xd6, 0xcb, 0xb9));
+        Vertical(canvas, floorY, spec.Height, spec.Width, new SKColor(0xd9, 0xd0, 0xc2), new SKColor(0xbf, 0xb3, 0xa2));
+        using (var glass = new SKPaint { Color = new SKColor(0xf7, 0xf1, 0xe4), IsAntialias = true })
+        using (var mullion = new SKPaint { Color = new SKColor(0x3a, 0x36, 0x31), IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 2 })
+            for (var x = -24000.0; x <= 24000; x += 6000)
+            {
+                var front = Panel(cam, fit, x, 1500, Back, 5200, 3000, 0);
+                using var path = Path(front);
+                canvas.DrawPath(path, glass);
+                canvas.DrawPath(path, mullion);
+                Fill(canvas, Panel(cam, fit, x, 3350, Back, 5200, 500, 0), new SKColor(0x2e, 0x2b, 0x27));
+            }
+
+        var cabinet = new SKColor(0x1b, 0x1c, 0x1f);
+        // The plinth, a low slab a little wider and deeper than the cabinet: its top, seen from eye height, then its face.
+        var (pw, pd) = (cabW + 120, 160 + 200);
+        Vec3 S(double u, double d) => new(cx + r.X * u - n.X * d, Plinth, Depth - 60 + r.Z * u - n.Z * d);
+        Shadow(canvas, Panel(cam, fit, cx, Plinth / 2, Depth - 60, pw, Plinth, Yaw), 14, 0.22f);
+        Fill(canvas, [.. new[] { S(-pw / 2, pd), S(pw / 2, pd), S(pw / 2, 0), S(-pw / 2, 0) }.Select(v => Point(cam, fit, v.X, v.Y, v.Z))],
+            new SKColor(0x3a, 0x3b, 0x40));
+        Fill(canvas, Panel(cam, fit, cx, Plinth / 2, Depth - 60, pw, Plinth, Yaw), new SKColor(0x26, 0x27, 0x2b));
+
+        // The cabinet's side, then its face.
+        var side = new[]
+        {
+            Point(cam, fit, cx + r.X * cabW / 2, top, Depth + r.Z * cabW / 2),
+            Point(cam, fit, cx + r.X * cabW / 2 + n.X * -160, top, Depth + r.Z * cabW / 2 - n.Z * 160),
+            Point(cam, fit, cx + r.X * cabW / 2 + n.X * -160, Plinth, Depth + r.Z * cabW / 2 - n.Z * 160),
+            Point(cam, fit, cx + r.X * cabW / 2, Plinth, Depth + r.Z * cabW / 2),
+        };
+        Fill(canvas, side, new SKColor(0x2a, 0x2b, 0x2f));
+        var face = Panel(cam, fit, cx, (top + Plinth) / 2, Depth, cabW, top - Plinth, Yaw);
+        Fill(canvas, face, cabinet);
+
+        var quad = Panel(cam, fit, cx, centreY, Depth - 1, wmm, hmm, Yaw);
+        Glow(canvas, quad, accent.WithAlpha(0x50), 22);
+        Pin(canvas, design, quad);
+        Person(canvas, cam, fit, personX, personZ, new SKColor(0x6e, 0x68, 0x5f, 0xb0));
         return (quad, null);
     }
 
@@ -606,6 +676,8 @@ public static class Mockup
             "wall" or "frame" => (594.0, aspect <= 1),
             "shelter" => (1750.0, aspect <= 1),
             "billboard" => (3048.0, true),
+            // A 55" 16:9 panel's long side, the usual freestanding display; portrait, it is 685 × 1218 mm.
+            "totem" => (1218.0, aspect <= 1),
             "card" => (85.0, aspect < 1),
             "box" => (140.0, aspect <= 1),
             _ => (1000.0, aspect <= 1),
