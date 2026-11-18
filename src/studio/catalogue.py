@@ -512,9 +512,10 @@ CARDS: tuple[Card, ...] = (
 
 BY_SLUG: dict[str, Card] = {c.slug: c for c in CARDS}
 
-#: The home page's three rows of cards, in this order: the workflows a visitor can start, the entries' first.
+#: The home page's cards, in this order, three to a row: the workflows a visitor can start, the entries' first. The
+#: store sign (2026-11-18) has no gallery image yet, so the macro draws its kind icon.
 HOME = ("film-trailer", "product-ad", "report-explainer", "startup-pitch", "maths-explainer", "product-poster",
-        "film-poster", "infographic", "logo")
+        "store-sign", "film-poster", "infographic", "logo")
 
 #: Cards by a former slug, for a link made before the change. A *request* recorded under one is placed by its workflow
 #: and type instead (`card_for`), since `poster` covered both of the cards that replaced it.
