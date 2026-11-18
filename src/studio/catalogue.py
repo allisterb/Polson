@@ -441,6 +441,8 @@ CARDS: tuple[Card, ...] = (
          (Route("poster", "Digital sign"),),
          extras=STORE, audiences=True, audiences_optional=True, types=("store",),
          sizes=SIGNAGE_SIZES, formats=SIGNAGE_FORMATS, brand_files=True,
+         image="store-sign.webp", alt="A shoe store's sign on a mall totem beside a passer-by: its name, what it sells, "
+                                      "and an orange-and-white sneaker",
          brief="A sign for the store on a mall's digital screen: its name and what it sells, readable at a glance by "
                "someone walking past."),
     Card("film-poster", "Film poster", "image", "Image · a one-sheet",
@@ -527,8 +529,7 @@ CARDS: tuple[Card, ...] = (
 
 BY_SLUG: dict[str, Card] = {c.slug: c for c in CARDS}
 
-#: The home page's cards, in this order, three to a row: the workflows a visitor can start, the entries' first. The
-#: store sign (2026-11-18) has no gallery image yet, so the macro draws its kind icon.
+#: The home page's cards, in this order, three to a row: the workflows a visitor can start, the entries' first.
 HOME = ("film-trailer", "product-ad", "report-explainer", "startup-pitch", "maths-explainer", "product-poster",
         "store-sign", "film-poster", "infographic", "logo")
 

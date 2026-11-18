@@ -25,6 +25,7 @@ import shutil
 import tempfile
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -357,6 +358,13 @@ _checked_at = float("-inf")
 #: How long a look at the archive stands, so a page load is not a bucket listing.
 RECHECK_SECONDS = 60.0
 
+#: How much of the disk (which is memory) `warm` may fill with whole requests. A request past it is still brought back
+#: when it is opened, as before; this only bounds what is fetched ahead of anyone asking.
+WARM_BYTES = 768 * 1024 * 1024
+
+#: Requests fetched at once for the list.
+LIST_WORKERS = 8
+
 
 def rebuild_listed(root: Path) -> None:
     """Brings back, as far as the request list needs, every archived request this instance does not have."""
@@ -366,17 +374,54 @@ def rebuild_listed(root: Path) -> None:
     with _rebuilding:
         if time.monotonic() - _checked_at < RECHECK_SECONDS:
             return
-        _checked_at = time.monotonic()
-        for name in archive.restorable(root):
-            try:
-                project = archive.restore(name, root, only=archive.light)
-                _partial.add(name)
-                thumb = next(still_renders(project, read_events(project / "events" / "server.jsonl")), None)
-                if thumb is not None:
-                    wanted = thumb.relative_to(project.resolve()).as_posix()
-                    archive.restore(name, root, only=lambda rel, wanted=wanted: rel in (wanted, "project.json"))
-            except Exception as exc:                             # noqa: BLE001 - one bad request never hides the rest
-                _logger.warning("polson front: could not bring back %s for the list (%s)", name, exc)
+        try:
+            # Side by side: one after another took 10.9 s for seven requests on a fresh instance (2026-11-18), nearly
+            # all of it round trips. Each restore makes its own storage client, so no client is shared across threads.
+            with ThreadPoolExecutor(max_workers=LIST_WORKERS) as pool:
+                list(pool.map(lambda name: _listed(root, name), archive.restorable(root)))
+        finally:
+            # Stamped when the rebuild is done, not when it starts: a visitor arriving mid-rebuild then waits on the
+            # lock for the whole list instead of being shown the part of it fetched so far.
+            _checked_at = time.monotonic()
+
+
+def warm(root: Path) -> None:
+    """Fetches the archive ahead of the first visitor: every request's row, then each request whole, up to `WARM_BYTES`.
+
+    Run once in a background thread when the server starts, so a new instance (a rollout, or a start from idle) has
+    the list ready and opens a request from local disk. Each whole request takes the lock on its own, so a visitor
+    opening one waits behind at most one restore, never the whole warm. Does nothing without an archive.
+    """
+    if not archive.ARCHIVE_URI:
+        return
+    started = time.monotonic()
+    rebuild_listed(root)
+    whole = 0
+    for name in sorted(_partial):
+        if _size(Path(root)) >= WARM_BYTES:
+            break
+        rebuild_request(root, name)
+        whole += name not in _partial
+    _logger.warning("polson front: warmed the archive in %.1f s: %d request(s) whole, %d listed only, %d MB on disk",
+                    time.monotonic() - started, whole, len(_partial), _size(Path(root)) // (1024 * 1024))
+
+
+def _listed(root: Path, name: str) -> None:
+    """Restores what `name`'s row is read from, and its thumbnail."""
+    try:
+        project = archive.restore(name, root, only=archive.light)
+        _partial.add(name)
+        thumb = next(still_renders(project, read_events(project / "events" / "server.jsonl")), None)
+        if thumb is not None:
+            wanted = thumb.relative_to(project.resolve()).as_posix()
+            archive.restore(name, root, only=lambda rel, wanted=wanted: rel in (wanted, "project.json"))
+    except Exception as exc:                                     # noqa: BLE001 - one bad request never hides the rest
+        _logger.warning("polson front: could not bring back %s for the list (%s)", name, exc)
+
+
+def _size(root: Path) -> int:
+    """Bytes under `root`, the projects directory."""
+    return sum(p.stat().st_size for p in root.rglob("*") if p.is_file())
 
 
 def rebuild_request(root: Path, name: str) -> None:
