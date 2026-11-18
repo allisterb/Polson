@@ -244,7 +244,32 @@
 
   <div class="fr-compose-body">
     <section>
+      {#- The business's own pictures, each named in the brief by its role: the logo is placed as given, every image appears. -#}
+      {% if card.brand_files %}
+      <h2 class="ps-label" style="margin:0">Logo</h2>
+      <p class="ps-hint">The store's logo, if it has one: an SVG, or the largest PNG you have (2000 px wide or more), on a transparent background. It is placed as given, never redrawn.</p>
+      <div class="fr-assets" data-assets>
+        <label class="ps-asset ps-asset-upload">
+          {{ m.icon('upload', 24) }}
+          <span class="ps-asset-up-label">Add the logo</span>
+          <span class="ps-asset-up-hint">SVG, PNG, JPG</span>
+          <input class="fr-vh" type="file" name="logo" accept="{{ accept_logo }}" data-files>
+        </label>
+      </div>
+      <h2 class="ps-label" style="margin:var(--space-6) 0 0">Images to include</h2>
+      <p class="ps-hint">Photographs or pictures that must appear on it: the shopfront, a product. Up to {{ max_images }}, the larger the better; each is fitted, never stretched.</p>
+      <div class="fr-assets" data-assets>
+        <label class="ps-asset ps-asset-upload">
+          {{ m.icon('upload', 24) }}
+          <span class="ps-asset-up-label">Add images</span>
+          <span class="ps-asset-up-hint">PNG, JPG, WebP</span>
+          <input class="fr-vh" type="file" name="images" multiple accept="{{ accept_images }}" data-files>
+        </label>
+      </div>
+      <h2 class="ps-label" style="margin:var(--space-6) 0 0">Other files</h2>
+      {% else %}
       <h2 class="ps-label" style="margin:0">Files to use</h2>
+      {% endif %}
       <p class="ps-hint">References, data, logos, a brief document, or a reference video (MP4). Up to {{ max_files }} files, 16 MB each. Only the studio sees them.</p>
       <div class="fr-assets" data-assets>
         <label class="ps-asset ps-asset-upload">

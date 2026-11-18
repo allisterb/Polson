@@ -238,7 +238,15 @@ public sealed partial class StageApi
 
         // Claims the studio's own checkers record (Verify, the client's words) are theirs to write: StageApi.Studio.cs.
         RefuseRecordedClaim(clean);
+        if (clean.StartsWith(PlacedPrefix, StringComparison.OrdinalIgnoreCase) || clean.StartsWith(GroundPrefix, StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException($"Stage.check: a claim beginning '{PlacedPrefix}' is recorded by Stage.place itself, from the "
+                + "picture's pixels and the size it was drawn at. Place it again at a size its pixels allow; do not write the verdict.");
+        return Verdict(clean, passed, detail, reason, judged);
+    }
 
+    /// <summary>Records a cleaned claim's verdict, as <see cref="Check"/> does once it has refused what it must.</summary>
+    private bool Verdict(string clean, bool passed, object? detail, string? reason, bool judged)
+    {
         // **A failure kept on purpose is its own state.** The finder that reports two fists on one rope is right;
         // the drawing wants them there. Without a third state the record showed a red check and the reason lived in
         // a note somewhere else, so a reader saw a failure the run had already decided about.

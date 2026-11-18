@@ -25,17 +25,33 @@ internal static class ClientWords
 {
     #region Methods
     /// <summary>Whether the project at <paramref name="projectRoot"/> is a logo run, from its <c>project.json</c>.</summary>
-    public static bool Applies(string? projectRoot)
+    public static bool Applies(string? projectRoot) => Manifest(projectRoot) is ("logo", _);
+
+    /// <summary>
+    /// Whether it is a store sign (a <c>poster</c> typed <c>store</c>), whose every word is the brief's too: its name, what it
+    /// sells and its message. francis_fashions_2 (2026-11-18) set "SHOE LOCKER COLLECTION", and "collection" was its own.
+    /// </summary>
+    public static bool IsSign(string? projectRoot) => Manifest(projectRoot) is ("poster" or "poster_qloo", "store");
+
+    /// <summary>What a store sign's failed check says to do.</summary>
+    public static string SignDetail(string[] foreign) =>
+        $"not in the brief: {List(foreign)}. A store sign carries the store's name, what it sells and the brief's message, each "
+        + "in the brief's words, and nothing else: take the rest off. A word inside a supplied logo is the logo's and is not read here.";
+
+    /// <summary>The project's workflow and type, from <c>project.json</c>; nulls when it cannot be read.</summary>
+    private static (string? Workflow, string? Type) Manifest(string? projectRoot)
     {
-        if (projectRoot is null) return false;
+        if (projectRoot is null) return (null, null);
         try
         {
             using var manifest = JsonDocument.Parse(File.ReadAllText(Path.Combine(projectRoot, "project.json")));
-            return manifest.RootElement.TryGetProperty("workflow", out var w) && w.GetString() == "logo";
+            var root = manifest.RootElement;
+            return (root.TryGetProperty("workflow", out var w) ? w.GetString() : null,
+                root.TryGetProperty("type", out var t) && t.ValueKind == JsonValueKind.String ? t.GetString() : null);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
-            return false;
+            return (null, null);
         }
     }
 

@@ -225,6 +225,10 @@ DOCUMENT_SUFFIXES = {
     ".png", ".jpg", ".jpeg", ".webp", ".mp4",
 }
 
+#: Pictures the agent places rather than reads: a logo as an SVG goes in with `Stage.place`, which keeps it vector.
+#: `Documents.ask` cannot open one, so it is accepted into `documents/` here and nowhere a document is expected.
+PLACEABLE_SUFFIXES = {".svg"}
+
 
 def stage_documents(project: Path, documents: list[str] | None) -> list[Path]:
     """Copies the director's source material into the project's `documents/` folder.
@@ -248,10 +252,10 @@ def stage_documents(project: Path, documents: list[str] | None) -> list[Path]:
         if not source.is_file():
             raise GenerateError(f"--document {item!r} is not a file.")
 
-        if source.suffix.lower() not in DOCUMENT_SUFFIXES:
+        if source.suffix.lower() not in DOCUMENT_SUFFIXES | PLACEABLE_SUFFIXES:
             raise GenerateError(
                 f"--document {item!r} has no type the studio can declare. Supported: "
-                + ", ".join(sorted(DOCUMENT_SUFFIXES))
+                + ", ".join(sorted(DOCUMENT_SUFFIXES | PLACEABLE_SUFFIXES))
             )
 
         target = folder / source.name

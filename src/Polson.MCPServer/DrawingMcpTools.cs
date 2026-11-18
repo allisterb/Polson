@@ -360,6 +360,33 @@ public partial class DrawingMcpTools
 
     internal static string[] SizeNames((int W, int H)[] sizes) => [.. sizes.Select(a => $"{a.W} × {a.H}")];
 
+    /// <summary>
+    /// The pictures the brief supplies to be placed — its <c>- Logo, in documents/:</c> and <c>- Images to include, in
+    /// documents/:</c> lines, as the composer writes them — as project paths (<c>documents/logo.svg</c>). Empty when it
+    /// names none.
+    /// </summary>
+    internal static string[] SuppliedPictures(string? projectRoot)
+    {
+        var brief = projectRoot is null ? null : Path.Combine(projectRoot, "brief.md");
+        if (brief is null || !File.Exists(brief)) return [];
+        return [.. File.ReadLines(brief).Select(l => SuppliedLine().Match(l)).Where(m => m.Success)
+            .SelectMany(m => m.Groups[1].Value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+            .Select(f => "documents/" + f.Split(" — ")[0].Trim()).Distinct(StringComparer.OrdinalIgnoreCase)];
+    }
+
+    /// <summary>The brief's supplied pictures a deliverable is missing: none placed by <c>Stage.place</c> this session. Null when
+    /// <paramref name="file"/> is not a deliverable.</summary>
+    internal static string[]? Unplaced(string file, IReadOnlySet<string> placed, string? projectRoot)
+    {
+        var name = Path.GetFileNameWithoutExtension(file.Trim());
+        if (!name.StartsWith("final", StringComparison.OrdinalIgnoreCase) && !name.StartsWith("output", StringComparison.OrdinalIgnoreCase))
+            return null;
+        return [.. SuppliedPictures(projectRoot).Where(f => !placed.Contains(f))];
+    }
+
+    [GeneratedRegex(@"^\s*-\s*(?:Logo|Images to include), in documents/:\s*(.+)$", RegexOptions.IgnoreCase)]
+    private static partial Regex SuppliedLine();
+
     [GeneratedRegex(@"(\d{2,5})\s*[×xX]\s*(\d{2,5})")]
     private static partial Regex BriefSize();
 
@@ -1079,6 +1106,16 @@ public partial class DrawingMcpTools
                         ["artifact"] = Events.Relativize(fullOutPath),
                         ["size"] = offSize.Size,
                         ["asked"] = offSize.Asked,
+                    });
+                }
+
+                if (Unplaced(outFile, session.Placed, ProjectRoot) is { Length: > 0 } unplaced)
+                {
+                    result.Logs.Add($"[WARN] {outFile} is a deliverable, and the brief supplies {string.Join(", ", unplaced)}, which Stage.place has not "
+                        + "drawn in this session. Each supplied picture appears on the piece, placed with Stage.place, or your report says why not.");
+                    Events.Append("render.unplaced", session.Stage, executionId, new Dictionary<string, object?>
+                    {
+                        ["artifact"] = Events.Relativize(fullOutPath), ["files"] = unplaced,
                     });
                 }
             }

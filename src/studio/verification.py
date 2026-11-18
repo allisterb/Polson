@@ -19,6 +19,7 @@ recorded it with `Stage.check`.
 from __future__ import annotations
 
 import json
+import re
 from collections import defaultdict
 from typing import Any, Iterable
 
@@ -68,6 +69,27 @@ def unresolved(events: Iterable[dict[str, Any]], since: str | None = None) -> li
     return [{"claim": c["claim"], "detail": _short(c.get("detail")) if c.get("detail") is not None else None,
              "studio": c.get("by") == "verify", "ts": c.get("ts")}
             for c in sorted(still, key=lambda c: c.get("by") != "verify")]
+
+
+#: The brief's lines naming pictures to place, as the composer writes them (`catalogue.Commission.brief_text`) and the
+#: engine reads them (`DrawingMcpTools.SuppliedPictures`).
+SUPPLIED = re.compile(r"^\s*-\s*(?:Logo|Images to include), in documents/:\s*(.+)$", re.IGNORECASE | re.MULTILINE)
+
+
+def supplied(brief: str) -> list[str]:
+    """The pictures the brief supplies to be placed, as project paths: `documents/logo.svg`."""
+    names = [n.strip() for m in SUPPLIED.finditer(brief) for n in m.group(1).split(",") if n.strip()]
+    return list(dict.fromkeys(f"documents/{n}" for n in names))
+
+
+def unplaced(events: Iterable[dict[str, Any]], brief: str, since: str | None = None) -> list[dict[str, Any]]:
+    """The brief's supplied pictures no `Stage.place` of this run drew, in the shape `unresolved` returns: the studio's
+    own finding, since a picture the client asked for that never reached the piece is a failure nothing else records."""
+    placed = {str(e.get("file") or "").casefold() for e in events
+              if e.get("type") == "place" and not (since and (e.get("ts") or "") < since)}
+    return [{"claim": f"{name} is on the piece", "detail": "supplied in the brief, and never placed with Stage.place",
+             "studio": True, "ts": None}
+            for name in supplied(brief) if name.casefold() not in placed]
 
 
 def _summary(checks: list[dict[str, Any]], reads: list[dict[str, Any]], events: list[dict[str, Any]]) -> list[str]:
