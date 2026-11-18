@@ -256,6 +256,14 @@ try:
 
         app.mount("/studio", _studio)
         _studio_mounted = True
+
+        # A new instance starts with an empty disk, and the first visitor used to wait while the archive's requests
+        # were fetched to draw the list. Fetched here instead, as the server boots; a no-op with no archive.
+        import threading as _threading
+
+        from polson_studio import front as _front
+
+        _threading.Thread(target=_front.warm, args=(_Path(_projects),), name="polson-warm", daemon=True).start()
         # Said as what it does, not as a mode name: "observing only" read as though the composer could not start
         # a run, which it can, through the commissioner.
         _logger.warning("polson runtime: studio mounted at /studio (requests start ADK runs; every run in the "

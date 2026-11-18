@@ -139,6 +139,47 @@ class RebuildTests(unittest.TestCase):
 
         self.assertEqual(len(listings), 1)
 
+    def test_warming_brings_every_request_back_whole_before_anyone_visits(self):
+        """Started as the server boots, so the first visitor neither waits for the list nor for a request."""
+        with with_archive(archived_poster()):
+            front_mod.warm(self.root)
+
+        self.assertTrue((self.root / "lantern" / "direction.md").is_file())
+        self.assertTrue((self.root / "lantern" / "artifacts" / "final_a.svg").is_file())
+        self.assertNotIn("lantern", front_mod._partial)
+
+    def test_warming_stops_at_its_ceiling_and_leaves_the_rest_listed(self):
+        with with_archive(archived_poster()), mock.patch.object(front_mod, "WARM_BYTES", 1):
+            front_mod.warm(self.root)
+            page = self.client.get("/requests?view=done")
+
+        self.assertIn("Lantern Keeper poster", page.text)
+        self.assertFalse((self.root / "lantern" / "direction.md").exists())
+        self.assertIn("lantern", front_mod._partial)
+
+    def test_a_visitor_during_a_rebuild_is_not_shown_half_a_list(self):
+        """The recheck stamp is set when the rebuild ends: one set when it began let a second caller skip the lock and
+        draw the list from whatever had arrived so far."""
+        seen = []
+        real = front_mod.archive.restore
+
+        def watching(*args, **kwargs):
+            seen.append(front_mod._checked_at)
+            return real(*args, **kwargs)
+
+        with with_archive(archived_poster()), mock.patch.object(front_mod.archive, "restore", side_effect=watching):
+            front_mod.rebuild_listed(self.root)
+
+        self.assertTrue(seen)
+        self.assertTrue(all(s == float("-inf") for s in seen))
+        self.assertNotEqual(front_mod._checked_at, float("-inf"))
+
+    def test_without_an_archive_warming_does_nothing(self):
+        with mock.patch.object(front_mod.archive, "ARCHIVE_URI", ""):
+            front_mod.warm(self.root)
+
+        self.assertEqual(list(self.root.iterdir()), [])
+
     def test_without_an_archive_nothing_changes(self):
         with mock.patch.object(front_mod.archive, "ARCHIVE_URI", ""):
             page = self.client.get("/requests?view=done")
