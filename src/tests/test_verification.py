@@ -124,5 +124,24 @@ class UnresolvedTests(unittest.TestCase):
         self.assertEqual([u["claim"] for u in got], ["new"])
 
 
+class UnplacedTests(unittest.TestCase):
+    """A picture the client supplied that never reached the piece, which no check of the agent's would record."""
+
+    BRIEF = ("A sign.\n\n---\n\n## What to deliver\n\n- Logo, in documents/: sole mates.svg\n"
+             "- Images to include, in documents/: shopfront.jpg, trainer.png\n- Files supplied, in documents/: guide.pdf\n")
+
+    def test_the_briefs_logo_and_images_are_what_is_supplied(self):
+        self.assertEqual(verification.supplied(self.BRIEF),
+                         ["documents/sole mates.svg", "documents/shopfront.jpg", "documents/trainer.png"])
+        self.assertEqual(verification.supplied("A brief with no pictures.\n- Files supplied, in documents/: a.png\n"), [])
+
+    def test_each_picture_no_place_event_drew_is_named_as_the_studios_finding(self):
+        events = [{"type": "place", "file": "documents/Sole Mates.svg", "ts": "2026-11-18T10:00:00Z"},
+                  {"type": "place", "file": "documents/trainer.png", "ts": "2026-11-17T10:00:00Z"}]
+        got = verification.unplaced(events, self.BRIEF, since="2026-11-18T00:00:00Z")
+        self.assertEqual([(u["claim"], u["studio"]) for u in got],
+                         [("documents/shopfront.jpg is on the piece", True), ("documents/trainer.png is on the piece", True)])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -18,7 +18,9 @@ Fill the brief table in `brief.md` with these rows in place of the film ones, an
 | The store's name, exactly as it appears | |
 | What it sells, in the brief's words (*shoe store*, *children's books*) | |
 | The message, worded exactly as it may appear — or none | |
-| Logo and colours in `documents/` (file names), or none | |
+| What it should do (the brief's `- It should:`) and how it should feel | |
+| The logo (the brief's `- Logo, in documents/:`), and any colours or brand guide in `documents/` — or none | |
+| Images to include (the brief's `- Images to include, in documents/:`) — or none | |
 | The screen: pixels and orientation (the brief's `- Sizes:`), and its diagonal in inches | |
 | Viewing distance: how far away most people read it | |
 | Audiences A, B, … — place, age band, language | |
@@ -33,8 +35,9 @@ director answers.
 - **Words come only from the brief.** The name, what it sells, and the message, each as the brief words it. **No offer,
   percentage, price, date, "sale", "new", "now open", "hurry" or "limited"** unless the brief gives it in those words:
   an invented offer on a shop's sign is a promise the shop did not make, and in most places against the law.
-- **The store's own assets are used as given.** A logo in `documents/` is placed, not redrawn or recoloured; its colours
-  lead the palette. Read a brand guide with `Documents.ask` before choosing anything, and cite the file and page.
+- **The store's own pictures are used as given**, each with `Stage.place` (*The store's own pictures*, below): the logo
+  is placed, never redrawn, recoloured or cut out, and its colours lead the palette; every image the brief lists
+  appears. Read a brand guide with `Documents.ask` before choosing anything, and cite the file and page.
 - **What it sells is shown, never a brand's product.** Imagery of the goods — a shoe, a stack of books — is drawn, or
   one material from `Assets` (`polson://manual/16`), with **no logo, mark, stitching pattern or shape that reads as a
   real brand's**. The store may stock that brand; the sign does not advertise it.
@@ -75,6 +78,91 @@ log(seen.success ? seen.text : seen.error);
 Record the answer word for word, then `Stage.check('a passer-by can say what the store sells', <your reading>,
 seen.text)`. If it names another kind of store, make what it sells larger or nearer the name, and ask again. Never ask
 a leading question.
+
+### What it is for, and how it should feel
+
+The brief's `- It should:` line is the sign's goal, chosen by the director. **It decides what leads**, so read it
+before the concepts and name it in each one:
+
+| It should | What leads | What follows |
+| :--- | :--- | :--- |
+| **Draw people in** (the default) | what it sells, shown: the goods drawn, or the client's image large | the name beside it; the descriptor close to the name |
+| **Help people find it** | the name as the shopfront shows it — the logo if there is one, its colours — as large as the safe area allows | little else: the descriptor small, an arrow only if the brief gives the store's direction |
+| **Make the name remembered** | the name or logo on one strong field of the store's colour | at most the descriptor; no picture that competes with the name |
+
+The brief's `- How it should feel:` line, if any, steers the palette, the typeface and the weight — never the words.
+Record each choice it drove in `direction.md` with its source as `Brief: feel`, beside the evidence for it. With no
+feel given, the category's look from the research decides, as it would anyway.
+
+### The store's own pictures
+
+The brief names them by role: `- Logo, in documents/:` (one file) and `- Images to include, in documents/:` (each must
+appear). Anything else in `- Files supplied` is reference — a brand guide, a photo to read — and is placed only if the
+brief asks. **Every supplied picture goes onto the sign with `Stage.place`**, which fits it without stretching and
+records whether it will be sharp at the brief's size (`polson://sdk/core` under *Stage*). **A final render names any
+supplied picture you have not placed**, and the run page shows it to the director.
+
+**Look first**, in Stage 1, and write what you find in `brief.md`'s table:
+
+```javascript
+// A raster: its size, and its colours (the logo's lead the palette).
+const logo = Skia.Image.load('documents/<the logo>');
+log(`${logo.width} × ${logo.height} ${JSON.stringify(logo.palette(5))}`);
+```
+
+An `.svg` logo is vector and sharp at any size; render it to see it — `RenderSvg(file: 'documents/<the logo>', outFile:
+'artifacts/00_logo.png')` — and read its colours off that render. Then ask what each picture is: `Video.ask(<the
+picture>, 'Describe this picture: what it shows, its colours, any words in it, and what it sits on — transparent, a
+white box, or a photograph. Where is its main subject, as fractions across and down?', { mimeType: 'image/png' })`
+(`image/jpeg` for a JPG).
+
+**The logo is fitted whole, never cropped** — `fit: 'contain'`, the default:
+
+```javascript
+const paper = Snap(1080, 1920);
+const mark = Stage.place(paper, 'documents/<the logo>', { x: 140, y: 260, width: 800, height: 420 });
+// mark.x, mark.y, mark.width, mark.height: where it landed in the box. Lay the next line out from there.
+```
+
+- **Clear space**: nothing else within a quarter of the logo's drawn height of it, on every side.
+- **What it sits on — checked for you.** For a logo with a clear background, `Stage.place` holds its ink against what
+  is already drawn behind it and records `placed against its ground: <file>`, failing under 3 : 1. **So draw the
+  ground first, then place the logo.** Never take the ground's colour from the logo's own ink: francis_fashions_2
+  (2026-11-18) sampled its black from a black wordmark and set it on that black, where it vanished. A dark logo goes
+  on a light field or panel, or a version supplied for dark grounds is used. A ragged light fringe left by a cut-out
+  shows on a dark ground and disappears on a light one. A logo on a white box or an opaque ground sits on a field of
+  that ground's colour, or on a panel the box fills. **Never cut a logo's background out, recolour it, or redraw
+  it**: that is a different logo.
+- **A logo that spells the store's name is the name.** It becomes the dominant element, and the name is not set again
+  in type. Its lettering is a line of the sign like any other, so it must pass the legibility check, **measured, not
+  estimated**: `mark.lines` is each line of its lettering, top to bottom, with `px` its height on the deliverable, and
+  `mark.smallestLine` the least of them. Add that to the check as a line of its own (below). A line's height is its
+  ink, so an icon standing in a line makes that line taller than its letters: the smallest line is the one that
+  counts. If it cannot be that large here — the sharpness check says how large the file allows — set the name in type
+  as the dominant line and place the logo smaller, as the mark beside it.
+
+**An image fills its region and is cropped around its subject** — `fit: 'cover'`, `focus` on the subject:
+
+```javascript
+const shop = Stage.place(paper, 'documents/<an image>', { x: 0, y: 1100, width: 1080, height: 820 },
+  { fit: 'cover', focus: [0.5, 0.4] });              // the subject's fractions across and down, from looking
+log(`kept ${(shop.kept * 100).toFixed(0)}% of the picture`);   // Stage.place warns under half
+```
+
+- **The region suits the picture's shape.** A landscape photograph on a portrait sign is a band across it, not a tall
+  box it is cut down to a sliver for. `kept` says how much of the picture survives; under half, rethink the region.
+- **Never crop off the product, a face, or words in the picture**, and never place a picture of a person without
+  asking: the no-real-person rule is about pictures the studio makes, so the director confirms the client may show
+  this one.
+- A product cut out on a transparent ground is fitted whole, like a logo (`fit: 'contain'`).
+- Words in a picture are the sign's words too: legible at the viewing distance, or small enough to read as texture.
+
+**Sharpness is checked for you.** Each `Stage.place` records `placed sharp: <file>` — the source's pixels against
+the pixels it covers on the deliverable, at the brief's size — and you cannot write it yourself. A failure says how
+large the picture can go. **Draw it at that size or smaller; never keep the failure with `accepted`**: on a screen
+read from metres away, an enlarged picture is the first thing that looks cheap. If no useful size is sharp, use the
+picture as a softened background behind a colour field, or leave it out — and either way say which file needs a
+larger version or a vector, in your report.
 
 ### The evidence
 
@@ -135,6 +223,8 @@ paper renders at (1, or 2 for a 2160-wide screen built at 1080). **Record the sm
 // LINES: each line of type as set — { text, size, family, weight } — kept beside the drawing that sets it.
 const SCALE = 1;                                          // 2 for a 2160-wide screen built at 1080
 const caps = LINES.map(l => ({ text: l.text, px: l.size * capShare(l.family, l.weight) * SCALE }));
+// A logo whose lettering is the name: its smallest line as Stage.place measured it, already in the deliverable's pixels.
+if (typeof mark !== 'undefined' && mark.smallestLine) caps.push({ text: 'the logo\'s lettering', px: mark.smallestLine });
 const smallest = caps.reduce((a, b) => (b.px < a.px ? b : a));
 Stage.check('every line is legible from the viewing distance', smallest.px >= minCapPx,
   `smallest cap ${smallest.px.toFixed(0)} px ("${smallest.text}"); the rule asks ${minCapPx.toFixed(0)} px at ` +
@@ -165,6 +255,10 @@ three concepts, and every choice with its evidence. Then **one section per audie
   a warning, which is a fault to fix.
 - One totem mock-up per final, labelled as a mock-up as `Stage.mockup` draws it. A mock-up is never evidence that the
   sign was placed anywhere.
+- Every supplied picture on every sign, placed with `Stage.place`, its `placed sharp` and `placed against its ground`
+  checks passing — or named in your report with why it is not there.
+- Every word on each final is the brief's: the server reads each `final_` file's words and fails `Client's words on …`
+  for any it does not find in the brief ("collection", "new", "official" — a word you add is yours, not the store's).
 - With several audiences, the set side by side in `artifacts/set.png`, each labelled — one sign several times, only
   the words moved.
 - A loop for the screen is a separate request (the motion workflow builds a film on a poster found in `documents/`):

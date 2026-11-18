@@ -66,6 +66,10 @@ public sealed partial class SessionContext
     /// <summary>The notes written with <c>{ once: true }</c>, each keyed by its stage and text, so a re-run script does not repeat them.</summary>
     public HashSet<(string? Stage, string Text)> NotedOnce { get; } = [];
 
+    /// <summary>The project files <c>Stage.place</c> has drawn in this session, project-relative with forward slashes, so a
+    /// deliverable can say which of the brief's supplied files never reached the piece.</summary>
+    public HashSet<string> Placed { get; } = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>
     /// True while one or more tool calls are actively executing on this session.
     /// </summary>

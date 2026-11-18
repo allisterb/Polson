@@ -304,8 +304,12 @@
       brief.addEventListener('input', count); count();
     }
 
-    // Files: one input holds the whole set, rebuilt through DataTransfer so tiles can add and remove.
-    var input = form.querySelector('[data-files]'), shelf = form.querySelector('[data-assets]');
+    // Files: each shelf's one input holds its whole set, rebuilt through DataTransfer so tiles can add and remove. A shelf
+    // whose input takes one file (the logo) replaces its choice rather than adding to it.
+    form.querySelectorAll('[data-assets]').forEach(function (shelf) { shelfFiles(shelf, shelf.querySelector('[data-files]')); });
+  }
+
+  function shelfFiles(shelf, input) {
     var chosen = [];
     function render() {
       shelf.querySelectorAll('figure').forEach(function (f) { f.remove(); });
@@ -336,6 +340,7 @@
     }
     if (input && shelf) {
       input.addEventListener('change', function () {
+        if (!input.multiple) chosen = [];
         Array.prototype.forEach.call(input.files, function (f) {
           if (!chosen.some(function (c) { return c.name === f.name && c.size === f.size; })) chosen.push(f);
         });

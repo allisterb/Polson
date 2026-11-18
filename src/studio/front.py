@@ -309,6 +309,26 @@ def learned_from(project: Path, run: Run | None, events: list[dict[str, Any]]) -
     return found if (found["compare"] or found["audiences"]) else {}
 
 
+async def stage_request(commission: catalogue.Commission, scratch: Path, files: list[UploadFile],
+                        logo: list[UploadFile], images: list[UploadFile]) -> tuple[list[Path], list[Path]]:
+    """Stages a request's uploads into `scratch`: the general files, and on a card with a logo and an images slot, those
+    too, named on the commission by their role. Returns the general files, and every file staged. Raises `StudioError`.
+    A card without the slots ignores them, as it ignores any field it does not draw."""
+    general = await uploads.stage(files, scratch)
+    if not commission.card.brand_files:
+        return general, general
+    logos = await uploads.stage(logo, scratch, uploads.LOGO_SUFFIXES, 1, "logos")
+    pictures = await uploads.stage(images, scratch, uploads.IMAGE_SUFFIXES, uploads.MAX_IMAGES, "images")
+    commission.logo = logos[0].name if logos else ""
+    commission.images = [p.name for p in pictures]
+    return general, general + logos + pictures
+
+
+def chosen_again(*slots: list[UploadFile]) -> str:
+    """What a refused form says of its files: a browser does not keep a file input's choice across a reload."""
+    return " Files have to be chosen again." if any((f.filename or "").strip() for s in slots for f in s) else ""
+
+
 def unique_id(root: Path, title: str) -> str:
     """A free project id derived from the title: `harbour-festival-trailer`, then `-2`, `-3`…"""
     base_id = catalogue.slugify(title)
@@ -460,7 +480,9 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
                     form=form, route=route, refused=refused, ages=catalogue.AGE_BANDS, languages=catalogue.LANGUAGES,
                     checked_by_eye=catalogue.checked_by_eye(), eye_note=catalogue.EYE_NOTE,
                     max_audiences=catalogue.MAX_AUDIENCES, example_places=catalogue.EXAMPLE_PLACES,
-                    accept=",".join(sorted(uploads.DOCUMENT_SUFFIXES)), max_files=uploads.MAX_FILES)
+                    accept=",".join(sorted(uploads.DOCUMENT_SUFFIXES)), max_files=uploads.MAX_FILES,
+                    accept_logo=",".join(sorted(uploads.LOGO_SUFFIXES)),
+                    accept_images=",".join(sorted(uploads.IMAGE_SUFFIXES)), max_images=uploads.MAX_IMAGES)
 
     @app.get("/requests", response_class=HTMLResponse)
     async def listing(request: Request, view: str = "active") -> Any:
@@ -551,7 +573,8 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
                      kind: str = Form(""), sizes: list[str] = Form([]), custom_size: str = Form(""),
                      formats: list[str] = Form([]), brief: str = Form(""), action: str = Form("save"),
                      aud_place: list[str] = Form([]), aud_age: list[str] = Form([]), aud_lang: list[str] = Form([]),
-                     auto: str = Form(""), files: list[UploadFile] = File([])) -> Any:
+                     auto: str = Form(""), files: list[UploadFile] = File([]),
+                     logo: list[UploadFile] = File([]), images: list[UploadFile] = File([])) -> Any:
         state = request.app.state
         form_data = await request.form()
         extras = {k[2:]: str(v) for k, v in form_data.items() if k.startswith("x_")}
@@ -572,23 +595,22 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
                 return composer(request, chosen, form, "This studio can watch requests but not make them. "
                                 "Use the create page instead.", 409)
             return await commissioned(request, chosen, form, title, route, kind, sizes, custom_size, formats,
-                                      extras, brief, aud_place, aud_age, files, autonomous, aud_lang)
+                                      extras, brief, aud_place, aud_age, files, autonomous, aud_lang, logo, images)
 
         scratch = Path(tempfile.mkdtemp(prefix="polson-request-"))
         try:
             commission = catalogue.parse(card, title, route, kind, sizes, custom_size, formats, extras, brief,
                                          aud_place, aud_age, aud_lang)
             commission.request, commission.deny = techniques.parse(commission.workflow, form["techniques"])
-            staged = await uploads.stage(files, scratch)
+            general, staged = await stage_request(commission, scratch, files, logo, images)
             commission.card.check_files([p.name for p in staged])
             project_id = unique_id(state.root, commission.title)
             made = await projects.create(state.root, project_id, commission.workflow, commission.kind,
-                                         commission.brief_text([p.name for p in staged]), auto=autonomous,
+                                         commission.brief_text([p.name for p in general]), auto=autonomous,
                                          request=commission.request, deny=commission.deny)
         except StudioError as exc:
             shutil.rmtree(scratch, ignore_errors=True)
-            note = " Files have to be chosen again." if any((f.filename or "").strip() for f in files) else ""
-            return composer(request, chosen, form, f"{exc}{note}", 409)
+            return composer(request, chosen, form, f"{exc}{chosen_again(files, logo, images)}", 409)
 
         try:
             if staged:
@@ -597,7 +619,7 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
                 for path in staged:
                     shutil.copy2(path, documents / path.name)
             record = commission.record()
-            record["files"] = [p.name for p in staged]
+            record["files"] = [p.name for p in general]
             record["created"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
             (made / REQUEST_FILE).write_text(json.dumps(record, indent=2), encoding="utf-8")
         finally:
@@ -614,7 +636,8 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
     async def commissioned(request: Request, chosen: catalogue.Card, form: dict[str, Any], title: str,
                            route: str, kind: str, sizes: list[str], custom_size: str, formats: list[str],
                            extras: dict[str, str], brief: str, aud_place: list[str], aud_age: list[str],
-                           files: list[UploadFile], autonomous: bool = False, aud_lang: list[str] | None = None) -> Any:
+                           files: list[UploadFile], autonomous: bool = False, aud_lang: list[str] | None = None,
+                           logo: list[UploadFile] | None = None, images: list[UploadFile] | None = None) -> Any:
         """The composer on a host that commissions rather than drives: the ADK runtime.
 
         The commission is checked, staged and named here and made by the host's commissioner, which applies
@@ -642,18 +665,17 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
                 commission.kind = offered[0]
             elif not commission.kind and chosen.default_type in offered:
                 commission.kind = chosen.default_type
-            staged = await uploads.stage(files, scratch)
+            general, staged = await stage_request(commission, scratch, files, logo or [], images or [])
             commission.card.check_files([p.name for p in staged])
             name = commissioner.free_name(commission.title)
             await commissioner.commission(name, commission.workflow, commission.kind,
-                                          commission.brief_text([p.name for p in staged]), staged, auto=autonomous,
+                                          commission.brief_text([p.name for p in general]), staged, auto=autonomous,
                                           request=commission.request, deny=commission.deny)
         except Exception as exc:                                 # noqa: BLE001 - refusals carry a status
             status = 409 if isinstance(exc, StudioError) else getattr(exc, "status", None)
             if status is None:
                 raise
-            note = " Files have to be chosen again." if any((f.filename or "").strip() for f in files) else ""
-            return composer(request, chosen, form, f"{exc}{note}", status)
+            return composer(request, chosen, form, f"{exc}{chosen_again(files, logo or [], images or [])}", status)
         finally:
             shutil.rmtree(scratch, ignore_errors=True)
 
@@ -662,7 +684,7 @@ def install(app: FastAPI, templates: Jinja2Templates, base, contain) -> None:
         made = Path(state.root) / name
         try:
             record = commission.record()
-            record["files"] = [p.name for p in staged]
+            record["files"] = [p.name for p in general]
             record["created"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
             (made / REQUEST_FILE).write_text(json.dumps(record, indent=2), encoding="utf-8")
         except OSError:

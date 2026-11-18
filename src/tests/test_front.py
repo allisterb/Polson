@@ -20,7 +20,7 @@ from unittest import mock
 from fastapi.testclient import TestClient
 
 from studio import app as app_mod
-from studio import catalogue, front, projects, techniques, uploads
+from studio import catalogue, front, projects, techniques, uploads, verification
 from studio.runs import Registry, StudioError
 from tests.test_studio import project_dir
 
@@ -309,8 +309,10 @@ class CatalogueTests(unittest.TestCase):
         self.assertEqual((made.workflow, made.kind), ("poster", "store"))
         brief = made.brief_text([])
         for line in ("- Store: Sole Mates", "- What it sells: a shoe store", "- Sizes: Portrait screen 1080 × 1920 px",
-                     '- Screen: 55" panel', "- Read from: 5 m"):
+                     '- Screen: 55" panel', "- Read from: 5 m", "- It should: Draw people in"):
             self.assertIn(line, brief)
+        self.assertNotIn("How it should feel", brief)                   # left blank, it says nothing
+        self.assertNotIn("in documents/", brief)                        # no logo, no images, no lines for them
         with self.assertRaisesRegex(StudioError, "not a preset"):
             catalogue.parse("store-sign", "X", "0", "", ["2480x3508"], "", [".png"], {"store": "X"}, "A brief.", [], [])
 
@@ -681,6 +683,62 @@ class FrontRoutingTests(unittest.TestCase):
         record = json.loads((made / front.REQUEST_FILE).read_text())
         self.assertEqual(record["title"], "Autumn menu poster")
         self.assertEqual(record["files"], ["menu notes.txt"])
+
+    def test_a_store_signs_logo_and_images_are_staged_and_named_by_role(self):
+        """The logo and images slots land in documents/ and the brief names each by role, in the lines the engine reads
+        back to name a picture a deliverable never placed; the general files stay reference."""
+        handed, patch = self.fake_create()
+        data = self.compose(card="store-sign", kind="", sizes=["1080x1920"], formats=[".png", ".svg"], x_store="Sole Mates",
+                            x_sells="urban styled sneakers", x_goal="Help people find it", x_feel="bold and young",
+                            aud_place=[], aud_age=[])
+        with patch:
+            reply = self.client.post("/requests", data=data, follow_redirects=False,
+                                     files=[("logo", ("sole mates.svg", b"<svg xmlns='http://www.w3.org/2000/svg'/>", "image/svg+xml")),
+                                            ("images", ("shopfront.jpg", b"\xff\xd8\xff", "image/jpeg")),
+                                            ("images", ("trainer.png", b"\x89PNG", "image/png")),
+                                            ("files", ("brand guide.pdf", b"%PDF-1.4", "application/pdf"))])
+
+        self.assertEqual(reply.status_code, 303, reply.text[:400])
+        brief = handed["brief"]
+        self.assertIn("- Logo, in documents/: sole mates.svg\n", brief)
+        self.assertIn("- Images to include, in documents/: shopfront.jpg, trainer.png\n", brief)
+        self.assertIn("- Files supplied, in documents/: brand guide.pdf\n", brief)
+        self.assertIn("- It should: Help people find it", brief)
+        self.assertIn("- How it should feel: bold and young", brief)
+        self.assertEqual(verification.supplied(brief), ["documents/sole mates.svg", "documents/shopfront.jpg",
+                                                        "documents/trainer.png"])
+        made = self.root / handed["project_id"]
+        self.assertEqual(sorted(p.name for p in (made / "documents").iterdir()),
+                         ["brand guide.pdf", "shopfront.jpg", "sole mates.svg", "trainer.png"])
+        record = json.loads((made / front.REQUEST_FILE).read_text())
+        self.assertEqual((record["logo"], record["images"], record["files"]),
+                         ("sole mates.svg", ["shopfront.jpg", "trainer.png"], ["brand guide.pdf"]))
+
+    def test_each_slot_takes_only_what_can_be_placed_there(self):
+        """An SVG is a logo, never a document or an image to include; one logo; a PDF is no image."""
+        base = self.compose(card="store-sign", kind="", sizes=["1080x1920"], formats=[".png"], x_store="Sole Mates",
+                            aud_place=[], aud_age=[])
+        cases = ((("images", ("logo.svg", b"<svg/>", "image/svg+xml")), "not a type the studio can place"),
+                 (("files", ("logo.svg", b"<svg/>", "image/svg+xml")), "not a type the studio can read"),
+                 (("images", ("menu.pdf", b"%PDF", "application/pdf")), "not a type the studio can place"))
+        for upload, words in cases:
+            handed, patch = self.fake_create()
+            with patch:
+                reply = self.client.post("/requests", data=base, files=[upload], follow_redirects=False)
+            self.assertEqual(reply.status_code, 409, upload)
+            self.assertIn(words, reply.text)
+            self.assertEqual(handed, {})
+        handed, patch = self.fake_create()
+        with patch:
+            reply = self.client.post("/requests", data=base, follow_redirects=False,
+                                     files=[("logo", ("a.png", b"\x89PNG", "image/png")), ("logo", ("b.png", b"\x89PNG", "image/png"))])
+        self.assertEqual(reply.status_code, 409)
+        self.assertIn("That is 2 logos", reply.text)
+
+    def test_only_a_card_with_the_slots_draws_them(self):
+        self.assertIn('name="logo"', self.client.get("/compose/store-sign").text)
+        self.assertIn('name="images"', self.client.get("/compose/store-sign").text)
+        self.assertNotIn('name="logo"', self.client.get("/compose/film-poster").text)
 
     def test_a_reference_video_is_staged_and_named_apart_in_the_brief(self):
         handed, patch = self.fake_create()

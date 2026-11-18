@@ -231,6 +231,10 @@ class Card:
     #: The sizes and formats offered, when not the kind's: a store sign is an image whose sizes are screens, with no print.
     sizes: tuple[Size, ...] = ()
     formats: tuple[Format, ...] = ()
+    #: A logo slot and an images slot beside the general files, each named in the brief by its role, so the agent knows
+    #: which file is the logo and that every image is to appear (`Stage.place` places them; a final render names any
+    #: it has not). A card for a business's own sign or ad, where the business's assets are the point.
+    brand_files: bool = False
 
     @property
     def size_presets(self) -> tuple[Size, ...]:
@@ -322,13 +326,24 @@ TRAILER_LENGTH = Extra("duration", "Duration", ("15 seconds", "30 seconds"), "15
 
 #: What a store sign asks for: the store, what it sells, at most one message, and the screen and distance it is read at,
 #: which decide its smallest type (`type.store.md`, after the 2010 ADA Standards' Table 703.5.5).
+#: What a store sign is for, as the director chooses it; `type.store.md` says what each changes in the design.
+SIGN_GOALS: dict[str, str] = {
+    "Draw people in": "passers-by see what it sells and want to come in",
+    "Help people find it": "people already looking for the store recognise it from a distance",
+    "Make the name remembered": "the name and its colours stay with people after they pass",
+}
+
 STORE: tuple[Extra, ...] = (
     Extra("store", "Store", placeholder="Its name, exactly as it appears", subject=True),
     Extra("sells", "What it sells", placeholder="In a few words: a shoe store, children's books", long=True, rows=2),
     Extra("message", "Message", placeholder="One line, worded as it may appear; blank for none. No offer or price "
                                             "unless the store gives it.", long=True, rows=2),
     Extra("screen", "Screen", ('43" panel', '55" panel', '65" panel', '75" panel'), '55" panel'),
-    Extra("distance", "Read from", ("3 m", "5 m", "8 m", "12 m"), "5 m"))
+    Extra("distance", "Read from", ("3 m", "5 m", "8 m", "12 m"), "5 m"),
+    # A sign's goal and the reaction it is after: the first two questions a sign-maker asks a client (Gillespie, Signs of
+    # the Times, ledgered 2026-11-18). They steer the design, never the words, so neither can put a word on the sign.
+    Extra("goal", "It should", tuple(SIGN_GOALS), "Draw people in"),
+    Extra("feel", "How it should feel", placeholder="A few words: calm and upmarket, playful, bold"))
 
 #: A mall's screens: a freestanding display is portrait, a wall screen often landscape; HD or 4K.
 SIGNAGE_SIZES: tuple[Size, ...] = (Size("Portrait screen", 1080, 1920), Size("Portrait 4K", 2160, 3840),
@@ -425,7 +440,7 @@ CARDS: tuple[Card, ...] = (
     Card("store-sign", "Store sign", "image", "Image · a mall screen, read from where people walk",
          (Route("poster", "Digital sign"),),
          extras=STORE, audiences=True, audiences_optional=True, types=("store",),
-         sizes=SIGNAGE_SIZES, formats=SIGNAGE_FORMATS,
+         sizes=SIGNAGE_SIZES, formats=SIGNAGE_FORMATS, brand_files=True,
          brief="A sign for the store on a mall's digital screen: its name and what it sells, readable at a glance by "
                "someone walking past."),
     Card("film-poster", "Film poster", "image", "Image · a one-sheet",
@@ -571,6 +586,9 @@ class Commission:
     #: director's settings, not the client's words, and reach the CLI as `--request` / `--deny`.
     request: list[str] = field(default_factory=list)
     deny: list[str] = field(default_factory=list)
+    #: The card's logo and images slots, by file name in `documents/` (`Card.brand_files`).
+    logo: str = ""
+    images: list[str] = field(default_factory=list)
 
     @property
     def narrated(self) -> bool:
@@ -603,6 +621,12 @@ class Commission:
         for label, value in self.extras:
             asked = [q.strip() for q in re.split(r"[;\n]", value) if q.strip()] if label == "Their questions" else []
             lines += [f"- {label}:"] + [f"  {i}. {q}" for i, q in enumerate(asked, 1)] if asked else [f"- {label}: {' '.join(value.split())}"]
+        # The engine reads these two lines back (`DrawingMcpTools.SuppliedPictures`) to name a supplied picture a
+        # deliverable never placed, so their wording is a contract: file names only, comma-separated.
+        if self.logo:
+            lines.append(f"- Logo, in documents/: {self.logo}")
+        if self.images:
+            lines.append("- Images to include, in documents/: " + ", ".join(self.images))
         clips = [f for f in files if f.lower().endswith(".mp4")]
         others = [f for f in files if f not in clips]
         if others:
@@ -621,7 +645,8 @@ class Commission:
                                "language": lang, "languageLabel": dict(LANGUAGES).get(lang, "") if lang else "",
                                "readBack": lang not in checked_by_eye()}
                               for i, (p, a, lang) in enumerate(self.audiences)],
-                "techniques": {"request": list(self.request), "deny": list(self.deny)}}
+                "techniques": {"request": list(self.request), "deny": list(self.deny)},
+                "logo": self.logo, "images": list(self.images)}
 
 
 def parse_audiences(places: list[str], ages: list[str], languages: list[str] | None = None) -> list[tuple[str, str, str]]:

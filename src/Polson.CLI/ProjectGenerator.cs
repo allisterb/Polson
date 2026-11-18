@@ -284,10 +284,13 @@ internal static class ProjectGenerator
 
             var name = Path.GetFileName(source);
             var extension = Path.GetExtension(name);
-            if (!Polson.ExtendedMind.DocumentProcessing.Documents.MimeTypes.ContainsKey(extension))
+            // An .svg is the one exception: a logo, which the agent places with Stage.place rather than reads.
+            if (!Polson.ExtendedMind.DocumentProcessing.Documents.MimeTypes.ContainsKey(extension)
+                && !extension.Equals(".svg", StringComparison.OrdinalIgnoreCase))
             {
                 return Fail($"--document {given}: '{extension}' is not a type Documents.ask can read, so the agent would see it "
-                          + $"and could not open it. Known: {string.Join(", ", Polson.ExtendedMind.DocumentProcessing.Documents.MimeTypes.Keys)}.");
+                          + $"and could not open it. Known: {string.Join(", ", Polson.ExtendedMind.DocumentProcessing.Documents.MimeTypes.Keys)}, "
+                          + "and .svg for a logo to place.");
             }
             if (new FileInfo(source).Length > Polson.ExtendedMind.DocumentProcessing.Documents.MaxInlineBytes)
             {

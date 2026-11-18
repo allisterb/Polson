@@ -102,17 +102,23 @@ public partial class DrawingMcpTools
     {
         // A logo's words, read off what was drawn rather than off the tagline argument (ClientWords): on the mark a word
         // the brief does not contain fails a check the server records; the brand sheet, with labels of its own, warns.
-        if (result.Success && ClientWords.Applies(ProjectRoot)
+        // A store sign's every final is held to the same rule (ClientWords.IsSign).
+        if (!result.Success) return;
+        var logo = ClientWords.Applies(ProjectRoot);
+        var sign = !logo && ClientWords.IsSign(ProjectRoot);
+        if ((logo || sign)
             && new[] { outSvg, outFile }.FirstOrDefault(p => !string.IsNullOrWhiteSpace(p)
-                && Path.GetFileNameWithoutExtension(p) is "final" or "brand_sheet") is { } piece)
+                && Path.GetFileNameWithoutExtension(p) is var n
+                && (logo ? n is "final" or "brand_sheet" : n.StartsWith("final", StringComparison.OrdinalIgnoreCase))) is { } piece)
         {
             var lines = ClientWords.LinesOf(result.RenderedFromPaper ? result.SvgXml : result.ResultCanvas);
             var foreign = ClientWords.Foreign(lines, ClientWords.Brief(ProjectRoot!));
             var artifact = piece.Replace('\\', '/');
-            if (Path.GetFileNameWithoutExtension(piece) == "final")
+            if (sign || Path.GetFileNameWithoutExtension(piece) == "final")
             {
                 var claim = ClientWords.Claim(artifact);
-                var detail = foreign.Length == 0 ? $"{lines.Count} line(s), every word in the brief" : ClientWords.MarkDetail(foreign);
+                var detail = foreign.Length == 0 ? $"{lines.Count} line(s), every word in the brief"
+                    : sign ? ClientWords.SignDetail(foreign) : ClientWords.MarkDetail(foreign);
                 Events.Append("check", session.Stage, executionId, new Dictionary<string, object?>
                 {
                     ["claim"] = claim, ["passed"] = foreign.Length == 0, ["detail"] = detail,

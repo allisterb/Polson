@@ -28,10 +28,20 @@ MAX_UPLOAD_BYTES = 16 * 1024 * 1024
 #: Per request. A brief with more references than this is a brief that has not chosen.
 MAX_FILES = 8
 
+#: A card's logo slot: one picture the agent places with `Stage.place`. An SVG stays vector there, which is why it is
+#: taken here though `Documents.ask` cannot read one (the agent renders it to look at it).
+LOGO_SUFFIXES = frozenset({".svg", ".png", ".jpg", ".jpeg", ".webp"})
+
+#: A card's images slot: pictures the client wants on the piece, each placed with `Stage.place`.
+IMAGE_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".webp"})
+
+#: Pictures to include, per request. Each must appear on the piece, so a handful is the most one sign or poster holds.
+MAX_IMAGES = 5
+
 CHUNK = 64 * 1024
 
 
-def safe_filename(raw: str | None) -> str:
+def safe_filename(raw: str | None, suffixes: frozenset[str] = DOCUMENT_SUFFIXES) -> str:
     """The name to write, with every route out of the directory removed. Raises `StudioError`.
 
     `UploadFile.filename` is a multipart header the client wrote. The basename of both separator
@@ -44,21 +54,23 @@ def safe_filename(raw: str | None) -> str:
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._ -]{0,127}", name):
         raise StudioError(f"{name!r} is not a usable file name. Use letters, digits, spaces, dots, "
                           "dashes and underscores.")
-    if Path(name).suffix.lower() not in DOCUMENT_SUFFIXES:
-        raise StudioError(f"{name} is not a type the studio can read. Use one of: "
-                          + ", ".join(sorted(DOCUMENT_SUFFIXES)))
+    if Path(name).suffix.lower() not in suffixes:
+        raise StudioError(f"{name} is not a type the studio can {'read' if suffixes is DOCUMENT_SUFFIXES else 'place'} "
+                          "there. Use one of: " + ", ".join(sorted(suffixes)))
     return name
 
 
-async def stage(files: list[UploadFile], into: Path) -> list[Path]:
-    """Streams every attached file into `into`, refusing the whole set on the first bad one."""
+async def stage(files: list[UploadFile], into: Path, suffixes: frozenset[str] = DOCUMENT_SUFFIXES,
+                limit: int = MAX_FILES, what: str = "files") -> list[Path]:
+    """Streams every attached file into `into`, refusing the whole set on the first bad one. `what` names the slot in a
+    refusal ("files", "logos", "images"); a file named as one already staged into `into`, from any slot, is refused."""
     files = [f for f in files if f is not None and (f.filename or "").strip()]
-    if len(files) > MAX_FILES:
-        raise StudioError(f"That is {len(files)} files; a request takes up to {MAX_FILES}.")
+    if len(files) > limit:
+        raise StudioError(f"That is {len(files)} {what}; a request takes up to {limit}.")
 
     staged: list[Path] = []
     for upload in files:
-        name = safe_filename(upload.filename)
+        name = safe_filename(upload.filename, suffixes)
         target = into / name
         if target.exists():
             raise StudioError(f"Two files are called {name}; rename one of them.")
