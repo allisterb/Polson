@@ -593,7 +593,7 @@ class FrontRoutingTests(unittest.TestCase):
         self.assertNotIn("data-silent-label", self.client.get("/compose/film-trailer").text)
 
     def test_the_home_page_shows_the_entries_workflows_in_two_rows(self):
-        """Nine cards, three rows, in `catalogue.HOME`'s order, and no others."""
+        """Every card in `catalogue.HOME`, in its order, and no others."""
         self.assertTrue(all(slug in catalogue.BY_SLUG for slug in catalogue.HOME))
         page = self.client.get("/home").text
         shown = [s for s in catalogue.HOME if f'/compose/{s}"' in page]
