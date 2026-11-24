@@ -2,6 +2,7 @@
 namespace Polson.Drawing.Skia;
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text.RegularExpressions;
@@ -1131,8 +1132,18 @@ public class CanvasRenderingContext2D
     /// candidate would make every fallback list resolve to its first entry whether installed or
     /// not — the failure <c>Skia.Font.has</c> exists to expose. If nothing resolves exactly, the
     /// first substitute is used, since it still carries the requested weight and slant.
+    /// <para>
+    /// Remembered per family list, weight and slant for the life of the process. On Linux each lookup is a fontconfig
+    /// match, and with the container's fonts installed one <c>ctx.font = 'bold 22px sans-serif'</c> cost 12.4 ms on
+    /// Cloud Run (0.09 ms on Windows, 2026-11-24). A whole-film check sets fonts on every frame it draws, so the flash
+    /// check over a 60 s film ran past the script limit there and took 8 s here. The faces are never disposed, so
+    /// sharing them is safe.
+    /// </para>
     /// </remarks>
-    private static SKTypeface ResolveFamily(string familyList, SKFontStyleWeight weight, SKFontStyleSlant slant)
+    internal static SKTypeface ResolveFamily(string familyList, SKFontStyleWeight weight, SKFontStyleSlant slant) =>
+        Resolved.GetOrAdd((familyList.Trim().ToLowerInvariant(), weight, slant), _ => Resolve(familyList, weight, slant));
+
+    private static SKTypeface Resolve(string familyList, SKFontStyleWeight weight, SKFontStyleSlant slant)
     {
         SKTypeface? substitute = null;
 
@@ -1525,6 +1536,9 @@ public class CanvasRenderingContext2D
     /// What each CSS generic family is tried as, in order. Skia has no notion of a generic, so a
     /// bare <c>sans-serif</c> would otherwise resolve to whatever the platform substitutes.
     /// </summary>
+    /// <summary>Faces already resolved, by lower-cased family list, weight and slant: see <see cref="ResolveFamily"/>.</summary>
+    private static readonly ConcurrentDictionary<(string, SKFontStyleWeight, SKFontStyleSlant), SKTypeface> Resolved = new();
+
     private static readonly Dictionary<string, string[]> GenericFamilies = new(StringComparer.OrdinalIgnoreCase)
     {
         ["serif"] = ["Times New Roman", "Georgia", "Liberation Serif", "DejaVu Serif", "serif"],

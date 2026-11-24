@@ -155,6 +155,35 @@ public class Canvas2DTests : TestsRuntime
     /// 2026-11-17 the "actual" ascent was the face's: 90.5 for an "H" whose ink is 72 tall, so a cap height read from it
     /// was a quarter too large.
     /// </summary>
+    /// <summary>
+    /// A font is looked up once per family list, weight and slant, not on every <c>ctx.font</c>. On Cloud Run each lookup
+    /// was a 12 ms fontconfig match, and a whole-film flash check that sets fonts on every frame ran past the script
+    /// limit (2026-11-24). The cached face still honours weight, slant and fallback.
+    /// </summary>
+    [Fact]
+    public void TestFontLookupsAreRememberedAndStillHonourTheirStyle()
+    {
+        var bold = CanvasRenderingContext2D.ResolveFamily("sans-serif", SKFontStyleWeight.Bold, SKFontStyleSlant.Upright);
+        Assert.Same(bold, CanvasRenderingContext2D.ResolveFamily(" Sans-Serif ", SKFontStyleWeight.Bold, SKFontStyleSlant.Upright));
+
+        var regular = CanvasRenderingContext2D.ResolveFamily("sans-serif", SKFontStyleWeight.Normal, SKFontStyleSlant.Upright);
+        Assert.NotSame(bold, regular);
+        Assert.True(bold.FontWeight > regular.FontWeight, $"bold {bold.FontWeight}, regular {regular.FontWeight}");
+
+        var fallback = CanvasRenderingContext2D.ResolveFamily("No Such Face, Arial", SKFontStyleWeight.Normal, SKFontStyleSlant.Upright);
+        Assert.Equal("Arial", fallback.FamilyName);
+
+        // Set over and over, as a frame callback does, and still draws.
+        var canvas = new SkiaCanvas(200, 60);
+        var ctx = canvas.GetContext("2d");
+        for (var i = 0; i < 50; i++)
+        {
+            ctx.Font = i % 2 == 0 ? "bold 32px sans-serif" : "32px Arial";
+            ctx.FillText("Hi", 10, 40);
+        }
+        Assert.Equal(32f, ctx.MeasureText("H") is { } m ? Metric(m, "fontBoundingBoxAscent") / 0.905f : 0f, 0.5f);
+    }
+
     [Fact]
     public void TestMeasureTextGivesTheInkAndTheFacesAscentApart()
     {

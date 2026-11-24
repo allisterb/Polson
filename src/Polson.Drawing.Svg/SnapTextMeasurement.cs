@@ -2,6 +2,7 @@
 namespace Polson.Drawing.Svg;
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -26,6 +27,15 @@ using SkiaSharp;
 /// </remarks>
 internal static class SnapTextMeasurement
 {
+    #region Fields
+    /// <summary>
+    /// Faces already resolved, by lower-cased family list, weight and slant. On Linux each lookup is a fontconfig match,
+    /// about 12 ms apiece on Cloud Run against a fraction of one on Windows (2026-11-24), and every <c>getBBox</c>, advance
+    /// and tracked glyph asks again. Shared, so never disposed.
+    /// </summary>
+    private static readonly ConcurrentDictionary<(string, SKFontStyleWeight, SKFontStyleSlant), SKTypeface> Resolved = new();
+    #endregion
+
     #region Methods
     /// <summary>The box a text element's glyphs occupy, honouring anchor, size and family.</summary>
     internal static SnapBBox Measure(SvgTextBase text, SnapMatrix? matrix)
@@ -33,7 +43,7 @@ internal static class SnapTextMeasurement
         var content = text.Text ?? string.Empty;
         var size = FontSize(text);
 
-        using var typeface = Typeface(text);
+        var typeface = Typeface(text);
         using var font = new SKFont(typeface, size);
 
         var width = font.MeasureText(content);
@@ -67,7 +77,7 @@ internal static class SnapTextMeasurement
     {
         if (string.IsNullOrEmpty(content)) return 0f;
 
-        using var typeface = Typeface(style);
+        var typeface = Typeface(style);
         using var font = new SKFont(typeface, FontSize(style));
         return font.MeasureText(content);
     }
@@ -78,7 +88,7 @@ internal static class SnapTextMeasurement
     /// <summary>Vertical metrics of <paramref name="style"/>'s face at its size.</summary>
     internal static (float Ascent, float Descent) Metrics(SvgTextBase style)
     {
-        using var typeface = Typeface(style);
+        var typeface = Typeface(style);
         using var font = new SKFont(typeface, FontSize(style));
         font.GetFontMetrics(out var metrics);
         return (metrics.Ascent, metrics.Descent);
@@ -131,7 +141,14 @@ internal static class SnapTextMeasurement
             ? SKFontStyleSlant.Italic
             : SKFontStyleSlant.Upright;
 
-        var families = (text.FontFamily ?? string.Empty)
+        var familyList = text.FontFamily ?? string.Empty;
+        return Resolved.GetOrAdd((familyList.Trim().ToLowerInvariant(), weight, slant), _ => Resolve(familyList, weight, slant));
+    }
+
+    /// <summary>The face for a family list, uncached: see <see cref="Resolved"/>.</summary>
+    private static SKTypeface Resolve(string familyList, SKFontStyleWeight weight, SKFontStyleSlant slant)
+    {
+        var families = familyList
             .Split(',', StringSplitOptions.RemoveEmptyEntries)
             .Select(f => f.Trim().Trim('\'', '"').Trim())
             .Where(f => f.Length > 0);
