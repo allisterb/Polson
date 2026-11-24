@@ -1040,21 +1040,37 @@ async def launch(app: FastAPI, name: str, message: str = OPENING) -> None:
     **In-process rather than over the network.** `ASGITransport` calls the app directly, so there is
     no port to discover, no second connection to the machine, and nothing to configure differently
     when this is deployed behind a proxy. It is how the tests drive it too.
+
+    **The run's engine is stopped when it ends, however it ends** (`studio.release`): ADK keeps it otherwise, and
+    each finished run held ~1 GB until the instance ran out of memory.
     """
     transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://intake", timeout=None,
-                                 headers=api_gate.internal()) as web:
-        made = await web.post(f"/apps/{name}/users/{USER}/sessions", json={})
-        made.raise_for_status()
-        session = made.json()["id"]
+    try:
+        async with httpx.AsyncClient(transport=transport, base_url="http://intake", timeout=None,
+                                     headers=api_gate.internal()) as web:
+            made = await web.post(f"/apps/{name}/users/{USER}/sessions", json={})
+            made.raise_for_status()
+            session = made.json()["id"]
 
-        answer = await web.post("/run_sse", json={
-            "appName": name, "userId": USER, "sessionId": session,
-            "newMessage": {"role": "user", "parts": [{"text": message}]},
-            "streaming": False,
-        })
-        answer.raise_for_status()
-    _logger.info("intake: %s ran to completion", name)
+            answer = await web.post("/run_sse", json={
+                "appName": name, "userId": USER, "sessionId": session,
+                "newMessage": {"role": "user", "parts": [{"text": message}]},
+                "streaming": False,
+            })
+            answer.raise_for_status()
+        _logger.info("intake: %s ran to completion", name)
+    finally:
+        await _release(name)
+
+
+async def _release(name: str) -> None:
+    """`studio.release`, logged; a failure to stop the engine is reported, never raised over the run's own outcome."""
+    try:
+        import studio
+        if await asyncio.shield(studio.release(name)):
+            _logger.warning("intake: %s's engine stopped", name)
+    except Exception as exc:                                    # noqa: BLE001 - cleanup must not mask the run
+        _logger.warning("intake: could not stop %s's engine (%r)", name, exc)
 
 
 async def observe(app: FastAPI, name: str) -> str | None:

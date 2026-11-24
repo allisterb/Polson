@@ -2199,6 +2199,10 @@ def build_app(project_dir: str | Path, *, name: str | None = None, **kwargs) -> 
                            interject.make_plugin(project))
                if p is not None]
 
+    toolset = next((t for t in root.tools if isinstance(t, McpToolset)), None)
+    if toolset is not None:
+        _engines[name or project.name] = toolset
+
     return App(
         name=name or project.name,
         root_agent=root,
@@ -2206,7 +2210,7 @@ def build_app(project_dir: str | Path, *, name: str | None = None, **kwargs) -> 
             *plugins,
             StudioWatchdog(
                 role_seconds={agent: budget.seconds for agent, budget in plan.items()},
-                toolset=next((t for t in root.tools if isinstance(t, McpToolset)), None),
+                toolset=toolset,
                 # None in a single-agent app: `build` only attaches the advisor where there are
                 # roles, so naming it there would direct an agent at a tool it does not have. A live
                 # logo run was told to call `ask_facilitator` and had no such tool.
@@ -2215,6 +2219,26 @@ def build_app(project_dir: str | Path, *, name: str | None = None, **kwargs) -> 
         ],
         context_cache_config=context_cache_config(),
     )
+
+
+#: Each app's engine toolset, by app name, so whatever started its run can stop its server: see `release`.
+_engines: dict[str, McpToolset] = {}
+
+
+async def release(app_name: str) -> bool:
+    """Stops `app_name`'s `Polson.CLI server` process. True if it had one; safe to call twice.
+
+    **ADK never does.** Its API server caches one runner per app for the life of the process and closes them only at
+    shutdown, and every request is its own app — so every finished run left its engine running, with its `Session`
+    scratchpad, bitmaps and caches. On 2026-11-24 an instance went 14% → 98% of 4 GiB over three runs and was killed
+    for it; one run left ~1 GB that never fell. The toolset is closed, not dropped: ADK's runner still holds it, and a
+    later call on the same app opens a fresh server, so `Session` does not carry across runs.
+    """
+    toolset = _engines.get(app_name)
+    if toolset is None:
+        return False
+    await toolset.close()
+    return True
 
 
 #: Explicit context caching, off unless `POLSON_CONTEXT_CACHE=1`: an experiment until a run has been measured with it.
