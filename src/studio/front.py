@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import shutil
 import tempfile
@@ -358,9 +359,13 @@ _checked_at = float("-inf")
 #: How long a look at the archive stands, so a page load is not a bucket listing.
 RECHECK_SECONDS = 60.0
 
-#: How much of the disk (which is memory) `warm` may fill with whole requests. A request past it is still brought back
-#: when it is opened, as before; this only bounds what is fetched ahead of anyone asking.
-WARM_BYTES = 768 * 1024 * 1024
+#: How much of the disk (which is memory) `warm` may fill with whole requests; `POLSON_WARM_MB` sets it. **None by
+#: default**: on 2026-11-24 an instance ran out of its 4 GiB mid-run with 245 MB of warmed requests on disk, and a
+#: request opened later is brought back then, in a few seconds. The list is always warmed; it is a few MB.
+try:
+    WARM_BYTES = max(0, int(os.environ.get("POLSON_WARM_MB", "0"))) * 1024 * 1024
+except ValueError:
+    WARM_BYTES = 0
 
 #: Requests fetched at once for the list.
 LIST_WORKERS = 8
@@ -386,7 +391,8 @@ def rebuild_listed(root: Path) -> None:
 
 
 def warm(root: Path) -> None:
-    """Fetches the archive ahead of the first visitor: every request's row, then each request whole, up to `WARM_BYTES`.
+    """Fetches the archive ahead of the first visitor: every request's row, then each request whole while the disk holds
+    less than `WARM_BYTES` (none by default).
 
     Run once in a background thread when the server starts, so a new instance (a rollout, or a start from idle) has
     the list ready and opens a request from local disk. Each whole request takes the lock on its own, so a visitor
@@ -398,7 +404,7 @@ def warm(root: Path) -> None:
     rebuild_listed(root)
     whole = 0
     for name in sorted(_partial):
-        if _size(Path(root)) >= WARM_BYTES:
+        if WARM_BYTES <= 0 or _size(Path(root)) >= WARM_BYTES:
             break
         rebuild_request(root, name)
         whole += name not in _partial

@@ -139,16 +139,25 @@ class RebuildTests(unittest.TestCase):
 
         self.assertEqual(len(listings), 1)
 
-    def test_warming_brings_every_request_back_whole_before_anyone_visits(self):
-        """Started as the server boots, so the first visitor neither waits for the list nor for a request."""
+    def test_warming_lists_but_fetches_nothing_whole_by_default(self):
+        """The disk is memory: an instance ran out of its 4 GiB mid-run with warmed requests on it (2026-11-24)."""
         with with_archive(archived_poster()):
+            front_mod.warm(self.root)
+            page = self.client.get("/requests?view=done")
+
+        self.assertIn("Lantern Keeper poster", page.text)
+        self.assertFalse((self.root / "lantern" / "direction.md").exists())
+        self.assertIn("lantern", front_mod._partial)
+
+    def test_warming_brings_requests_back_whole_when_given_room(self):
+        with with_archive(archived_poster()), mock.patch.object(front_mod, "WARM_BYTES", 64 * 1024 * 1024):
             front_mod.warm(self.root)
 
         self.assertTrue((self.root / "lantern" / "direction.md").is_file())
         self.assertTrue((self.root / "lantern" / "artifacts" / "final_a.svg").is_file())
         self.assertNotIn("lantern", front_mod._partial)
 
-    def test_warming_stops_at_its_ceiling_and_leaves_the_rest_listed(self):
+    def test_warming_stops_at_a_ceiling_and_leaves_the_rest_listed(self):
         with with_archive(archived_poster()), mock.patch.object(front_mod, "WARM_BYTES", 1):
             front_mod.warm(self.root)
             page = self.client.get("/requests?view=done")

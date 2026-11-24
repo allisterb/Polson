@@ -184,6 +184,20 @@ public class Canvas2DTests : TestsRuntime
         Assert.Equal(32f, ctx.MeasureText("H") is { } m ? Metric(m, "fontBoundingBoxAscent") / 0.905f : 0f, 0.5f);
     }
 
+    /// <summary>
+    /// The face found for a character the chosen face lacks is remembered too: a frame callback asks for the same π on
+    /// every frame, and on Linux each answer was a search of every installed face.
+    /// </summary>
+    [Fact]
+    public void TestFallbackFacesAreRemembered()
+    {
+        var primary = CanvasRenderingContext2D.ResolveFamily("Arial", SKFontStyleWeight.Normal, SKFontStyleSlant.Upright);
+        const int ideograph = 0x6F22;                                   // 漢, which Arial does not carry
+        var first = TextShaper.Fallback(primary, ideograph);
+        Assert.Same(first, TextShaper.Fallback(primary, ideograph));
+        if (first is not null) Assert.NotEqual(primary.FamilyName, first.FamilyName);
+    }
+
     [Fact]
     public void TestMeasureTextGivesTheInkAndTheFacesAscentApart()
     {

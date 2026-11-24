@@ -44,6 +44,10 @@ internal static class TextShaper
     /// <summary>One HarfBuzz face per typeface for the life of the process. A CJK collection is tens of megabytes, so
     /// reading it again for every <c>fillText</c> would make text the slowest thing on the canvas.</summary>
     private static readonly ConcurrentDictionary<string, Lazy<Face?>> Faces = new();
+
+    /// <summary>Fallback faces by family, weight, width, slant and character: see <see cref="Fallback"/>.</summary>
+    private static readonly ConcurrentDictionary<(string Family, int Weight, int Width, SKFontStyleSlant Slant, int CodePoint), SKTypeface?>
+        Fallbacks = new();
     #endregion
 
     #region Methods
@@ -208,7 +212,7 @@ internal static class TextShaper
             var cp = graphemes[i].CodePoint;
             faces[i] = Has(primary, cp, probes) ? primary
                 : Has(current, cp, probes) ? current
-                : SKFontManager.Default.MatchCharacter(primary.FamilyName, primary.FontStyle, null, cp) ?? primary;
+                : Fallback(primary, cp) ?? primary;
             current = faces[i];
         }
 
@@ -303,6 +307,18 @@ internal static class TextShaper
         var upem = face.UnitsPerEm > 0 ? face.UnitsPerEm : typeface.UnitsPerEm;
         font.SetScale(upem, upem);
         return new Face(blob, face, font, upem);
+    }
+
+    /// <summary>
+    /// The face the system offers for a character <paramref name="primary"/> lacks, or null: remembered per family, style
+    /// and character for the life of the process. On Linux each answer is a fontconfig search of every installed face,
+    /// and a frame callback asks again on every frame for the same π or ≈. Never disposed, so sharing is safe.
+    /// </summary>
+    internal static SKTypeface? Fallback(SKTypeface primary, int codePoint)
+    {
+        var style = primary.FontStyle;
+        return Fallbacks.GetOrAdd((primary.FamilyName, style.Weight, style.Width, style.Slant, codePoint),
+            key => SKFontManager.Default.MatchCharacter(key.Family, new SKFontStyle(key.Weight, key.Width, key.Slant), null, key.CodePoint));
     }
 
     private static bool Has(SKTypeface typeface, int codePoint, Dictionary<SKTypeface, SKFont> probes)
