@@ -799,7 +799,9 @@ Checks a finished film (`Verify.film`) or a still (`Verify.image`) three ways, a
   - **`scale`**: an axis label you declare, such as a tick or a scale's end (`scale: ['0%', '1,000%']`). It marks a ruler, not a claim;
   - **`own words`**: anything else.
 
-  **A text with figures is sourced figure by figure.** A line can carry a document's figure and one you computed, so each figure is looked for on its own: on the documents' pages first, then among the figures of your `computed` keys, then in research and the brief. `detail` names where each was found. A figure found nowhere makes the text an **`unsourced figure`**, with `detail` naming it, and fails the check.
+  **A text with figures is sourced figure by figure.** A line can carry a document's figure and one you computed, so each figure is looked for on its own: on the documents' pages first, then among the figures of your `computed` keys, then in research and the brief. `detail` names where each was found. A figure found nowhere makes the text an **`unsourced figure`**, with `detail` naming it, and fails the check. **In a maths explainer a single digit is notation**, not a figure: the 1 in `1/n^s`, `k = 1, 2, 3`, "Scene 3". Every other figure (a year, a decimal, a count, a prize) still needs its working or a source.
+
+  **A text with no letter or digit**, a lone `=` or `→` between two equations, has the status `symbol`: a reader does not name it, so it is neither seen nor missed.
 
   **`computed` is for arithmetic, not citations.** An entry whose working shows no arithmetic (a digit and an operator) is set aside, and the summary names it. A live run passed `'2016': 'Period covered from FT methodology'` and `'20': 'FT rank 20'`. A figure from a document is found on its page without help, and a label claiming it would have sourced "Across 20 American Countries" from Qloo's peer ranked 20th. The figure check cannot tell what a figure is said to mean. That the article's 20 countries were *eligible*, not represented, is for you to read.
 

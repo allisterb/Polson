@@ -156,6 +156,7 @@ public sealed partial class VerifyToolkit
                 ["readAs"] = Raw(seen?.Text),
                 ["readAt"] = seen?.From,
                 ["status"] = e.From is null ? "never shown" : citations[i] ? "citation" : seen is not null ? "seen"
+                    : FilmReadBack.Symbol(e.Text) ? "symbol"
                     : FilmReadBack.Unreadable(e.Text, Nemotron) ? "unchecked" : "missed",
             };
         }).ToArray();
@@ -241,7 +242,8 @@ public sealed partial class VerifyToolkit
                 ["seen"] = seen is not null,
                 ["readAs"] = Raw(seen),
                 ["closest"] = seen is null ? Raw(closest) : null,
-                ["status"] = s.On.Length == 0 ? "off the canvas" : seen is not null ? "seen" : FilmReadBack.Unreadable(s.Text, Nemotron) ? "unchecked" : "missed",
+                ["status"] = s.On.Length == 0 ? "off the canvas" : seen is not null ? "seen" : FilmReadBack.Symbol(s.Text) ? "symbol"
+                    : FilmReadBack.Unreadable(s.Text, Nemotron) ? "unchecked" : "missed",
             };
         }).ToArray();
 
@@ -993,6 +995,7 @@ public abstract class ReadBackCheck(string name, Dictionary<string, object?>[] i
         ["missed"] = Items.Count(i => (string?)i["status"] == "missed"),
         ["citations"] = Items.Count(i => (string?)i["status"] == "citation"),
         ["unchecked"] = Items.Count(i => (string?)i["status"] == "unchecked"),
+        ["symbols"] = Items.Count(i => (string?)i["status"] == "symbol"),
         ["unsourced"] = Items.Count(i => (string?)i["source"] == "unsourced figure"),
         ["strays"] = Strays.Count,
         ["pending"] = Strays.Count(s => s.Verdict is null),
@@ -1374,6 +1377,12 @@ internal static class FilmReadBack
         nemotron && (text ?? "").Any(c => (c is >= '؀' and <= 'ۿ' or >= 'ݐ' and <= 'ݿ' or >= 'ࢠ' and <= 'ࣿ'
             or >= 'ﭐ' and <= '﷿' or >= 'ﹰ' and <= '﻿' or >= 'ऀ' and <= 'ॿ') && char.IsLetter(c));
 
+    /// <summary>
+    /// A text with no letter or digit, a lone "=" or "→" between two equations: a reader names none of these, so one not
+    /// read is not missed. Riemann Hypothesis 2 had six "=" counted missed (2026-11-24).
+    /// </summary>
+    internal static bool Symbol(string? text) => !(text ?? "").Any(char.IsLetterOrDigit);
+
     /// <summary>What the summary says when texts were left unchecked for their script, <paramref name="scripts"/> naming them.</summary>
     internal static string UncheckedNote(int count, string piece, string scripts = "Arabic or Hindi") => count == 0 ? ""
         : $" {count} text{(count == 1 ? " is" : "s are")} in {scripts}, which the reader cannot be trusted to read: {(count == 1 ? "it is" : "they are")} "
@@ -1593,6 +1602,7 @@ internal sealed class FilmSources
     {
         var briefText = ReadBrief(projectRoot);
         brief = Normal(briefText);
+        notation = IsMaths(projectRoot);
         briefFigures = [.. FilmReadBack.Figures(briefText)];
         pages = ReadPages(projectRoot);
         qloo = session?.Taste.All.Where(r => r.Ok)
@@ -1650,7 +1660,11 @@ internal sealed class FilmSources
                 if (r.Figures.Contains(f)) return ("research", r.Id);
             return briefFigures.Contains(f) ? ("brief", "brief.md") : (null, f);
         }
-        var found = figures.Distinct().Select(SourceOf).ToArray();
+        // In a maths explainer a single digit is notation, not a figure: the 1 in 1/n^s, the 2 in ½, k = 1, 2, 3, "Scene 3".
+        // Riemann Hypothesis 2 (2026-11-24) failed its read-back on 27 such "unsourced figures"; its real facts (1859,
+        // 14.135, 10¹³, $1,000,000) are all larger or decimal and still need their working or a source.
+        var found = figures.Distinct().Where(f => !(notation && IsNotation(f))).Select(SourceOf).ToArray();
+        if (found.Length == 0) return ("own words", "its digits are notation");
 
         var missing = found.Where(x => x.Kind is null).Select(x => x.Where).ToArray();
         if (missing.Length > 0) return ("unsourced figure", $"no source for {string.Join(", ", missing)}");
@@ -1674,6 +1688,25 @@ internal sealed class FilmSources
 
     #region Private methods
     private static string Normal(string? text) => FilmReadBack.Normal(text);
+
+    /// <summary>A figure that is one digit, which a maths explainer's notation is full of.</summary>
+    private static bool IsNotation(string figure) => figure.Length == 1 && char.IsAsciiDigit(figure[0]);
+
+    /// <summary>Whether the project is a maths explainer, by its <c>project.json</c>: there, single digits are notation.</summary>
+    private static bool IsMaths(string? root)
+    {
+        var path = root is null ? null : Path.Combine(root, "project.json");
+        if (path is null || !File.Exists(path)) return false;
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            return doc.RootElement.TryGetProperty("workflow", out var w) && w.GetString() == "math_explainer";
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
 
     /// <summary>The brief: the director's words between its markers, or the whole file.</summary>
     private static string ReadBrief(string? root)
@@ -1718,6 +1751,8 @@ internal sealed class FilmSources
     #region Fields
     private readonly string brief;
     private readonly HashSet<string> briefFigures;
+    /// <summary>A maths explainer: single digits are notation there. See <see cref="Classify"/>.</summary>
+    private readonly bool notation;
     private readonly (string Doc, int Page, string Text, HashSet<string> Figures)[] pages;
     private readonly Dictionary<string, string> qloo;
     private readonly (string Id, string Text, HashSet<string> Figures)[] research;

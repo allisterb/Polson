@@ -1120,6 +1120,14 @@ public partial class JsDrawingEngine : Runtime
 
         if (ex is MissingMemberException) return ExplainMissingMember(message);
 
+        // Jint's argument conversion on an awaited call ("Expected string but got Undefined") is a .NET exception with no
+        // position, and reached the script as that sentence alone: Riemann Hypothesis 2 spent six turns finding that
+        // `Verify.film(comp, path)` had an undefined path (2026-11-24). It cannot be placed: CatchClrExceptions turns it
+        // into a JavaScript error, but the awaited promise then never settles and the script waits out PromiseTimeout.
+        // So it is explained instead, naming the awaited call as where to look.
+        if (ex is ArgumentException && ConversionFailure().IsMatch(message))
+            return message + ArgumentHelp(message).Replace("A call on this line", "An awaited call", StringComparison.Ordinal);
+
         // Anywhere in the chain: the load failure is usually two or three levels under whatever the
         // engine surfaced, and which level it sits at is not worth depending on.
         for (var cause = ex; cause is not null; cause = cause.InnerException)
@@ -1285,6 +1293,10 @@ public partial class JsDrawingEngine : Runtime
     [GeneratedRegex(@":(?<line>\d+):\d+")]
     private static partial Regex StackLine();
 
+    /// <summary>Jint's argument-conversion failure, "Expected string but got Undefined".</summary>
+    [GeneratedRegex(@"\bExpected (?<expected>\w+) but got (?<got>\w+)")]
+    private static partial Regex ConversionFailure();
+
     /// <summary>Where in the script it happened, when Jint recorded a position.</summary>
     private static string Where(JavaScriptException ex)
     {
@@ -1308,6 +1320,13 @@ public partial class JsDrawingEngine : Runtime
     /// </remarks>
     private static string ArgumentHelp(string message, string? sourceLine = null)
     {
+        if (ConversionFailure().Match(message) is { Success: true } conversion)
+        {
+            return $" A call on this line was given {conversion.Groups["got"].Value.ToLowerInvariant()} where it takes a "
+                + $"{conversion.Groups["expected"].Value.ToLowerInvariant()}: usually a variable that was never assigned, or a "
+                + "property that does not exist on the object it was read from. Log each argument of the call to see which.";
+        }
+
         if (!message.Contains("No public methods with the specified arguments", StringComparison.OrdinalIgnoreCase))
         {
             return string.Empty;

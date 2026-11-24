@@ -108,6 +108,30 @@ public class AwaitedFailureTests : TestsRuntime
     }
 
     /// <summary>
+    /// An awaited call given <c>undefined</c> for a string says what to look for, not only Jint's "Expected string but got
+    /// Undefined". Riemann Hypothesis 2 spent six turns finding an undefined path in <c>Verify.film(comp, path)</c>.
+    /// </summary>
+    /// <remarks>
+    /// No line: Jint throws it with no position, and making it a JavaScript error left the promise unsettled for the full
+    /// two-minute PromiseTimeout. The time bound below is the guard against that coming back.
+    /// </remarks>
+    [Fact]
+    public void TestAnUndefinedStringArgumentToAnAwaitedCallIsExplainedPromptly()
+    {
+        var started = DateTime.UtcNow;
+        var result = Run("""
+            const comp = Motion.composition({ width: 40, height: 40 });
+            let path;
+            await Verify.film(comp, path);
+            """);
+
+        Assert.False(result.Success);
+        Assert.Contains("Expected string but got Undefined", result.Error, StringComparison.Ordinal);
+        Assert.Contains("An awaited call was given undefined where it takes a string", result.Error, StringComparison.Ordinal);
+        Assert.True(DateTime.UtcNow - started < TimeSpan.FromSeconds(20), $"took {DateTime.UtcNow - started}");
+    }
+
+    /// <summary>
     /// A rejection that is not an Error still reports something.
     /// </summary>
     /// <remarks>

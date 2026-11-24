@@ -329,6 +329,37 @@ public class VerifyTests : TestsRuntime, IDisposable
     }
 
     /// <summary>
+    /// In a maths explainer a single digit is notation, and every other figure still needs a source. Riemann Hypothesis 2
+    /// (2026-11-24) failed its read-back on 27 "unsourced figures", nearly all of them the 1 in 1/n^s or "Scene 3".
+    /// </summary>
+    [Fact]
+    public void TestSingleDigitsAreNotationInAMathsExplainerOnly()
+    {
+        var none = new Dictionary<string, string>();
+        var plain = new FilmSources(root, null);
+        Assert.Equal(("unsourced figure", "no source for 1"), plain.Classify("ζ(s) = ∑_(n = 1)^∞ 1/(n^s)", none));
+
+        File.WriteAllText(Path.Combine(root, "project.json"), """{ "id": "rh", "workflow": "math_explainer" }""");
+        var maths = new FilmSources(root, null);
+        Assert.Equal(("own words", "its digits are notation"), maths.Classify("ζ(s) = ∑_(n = 1)^∞ 1/(n^s)", none));
+        Assert.Equal(("own words", "its digits are notation"), maths.Classify("SCENE 3: THE CRITICAL LINE", none));
+        Assert.Equal(("unsourced figure", "no source for 1859"), maths.Classify("The Riemann Hypothesis (1859):", none));
+        Assert.Equal(("unsourced figure", "no source for 14.135"), maths.Classify("t₁ ≈ 14.135", none));
+        Assert.Equal(("computed", "14.135 = zeros[0].toFixed(3) from 14.1347 * 1"),
+            maths.Classify("t₁ ≈ 14.135", new Dictionary<string, string> { ["t₁ ≈ 14.135"] = "14.135 = zeros[0].toFixed(3) from 14.1347 * 1" }));
+    }
+
+    /// <summary>A lone symbol between two equations is not a text a reader names, so not reading it is not missing it.</summary>
+    [Fact]
+    public void TestATextWithNoLetterOrDigitIsASymbol()
+    {
+        Assert.True(FilmReadBack.Symbol("="));
+        Assert.True(FilmReadBack.Symbol(" → "));
+        Assert.False(FilmReadBack.Symbol("= 2"));
+        Assert.False(FilmReadBack.Symbol("ζ"));
+    }
+
+    /// <summary>
     /// A research figure with a thousands separator is found in the research. anthropic_s_1_outside_cc set Alphabet's
     /// $229,692M from a research answer printing "$229,692 million", and all three such figures came back unsourced:
     /// the research text was matched after its comma had become a space.

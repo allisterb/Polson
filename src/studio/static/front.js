@@ -1579,7 +1579,8 @@
       svgEl('title', {}, g).textContent = it.text.replace(/\n/g, ' ') + ' — on screen ' + it.from.toFixed(1) + '–' + it.to.toFixed(1) + ' s · '
         + (SOURCE[it.source] || it.source) + (it.detail ? ' (' + it.detail + ')' : '') + ' · '
         + (it.status === 'seen' ? 'read by the watcher' + (it.readAs && it.readAs !== it.text ? ' as “' + it.readAs + '”' : '')
-          : it.status === 'unchecked' ? UNCHECKED : it.status === 'citation' ? CITATION : 'not read by the watcher');
+          : it.status === 'unchecked' ? UNCHECKED : it.status === 'citation' ? CITATION
+          : it.status === 'symbol' ? 'a symbol, which a watcher does not name: not graded' : 'not read by the watcher');
       svgEl('rect', { x: x(it.from), y: y, width: w, height: barH, rx: 3 }, g);
       if (w > 34) svgEl('text', { x: x(it.from) + 4, y: y + 13 }, g).textContent = clipText(it.text.replace(/\n/g, ' '), Math.floor(w / 6.2));
     });
