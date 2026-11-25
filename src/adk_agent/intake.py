@@ -110,8 +110,9 @@ WORKFLOWS: dict[str, tuple[str, ...]] = {
     # `UNTYPED_IS_A_CHOICE` below.
     # `pitch` tells a startup's case from its own deck (and model) to investors, every projection marked as one; with
     # places, a film per investor audience in its conventions. `report.10k` and `report.s1` are reports on a Form 10-K and
-    # a Form S-1, with the questions their readers take to them asked as well as the director's.
-    "motion": ("pitch", "product", "report", "report.10k", "report.s1"),
+    # a Form S-1, with the questions their readers take to them asked as well as the director's. `promo` is a pitch for any
+    # subject — a product, a studio, a project, a cause — from the director's brief and material, to whoever it persuades.
+    "motion": ("pitch", "product", "promo", "report", "report.10k", "report.s1"),
     # **The Qloo twins**: the two above as the hackathon entry built them, each audience's design from its Qloo taste
     # profile through the `Taste` tool. Offered only while Qloo is on (`taste_available`): its API is contract-only.
     "poster_qloo": ("film", "product"),
@@ -279,6 +280,8 @@ DEADLINES: dict[str, int] = {
     # A type's own entry, `workflow.type`, wins over its workflow's: a pitch is two minutes of narrated film to a
     # trailer's fifteen seconds. The CLI's craft default agrees (`ProjectGenerator.WorkflowDeadlines`).
     "motion.pitch": 90,
+    # A promo is a pitch's shape for any subject, ninety seconds to two minutes; the pitch's allowance until a run measures it.
+    "motion.promo": 90,
     "math_explainer": 60,
     # The CLI's craft defaults (`ProjectGenerator.WorkflowDeadlines`): a mark and its sheet, one composed cover. Logo 20, not
     # 15: emberroast1 (2026-10-29) finished at 13 of 15 with a thin brand sheet and no findings.md.
@@ -334,11 +337,11 @@ def _base_token_cap() -> int | None:
 #: context (55k tokens at the start, 172k by the end). ftcexplainer1 (3.7 Flash, 2026-10-23) had spent 1.8M of 2M by
 #: Deliver and had not written its findings; ftcexplainer3 (3.5 Flash) hit 2M in its build stage after 57 turns.
 #: `motion.pitch` at twice, keyed like `DEADLINES`: about nine scenes and their narration against a trailer's handful, and
-#: no measured run behind it yet.
+#: no measured run behind it yet. `motion.promo` at twice for the same reason: a pitch's scenes and voice, any subject.
 #: `motion.report` at twice too, its kinds (`report.s1`, `report.10k`) with it: reading a long filing is the cost.
 #: anthropic_s_1 (3.8 Flash, 2026-10-28, three audiences, S-1) spent its 3M on the reading, three profiles and one design
 #: board in 17 minutes — 66 calls, each resending ~180k tokens of context — and was halted before any film was encoded.
-TOKEN_SCALE: dict[str, float] = {"math_explainer": 2.0, "motion.pitch": 2.0, "motion.report": 2.0}
+TOKEN_SCALE: dict[str, float] = {"math_explainer": 2.0, "motion.pitch": 2.0, "motion.promo": 2.0, "motion.report": 2.0}
 
 #: A further multiple when the brief asks for a voice (`- Narration: Enabled`), keyed as `TOKEN_SCALE` is. Only where
 #: the type's scale was set for a silent film: a pitch is narrated by default and its scale already counts it.

@@ -40,6 +40,9 @@ public static class FFmpeg
 
     /// <summary>How long ffmpeg may take to finish once the last frame is in.</summary>
     const int FinishMs = 300_000;
+
+    /// <summary>A watch copy's sound, when it keeps one: enough for a narrator's words.</summary>
+    const int WatchAudioKbps = 64;
     #endregion
 
     #region Properties
@@ -120,26 +123,30 @@ public static class FFmpeg
     /// A silent copy of <paramref name="video"/>, <paramref name="seconds"/> long, at most <paramref name="maxHeight"/> tall and
     /// encoded to fit <paramref name="maxBytes"/>, written as <paramref name="output"/>; null when written, else why not. What
     /// <c>Verify.film</c> sends when the film itself is over the watcher's limit: a grainy 1080 master ran 65 MB (becool2).
+    /// With <paramref name="audio"/>, its sound is kept at <see cref="WatchAudioKbps"/>, as <c>Video.ask</c>'s copy is: a
+    /// question about a narrated film may be about what it says.
     /// </summary>
     /// <remarks>
     /// The bitrate is a share of what fits, capped by VBV; an encode that still comes out too big is tried again at a smaller
     /// share. Read with the <c>file</c> protocol only, and moved into place only when it fits.
     /// </remarks>
-    public static string? WatchCopy(string video, double seconds, string output, int maxHeight, long maxBytes)
+    public static string? WatchCopy(string video, double seconds, string output, int maxHeight, long maxBytes, bool audio = false)
     {
         if (Executable is not { } exe) return $"no 'ffmpeg' was found: {Install}.";
         var partial = output + ".part";
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(output))!);
+            string[] sound = audio ? ["-c:a", "aac", "-b:a", WatchAudioKbps + "k"] : ["-an"];
             for (var share = 0.85; share > 0.3; share *= 0.7)
             {
-                var kbps = Math.Max(1, (long)(maxBytes * 8 * share / Math.Max(1, seconds) / 1000)).ToString(CultureInfo.InvariantCulture);
-                var info = Info(exe, "-hide_banner", "-nostdin", "-loglevel", "error", "-y", "-protocol_whitelist", "file",
-                    "-i", "file:" + video, "-an", "-vf", $"scale=-2:'min(ih,{maxHeight})':flags=lanczos",
+                var kbps = Math.Max(1, (long)(maxBytes * 8 * share / Math.Max(1, seconds) / 1000) - (audio ? WatchAudioKbps : 0))
+                    .ToString(CultureInfo.InvariantCulture);
+                var info = Info(exe, ["-hide_banner", "-nostdin", "-loglevel", "error", "-y", "-protocol_whitelist", "file",
+                    "-i", "file:" + video, .. sound, "-vf", $"scale=-2:'min(ih,{maxHeight})':flags=lanczos",
                     "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-maxrate", kbps + "k", "-bufsize", kbps + "k",
                     "-pix_fmt", "yuv420p", "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
-                    "-movflags", "+faststart", "-f", "mp4", "file:" + partial);
+                    "-movflags", "+faststart", "-f", "mp4", "file:" + partial]);
                 using var process = Process.Start(info);
                 if (process is null) return "ffmpeg did not start.";
                 process.StandardInput.Close();
@@ -148,7 +155,7 @@ public static class FFmpeg
                 if (!process.WaitForExit(FinishMs)) { Kill(process); return $"ffmpeg took more than {FinishMs / 1000} s for the copy."; }
                 if (process.ExitCode != 0) return $"ffmpeg failed: {Trim(error.Result)}";
                 if (new FileInfo(partial).Length > maxBytes) continue;
-                MoveIntoPlace(partial, output, "Verify.film");
+                MoveIntoPlace(partial, output, audio ? "Video.ask" : "Verify.film");
                 return null;
             }
             return $"no copy {maxHeight} px tall came in under {maxBytes / (1024 * 1024.0):0.#} MB; the film is too long to watch in one read.";

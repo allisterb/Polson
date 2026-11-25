@@ -415,6 +415,26 @@ CARDS: tuple[Card, ...] = (
                  NARRATION),
          audiences=True, audiences_optional=True, types=("pitch",), needs=".pdf",
          brief="Create a motion graphic startup pitch with as much information as possible for potential investors."),
+    # A pitch for anything the director names — a product, a studio, a project, a cause — to whoever it should persuade,
+    # made from the brief and the material attached. The motion workflow's `promo` type: the material read and every
+    # claim confirmed against it, as a pitch's deck is; the film ends on the ask. Material is optional: without it the
+    # brief is the whole case, and the type says the film is only as full as the brief.
+    Card("motion-pitch", "Motion pitch", "video", "Video · 90 seconds, a pitch for anything from your material",
+         (Route("motion", "Motion graphics pitch"),),
+         extras=(Extra("subject", "Subject", placeholder="Its name, and what it is in one sentence", long=True, rows=2,
+                       subject=True),
+                 Extra("persuades", "Who it persuades", placeholder="Who they are, and what they already know", long=True,
+                       rows=2),
+                 Extra("belief", "What they should believe", placeholder="The one thing they should leave with",
+                       long=True, rows=2),
+                 Extra("ask", "What they should do next", placeholder="The ask, worded as it may appear", long=True,
+                       rows=2),
+                 Extra("duration", "Duration", ("60 seconds", "90 seconds", "2 minutes"), "90 seconds"),
+                 NARRATION),
+         audiences=True, audiences_optional=True, types=("promo",),
+         brief="A narrated motion pitch for the subject, made from the attached material: it should leave the viewer "
+               "believing the one thing above and end on what they should do next, every claim taken from the "
+               "material."),
     # A theorem or concept explained in a film: equations, graphs and narration, every formula and claim checked before
     # it is drawn and the film read back after. The Nebius entry's; the `math_explainer` workflow.
     Card("maths-explainer", "Math concept explainer", "video", "Video · a theorem or concept, every step checked",
@@ -530,8 +550,8 @@ CARDS: tuple[Card, ...] = (
 BY_SLUG: dict[str, Card] = {c.slug: c for c in CARDS}
 
 #: The home page's cards, in this order, three to a row: the workflows a visitor can start, the entries' first.
-HOME = ("film-trailer", "product-ad", "report-explainer", "startup-pitch", "maths-explainer", "product-poster",
-        "store-sign", "film-poster", "infographic", "logo")
+HOME = ("film-trailer", "product-ad", "report-explainer", "startup-pitch", "motion-pitch", "maths-explainer",
+        "product-poster", "store-sign", "film-poster", "infographic", "logo")
 
 #: Cards by a former slug, for a link made before the change. A *request* recorded under one is placed by its workflow
 #: and type instead (`card_for`), since `poster` covered both of the cards that replaced it.

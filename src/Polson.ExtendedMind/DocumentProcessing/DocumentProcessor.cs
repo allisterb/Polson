@@ -95,6 +95,9 @@ public class DocumentProcessor : Runtime, IDisposable
     /// set it could make a read hold the script to the end of its time.
     /// </summary>
     internal double WaitSeconds { get; set; } = 20;
+
+    /// <summary>The directory files are read from, and nowhere else; null where none was given.</summary>
+    protected string? ProjectRoot => projectRoot;
     #endregion
 
     #region Methods
@@ -189,9 +192,25 @@ public class DocumentProcessor : Runtime, IDisposable
 
         if (bytes.Length > MaxBytes)
         {
-            return Refused(DocumentFailure.TooLarge,
-                $"{named} is {bytes.Length / (1024 * 1024.0):0.#} MB against a {MaxBytes / (1024 * 1024.0):0.#} MB inline limit.",
-                named);
+            // A surface that can make a smaller copy sends that instead (a film, as Verify.film already did); the record
+            // names both, so an answer is never mistaken for one about the full-size file.
+            var (copy, why) = source is string given ? SmallerCopy(given, bytes.Length) : (null, null);
+            if (copy is null)
+            {
+                return Refused(DocumentFailure.TooLarge,
+                    $"{named} is {bytes.Length / (1024 * 1024.0):0.#} MB against a {MaxBytes / (1024 * 1024.0):0.#} MB inline limit."
+                    + (why is null ? "" : $" No smaller copy could be made: {why}"),
+                    named);
+            }
+            try
+            {
+                (bytes, mime, _) = Read(copy, opts);
+            }
+            catch (DocumentRefusal refusal)
+            {
+                return Refused(refusal.Failure, refusal.Message, named);
+            }
+            named = $"{named} (as {copy})";
         }
 
         var useModel = opts.Model ?? Model;
@@ -547,6 +566,12 @@ public class DocumentProcessor : Runtime, IDisposable
     #endregion
 
     #region Methods — reading
+    /// <summary>
+    /// A project-relative copy of <paramref name="path"/> under <see cref="MaxBytes"/>, to send in its place: <c>(copy, null)</c>
+    /// when made, <c>(null, why)</c> when not, <c>(null, null)</c> where this surface makes none. Documents make none.
+    /// </summary>
+    protected virtual (string? Copy, string? Why) SmallerCopy(string path, long bytes) => (null, null);
+
     /// <summary>Bytes, MIME type and a name for the record, from whatever the caller passed.</summary>
     private (byte[] Bytes, string Mime, string Named) Read(object? source, DocumentOptions opts)
     {

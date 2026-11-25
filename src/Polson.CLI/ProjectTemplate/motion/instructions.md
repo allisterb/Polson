@@ -514,7 +514,11 @@ seconds) onto one sheet, as in stage 3, and write it as `artifacts/05_sheet.png`
 **A beat shorter than half a second falls between its cells**: give it a sheet of its own, a cell every two
 frames. trailer3's crack write-on looked right on the half-second sheet; frame by frame, it was invisible for
 its first four frames, because each crack began under the bullet hole. `comp.sheet('artifacts/05_sheet.png', { count:
-31, cols: 6 })` draws the half-second sheet of a fifteen-second film; `{ times }` draws a beat's own.
+31, cols: 6 })` draws the half-second sheet of a fifteen-second film; `{ times }` draws a beat's own. A sheet holds
+48 cells, 24 seconds: **a longer film gets one sheet per part** (`{ from, to, count }`, `05_sheet_1.png`, `05_sheet_2.png`…).
+**Pass the cuts to `comp.blank`** — `comp.blank({ cuts: [...scene starts], background })` — and record it with a
+`Stage.check`: it looks at every frame after each cut, where the sheet and the sampling both miss a cut that opens on a
+few empty frames.
 **Read it against Manual 25 §4's table, *What the sheet shows***: for what you see (mechanical, stuttering, too much at
 once, unread, flat, no personality), it names the usual cause, the fix and the check that measures it.
 
@@ -524,7 +528,10 @@ pass, each key naming its curve (read back as `c.label`; a curve has no `name`),
 should be `'clamped'`, Manual 25 §5b) — and `overshoots` — segments that go past their keys. Record it:
 `Stage.check('the key moves pass through their middle keys and rest without overshoot', …)`, naming any you meant.
 
-**Hold the film to its design board.** Render the finished film at each board frame's time and compare:
+**Hold the film to its design board.** Render the finished film at each board frame's time and compare. The board
+is the one drawn in Stage 3, before any motion: **a board redrawn from the finished film compares the film with
+itself** — polsonpromo1's came back 100% alike and measured nothing — so if that is all there is, the check fails and
+says so.
 
 ```javascript
 // Each board frame against the finished film at the same moment: where they differ, and by how much.

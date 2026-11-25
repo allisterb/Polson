@@ -71,8 +71,8 @@ WORKFLOWS: dict[str, tuple[str, ...]] = {
     # `report` an explainer that answers an audience's questions from a document the director attached, and `pitch` a
     # startup's case told to investors from its own deck.
     # `report.10k` and `report.s1` are reports on a Form 10-K and a Form S-1: the report type with its readers' questions
-    # for that filing added.
-    "motion": ("pitch", "product", "report", "report.10k", "report.s1"),
+    # for that filing added. `promo` is a pitch for any subject, from the director's brief and material.
+    "motion": ("pitch", "product", "promo", "report", "report.10k", "report.s1"),
     # A theorem or concept explained in an animated film, every formula checked before it is drawn. No types.
     "math_explainer": (),
     "harness": ("image", "infographic", "logo"),

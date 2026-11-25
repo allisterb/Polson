@@ -2,6 +2,7 @@ namespace Polson.ExtendedMind.DocumentProcessing;
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Net.Http;
 using System.Text.Json.Nodes;
 using System.Threading;
@@ -111,6 +112,12 @@ public class VideoReader : DocumentProcessor
     protected override IReadOnlyDictionary<string, string> Types => VideoTypes;
 
     protected override int MaxBytes => MaxClipBytes;
+
+    /// <summary>
+    /// Makes a smaller copy of a clip: <c>(source, output, maxBytes)</c>, both full paths, returning null when written or why
+    /// not. Set by the host, which has ffmpeg; this assembly does not. Null makes no copy, and an oversized clip is refused.
+    /// </summary>
+    internal Func<string, string, long, string?>? Shrink { get; set; }
     #endregion
 
     #region Methods
@@ -140,6 +147,22 @@ public class VideoReader : DocumentProcessor
                 });
         var (text, tokens, finish, endpoint) = await chat.Ask(model, content, schema, ct);
         return new Generation(text, tokens, finish) { Model = model, Endpoint = endpoint };
+    }
+
+    /// <summary>
+    /// A film over the limit is watched as a copy in <c>artifacts/verify/</c>, as <c>Verify.film</c> watches one. polsonpromo1
+    /// (2026-11-25) was refused its 73.7 MB cold viewing and hand-made a 480 × 270 copy; this makes the same copy itself.
+    /// A copy newer than its film is reused, so asking again while a read is pending does not encode again.
+    /// </summary>
+    protected override (string? Copy, string? Why) SmallerCopy(string path, long bytes)
+    {
+        if (Shrink is null || string.IsNullOrEmpty(ProjectRoot) || !VideoTypes.ContainsKey(Path.GetExtension(path))) return (null, null);
+        var copy = $"artifacts/verify/{Path.GetFileNameWithoutExtension(path)}-ask.mp4";
+        var full = ProjectPath.Resolve(ProjectRoot, path, "video", "Read");
+        var output = ProjectPath.Resolve(ProjectRoot, copy, "video", "Write");
+        if (File.Exists(output) && File.GetLastWriteTimeUtc(output) >= File.GetLastWriteTimeUtc(full) && new FileInfo(output).Length <= MaxBytes)
+            return (copy, null);
+        return Shrink(full, output, MaxBytes) is { } why ? (null, why) : (copy, null);
     }
 
     protected override void Dispose(bool disposing)

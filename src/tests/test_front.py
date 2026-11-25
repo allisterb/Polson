@@ -289,7 +289,7 @@ class CatalogueTests(unittest.TestCase):
                     "product-poster": "product", "product-ad": "product", "maths-explainer": "topic",
                     "logo": "name", "book-cover": "book_title", "store-sign": "store",
                     "film-poster-qloo": "film", "film-trailer-qloo": "film", "product-poster-qloo": "product",
-                    "product-ad-qloo": "product"}
+                    "product-ad-qloo": "product", "motion-pitch": "subject"}
         self.assertEqual({c.slug: x.key for c in catalogue.CARDS for x in c.extras if x.subject}, subjects)
         for slug, key in subjects.items():
             card = catalogue.BY_SLUG[slug]
@@ -1039,7 +1039,7 @@ class FakeCommissioner:
     """Stands in for `adk_agent.intake.Commissioner`: offers drawing (review only) and the infographics."""
 
     TYPES = {"drawing": ("review",), "vector_infographic": ("editorial", "swiss"), "infographic": ("editorial",),
-             "motion": ("pitch", "product", "report", "report.10k", "report.s1")}
+             "motion": ("pitch", "product", "promo", "report", "report.10k", "report.s1")}
 
     def __init__(self, root: Path, refuse: Exception | None = None) -> None:
         self.root, self.refuse, self.made = root, refuse, []

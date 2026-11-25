@@ -1,25 +1,23 @@
 ## What it does
-Polson Graphics Studio is an agentic co-creative graphics and motion design platform designed to provide an autonomous, affordable alternative to human-powered on-demand creative service platforms like Design Pickle and Superside, with innovative and accurate graphic and motion design work that adapts to different audiences and languages and cultures all over the world. Polson Graphics Studio provides a verifiable, culturally adaptable, alternative to diffusion model-powered generative AI systems like Google Veo or Adobe Firefly for professional-grade image and motion graphic design work for financial report visualizations, VC pitch decks, film trailers, product advertisements, logos, infographics, posters, and many other types of graphic and motion design projects where precision, accuracy, and cross-cultural adaptation is crucial. 
+Polson Graphics Studio is an agentic co-creative graphics and motion design platform designed to provide an autonomous, affordable alternative to human-powered on-demand creative service platforms like [Design Pickle](https://designpickle.com/) and [Superside](https://www.superside.com/), with innovative and accurate graphic and motion design work that adapts to different audiences and languages and cultures all over the world. Polson Graphics Studio provides a verifiable, culturally adaptable, alternative to diffusion model-powered generative AI systems like Google Veo or Adobe Firefly, for professional-grade image and motion graphic design work for infographics, product advertisements, film trailers, logos, posters, and many other types of graphic and motion design projects where precision, accuracy, and cross-cultural adaptation is crucial. 
+
+![](https://i.imgur.com/isBlYIm.png)
+
+![](https://imgur.com/jqDfKc7.png)
+
 
 ![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/trailer5.webp)
 
 ![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/output.webp)
 
-
 Polson's overall goal is to allow ordinary users to harness their creativity using AI with professional-level graphic and motion design that would be far too expensive to employ via traditional means, mirroring the use of AI for software development by non-expert users today, and which can't be done by current generative AI systems. It aims to be superior to even the most advanced diffusion model-powered image and video generators in the areas of precision and accuracy and cross-cultural adaptation. 
 ![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/allin_final_a.svg)
 
-In [contrast](https://higgsfield.ai/blog/AI-Motion-Design-When-Video-Generation-Meets-Code) to standard agentic image or video generators that use diffusion models, Polson Graphics Studio uses a  procedural drawing and animation engine that agents using multimodal LLMs like Claude Opus 5 and Gemini 3.8 write code for to create visual artifacts that they can perceive both visually and as code.  Polson attempts to bring the same co-creative, verifiable environment for agentic software development that modern artificial intelligence enables, to the task of visual art and graphic design.  The agent has access to a wide range of tools to interact with, experiment on, and verify the drawing and animations it creates, to access and use knowledge in graphic design manuals and other resources, and to offload research tasks to cloud-based systems like Qloo.  
+In [contrast](https://higgsfield.ai/blog/AI-Motion-Design-When-Video-Generation-Meets-Code) to standard AI image or video generators that use diffusion models, Polson Graphics Studio uses a  procedural drawing and animation engine that agents using multimodal LLMs like Claude Opus and Google Gemini write code for to create visual artifacts that they can perceive both visually and as code.  Polson attempts to bring the same co-creative, verifiable environment for agentic software development that modern artificial intelligence enables, to the task of visual art and graphic design.  The agent has access to a wide range of tools to interact with, experiment on, and verify the drawing and animations it creates, to access and use knowledge in graphic design manuals and other resources, and to offload research tasks to cloud-based systems like [Parallel.ai](https://parallel.ai/).  
 
 Each studio project collects natural language briefs, PDF documents, brand images and other user-supplied assets and follows a formal graphic design workflow, with detailed validation phases designed to check the accuracy of each fact or number  that appears on-screen and delivers raster and vector images and videos in different formats together with creative briefs, brand sheets, mood boards, verification reports, and many different types of artifacts that are typically the result of the graphic design process.
 
 ![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/kitofparts2.png)
-
-
-Polson Graphics Studio uses Qloo to provide a cultural intelligence layer that agents use to gain insight into and guide design decisions for an audience:
-![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/s1-audiences.PNG)
- and to adapt a single design campaign for different audiences:
-![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/studio_choices.png)
 
 ## Polson Framework
 [Polson](https://github.com/allisterb/Polson) is a framework for agentic co-creative visual art and graphic design, built on the principles of [Enactive Co-Creative AI](https://www.co-creativeai.com/). Polson attempts to address the fundamental limitations of diffusion model-based image and video generators for graphic design work with a code-based procedural drawing and animation engine that agents using multimodal LLMs like Gemini and Claude write code for to create visual artifacts that they can perceive both visually and as code, and can make precise, verifiable, mutations of the visual artifact state through code operations in response to instructions or user or other agent feedback, without drifting and losing coherency. Polson attempts to bring the same co-creative environment for software development collaboration and automation to the task of visual art and graphic design.  
@@ -77,7 +75,7 @@ In Polson every piece goes through data verification checks the agent cannot ski
 
 When a piece is finished, the studio lists every text on it and looks up where each one came from:
 - **A document**: the figure is found on a page of the PDF the client supplied, by searching the page's text, not by trusting the model. For long filings like an S-1, the agent first finds the right pages by their headings, then asks each question of those pages only, and every figure in the answer is checked against the page it came from.
-- **The brief**, **a Qloo answer** (each cited title must be one a recorded query actually returned), or **research** through Parallel.ai, which returns a citation for every field.
+- **The brief**, or **research** through Parallel.ai, which returns a citation for every field.
 - **Arithmetic**: a growth rate or a share is computed in the script, and the working is passed along with it ("16,286 / 1,163 = 14.003").
 - **Facts no document holds**, like a film's credits or "no later filing has set a price range", are checked on the web through Parallel.ai, and come back supported, unsettled or not supported.
 
@@ -93,22 +91,18 @@ The end result of a Polson graphics design run is the finished media production 
 ![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/deliverables.png)
 
 ## Inspiration
-### Cross-cultural graphic design
-In today's fundamentally globalized and ultra-competitive international markets, brands, studios and founders must now adapt their messaging for many languages, regions, and cultures. Localization of advertising campaigns or investor pitches for different audiences is often an expensive and imprecise undertaking. An agency adapting a campaign for Tokyo and Mumbai or a founder adapting a pitch deck for international investors relies on a strategist's intuition, or on cultural rules of thumb that slide easily into stereotype. The demographics of communities are also changing due to employment, migration and other factors and messaging relying on historical data is not guaranteed to be effective. Generative AI can make this worse rather than better: ask a language model what 45-to-54-year-olds in Tokyo watch and it will likely name internationally famous titles. Every localised variant of a graphic or video created by generative AI ends up drawn from the same averaged-out design choices and taste. Adapting graphic design for different cultures should be about transformation rather than simply quotation or mimicry.
 
-What is needed for localization and cross-cultural graphic design is evidence about the audience that is timely enough to account for shifting demographics and specific enough to design from and inspire a local visual language. For example by querying films, shows, artists, brands that over-index for a place and age band, relative to that place as a whole, an agent could decide that an audience that likes fast-paced films or TV could favor a more fast-paced motion design vs. slower-paced videos for other audiences.
-![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/audience-motion.png)
 ### The possibility of agentic graphic design
 Programmers today are accustomed to collaborating with LLM-based agents on developing software, and the astonishing levels of productivity and creativity that these collaborations enable.  The entire software development industry is being transformed, for better or worse, by the automation of all aspects of software development by agents. But no equivalent creative collaboration and automation has taken root in the field of visual arts or graphic design.
 
-Neural models that generate and manipulate images and other visual artifacts suffer from a core problem in modern artificial intelligence: the innate inability of neural models to handle prolonged, iterative interaction over non-language data that maintains a consistent level of *precision*, *coherency*, and *verifiability*. Language in all its human (and artificial) varieties is discrete, segmentable, addressable. Visual information is continuous, non-segmented, and entangled. When you ask a diffusion-based model like Midjourney or Google's Nano Banana to create or change an image, it follows a completely different process compared to asking an LLM to create or make a change to a program's source code or to edit a podcast script. There are no precise, deterministic tools a diffusion-based model can use to attempt precise operations on an image like "make the hat on the man in the third row red" or "change the figure in the third row to $550,000", in such a way that the objects and properties referred to in the operation retain the permanence humans are accustomed to when thinking and speaking and acting. There are also very limited environmental tools for models to check and validate the text and figures embedded in a visual artifact, the way program code can be checked and validated and tested. This makes agentic graphic design work for things like presentations of financial reports and data very difficult.
+Neural models that generate and manipulate images and other visual artifacts suffer from a core problem in modern artificial intelligence: the innate inability of neural models to handle prolonged, iterative interaction over non-language data that maintains a consistent level of *precision*, *coherency*, and *verifiability*. Language in all its human (and artificial) varieties is discrete, segmentable, addressable. Visual information is continuous, non-segmented, and entangled. When you ask a diffusion-based model like Midjourney to create or change an image, it follows a completely different process compared to asking an LLM to create or make a change to a program's source code or to edit a podcast script. There are no precise, deterministic tools a diffusion-based model can use to attempt precise operations on an image like "make the hat on the man in the third row red" or "change the figure in the third row to $550,000", in such a way that the objects and properties referred to in the operation retain the permanence humans are accustomed to when thinking and speaking and acting. There are also very limited environmental tools for models to check and validate the text and figures embedded in a visual artifact, the way program code can be checked and validated and tested. This makes agentic graphic design work for things like presentations of financial reports and data very difficult.
 
 An agentic graphic and motion design system that is precise, accurate and reliable enough for medium-horizon tasks like creating videos for VC pitches or analysis of S-1 filings while being able to create design variants that can autonomously adapt to audiences in different cultures or regions requires a fundamentally different approach to agentic systems for image and video generation today. 
 
 Such a system would give ordinary people the power to create professional graphic design productions on their own without needing years of specialized knowledge and training. It would also give professional graphic designers the ability to automate lower-level tasks and projects and allow them to reach higher levels of productivity and creativity and autonomy.
 
 Overall such a system has the potential to enable the same revolutionary collaboration and automation for graphic design as exists for software development today. 
-![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/anthropic_s1_outside_cc.webp)
+![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/output-2.webp)
 
 
 
@@ -125,14 +119,6 @@ Once the project run starts the agent works autonomously according to the briefs
 If the agent needs input from the user, it will prompt through the interface:
 ![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/interaction1.png)
 
-
-
-The studio displays the audience data it got from Qloo for the different audiences the campaign will target: 
-![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/stuudio_contrast.PNG)
-
-It also displays the choices it made based on the Qloo data:
-
-![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/studio_choices.png)
 
 ## How we built it
 
@@ -155,198 +141,3 @@ The deliverable is an SVG infographic that can be opened in Illustrator with the
 
 ![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/dmd_final_a.svg)
 
-## How Polson uses Qloo for cross-cultural graphic design
-Polson uses a .NET client to access the Qloo REST API with query patterns ported from the `@qloo/qloo-harness` package. The capabilities of the Qloo API are exposed to the agent via an MCP tool and the `Taste` JavaScript global and functions like `find`, `contrast` etc. that the agent calls before graphic design work for different audiences to establish evidence for things like the pace of videos.
-```
-Studio request composer
-   │  User brief: "Audience A: Tokyo, aged 45 to 54"
-   ▼
- Agent
-   │  MCP tool call: Taste { op: 'profile', audience: {...} }
-   ▼
- MCP server 
-   ├─ Taste MCP tool ──► Qloo Insights / Search / Tags / Audiences / Compare
-   │                      ├ parameter validator (refuses before sending)
-   │                      ├ rate limit, bounded retry, typed failures
-   │                      ├ private disk cache, per-session budget
-   │                      └ monthly quota read from Qloo's response headers
-   ├─ Taste JS global: find / get / pace / contrast / comparePace / images / colourField / oklch / checkReferences
-   │     
-   │ 
-Run record: every query, its purpose, cost, cache status
-   │
-   ▼
- Studio request results: Audiences · Contrast · Choices · Verification 
-```
-### Audience profiles
-
-An audience profile call looks like: 
-`Taste({ op: 'profile', audience: { location: 'Tokyo', age: '45_to_54' } })
-` 
-Agents make multiple profile calls to attempt to determine statistically, for each domain (films, TV, music artists) what this audience loves that its city or area does not:
-
-1. The audience's list, at a popularity floor of 0.5. Measured with no floor the list is long-tail titles no one would recognise; at 0.9 it is the all-time hits. 0.5 keeps titles that are both recognisable and distinctive.
-2. The same query for the place with no age band, this is the **baseline**.
-3. **Distinctive** = in the audience's list and not in the baseline, kept in the audience's own rank order. These are the
-   references the design cites. **Shared** = popular there for any age band.
-4. One tag query for the place's aesthetic vocabulary, reported as the place's and not the audience's.
-
-### Audience contrasts
-
-`Taste.contrast(a, b)` compares two audience profiles A and B. It returns:
-- titles distinctive to both: evidence for what a series of pieces should share;
-- titles distinctive to only A or only B: each piece's own evidence;
-- tags leaning each way, with counts;
-- A pace comparison for films (see below)
-The studio's Contrast tab draws this for each request
-![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/stuudio_contrast.PNG)
-
-### Pace for motion design
-`profile.pace()` counts the audience's distinctive films and shows that Qloo tags fast-paced and slow.
-`Taste.comparePace(a, b)` runs Fisher's exact test on the two audiences' counts. `comparePaceAll` covers three to six
-audiences, Holm-adjusted for the number of pairs.
-
-The rule the workflows enforce: "no measurable difference" is an answer to report, not a reason to invent one. Where pace doesn't differ, the films share a beat grid and differ only where the evidence does (grade, imagery, voice).
-### Audience choices
-![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/studio_choices.png)
-
-Every design decision the agent makes for an audience is written down as a row in the project's `direction.md`, which the studio's Choices tab draws.
-![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/choices3.png)
-**Evidence** names the Qloo answer it came from by its handle (`t7`, `t8`…, each one a query recorded in the run) and the item's rank in that answer, so a reader can open the query and see the tag or title the choice rests on. **Kind** keeps the sources apart: *Qloo* (from an audience's data), *Brief* (the client asked for it), *Research* (a cited source), *Rule* (a workflow rule that holds for every audience), *Check* (measured on the finished piece) and *Assumed* (decided without evidence, and said so). A choice with no evidence cannot pass as one with some.
-
-Design decisions like colour come from what each audience over-indexes on; what is shared comes from what they have in common. Motion also needs evidence of its own. A poster's evidence decides what a film looks like; nothing in it decides how the film moves. So for trailers, product films, pitches and reports, the agent counts each audience's distinctive films that Qloo tags fast-paced or slow, and tests the difference before writing a single beat. In two trailer studies for *Be Cool* (2005), aimed at 45-to-54-year-olds:
-
-| | Tokyo | Mumbai |
-|---|---|---|
-| Pace evidence | 14 fast, 12 slow: no real lean | 23 fast, 5 slow |
-| The test | `Taste.comparePace`: Fisher's exact **p = 0.040**, a measurable difference | |
-| Pace | 6 arrivals, median hold 2.75 s, the title landing at 10.9 s | 8 arrivals, median hold 1.75 s, the title landing at 5 s |
-| Grade | lifted blacks and softened colour (contrast 0.94, saturation 0.9), from the style tags its distinctive films share: *Dreamlike Visuals*, *Flowing* | warmer and crisper (contrast 1.08, saturation 1.1), from *Warm Toned*, *Glitzy*, *Crisp* |
-
-A check on the finished films then confirmed the difference is really there, rather than only claimed: the Mumbai film changes more often and holds for less time than the Tokyo one.
-
-**"No difference" is an answer too.** In a startup pitch made for two audiences, the comparison came back at p = 0.556, so the two films share one beat grid and set of holds, and that row of the table reads *shared, because the evidence does not separate them*. Inventing a difference the data does not support would put a stereotype where the evidence should be. The same holds for the facts: in a pitch or a report every figure is the same in every audience's film, and only the telling (pace, grade, voice, and numbers written the way that place writes them) is the audience's.
-
-Before a run is delivered, `Taste.checkReferences()` confirms that every title or tag the direction cites was actually returned by a recorded query, so a reference cannot be invented after the fact.
-
-### Film audiences
-For film posters and trailers 
-- **What the film's own fans in this city love** (film posters and trailers). Ask about the audience *with the film as a
-  signal*, and subtract the same query without it. A city's whole audience points at its local music; its fans of
-  *this* film point somewhere quite different.
-
-### Product audiences
-- **Qloo is used to determine what buyers of the comparable brands love here, minus what they love anywhere** (product ads). Resolve the brief's
-comparable brands, then ask for the brands and artists their buyers like in each city and once globally. What remains
-locally is that market's own register. Qloo's brand tags (aesthetic, emotional tone, packaging format) supply the look,
-the voice and the packshot. Tags every audience shares are treated as the category's look, not as a difference. Qloo's place results (with a location filter) supply each city's setting and its mood tags.
-
-### Visual research from Qloo data
-`Taste.images(profile, { type: 'film' })` fetches the posters of an audience's distinctive films, or the logos of its
-buyers' brands. `Taste.colourField(pictures)` measures each one in OKLCH and maps where their hues crowd on the colour
-wheel and where it is empty. This is the method in Ellen Lupton's book called "Visual Research": collect a field, measure it, and decide whether the new piece should stand in it or apart from it. At the end, `Taste.oklch` places
-the finished piece's colours on the same wheel. A `Stage.check` then confirms the piece stands where the direction said
-it would.
-![](https://ajb.nyc3.cdn.digitaloceanspaces.com/polson/visual_research.png)
-
-### How each Polson workflow uses Qloo
-
-| Studio card | Workflow / type | Audiences | What Qloo decides |
-|---|---|---|---|
-| **Poster: Film poster** | `poster` / `film` | Required, 1–6 | Image, composition, palette; whether the evidence licenses an "overwhelming" register |
-| **Poster: Product ad** | `poster` / `product` | Required, 1–6 | Image, setting, composition, palette; packshot label colours from the category's look |
-| **Film trailer** | `motion` (untyped) | Required, 1–6 | Pace and holds, colour grade, transitions where motivated; carries the poster's system |
-| **Product ad** (film) | `motion` / `product` | Required, 1–6 | Opening setting (the hook image), palette, pace, grade, tone |
-| **Startup pitch** | `motion` / `pitch` | Optional | With places: pace, grade and voice per audience. The case itself is never Qloo's |
-| **Report explainer** | `motion` / `report` | Optional | With places: pace and grade per audience. The facts are never Qloo's |
-
-
-#### Film poster:
-1. **Audience.** A profile per audience, its place checked. The director is asked whether any distinctive reference would
-   be wrong to borrow from.
-2. **The film's own fans** in each city, and `demographics` on the film to confirm the age skew.
-3. **One `compare`** per audience: its references against the rest of the set's.
-4. **Mind map and research board.** Each audience gets a branch of its distinctive titles and tags, each cited with its
-   handle. The map is checked: a node cited to an answer that didn't return it is fixed or dropped. Then the colour field
-   of the audience's own films.
-5. **Concepts.** Three per audience, each starting from a different item in that audience's profile, named.
-   Later audiences' concepts are drawn from their own profile **before** looking back at the first.
-6. **Direction.** One section per audience; each section after the first opens with what its poster does differently,
-   and which of its own profile's items caused each difference.
-7. **The series** holds the system (grid, type, title) and never the image, composition or palette. Those are what each
-   audience's evidence decides.
-8. **The set test.** All finals side by side. If a stranger couldn't tell them apart, the findings say so *"rather than
-   forcing a difference the evidence does not support"*.
-9. **Before delivery:** the colour check against the field, and `Taste.checkReferences()`.
-
-#### Product ad (poster or film):
-
-**"Dynamic creative"**: one template, with each variant being what its audience's evidence decides.
-
-- **Evidence.** The buyers-here-minus-buyers-anywhere method (under *Product audiences* above). The opening beat of the film is
-  *"the one image from this audience's evidence — the setting, the hour, the object"*.
-- **Pace** comes from the audience's own profile, **not** from the buyers' films. We measured that: buyers' pace changed
-  with how many titles were read (33% fast at 25, 59% at 50), and no pair of cities differed.
-- **Comparables are signals, never imagery.** No logo, trade dress or signature colour is borrowed.
-- **The claim** comes only from the brief, and is read back off the finished film word for word.
-- **Age- or place-restricted products** go to the director: *"Qloo measures taste; it knows nothing about the law."*
-
-#### Film trailer, startup pitch, report explainer:
-
-Motion needs evidence a poster doesn't, because *"a poster's evidence decides what the film looks like; nothing in it
-decides how the film moves"*.
-
-- **Pace** comes from `pace()` and the pace comparison (under *Pace for motion design* above). With several audiences, every profile is fetched and
-  compared before any beat is planned.
-- **Grade** comes from the distinctive titles' looks.
-- **Tempo in beats per minute** is explicitly *not* a Qloo fact. Without a source it is chosen and marked *assumed*.
-- **The finals.** One build function makes every audience's film (`final_a.mp4`, `final_b.mp4`, …). Where a pair
-  differs in pace, a check confirms the films really do: number of arrival beats, median hold, longest still stretch,
-  end-card hold. A "Between the audiences" section says what is shared and why, and what differs with which evidence.
-- **Pitch and report films.** The case and the facts are shared; *"only its telling is the audience's"*. Number
-  formats follow the locale's own rules (Unicode CLDR), labelled *Rule*, not Qloo.
-
-
-## What we built during the hackathon
-During this hackathon I added the following features to the Polson project:
-- **Qloo as a cross-culture evidence layer**: A .NET Qloo client (query patterns ported from `@qloo/qloo-harness`) with parameter validation, rate limiting, a private server-side cache and a per-run budget, exposed to agents as the `Taste` tool. On top of it: audience profiles (what an audience over-indexes on against its own place), contrasts between audiences, the pace test (Fisher's exact test on fast- and slow-paced titles, Holm-adjusted for three to six
-  audiences), the comparable-brands method for product ads, visual research from an audience's posters and logos
-  measured in OKLCH, and `Taste.checkReferences()`, which fails a run that cites a title its queries never returned.
-- **Motion**: the animation model ported from Synfig and EffectCraft and spoken narration timed to each scene. The motion workflows: film trailer, product ad, startup pitch and financial report explainer (S-1 and 10-K) each making one film per audience from shared facts, with Qloo deciding only how each audience's film is told.
-- **Verification**: `Verify.film` and `Verify.image` read the finished piece back with an independent model and source
-  every text on it (a document's page, the brief, research, Qloo, or the arithmetic shown); stated facts are checked on
-  the web through Parallel.ai; checks record their own verdicts, so an agent cannot mark one passed.
-- **The client studio**: a request composer with audiences and the
-  Audiences, Contrast and Choices views of each run's Qloo evidence.
-
-
-## Challenges we ran into
-
-* Correct figures can still tell the wrong story. One  narrated film on Anthropic's S-1 got every figure right
-and still misled: it captioned a six-month net loss of $80.7 billion as the cost of scaling compute. Verifying figures in a graphic needs to take into account the layout and meaning as well, not just the text.
-
-* Large 300+ page filing PDFs are hard for models to handle. For the Anthropic S-1, every question originally sent about 400k tokens. Now the agent finds each answer's pages by heading, and asks each question of the relevant pages only.
-
-* Caching is probably the most important cost-saving optimization for agentic apps. It took me quite a while to work out the most effective cache strategy when using Google ADK.
-
-* Taste data has a shape that must be learnt e.g. A place with no age band has no baseline to subtract; audience movie lists
-default to recent titles.
-
-## Accomplishments that we're proud of
-- Audience variants that differ only where the evidence does e.g. pace differences between audiences are tested using statistical tests and "no measurable difference" is reported.
-- Validating numbers in motion graphics from large documents. Each number on screen is found on a page of the filing (or computed in the script, with the working shown), and the finished film is then read back by an independent model and compared with what was set.
-- Having agents follow a design process and produce different deliverables. Brief, research board, mind map, kit of parts etc. are all produced alongside the finished SVG, PNG, WebP, MP4 and print PDF.
-
-
-Overall I was able to create a product from several of my research interests that I think has a great deal of potential in today's hyper-competitive market for AI generative graphics.
-## What we learned
-
-- A check the agent can write is not a check. Verdicts are recorded by the tools, not reported by the agent.
-- Digits are not the claim. The words around a figure carry the story, and need rules of their own.
-- "No measurable difference" is an answer. Forcing a difference between two audiences is the stereotype problem by another route.
-
-
-
-## What's next for Polson Graphics Studio
-* I would like to build different workflows like creating visualizations and motion graphics for scientific papers. 
-* I would like to be able to use character animation as well in the motion graphics.

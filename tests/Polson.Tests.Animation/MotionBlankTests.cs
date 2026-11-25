@@ -49,6 +49,34 @@ public class MotionBlankTests : TestsRuntime
         Assert.Throws<ArgumentException>(() => comp.Blank(Opts(("width", 20d))));
     }
 
+    /// <summary>
+    /// A cut that opens on a few empty frames fails when the cut is named, though the sparse samples miss it. polsonpromo1
+    /// opened every cut on 2–8 empty frames and passed.
+    /// </summary>
+    [Fact]
+    public void ACutOpeningOnEmptyFramesIsCaught()
+    {
+        var motion = new MotionToolkit();
+        var comp = motion.Composition(Opts(("width", 1280d), ("height", 720d), ("fps", 24d), ("duration", 4d)));
+        comp.Fill(Opts(("color", "#0f172a")));
+        // Shown to 2 s, then nothing for 5 frames after the cut at 2 s, then shown again.
+        var amount = motion.Nodes.Animated("real", new object[]
+        {
+            Opts(("time", 0d), ("value", 1d)), Opts(("time", 1.99d), ("value", 1d)), Opts(("time", 2d), ("value", 0d)),
+            Opts(("time", 2.2d), ("value", 0d)), Opts(("time", 2.21d), ("value", 1d)), Opts(("time", 4d), ("value", 1d)),
+        });
+        comp.Group(Opts(("amount", amount))).Equation(Opts(("latex", @"x^2"), ("origin", new[] { 640d, 360d }),
+            ("size", 96d), ("color", "#e2e8f0")));
+
+        Assert.True((bool)comp.Blank()["passed"]!);                                     // between the samples
+        var named = comp.Blank(Opts(("cuts", new object[] { 0d, 2d })));
+        Assert.False((bool)named["passed"]!);
+        var cuts = ((object?[])named["cuts"]!).Cast<Dictionary<string, object?>>().ToArray();
+        Assert.Equal(0, cuts[0]["emptyFrames"]);
+        Assert.Equal(5, cuts[1]["emptyFrames"]);
+        Assert.True((bool)comp.Blank(Opts(("cuts", new object[] { 2d }), ("atCut", 5d)))["passed"]!);
+    }
+
     private static MotionComposition Film(MotionToolkit motion, bool gap)
     {
         var comp = motion.Composition(Opts(("width", 1280d), ("height", 720d), ("fps", 12d), ("duration", 6d)));

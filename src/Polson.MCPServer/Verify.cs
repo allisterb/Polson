@@ -748,6 +748,23 @@ public sealed partial class VerifyToolkit
         + "\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\"}}}}}}";
 
     /// <summary>
+    /// What <c>Video.ask</c> sends for a film over the watcher's limit (<see cref="VideoReader.Shrink"/>): a copy at most
+    /// <see cref="WatchHeight"/> tall, as <c>Verify.film</c> watches, keeping its sound. Null when written, else why not.
+    /// </summary>
+    internal static string? AskCopy(string source, string output, long maxBytes)
+    {
+        try
+        {
+            var info = FFmpeg.Probe(source, Path.GetFileName(source), FFmpeg.VideoFormat.Mp4, "Video.ask");
+            return FFmpeg.WatchCopy(source, info.Seconds, output, WatchHeight, maxBytes, audio: info.HasAudio);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or TimeoutException or IOException)
+        {
+            return ex.Message;
+        }
+    }
+
+    /// <summary>
     /// The watch copy's greatest height. becool2's copies read 8 of 8 texts at 356 px tall and 3 of 8 at 270, where its
     /// small type fell to 7 px; 720 keeps 1080's type at two thirds and fits 15 s in the limit at about 3.5 Mbps.
     /// </summary>

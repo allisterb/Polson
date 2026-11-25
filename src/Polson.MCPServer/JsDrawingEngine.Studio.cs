@@ -33,9 +33,18 @@ public partial class JsDrawingEngine
 
     /// <summary>
     /// Watching a clip, configured once at startup: Gemini, or Nemotron when <c>Verify:Reader</c> names it. Registered on
-    /// the same terms as <see cref="Documents"/>: unconfigured, it refuses with a remedy rather than being absent.
+    /// the same terms as <see cref="Documents"/>: unconfigured, it refuses with a remedy rather than being absent. Given
+    /// ffmpeg here, so a film over its limit is watched as a smaller copy (<see cref="VerifyToolkit.AskCopy"/>).
     /// </summary>
-    public static VideoReader? Video { get; set; }
+    public static VideoReader? Video
+    {
+        get;
+        set
+        {
+            field = value;
+            if (value is not null) value.Shrink ??= VerifyToolkit.AskCopy;
+        }
+    }
 
     /// <summary>
     /// Checks the facts a read-back's <c>sources</c> option states, on the web, configured with Parallel at startup. Null and

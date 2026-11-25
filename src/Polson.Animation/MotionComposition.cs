@@ -1185,7 +1185,8 @@ public sealed class MotionComposition : MotionLayerList
             times = count == 1 ? [from] : [.. Enumerable.Range(0, count).Select(i => from + i * (to - from) / (count - 1))];
         }
         if (times.Length is 0 or > 48)
-            throw new ArgumentException($"composition.sheet takes 1 to 48 times, not {times.Length}: a sheet is to be read at a glance.");
+            throw new ArgumentException($"composition.sheet takes 1 to 48 times, not {times.Length}: a sheet is to be read at a glance. "
+                + "A film over 24 s gets one half-second sheet per part: { from, to, count } for each, written as 05_sheet_1.png, 05_sheet_2.png….");
         if (times.FirstOrDefault(t => t < 0 || t > Duration + 1e-9, -1) is var outside and >= 0)
             throw new ArgumentException($"composition.sheet: {outside:0.###} s is outside the film (0 to {Duration:0.###} s).");
 

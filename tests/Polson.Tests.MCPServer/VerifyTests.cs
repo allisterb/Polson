@@ -649,6 +649,46 @@ public class VerifyTests : TestsRuntime, IDisposable
         Assert.Contains("Read from artifacts/verify/big-watch.mp4", (string)result["summary"]!);
         Assert.True((bool)result["passed"]!);
     }
+
+    /// <summary>
+    /// <c>Video.ask</c> on a film over the limit sends a smaller copy too, as <c>Verify.film</c> does. polsonpromo1's 73.7 MB
+    /// film was refused its cold viewing and the agent made a 480 × 270 copy by hand.
+    /// </summary>
+    [Fact]
+    public async Task TestVideoAskOnAFilmOverTheLimitSendsACopy()
+    {
+        if (!FFmpeg.Available || !SkiaSharp.SKFontManager.Default.GetFontFamilies().Contains("Arial"))
+        {
+            Info("Skipped: needs ffmpeg and Arial.");
+            return;
+        }
+        var motion = new MotionToolkit(root);
+        var comp = motion.Composition(new Hashtable { ["width"] = 320d, ["height"] = 180d, ["fps"] = 12d, ["duration"] = 3d });
+        comp.Fill(new Hashtable { ["color"] = "#ffffff" });
+        comp.Text(new Hashtable { ["text"] = "BE COOL", ["family"] = "Arial", ["size"] = 40d, ["origin"] = new[] { 160d, 90d } });
+        comp.SaveVideo("asked.mp4");
+        var limit = (int)(new FileInfo(Path.Combine(root, "asked.mp4")).Length * 9 / 10);
+
+        var answer = new Answer("A film about keeping cool.");
+        using var video = new VideoReader([new NemotronEndpoint(NemotronEndpoint.Nebius, "https://tf.example/v1", "k", NemotronEndpoint.NebiusModel)],
+            new DocumentBudget(5), root, http: new HttpClient(answer)) { MaxClipBytes = limit };
+        JsDrawingEngine.Video = video;                                                                   // gives it ffmpeg
+        try
+        {
+            var read = await video.Ask("asked.mp4", "What is this film about?");
+
+            Assert.True(read.Success, read.Error);
+            var copy = Path.Combine(root, "artifacts", "verify", "asked-ask.mp4");
+            Assert.InRange(new FileInfo(copy).Length, 1, limit);
+            var sent = answer.LastRequest.Replace("\\u002B", "+").Replace("\\/", "/");
+            Assert.Contains(Convert.ToBase64String(File.ReadAllBytes(copy))[..400], sent);
+            Assert.Equal("asked.mp4 (as artifacts/verify/asked-ask.mp4)", read.Provenance!.Source);
+        }
+        finally
+        {
+            JsDrawingEngine.Video = null;
+        }
+    }
     /// <summary>
     /// A counting number is checked by the values it holds. A reading in its format and range while it counts is no stray,
     /// even a value no frame drew exactly; one outside its range, or after it stopped, is.

@@ -764,7 +764,7 @@ for (const s of shots.answer.shots) log(`${s.start_s}-${s.end_s}s  ${s.what}  "$
 > [!IMPORTANT]
 > **`Video.ask` is asynchronous — you must `await` it**, like `Documents.ask`.
 >
-> **MP4 only**, up to 7.5 MB, which is what the services were measured to accept: `Motion` saves MP4 as its video. `Verify.film` sends a smaller copy of a film over that itself; for `Video.ask`, encode one at 720p or a lower quality. An animated `.webp` is not a video to it.
+> **MP4 only**, up to 7.5 MB, which is what the services were measured to accept: `Motion` saves MP4 as its video. A film over that is sent as a copy at most 720 px tall, made for you: `Verify.film` as `artifacts/verify/<name>-watch.mp4`, `Video.ask` as `artifacts/verify/<name>-ask.mp4`, keeping its sound, and `provenance.source` names it. Pass the delivered film; don't make a copy by hand. An animated `.webp` is not a video to it.
 > About 2,400 input tokens per 15 s of clip, and the same question of the same clip costs once.
 
 > [!CAUTION]

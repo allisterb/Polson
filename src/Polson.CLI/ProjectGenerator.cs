@@ -707,6 +707,9 @@ internal static class ProjectGenerator
         // A pitch is two minutes of film to the trailer's fifteen: a deck (and perhaps a model) read and checked, about
         // nine scenes each encoded as a part, and every line narrated. No measured run behind it yet; tune after the first.
         ["motion.pitch"] = 90,
+        // A promo is a pitch's shape for any subject: ninety seconds by default, up to two minutes, read from the director's
+        // material, claims confirmed and every line narrated. The pitch's allowance until a run measures it.
+        ["motion.promo"] = 90,
         // A minute of film like the trailer's, with a plan whose every formula and claim is checked before anything is
         // drawn, narration spoken line by line, and a read-back. No measured run behind it yet; tune after the first.
         ["math_explainer"] = 60,
@@ -1575,12 +1578,13 @@ internal static class ProjectGenerator
     /// <remarks>
     /// A report explainer is a trailer whose subject is figures, so the data-encoding manual's integrity rules — where
     /// a number comes from, bars from zero, one scale for things compared — are the craft, not a reference to look up.
-    /// A pitch is the same craft with projections in it.
+    /// A pitch is the same craft with projections in it, and a promo is a pitch for any subject.
     /// </remarks>
     static readonly Dictionary<string, string[]> TypeManuals = new()
     {
         ["motion.report"] = ["13"],
         ["motion.pitch"] = ["13"],
+        ["motion.promo"] = ["13"],
     };
 
     /// <summary>The judgment manuals' preamble, then one entry per manual, or empty when there are none.</summary>

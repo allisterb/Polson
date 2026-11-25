@@ -741,6 +741,22 @@ public partial class ProjectGeneratorTests : TestsRuntime, IDisposable
         Assert.Equal(30, ProjectGenerator.DeadlineFor("motion", 30, "pitch"));
     }
 
+    /// <summary>A promo is a pitch for any subject from the director's material: the pitch's manual and allowance, its own spine.</summary>
+    [Fact]
+    public void TestAPromoCarriesItsSpineTheDataManualAndItsOwnDeadline()
+    {
+        Assert.True(ProjectGenerator.Create(Options("promo", o => { o.Workflow = "motion"; o.Type = "promo"; })));
+
+        var promo = File.ReadAllText(Path.Combine(root, "promo", "GEMINI.md"));
+        Assert.Contains("## The type: promo", promo, StringComparison.Ordinal);
+        Assert.Contains("### The spine — before anything is read closely", promo, StringComparison.Ordinal);
+        Assert.Contains("### Stage 1b — every claim confirmed by the material", promo, StringComparison.Ordinal);
+        Assert.DoesNotContain("## The type: pitch", promo, StringComparison.Ordinal);
+        Assert.DoesNotContain("{{LANGUAGE}}", promo, StringComparison.Ordinal);
+        Assert.Contains($"### Manual 13 — {PolsonManuals.Find("13")!.Title}", promo, StringComparison.Ordinal);
+        Assert.Equal(90, ProjectGenerator.DeadlineFor("motion", null, "promo"));
+    }
+
     /// <summary>
     /// The `_qloo` twins (2026-11-14) are their own templates — the poster and motion as the Qloo entry built them — but
     /// take their base workflow's deadline, manuals, default type and techniques. The mainline no longer asks for Qloo.
