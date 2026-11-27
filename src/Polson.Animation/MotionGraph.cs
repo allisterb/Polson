@@ -143,6 +143,11 @@ internal static class MotionTypes
         IList list when list.Cast<object?>().Any(e => e is null) =>
             $"[{string.Join(", ", list.Cast<object?>().Select(e => e is null ? "undefined" : Convert.ToString(e, CultureInfo.InvariantCulture)))}]. "
             + "An undefined entry is a property the value does not have: axes.point(x, y) is [x, y], and a vector's .at(t) is { x, y }",
+        // polsonpromo2 passed [K(...), y] and was told "not a list of 2", which it had passed.
+        IList list when list.Cast<object?>().Any(e => e is MotionNode) =>
+            $"[{string.Join(", ", list.Cast<object?>().Select(e => e is MotionNode n ? $"a {n.Type} node" : Convert.ToString(e, CultureInfo.InvariantCulture)))}]: "
+            + "a point's coordinates are numbers, never nodes. Make the point a node: Motion.nodes.composite(x, y) from two "
+            + "numbers or real nodes, or a 'vector' node keyed whole with Motion.nodes.animated('vector', …)",
         IList list => $"a list of {list.Count}",
         _ => $"a {v.GetType().Name}"
     };

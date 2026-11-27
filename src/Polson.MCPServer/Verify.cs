@@ -92,7 +92,13 @@ public sealed partial class VerifyToolkit
         if (new FileInfo(full).Length is var size && size > limit)
         {
             watched = $"artifacts/verify/{Path.GetFileNameWithoutExtension(full)}-watch.mp4";
-            if (FFmpeg.WatchCopy(full, comp.Duration, ProjectPath.Resolve(projectRoot, watched, "video", "Write"), WatchHeight, limit) is { } why)
+            // A copy newer than its film is reused, as Video.ask's is. x264 does not encode the same bytes twice, and the read
+            // is cached by its bytes: polsonpromo3 (2026-11-27) made a new copy on each of 40 calls, so every call started a
+            // fresh read of its 182 s film, answered Pending, and finished into a cache no later call could hit.
+            var copy = ProjectPath.Resolve(projectRoot, watched, "video", "Write");
+            var current = File.Exists(copy) && File.GetLastWriteTimeUtc(copy) >= File.GetLastWriteTimeUtc(full)
+                && new FileInfo(copy).Length <= limit;
+            if (!current && FFmpeg.WatchCopy(full, comp.Duration, copy, WatchHeight, limit) is { } why)
                 return Failed("TooLarge", $"{videoPath} is {Megabytes(size)} MB, over the watcher's {Megabytes(limit)} MB, "
                     + $"and no smaller copy could be made: {why}", "Encode a shorter film, or check it in parts encoded as separate files.");
             over = size;
@@ -955,7 +961,12 @@ public abstract class ReadBackCheck(string name, Dictionary<string, object?>[] i
         var summary = $"{Items.Length} texts {Where}: {counts["seen"]} seen by the reader"
             + (missed.Length == 0 ? "" : $", {missed.Length} missed ({string.Join("; ", missed.Take(4).Select(m => $"\"{Clip((string)m["text"]!)}\" {MissedNote(m)}"))})")
             + $". Sources: {string.Join(", ", bySource)}."
-            + (unsourced == 0 ? "" : $" {unsourced} figure{(unsourced == 1 ? " has" : "s have")} no source: find it in a document or the brief, pass its working as computed, or, for a fact rather than arithmetic, state it in sources.")
+            // Named, as missed texts are: polsonpromo2 was told "3 figures have no source" and dumped the items to learn which.
+            + (unsourced == 0 ? "" : $" {unsourced} text{(unsourced == 1 ? " has a figure" : "s have figures")} with no source ("
+                + string.Join("; ", Items.Where(i => (string?)i["source"] == "unsourced figure").Take(6)
+                    .Select(i => $"'{Clip((string)i["text"]!)}': {i["detail"]}"))
+                + (unsourced > 6 ? $"; and {unsourced - 6} more in items" : "")
+                + "): find each in a document or the brief, pass its working as computed, or, for a fact rather than arithmetic, state it in sources.")
             + (unsupported.Length == 0 ? "" : Facts(unsupported.Length, $"not supported by the sources the web check read ({Texts(unsupported)}): correct it, or find it in a document; a fact nothing supports comes off."))
             + (unsettled.Length == 0 ? "" : Facts(unsettled.Length, $"the sources leave unsettled ({Texts(unsettled)}): state it as they do if you can; otherwise the director sees it marked unsettled."))
             + (notChecked.Length == 0 ? "" : Facts(notChecked.Length, $"not checked on the web ({notChecked[0].Error ?? "no decision"}): recorded as unchecked."))

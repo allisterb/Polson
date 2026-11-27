@@ -131,6 +131,14 @@ public class MotionCompositionTests(ITestOutputHelper output) : TestsRuntime
         e = Assert.Throws<ArgumentException>(() => comp.Circle(new Dictionary<string, object?> { ["origin"] = new object?[] { null, null } }));
         Assert.Contains("[undefined, undefined]", e.Message);
         Assert.Contains("axes.point(x, y) is [x, y]", e.Message);
+
+        // polsonpromo2: [node, y] was refused as "not a list of 2", which is what it had passed.
+        e = Assert.Throws<ArgumentException>(() => comp.Circle(new Dictionary<string, object?>
+        {
+            ["origin"] = new object?[] { motion.Nodes.Linear("real", 0d, 100d), 50d }
+        }));
+        Assert.Contains("[a real node, 50]", e.Message);
+        Assert.Contains("Motion.nodes.composite(x, y)", e.Message);
     }
 
     [Fact]

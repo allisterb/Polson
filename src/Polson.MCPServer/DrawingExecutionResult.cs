@@ -82,6 +82,10 @@ public class DrawingExecutionResult
     [JsonIgnore]
     public int FallbackSurfaces { get; set; }
 
+    /// <summary>Whether that fallback came from a script that built a composition, so the render cannot be one of its frames.</summary>
+    [JsonIgnore]
+    public bool FallbackComposed { get; set; }
+
     /// <summary>The canvas whose pixels are the result, when a canvas is; its layout is audited as a paper's is.</summary>
     [JsonIgnore]
     public SkiaCanvas? ResultCanvas { get; set; }

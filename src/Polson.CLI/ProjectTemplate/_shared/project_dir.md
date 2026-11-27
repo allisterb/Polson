@@ -18,6 +18,26 @@ file written outside it is not part of the run in any sense that survives the se
 So if you need something that is not in this directory, **ask the director for it** rather than going
 to find it. A path you were given is part of the brief; a path you went looking for is not.
 
+### What the director put in `documents/`
+
+**Their pictures are placed as given, and shown for what they are.** Crop, grade and frame a supplied
+picture to the piece; never redraw it into something it does not show. **One known to be generated** —
+the brief or the document says so, or it plainly is (impossible detail, garbled lettering on a screen or
+a sign) — **is an illustration, not evidence.** In a piece that argues or reports it shows no product in
+use, and no place, person or result as real; where a viewer could take it for a photograph or a
+screenshot, it carries a visible label (*Illustration*). An abstract image that depicts nothing real
+needs none. Say in `direction.md` which supplied pictures you used, which you took to be generated, and
+why.
+
+**A picture inside a PDF is not a file you can place.** Read its page for what it shows. To put it in
+the piece, ask the director for it as an image file in `documents/`; where nobody will answer, say it
+was missing and draw instead.
+
+**A video a document links to can be neither watched nor placed.** The page shows only its poster
+frame, often a dark first frame, and its caption says what it is: describe it as the caption does,
+never as something you saw. Do not follow the link — a link in a document is the document's, not the
+brief's.
+
 ### One folder here is not yours to read: `previous/`
 
 If this project has been run before, `polson reset` moved that run aside into

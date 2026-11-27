@@ -1473,8 +1473,15 @@ yellow, black and grey at one saturation throughout. Two ways to do it here:
 
 **Gradients, noise and texture help a composite read as one surface** (ch. 13). The same grain over drawn and
 generated parts is the strongest single cue that they were made together. `comp.noise` is Synfig's noise, matched to it
-pixel for pixel. For grain, a new one-pixel pattern every frame, use the native composite: about 25 ms a frame at
-1920 × 1080, so a whole film can carry it. **Not `overlay`**: Synfig's overlay is keyed by the layer, not the backdrop as Photoshop's is, so it lifts the
+pixel for pixel. For grain, a new one-pixel pattern every frame, use the native composite. **Drawing it is cheap and
+encoding it is not**: at 1920 × 1080 it adds about 20 ms a frame to `comp.render`, but about 70 ms a frame to
+`saveVideo`, because noise is what an encoder cannot compress (measured 2026-11-27: 16–26 ms a frame without the
+grain, 90–98 with; x264 alone took 7 ms a frame on the plain film and 65 on the grainy one). **The file grows to the
+encoder's ceiling** (`quality`/500 bits a pixel a frame): about 1 MB a second at 1080p24 and 0.45 at 720p, where flat
+colour and type run far below it. polsonpromo1's grainy 90 s at 1080p was 80 MB; becool4's ungrained 15 s, 2 MB; and
+becool2's grainy 15 s, encoded before the ceiling, 67 MB at 36.6 Mbps. Over
+7.5 MB, `Verify.film` watches a smaller copy. So budget about 90 ms a frame for a grainy film and encode it in parts of
+about 8 s, or grain only the scenes that need it. **Not `overlay`**: Synfig's overlay is keyed by the layer, not the backdrop as Photoshop's is, so it lifts the
 darks by about the square of the noise and peppers a dark ground, and it adds about 135 ms a frame at 1080 (the SDK's
 *Blend methods*). The recipe, 6% either way:
 

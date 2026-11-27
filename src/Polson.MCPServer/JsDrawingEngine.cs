@@ -528,15 +528,22 @@ public partial class JsDrawingEngine : Runtime
             // one element, and the result read as a list of the right sort of length full of `undefined`.
             // A run lost its most expensive stretch to it. Lists are made arrays before concat sees them,
             // as the receiver and as arguments; spread and Array.from already worked.
+            //
+            // And an array made by `flat` or `flatMap` throws a bare NullReferenceException in Jint 4.9.2's concat
+            // (TryConcatAllJsArrayFast), as receiver or argument, with or without an await; a copy of it does not.
+            // polsonpromo2 lost four runs to `SCENES.flatMap(...).concat(...)`. So both return a copy.
             var isList = new ClrFunction(engine, "isList", (_, a) => a.Length > 0 && a[0] is ObjectWrapper w && IsList(w.Target));
             engine.Invoke(engine.Evaluate("""
                 (function (isList) {
                     const original = Array.prototype.concat;
                     const asArray = v => isList(v) ? Array.from(v) : v;
-                    Object.defineProperty(Array.prototype, 'concat', {
-                        value: function concat(...items) { return original.apply(asArray(this), items.map(asArray)); },
-                        writable: true, configurable: true, enumerable: false
+                    const define = (name, value) => Object.defineProperty(Array.prototype, name, {
+                        value, writable: true, configurable: true, enumerable: false
                     });
+                    define('concat', function concat(...items) { return original.apply(asArray(this), items.map(asArray)); });
+                    const nativeFlat = Array.prototype.flat, nativeFlatMap = Array.prototype.flatMap;
+                    define('flat', function flat(...args) { return Array.from(nativeFlat.apply(this, args)); });
+                    define('flatMap', function flatMap(...args) { return Array.from(nativeFlatMap.apply(this, args)); });
                 })
                 """), isList);
 
@@ -794,13 +801,13 @@ public partial class JsDrawingEngine : Runtime
                 result.ReturnValue = evalResult.ToObject();
                 result.ResultCanvas = lastCanvas;
                 result.ImageBytes = Encode(() => lastCanvas.ToImageBytes(format, quality));
-                WarnOfFallback(result, needsAwait, evalResult, canvases.Count + papers.Count, "canvas");
+                WarnOfFallback(result, needsAwait, evalResult, canvases.Count + papers.Count, motionToolkit?.LastComposition is not null);
             }
             else if (papers.Count > 0)
             {
                 finalPaper = papers.Last();
                 result.ReturnValue = evalResult.ToObject();
-                WarnOfFallback(result, needsAwait, evalResult, canvases.Count + papers.Count, "paper");
+                WarnOfFallback(result, needsAwait, evalResult, canvases.Count + papers.Count, motionToolkit?.LastComposition is not null);
             }
             else
             {
@@ -871,7 +878,7 @@ public partial class JsDrawingEngine : Runtime
             sw.Stop();
             result.ExecutionTimeMs = sw.ElapsedMilliseconds;
             result.Success = false;
-            result.Error = Explain(ex);
+            result.Error = Placed(Explain(ex), ex.Message, sessionEngine, jsScript, needsAwait ? WrapperLines : 0);
             Runtime.Error(ex, "Script execution error: {0}", ex.Message);
         }
 
@@ -1148,16 +1155,18 @@ public partial class JsDrawingEngine : Runtime
             return $"{message} The reason is: {reason.Message}";
         }
 
-        // A Jint 4.9.2 fault: after an await on a host call (Documents.ask, Research, Assets), a parameter default that reads
-        // a property — `size = T.figure`, `{ color = P.ink }` — throws a bare NullReferenceException inside the engine.
-        // anthropic_s_1_outside_cc (2026-10-30) hit it three times with nothing to say which line; a literal default and
-        // destructuring in the body both work.
+        // A Jint 4.9.2 fault: after an await on a host call (Documents.ask, Research, Assets), any parameter default but a
+        // number, string or boolean literal throws a bare NullReferenceException inside the engine. anthropic_s_1_outside_cc
+        // (2026-10-30) hit it three times; polsonpromo2 (2026-11-25) was told `{}` was fine and lost five runs to it. Probed:
+        // `104`, `'x'`, `-1`, `true` and `1 + 2` work; `{}`, `[]`, `{ k: 1 }`, `() => 1`, `K`, `undefined` and `T.figure`
+        // fail, as do destructured parameters with defaults.
         if (ex is NullReferenceException && ex.StackTrace?.Contains("FunctionEnvironment.AddFunctionParameters", StringComparison.Ordinal) == true)
         {
             return $"{message} This is a fault in the JavaScript engine, not your data: after an `await` on Documents.ask, "
-                + "Research or Assets, a function whose parameter default reads a property — `function f(g, size = T.figure)`, "
-                + "`function f(g, { color = P.ink })` — fails when called. Read the default inside the body instead: "
-                + "`function f(g, o) { const { size = T.figure, color = P.ink } = o; … }`. A literal default (`size = 104`) is fine.";
+                + "Research or Assets, a function whose parameter default is anything but a number, string or boolean "
+                + "literal fails when called — `o = {}`, `a = []`, `size = T.figure`, `size = K`, `x = undefined`, "
+                + "`{ color = P.ink }` all do. Default inside the body instead: `function f(g, o) { o ??= {}; const { size = "
+                + "T.figure, color = P.ink } = o; … }`. Only `size = 104`, `s = 'x'` and `b = true` are safe as parameters.";
         }
 
         // Jint's own time limit throws a bare TimeoutException, whose message names nothing: on a live
@@ -1193,9 +1202,13 @@ public partial class JsDrawingEngine : Runtime
     /// debugging scaling that worked. With one surface the fallback is right. Recorded rather than logged here, because
     /// only <c>ExecuteScript</c> knows whether the render goes anywhere: <see cref="FallbackWarning"/>.
     /// </remarks>
-    private static void WarnOfFallback(DrawingExecutionResult result, bool wrapped, JsValue returned, int surfaces, string kind)
+    private static void WarnOfFallback(DrawingExecutionResult result, bool wrapped, JsValue returned, int surfaces, bool composed)
     {
-        if (wrapped && returned.IsUndefined() && surfaces >= 2) result.FallbackSurfaces = surfaces;
+        // A composition's frames are not surfaces, so one that went unreturned fell back to a scratch canvas even when it
+        // was the only one: polsonpromo2's `if (MODE === 'frame') { comp.render(…) }` gave an 86-byte measuring canvas.
+        if (!wrapped || !returned.IsUndefined() || (surfaces < 2 && !composed)) return;
+        result.FallbackSurfaces = surfaces;
+        result.FallbackComposed = composed;
     }
 
     /// <summary>
@@ -1224,7 +1237,12 @@ public partial class JsDrawingEngine : Runtime
     }
 
     /// <summary>The warning for a render that fell back to the last of several surfaces, or null.</summary>
-    internal static string? FallbackWarning(DrawingExecutionResult result) => result.FallbackSurfaces < 2 ? null
+    internal static string? FallbackWarning(DrawingExecutionResult result) =>
+        result.FallbackComposed
+        ? "[WARN] This script uses await, built a composition and returned nothing, so the render is the last canvas it "
+            + "created, not a frame of the composition. In a script that awaits, a bare last line is not the result, nor is "
+            + "a call inside an `if`: write `return comp.render(t);`."
+        : result.FallbackSurfaces < 2 ? null
         : $"[WARN] This script uses await and returned nothing, so the render is the last surface it created, of "
             + $"{result.FallbackSurfaces} — which may be a scratch surface rather than the one you meant. In a script that "
             + "awaits, a bare last line is not the result: end it with `return sheet;`, naming what to render.";
@@ -1296,6 +1314,25 @@ public partial class JsDrawingEngine : Runtime
     /// <summary>Jint's argument-conversion failure, "Expected string but got Undefined".</summary>
     [GeneratedRegex(@"\bExpected (?<expected>\w+) but got (?<got>\w+)")]
     private static partial Regex ConversionFailure();
+
+    /// <summary>
+    /// Puts the script's line after a .NET exception's message, from the engine's call stack, which still holds the frame
+    /// that faulted. A fault inside Jint carries no position of its own: polsonpromo2 bisected two bare "Object reference
+    /// not set" errors with <c>exit()</c> over six runs, sure its logs had been lost, when it had failed before logging.
+    /// </summary>
+    private static string Placed(string explained, string message, Engine? engine, string? script, int lineOffset)
+    {
+        var stack = engine is null ? null : Try(() => engine.Advanced.StackTrace);
+        if (stack is null || StackLine().Match(stack) is not { Success: true } hit) return explained;
+        var line = int.Parse(hit.Groups["line"].Value, CultureInfo.InvariantCulture) - lineOffset;
+        if (line <= 0) return explained;
+
+        var source = SourceLine(script, line)?.Trim();
+        var where = $" (line {line}{(string.IsNullOrEmpty(source) ? "" : $": `{(source.Length > 100 ? source[..100] + "…" : source)}`")})";
+        return explained.StartsWith(message, StringComparison.Ordinal) ? explained.Insert(message.Length, where) : explained + where;
+
+        static string? Try(Func<string> read) { try { return read(); } catch (Exception) { return null; } }
+    }
 
     /// <summary>Where in the script it happened, when Jint recorded a position.</summary>
     private static string Where(JavaScriptException ex)

@@ -637,7 +637,7 @@ public class VerifyTests : TestsRuntime, IDisposable
 
         var answer = new Answer(new JsonObject { ["items"] = new JsonArray(new JsonObject { ["text"] = "BE COOL", ["from"] = 0, ["to"] = 3 }) }.ToJsonString());
         using var video = new VideoReader([new NemotronEndpoint(NemotronEndpoint.Nebius, "https://tf.example/v1", "k", NemotronEndpoint.NebiusModel)],
-            new DocumentBudget(5), root, http: new HttpClient(answer)) { MaxClipBytes = limit };
+            new DocumentBudget(5), root, cache: new DocumentCache(Path.Combine(root, "cache")), http: new HttpClient(answer)) { MaxClipBytes = limit };
         var result = await new VerifyToolkit(video, root, null).Film(comp, "big.mp4");
 
         Assert.True((bool)result["ok"]!, result.GetValueOrDefault("error") as string);
@@ -648,6 +648,15 @@ public class VerifyTests : TestsRuntime, IDisposable
         Assert.Equal("big.mp4", result["video"]);
         Assert.Contains("Read from artifacts/verify/big-watch.mp4", (string)result["summary"]!);
         Assert.True((bool)result["passed"]!);
+
+        // Asked again, the copy is reused rather than encoded anew, so the read is the same one. polsonpromo3's 40 calls
+        // each made new bytes, a new cache key and a new read, and the film was never verified.
+        var written = File.GetLastWriteTimeUtc(copy);
+        var requests = answer.Requests;
+        var again = await new VerifyToolkit(video, root, null).Film(comp, "big.mp4");
+        Assert.True((bool)again["ok"]!, again.GetValueOrDefault("error") as string);
+        Assert.Equal(written, File.GetLastWriteTimeUtc(copy));
+        Assert.Equal(requests, answer.Requests);
     }
 
     /// <summary>
@@ -951,6 +960,7 @@ public class VerifyTests : TestsRuntime, IDisposable
         var cited = await new VerifyToolkit(reader, root, null).Image(canvas, new Dictionary<string, object?> { ["computed"] = new Dictionary<string, object?> { ["+46%"] = "from the letter" } });
         Assert.Contains("1 computed entry was not used", (string)cited["summary"]!);
         Assert.Equal("unsourced figure", ((object?[])cited["items"]!).Cast<Dictionary<string, object?>>().Single(i => (string)i["text"]! == "+46%")["source"]);
+        Assert.Contains("1 text has a figure with no source ('+46%': no source for 46)", (string)cited["summary"]!);
 
         var refused = Assert.Throws<InvalidOperationException>(() => verify.Stray(1, "misread"));
         Assert.Contains("artifacts/verify/image-stray-1.png", refused.Message);
@@ -1336,8 +1346,12 @@ public class VerifyTests : TestsRuntime, IDisposable
         /// <summary>The last request's body, to see how the piece was sent.</summary>
         public string LastRequest { get; private set; } = "";
 
+        /// <summary>How many requests reached the service.</summary>
+        public int Requests { get; private set; }
+
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
+            Requests++;
             LastRequest = request.Content is null ? "" : await request.Content.ReadAsStringAsync(ct);
             return new HttpResponseMessage(HttpStatusCode.OK)
             {

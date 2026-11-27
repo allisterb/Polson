@@ -374,7 +374,7 @@ full are at `polson://sdk/core/Assets`; how to word a request is Manual 16 (`pol
 | `Assets.matte(descriptor, { hardEdge })` | a greyscale mask, or a stencil | **a matte wipe** — `comp.wipe({ type: 'matte', image: matte, completion })` wipes by the greys, darkest first, and keyed 1 → 0 reveals lightest first: ink blooming, smoke clearing, paper tearing, light spreading | every type |
 | `Assets.cutout(descriptor, { variants })` | elements with real alpha, several views from one generation | layers on planes, parallax under a camera move; an object that moves on its own | a film; a product (the packshot) |
 | `Photo.of(subject)` | a licensed photograph; the credit is owed, `Photo.credits()` on the end card | a real place or object, framed | a film, where the brief allows it |
-| `documents/` | the director's own pictures | `Skia.Image.load('documents/<file>')` | every type |
+| `documents/` | the director's own pictures, as image files | `Skia.Image.load('documents/<file>')` | every type; one known to be generated is an illustration, labelled where it could pass for a photograph (*What the director put in `documents/`*) |
 
 - **Your type's rules come first.** A pitch's or a report's pictures carry only what its source says: a surface, a ground
   or a matte claims nothing and fits; a generated object, a person or a photograph does not.

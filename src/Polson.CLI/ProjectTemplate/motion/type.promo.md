@@ -215,9 +215,11 @@ for (const [doc, lines] of Object.entries(byDoc)) {
   itself states it.
 - **The subject's own assets are used as given.** A logo is placed, not redrawn or recoloured. A screenshot or product
   shot is placed with `Skia.Image.load('documents/<file>')` and `comp.image({ image, tl, br })`, framed rather than cut
-  out by hand. **A brand guide in `documents/` is the subject's identity and the film follows it**; with none, the
-  palette and type are yours — one family, one accent on a neutral, contrast 4.5 : 1 for text — and never another
-  organisation's.
+  out by hand. A supplied picture known to be generated is an illustration, never a screenshot of the product at work:
+  label it where it could pass for one (*What the director put in `documents/`*). A clip the material links to is
+  shown, if at all, by a still the director supplies. **A brand guide in `documents/` is the subject's identity and
+  the film follows it**; with none, the palette and type are yours — one family, one accent on a neutral, contrast
+  4.5 : 1 for text — and never another organisation's.
 - **Other organisations by name only, as the material names them**: no logo, wordmark, product image or trade dress of
   anyone but the subject.
 - **No real person in pictures**: no face, likeness or recognisable silhouette, unless a photograph is supplied in
@@ -254,17 +256,28 @@ for a **funder or sponsor**, the proof moves before *what changes* and the ask s
 material states it; for **collaborators or a team**, *what changes* comes early as the vision and the ask is what is
 needed from them. This is the studio's rule, not a cited one: mark it so.
 
-**About ten seconds a scene.** Sixty seconds holds about five scenes; ninety about seven; two minutes all of them. **What
-to drop**: *what changes*, then the second *how* scene; the hook, *what it is* and the ask always stay. Put the scene
-list, with its length per scene and what was dropped, in Q1. **The length is the brief's**: cut it only on a
-measurement (encode one scene, time it, multiply), never on an estimate.
+**About ten seconds a scene, and a longer film has more scenes, not longer ones.** Sixty seconds holds about five
+scenes, ninety about eight. Past that the *problem*, *how it works* and *proof* scenes repeat, one per idea the
+material develops — a section, a stage, a check, a comparison — so two and a half minutes is about fifteen scenes,
+never eight at twenty seconds each. polsonpromo1's ninety seconds carried a twenty-page document in eight scenes and
+felt short: the viewer was told there was more and shown little of it.
 
-**The film is encoded in parts, each one script's work.** A script has 30 seconds, and at 1920 × 1080 a frame takes
-about 100 ms to render and encode (polsonpromo1: a 12 s scene took 28.7 s, a second under the limit). So:
+**Cover the material, then cut.** Before the scene list, list the material's ideas in `direction.md`, one line each
+with its page — every section heading, every stage, every check or comparison it develops. Each one is a scene, shares
+a scene with a neighbour, or is left out with its reason (*not this viewer's*, *no room*, *only a claim with nothing to
+show*). Q1 shows the list with how many ideas made the film. A scene may carry two or three of its ideas at once — a
+table's rows, a pipeline's steps — where they read in one look; it may not carry a paragraph. **What to drop**, when
+the length runs out: *what changes*, then the later *how* scenes; the hook, *what it is* and the ask always stay. **The
+length is the brief's**: cut it only on a measurement (encode one scene, time it, multiply), never on an estimate.
+
+**The film is encoded in parts, each one script's work.** A script has 30 seconds, and what a frame costs depends on
+the look: at 1920 × 1080, polsonpromo1's blurred, grainy scenes took about 100 ms a frame (a 12 s scene in 28.7 s, a
+second under the limit), and polsonpromo2's flat shapes and type about 25 ms (25 s parts in 13–19 s). So:
 
 1. **Encode the first part, and time it**: `const t0 = Date.now(); comp.saveVideo('artifacts/part_0.mp4', { from, to });
    log(Date.now() - t0)`. Divide 20 seconds by its time per second of film: that is the longest part, with room left
-   for the rest of the script. At 1080 it is about 8 seconds; a blurred or grainy scene is shorter.
+   for the rest of the script — about 8 seconds for a blurred, grainy look, about 25 for a flat one. Time again if a
+   later scene adds blur or grain.
 2. **A part ends on a cut where it can**, and a scene longer than a part is split at a held moment within it (a part
    boundary in a hold does not show).
 3. **Name parts by their start**, `part_<seconds>.mp4`, from the start: a part retimed is encoded again under its new
@@ -289,7 +302,8 @@ if (line.unsaid.length) error('the recording says more than the line: ' + line.u
 - **One line a call, at most two new lines a script** — a new line takes about 13 seconds to record. Pass which lines to
   record in `ARGS` and run the script until all are cached; a cached line costs nothing.
 - **The scene's length is its narration's**, plus the holds: a claim is on screen before it is spoken and stays after.
-  About 140 words a minute; ninety seconds is about 200 words. Never cut a line to fit a beat.
+  About 140 words a minute; ninety seconds is about 200 words, two and a half minutes about 330. Never cut a line to
+  fit a beat.
 - **The voice makes no claim the screen and Stage 1b have not checked**, and says a figure as the screen shows it.
 - **The film must make its case with the sound off**: every claim the voice makes is on screen too, in fewer words.
 - **Let the voice lead the cut** — a J or an L cut (Manual 25 §12d), not voice and picture changing on one frame.

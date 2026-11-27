@@ -132,27 +132,53 @@ public class DocumentInteropTests : TestsRuntime, IDisposable
     }
 
     /// <summary>
-    /// Jint 4.9.2: after an await on a host call, a parameter default that reads a property throws a bare
-    /// NullReferenceException inside the engine. anthropic_s_1_outside_cc hit it three times with nothing to say which
-    /// line; the error now names the pattern and the way round it. When an upgraded Jint fixes it, this test says so.
+    /// Jint 4.9.2: after an await on a host call, any parameter default but a number, string or boolean literal throws a
+    /// bare NullReferenceException inside the engine. anthropic_s_1_outside_cc hit it three times with nothing to say
+    /// which line, and polsonpromo2 was told `{}` was safe. The error now names the forms, the way round, and the line.
+    /// When an upgraded Jint fixes it, this test says so.
     /// </summary>
-    [Fact]
-    public async Task TestAParameterDefaultReadingAPropertyAfterAHostAwaitIsExplained()
+    [Theory]
+    [InlineData("size = T.figure")]
+    [InlineData("o = {}")]
+    [InlineData("a = []")]
+    [InlineData("size = K")]
+    [InlineData("u = undefined")]
+    public async Task TestANonLiteralParameterDefaultAfterAHostAwaitIsExplainedAndPlaced(string param)
     {
         File.WriteAllText(Path.Combine(root, "notes.txt"), "Revenue was 215,938.");
         JsDrawingEngine.Documents = new AnsweringLater(new DocumentBudget(5), root, new DocumentCache(Path.Combine(root, "cache")));
 
-        var result = await Run("""
-            const T = { figure: 104 };
-            function f(g, size = T.figure) { return size; }
+        var result = await Run($$"""
+            const T = { figure: 104 }, K = 3;
+            function f(g, {{param}}) { return 1; }
             await Documents.ask('notes.txt', 'What was revenue?');
             log('got ' + f(null));
             """);
 
         Assert.False(result.Success, "the engine no longer fails here: remove the explanation in JsDrawingEngine.Explain");
-        Assert.Contains("Read the default inside the body", result.Error);
+        Assert.Contains("Default inside the body", result.Error);
+        Assert.Matches(@"^Object reference not set to an instance of an object\. \(line [24]: `", result.Error);
     }
 
+    /// <summary>The literal defaults the explanation calls safe are safe.</summary>
+    [Theory]
+    [InlineData("size = 104")]
+    [InlineData("s = 'x'")]
+    [InlineData("b = true")]
+    public async Task TestALiteralParameterDefaultAfterAHostAwaitWorks(string param)
+    {
+        File.WriteAllText(Path.Combine(root, "notes.txt"), "Revenue was 215,938.");
+        JsDrawingEngine.Documents = new AnsweringLater(new DocumentBudget(5), root, new DocumentCache(Path.Combine(root, "cache")));
+
+        var result = await Run($$"""
+            function f(g, {{param}}) { return 1; }
+            await Documents.ask('notes.txt', 'What was revenue?');
+            log('got ' + f(null));
+            """);
+
+        Assert.True(result.Success, result.Error);
+        Assert.Equal("got 1", Logged(result));
+    }
     /// <summary><c>Documents.find</c> reaches a script, awaited like <c>ask</c>, and its hits read as an array.</summary>
     [Fact]
     public async Task TestFindIsReachableFromAScript()
