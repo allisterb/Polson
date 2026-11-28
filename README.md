@@ -250,8 +250,6 @@ Environment variables, all optional:
 | `POLSON_MAX_RUNS_PER_DAY` · `POLSON_MAX_CONCURRENT_RUNS` | `25` · `2` | Brakes for a public studio. |
 | `POLSON_VERIFY_READER` | `gemini` | Who reads finished pieces back (`gemini` or `nemotron`). |
 
-The deployment adds the variables that only matter on Cloud Run (the keepalive's own URL, the bucket mirror, the artifact service); [`deploy/README.md`](deploy/README.md) lists them with the full deploy command.
-
 **Think before binding to `0.0.0.0`.** A public URL is an open cost surface, and visitor-typed text reaches an agent holding tools.
 
 ---
