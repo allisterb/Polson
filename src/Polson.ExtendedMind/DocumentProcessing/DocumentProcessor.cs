@@ -64,7 +64,9 @@ public class DocumentProcessor : Runtime, IDisposable
 
     #region Properties
     /// <summary>Default model. Flash reads documents well and is what a budget is sized against.</summary>
-    public const string DefaultModel = "gemini-2.5-flash";
+    /// <remarks>3.8 since 2026-11-27: from 2026-12-01 Google routes <c>gemini-2.5-flash</c> to <c>gemini-3.5-flash-lite</c>, which would
+    /// have changed the reader without a line changing here. The studio's agents already run on 3.8.</remarks>
+    public const string DefaultModel = "gemini-3.8-flash";
 
     /// <summary>Most pages <see cref="Find"/> lists; past it, <c>more</c> says a longer phrase is wanted.</summary>
     public const int MaxHits = 40;
